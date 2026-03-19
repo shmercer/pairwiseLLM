@@ -67,6 +67,7 @@ schema_step_log <- c(
   is_drift_probe_step = "logical",
   link_spoke_id = "integer",
   run_mode = "character",
+  link_estimation_mode = "character",
   link_stage = "character",
   delta_spoke_estimate_pre = "double",
   delta_spoke_sd_pre = "double",
@@ -206,6 +207,8 @@ schema_link_stage_log <- c(
   refit_id = "integer",
   spoke_id = "integer",
   hub_id = "integer",
+  link_epoch_id = "integer",
+  link_estimation_mode = "character",
   link_transform_policy = "character",
   link_transform_state = "character",
   link_refit_mode = "character",
@@ -232,11 +235,10 @@ schema_link_stage_log <- c(
   stop_recent_pass_count = "integer",
   stop_recent_window_size = "integer",
   link_stop_pass = "logical",
+  link_state_frozen = "logical",
+  link_state_frozen_refit_id = "integer",
   stability_window_refits_used = "integer",
   stability_passes_required_used = "integer",
-  transform_frozen = "logical",
-  transform_frozen_refit_id = "integer",
-  link_epoch_id = "integer",
   ts_btl_rank_spearman = "double",
   ppc_brier_cross_active = "double",
   ppc_brier_cross_probe = "double",
@@ -246,6 +248,11 @@ schema_link_stage_log <- c(
   stop_blocker_codes = "character",
   link_fit_method = "character",
   link_uncertainty_approximation = "character",
+  phase_b_global_metric_uncertainty_approximation = "character",
+  link_diagnostics_pass = "logical",
+  link_diagnostics_converged_pass = "logical",
+  link_diagnostics_finite_summary_pass = "logical",
+  link_diagnostics_uncertainty_pass = "logical",
   link_diagnostics_divergences = "integer",
   link_diagnostics_max_rhat = "double",
   link_diagnostics_min_ess_bulk = "double",
@@ -346,10 +353,21 @@ schema_link_stage_log <- c(
   probe_pred_rmse_max_used = "double",
   probe_pred_rmse_pass = "logical",
   theta_global_rmse_scope = "character",
+  phase_a_within_edges_hub_used = "integer",
+  phase_a_within_edges_spoke_used = "integer",
+  phase_b_active_edges_used = "integer",
+  anchored_joint_hub_items_fixed_count = "integer",
   theta_global_rmse_lagged = "double",
   theta_global_rmse_max_used = "double",
   theta_global_rmse_pass = "logical",
   probe_edges_min_for_stop_used = "integer",
+  anchored_joint_init_state_method = "character",
+  anchored_joint_spoke_prior_scale_used = "double",
+  anchored_joint_sd_floor_used = "double",
+  anchored_joint_spoke_prior_fallback_used = "logical",
+  anchored_joint_spoke_prior_fallback_sd_used = "double",
+  judge_params_fixed_for_anchored_joint = "logical",
+  anchored_joint_free_block_dim = "integer",
   alternative_fit_method = "character",
   alternative_uncertainty_approximation = "character",
   alt_eval_active_edges = "integer",
@@ -373,6 +391,137 @@ schema_item_step_log <- c(
   sigma = "double",
   degree = "integer"
 )
+
+.adaptive_step_log_transform_only_fields <- function() {
+  c(
+    "delta_spoke_estimate_pre",
+    "delta_spoke_sd_pre",
+    "link_transform_policy",
+    "link_transform_state",
+    "log_alpha_spoke_estimate_pre",
+    "log_alpha_spoke_sd_pre"
+  )
+}
+
+.adaptive_link_stage_transform_only_fields <- function() {
+  c(
+    "link_transform_policy",
+    "link_transform_state",
+    "link_refit_mode",
+    "shift_only_theta_treatment",
+    "shift_only_theta_treatment_resolved",
+    "delta_spoke_mean",
+    "delta_spoke_sd",
+    "log_alpha_spoke_mean",
+    "log_alpha_spoke_sd",
+    "delta_change_lagged",
+    "log_alpha_change_lagged",
+    "probe_brier_shift_only",
+    "probe_brier_shift_scale",
+    "probe_brier_delta",
+    "log_alpha_spoke_sd_alt",
+    "link_transform_escalation_window_refits_used",
+    "link_transform_escalation_passes_required_used"
+  )
+}
+
+.adaptive_link_stage_anchored_joint_disabled_fields <- function() {
+  c(
+    "alternative_fit_method",
+    "alternative_uncertainty_approximation",
+    "alt_eval_active_edges",
+    "probe_brier_delta_min_used",
+    "logalpha_sd_guardrail_used",
+    "escalation_recent_pass_count",
+    "escalation_recent_window_size"
+  )
+}
+
+.adaptive_log_normalize_mode_fields <- function(row, schema, log_name) {
+  out <- tibble::as_tibble(row)
+
+  if (identical(log_name, "link_stage_log")) {
+    if ("transform_frozen" %in% names(out) && !"link_state_frozen" %in% names(out)) {
+      out$link_state_frozen <- out$transform_frozen
+    }
+    if ("transform_frozen_refit_id" %in% names(out) &&
+      !"link_state_frozen_refit_id" %in% names(out)) {
+      out$link_state_frozen_refit_id <- out$transform_frozen_refit_id
+    }
+    out$transform_frozen <- NULL
+    out$transform_frozen_refit_id <- NULL
+  }
+
+  if ("link_estimation_mode" %in% names(schema) && !"link_estimation_mode" %in% names(out)) {
+    default_mode <- if (identical(log_name, "link_stage_log")) {
+      "transform"
+    } else {
+      NA_character_
+    }
+    out$link_estimation_mode <- rep_len(default_mode, nrow(out))
+  }
+
+  if ("link_estimation_mode" %in% names(out)) {
+    out$link_estimation_mode <- vapply(
+      as.character(out$link_estimation_mode),
+      function(value) {
+        if (is.na(value) || value == "") {
+          if (identical(log_name, "link_stage_log")) {
+            return("transform")
+          }
+          return(NA_character_)
+        }
+        .adaptive_normalize_link_estimation_mode(value)
+      },
+      character(1),
+      USE.NAMES = FALSE
+    )
+  }
+
+  mode <- as.character(out$link_estimation_mode %||% rep_len(NA_character_, nrow(out)))
+  anchored_idx <- !is.na(mode) & mode == "anchored_joint"
+  if (!any(anchored_idx)) {
+    return(out)
+  }
+
+  fields <- if (identical(log_name, "step_log")) {
+    .adaptive_step_log_transform_only_fields()
+  } else if (identical(log_name, "link_stage_log")) {
+    .adaptive_link_stage_transform_only_fields()
+  } else {
+    character()
+  }
+
+  for (col in intersect(fields, names(schema))) {
+    if (!col %in% names(out)) {
+      out[[col]] <- rep_len(.adaptive_schema_typed_na(schema[[col]]), nrow(out))
+    }
+    out[[col]][anchored_idx] <- .adaptive_schema_typed_na(schema[[col]])
+  }
+
+  if (identical(log_name, "link_stage_log")) {
+    if ("hub_lock_kappa" %in% names(out)) {
+      out$hub_lock_kappa[anchored_idx] <- NA_real_
+    }
+    for (col in intersect(.adaptive_link_stage_anchored_joint_disabled_fields(), names(schema))) {
+      if (!col %in% names(out)) {
+        out[[col]] <- rep_len(.adaptive_schema_typed_na(schema[[col]]), nrow(out))
+      }
+      out[[col]][anchored_idx] <- .adaptive_schema_typed_na(schema[[col]])
+    }
+    if ("scale_ready" %in% names(out)) {
+      out$scale_ready[anchored_idx] <- FALSE
+    }
+    if ("alt_eval_converged" %in% names(out)) {
+      out$alt_eval_converged[anchored_idx] <- FALSE
+    }
+    if ("escalated_this_refit" %in% names(out)) {
+      out$escalated_this_refit[anchored_idx] <- FALSE
+    }
+  }
+
+  out
+}
 
 .adaptive_schema_empty_col <- function(type) {
   if (identical(type, "integer")) {
@@ -539,6 +688,7 @@ new_step_log <- function(now_fn = function() Sys.time()) {
 #' @keywords internal
 #' @noRd
 append_step_log <- function(step_log, row) {
+  row <- .adaptive_log_normalize_mode_fields(row, schema_step_log, "step_log")
   append_canonical_row(step_log, row, schema_step_log, allow_multirow = FALSE)
 }
 
@@ -563,6 +713,7 @@ new_link_stage_log <- function() {
 #' @keywords internal
 #' @noRd
 append_link_stage_log <- function(link_stage_log, rows) {
+  rows <- .adaptive_log_normalize_mode_fields(rows, schema_link_stage_log, "link_stage_log")
   append_canonical_row(link_stage_log, rows, schema_link_stage_log, allow_multirow = TRUE)
 }
 

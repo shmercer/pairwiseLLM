@@ -83,25 +83,37 @@
   NA_real_
 }
 
-.adaptive_log_factor_specs_step <- function() {
+.adaptive_log_factor_specs_step <- function(allow_legacy_run_mode = FALSE) {
+  run_mode_levels <- c(
+    "within_set",
+    "link_one_spoke",
+    "link_multi_spoke",
+    "link_probe_holdout"
+  )
+  if (isTRUE(allow_legacy_run_mode)) {
+    run_mode_levels <- c(run_mode_levels, "link_probe")
+  }
   list(
-    run_mode = c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout", "link_probe"),
+    run_mode = run_mode_levels,
+    link_estimation_mode = .adaptive_link_estimation_mode_levels(),
     link_stage = c("anchor_link", "long_link", "mid_link", "local_link", "probe_panel"),
     link_transform_policy = .adaptive_link_transform_policy_levels(),
     link_transform_state = .adaptive_link_transform_state_levels(),
-    utility_mode = c("pairing_trueskill_u0", "linking_d_optimal"),
-    hub_lock_mode = c("hard_lock", "soft_lock")
+    utility_mode = .adaptive_utility_mode_levels(),
+    hub_lock_mode = .adaptive_hub_lock_mode_levels()
   )
 }
 
 .adaptive_log_factor_specs_link_stage <- function() {
   list(
+    link_estimation_mode = .adaptive_link_estimation_mode_levels(),
     link_transform_policy = .adaptive_link_transform_policy_levels(),
     link_transform_state = .adaptive_link_transform_state_levels(),
     link_refit_mode = c("shift_only", "joint_refit"),
     shift_only_theta_treatment = .adaptive_shift_only_theta_treatment_levels(),
     shift_only_theta_treatment_resolved = .adaptive_shift_only_theta_treatment_levels(),
-    hub_lock_mode = c("hard_lock", "soft_lock")
+    hub_lock_mode = .adaptive_hub_lock_mode_levels(),
+    anchored_joint_init_state_method = .adaptive_anchored_joint_init_state_method_levels()
   )
 }
 
@@ -131,6 +143,119 @@
     }
     out[[col]] <- factor(vals, levels = allowed)
   }
+  out
+}
+
+.adaptive_normalize_public_step_log <- function(step_log) {
+  out <- tibble::as_tibble(step_log)
+  if (nrow(out) < 1L) {
+    return(out)
+  }
+
+  run_mode_chr <- if ("run_mode" %in% names(out)) {
+    as.character(out$run_mode)
+  } else {
+    rep(NA_character_, nrow(out))
+  }
+  legacy_drift_idx <- which(run_mode_chr %in% "link_probe")
+
+  if ("is_holdout_probe_step" %in% names(out)) {
+    out$is_holdout_probe_step <- as.logical(out$is_holdout_probe_step)
+    out$is_holdout_probe_step[legacy_drift_idx] <- FALSE
+  }
+  if ("is_drift_probe_step" %in% names(out)) {
+    out$is_drift_probe_step <- as.logical(out$is_drift_probe_step)
+    out$is_drift_probe_step[legacy_drift_idx] <- TRUE
+  }
+  if ("is_probe_step" %in% names(out)) {
+    out$is_probe_step <- as.logical(out$is_probe_step)
+    out$is_probe_step[legacy_drift_idx] <- TRUE
+  }
+  if ("utility_mode" %in% names(out)) {
+    utility_chr <- as.character(out$utility_mode)
+    link_estimation_mode <- if ("link_estimation_mode" %in% names(out)) {
+      as.character(out$link_estimation_mode)
+    } else {
+      rep("transform", nrow(out))
+    }
+    is_probe_step <- if ("is_probe_step" %in% names(out)) {
+      as.logical(out$is_probe_step)
+    } else {
+      rep(FALSE, nrow(out))
+    }
+    out$utility_mode <- vapply(
+      seq_along(utility_chr),
+      function(idx) {
+        mode <- utility_chr[[idx]]
+        if (is.na(mode) || mode == "") {
+          return(NA_character_)
+        }
+        if (isTRUE(is_probe_step[[idx]]) &&
+          .adaptive_is_linking_d_optimal_mode(mode, allow_legacy = TRUE)) {
+          return(NA_character_)
+        }
+        if (.adaptive_is_linking_d_optimal_mode(mode, allow_legacy = TRUE)) {
+          return(.adaptive_linking_utility_mode(link_estimation_mode[[idx]]))
+        }
+        mode
+      },
+      character(1L),
+      USE.NAMES = FALSE
+    )
+  }
+
+  out
+}
+
+.adaptive_public_step_log_factor_specs <- function(step_log) {
+  run_mode_chr <- if ("run_mode" %in% names(step_log)) {
+    as.character(step_log$run_mode)
+  } else {
+    character()
+  }
+  .adaptive_log_factor_specs_step(
+    allow_legacy_run_mode = any(run_mode_chr %in% "link_probe", na.rm = TRUE)
+  )
+}
+
+.adaptive_link_anchored_joint_quantiles <- function(theta_mean, theta_sd, probs) {
+  theta_mean <- as.double(theta_mean)
+  theta_sd <- as.double(theta_sd)
+  out <- matrix(
+    NA_real_,
+    nrow = length(probs),
+    ncol = length(theta_mean),
+    dimnames = list(NULL, names(theta_mean))
+  )
+  if (length(theta_mean) < 1L) {
+    return(out)
+  }
+
+  finite_mean <- is.finite(theta_mean)
+  if (any(finite_mean)) {
+    out[probs == 0.5, finite_mean] <- theta_mean[finite_mean]
+  }
+
+  point_mass <- finite_mean & is.finite(theta_sd) & theta_sd <= 0
+  if (any(point_mass)) {
+    out[, point_mass] <- matrix(
+      theta_mean[point_mass],
+      nrow = length(probs),
+      ncol = sum(point_mass),
+      byrow = TRUE
+    )
+  }
+
+  approx_idx <- finite_mean & is.finite(theta_sd) & theta_sd > 0
+  if (any(approx_idx)) {
+    z <- stats::qnorm(probs)
+    out[, approx_idx] <- vapply(
+      which(approx_idx),
+      function(idx) theta_mean[[idx]] + z * theta_sd[[idx]],
+      numeric(length(probs))
+    )
+  }
+
   out
 }
 
@@ -167,6 +292,78 @@
         ncol = ncol(theta_raw_quantiles),
         dimnames = dimnames(theta_raw_quantiles)
       )
+    ))
+  }
+
+  if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+    probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)
+    link_eap <- rep_len(NA_real_, length(ids))
+    link_sd <- rep_len(NA_real_, length(ids))
+    names(link_eap) <- ids
+    names(link_sd) <- ids
+    link_quantiles <- matrix(NA_real_, nrow = length(probs), ncol = length(ids))
+    rownames(link_quantiles) <- c("q2.5", "q5", "q50", "q95", "q97.5")
+    colnames(link_quantiles) <- ids
+
+    hub_id <- as.integer(controller$hub_id %||% 1L)
+    spoke_ids <- sort(unique(as.integer(set_id[as.integer(set_id) != hub_id])))
+    if (length(spoke_ids) < 1L) {
+      return(list(
+        theta_link_eap = as.double(link_eap),
+        theta_link_sd = as.double(link_sd),
+        theta_link_quantiles = link_quantiles
+      ))
+    }
+
+    hub_state <- .adaptive_link_anchored_joint_resolve_state(
+      state = state,
+      spoke_id = as.integer(spoke_ids[[1L]]),
+      controller = controller
+    )
+    hub_mean <- as.double(hub_state$theta_hub_fixed)
+    names(hub_mean) <- names(hub_state$theta_hub_fixed)
+    hub_ids <- intersect(ids[as.integer(set_id) == hub_id], names(hub_mean))
+    if (length(hub_ids) > 0L) {
+      hub_quantiles <- .adaptive_link_anchored_joint_quantiles(
+        theta_mean = hub_mean,
+        theta_sd = rep(0, length(hub_mean)),
+        probs = probs
+      )
+      hub_match <- match(hub_ids, colnames(hub_quantiles))
+      link_eap[hub_ids] <- hub_mean[hub_ids]
+      link_sd[hub_ids] <- 0
+      link_quantiles[, hub_ids] <- hub_quantiles[, hub_match, drop = FALSE]
+    }
+
+    for (spoke_id in spoke_ids) {
+      accepted_state <- .adaptive_link_anchored_joint_resolve_state(
+        state = state,
+        spoke_id = as.integer(spoke_id),
+        controller = controller
+      )
+      spoke_mean <- as.double(accepted_state$theta_spoke_global_mean)
+      names(spoke_mean) <- names(accepted_state$theta_spoke_global_mean)
+      spoke_sd <- as.double(accepted_state$theta_spoke_global_sd)
+      names(spoke_sd) <- names(accepted_state$theta_spoke_global_sd)
+      spoke_item_ids <- intersect(ids[as.integer(set_id) == as.integer(spoke_id)], names(spoke_mean))
+      if (length(spoke_item_ids) < 1L) {
+        next
+      }
+      spoke_quantiles <- .adaptive_link_anchored_joint_quantiles(
+        theta_mean = spoke_mean,
+        theta_sd = spoke_sd,
+        probs = probs
+      )
+      spoke_match <- match(spoke_item_ids, colnames(spoke_quantiles))
+      link_eap[spoke_item_ids] <- spoke_mean[spoke_item_ids]
+      link_sd[spoke_item_ids] <- spoke_sd[spoke_item_ids]
+      link_quantiles[, spoke_item_ids] <- spoke_quantiles[, spoke_match, drop = FALSE]
+    }
+
+    return(list(
+      theta_link_eap = as.double(link_eap),
+      theta_link_sd = as.double(link_sd),
+      theta_link_quantiles = link_quantiles
     ))
   }
 
@@ -458,8 +655,8 @@ adaptive_get_logs <- function(state) {
   }
   list(
     step_log = .adaptive_cast_log_factors(
-      state$step_log,
-      specs = .adaptive_log_factor_specs_step(),
+      .adaptive_normalize_public_step_log(state$step_log),
+      specs = .adaptive_public_step_log_factor_specs(state$step_log),
       log_name = "step_log"
     ),
     round_log = tibble::as_tibble(state$round_log),
@@ -522,8 +719,8 @@ adaptive_step_log <- function(state) {
     rlang::abort("`state$step_log` is missing.")
   }
   .adaptive_cast_log_factors(
-    state$step_log,
-    specs = .adaptive_log_factor_specs_step(),
+    .adaptive_normalize_public_step_log(state$step_log),
+    specs = .adaptive_public_step_log_factor_specs(state$step_log),
     log_name = "step_log"
   )
 }
@@ -802,12 +999,20 @@ summarize_adaptive <- function(state) {
 
   fit_methods <- .adaptive_print_compact_values(latest_rows$link_fit_method)
   uncertainty <- .adaptive_print_compact_values(latest_rows$link_uncertainty_approximation)
+  global_metric_uncertainty <- .adaptive_print_compact_values(
+    latest_rows$phase_b_global_metric_uncertainty_approximation
+  )
   probe_panel_id <- .adaptive_print_compact_values(latest_rows$probe_panel_id)
   probe_planned <- sum(as.integer(latest_rows$probe_edges_planned %||% 0L), na.rm = TRUE)
   probe_realized <- sum(as.integer(latest_rows$probe_edges_realized %||% 0L), na.rm = TRUE)
   gate_open <- sum(latest_rows$link_stop_gate_open %in% TRUE, na.rm = TRUE)
   lag_open <- sum(latest_rows$link_lag_eligible %in% TRUE, na.rm = TRUE)
-  frozen <- sum(latest_rows$transform_frozen %in% TRUE, na.rm = TRUE)
+  frozen <- sum(latest_rows$link_state_frozen %in% TRUE, na.rm = TRUE)
+  estimation_mode <- .adaptive_print_compact_values(latest_rows$link_estimation_mode)
+  init_method <- .adaptive_print_compact_values(latest_rows$anchored_joint_init_state_method)
+  phase_a_hub_edges <- sum(as.integer(latest_rows$phase_a_within_edges_hub_used %||% 0L), na.rm = TRUE)
+  phase_a_spoke_edges <- sum(as.integer(latest_rows$phase_a_within_edges_spoke_used %||% 0L), na.rm = TRUE)
+  phase_b_active_edges <- sum(as.integer(latest_rows$phase_b_active_edges_used %||% 0L), na.rm = TRUE)
 
   blocker_codes <- unique(as.character(latest_rows$stop_blocker_codes %||% character()))
   blocker_codes <- blocker_codes[!is.na(blocker_codes) & nzchar(blocker_codes)]
@@ -821,17 +1026,36 @@ summarize_adaptive <- function(state) {
     if (!is.na(uncertainty) && nzchar(uncertainty)) {
       paste0("uncertainty=", uncertainty)
     },
+    if (!is.na(global_metric_uncertainty) && nzchar(global_metric_uncertainty)) {
+      paste0("global_metric_uncertainty=", global_metric_uncertainty)
+    },
+    if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
+      paste0("mode=", estimation_mode)
+    },
+    if (!is.na(init_method) && nzchar(init_method)) {
+      paste0("init_state=", init_method)
+    },
     if (!is.na(probe_panel_id) && nzchar(probe_panel_id)) {
       paste0("probe_panel_id=", probe_panel_id)
+    },
+    if (isTRUE(any(as.character(latest_rows$link_estimation_mode) == "anchored_joint", na.rm = TRUE))) {
+      paste0(
+        "evidence_edges=",
+        phase_a_hub_edges,
+        "+",
+        phase_a_spoke_edges,
+        "+",
+        phase_b_active_edges
+      )
     },
     paste0("probe_edges=", probe_realized, "/", probe_planned),
     paste0("lag_open=", lag_open, "/", nrow(latest_rows)),
     paste0("stop_gate_open=", gate_open, "/", nrow(latest_rows)),
     if (length(phase_ctx$stopped_spokes) > 0L) {
-      paste0("probe_only_spokes=", paste(phase_ctx$stopped_spokes, collapse = ","))
+      paste0("stopped_spokes=", paste(phase_ctx$stopped_spokes, collapse = ","))
     },
     if (frozen > 0L) {
-      paste0("transform_frozen=", frozen, "/", nrow(latest_rows))
+      paste0("link_state_frozen=", frozen, "/", nrow(latest_rows))
     },
     if (length(blockers) > 0L) {
       paste0("stop_blockers=", paste(sort(blockers), collapse = ","))
@@ -851,12 +1075,13 @@ summarize_adaptive <- function(state) {
     return(character())
   }
 
+  estimation_mode <- as.character(controller$link_estimation_mode %||% NA_character_)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   policy <- as.character(controller$link_transform_policy %||% NA_character_)
   state_map <- controller$link_transform_state_by_spoke %||% list()
   state_vals <- .adaptive_print_compact_values(state_map)
   epoch_map <- controller$link_epoch_id_by_spoke %||% list()
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- controller$link_state_frozen_by_spoke %||% list()
   frozen_spokes <- as.integer(names(frozen_map)[vapply(frozen_map, isTRUE, logical(1L))])
   frozen_spokes <- frozen_spokes[is.finite(frozen_spokes)]
 
@@ -869,7 +1094,10 @@ summarize_adaptive <- function(state) {
       paste0("ready_spokes=", paste(phase_ctx$ready_spokes, collapse = ","))
     },
     if (length(phase_ctx$stopped_spokes) > 0L) {
-      paste0("probe_only_spokes=", paste(phase_ctx$stopped_spokes, collapse = ","))
+      paste0("stopped_spokes=", paste(phase_ctx$stopped_spokes, collapse = ","))
+    },
+    if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
+      paste0("estimation_mode=", estimation_mode)
     },
     if (!is.na(policy) && nzchar(policy)) {
       paste0("transform_policy=", policy)
@@ -1046,6 +1274,14 @@ print.adaptive_state <- function(x, ...) {
 }
 
 .adaptive_progress_link_diag_pass <- function(link_row) {
+  contract_pass <- .adaptive_progress_col_value(
+    link_row,
+    "link_diagnostics_pass",
+    default = NA
+  )
+  if (!is.na(contract_pass)) {
+    return(isTRUE(contract_pass))
+  }
   isTRUE(.adaptive_progress_col_value(link_row, "link_diagnostics_divergences_pass", default = NA)) &&
     isTRUE(.adaptive_progress_col_value(link_row, "link_diagnostics_rhat_pass", default = NA)) &&
     isTRUE(.adaptive_progress_col_value(link_row, "link_diagnostics_ess_pass", default = NA))
@@ -1205,37 +1441,78 @@ print.adaptive_state <- function(x, ...) {
     if (length(bad_idx) > 0L) {
       for (idx in bad_idx) {
         link_row <- link_stage_rows[idx, , drop = FALSE]
-        diagnostics <- c(
-          diagnostics,
-          paste0(
-            "Diagnostics: spoke=",
-            as.integer(.adaptive_progress_col_value(link_row, "spoke_id", default = NA_integer_)),
-            " link divergences=",
-            .adaptive_progress_col_value(link_row, "link_diagnostics_divergences", default = NA_integer_),
-            " ",
-            .adaptive_progress_fmt_state(
-              .adaptive_progress_col_value(link_row, "link_diagnostics_divergences_pass", default = NA)
-            ),
-            "  max_rhat=",
-            .adaptive_progress_fmt_num(
-              .adaptive_progress_col_value(link_row, "link_diagnostics_max_rhat", default = NA_real_),
-              digits = 3L
-            ),
-            " ",
-            .adaptive_progress_fmt_state(
-              .adaptive_progress_col_value(link_row, "link_diagnostics_rhat_pass", default = NA)
-            ),
-            "  min_ess_bulk=",
-            .adaptive_progress_fmt_num(
-              .adaptive_progress_col_value(link_row, "link_diagnostics_min_ess_bulk", default = NA_real_),
-              digits = 0L
-            ),
-            " ",
-            .adaptive_progress_fmt_state(
-              .adaptive_progress_col_value(link_row, "link_diagnostics_ess_pass", default = NA)
+        fit_method <- as.character(.adaptive_progress_col_value(
+          link_row,
+          "link_fit_method",
+          default = NA_character_
+        ))
+        if (fit_method %in% c("map_laplace", "accepted_state_reuse")) {
+          diagnostics <- c(
+            diagnostics,
+            paste0(
+              "Diagnostics: spoke=",
+              as.integer(.adaptive_progress_col_value(link_row, "spoke_id", default = NA_integer_)),
+              " link method=",
+              fit_method,
+              " converged=",
+              .adaptive_progress_fmt_state(
+                .adaptive_progress_col_value(
+                  link_row,
+                  "link_diagnostics_converged_pass",
+                  default = NA
+                )
+              ),
+              "  finite_summary=",
+              .adaptive_progress_fmt_state(
+                .adaptive_progress_col_value(
+                  link_row,
+                  "link_diagnostics_finite_summary_pass",
+                  default = NA
+                )
+              ),
+              "  uncertainty=",
+              .adaptive_progress_fmt_state(
+                .adaptive_progress_col_value(
+                  link_row,
+                  "link_diagnostics_uncertainty_pass",
+                  default = NA
+                )
+              )
             )
           )
-        )
+        } else {
+          diagnostics <- c(
+            diagnostics,
+            paste0(
+              "Diagnostics: spoke=",
+              as.integer(.adaptive_progress_col_value(link_row, "spoke_id", default = NA_integer_)),
+              " link divergences=",
+              .adaptive_progress_col_value(link_row, "link_diagnostics_divergences", default = NA_integer_),
+              " ",
+              .adaptive_progress_fmt_state(
+                .adaptive_progress_col_value(link_row, "link_diagnostics_divergences_pass", default = NA)
+              ),
+              "  max_rhat=",
+              .adaptive_progress_fmt_num(
+                .adaptive_progress_col_value(link_row, "link_diagnostics_max_rhat", default = NA_real_),
+                digits = 3L
+              ),
+              " ",
+              .adaptive_progress_fmt_state(
+                .adaptive_progress_col_value(link_row, "link_diagnostics_rhat_pass", default = NA)
+              ),
+              "  min_ess_bulk=",
+              .adaptive_progress_fmt_num(
+                .adaptive_progress_col_value(link_row, "link_diagnostics_min_ess_bulk", default = NA_real_),
+                digits = 0L
+              ),
+              " ",
+              .adaptive_progress_fmt_state(
+                .adaptive_progress_col_value(link_row, "link_diagnostics_ess_pass", default = NA)
+              )
+            )
+          )
+        }
       }
     }
   }
@@ -1422,16 +1699,26 @@ print.adaptive_state <- function(x, ...) {
   for (idx in seq_len(nrow(rows))) {
     link_row <- rows[idx, , drop = FALSE]
     spoke_id <- as.integer(.adaptive_progress_col_value(link_row, "spoke_id", default = NA_integer_))
+    estimation_mode <- as.character(.adaptive_progress_col_value(
+      link_row,
+      "link_estimation_mode",
+      default = NA_character_
+    ))
     transform_state <- as.character(.adaptive_progress_col_value(
       link_row,
       "link_transform_state",
       default = NA_character_
     ))
+    init_method <- as.character(.adaptive_progress_col_value(
+      link_row,
+      "anchored_joint_init_state_method",
+      default = NA_character_
+    ))
 
-    if (isTRUE(.adaptive_progress_col_value(link_row, "transform_frozen", default = NA))) {
+    if (isTRUE(.adaptive_progress_col_value(link_row, "link_state_frozen", default = NA))) {
       frozen_refit <- .adaptive_progress_col_value(
         link_row,
-        "transform_frozen_refit_id",
+        "link_state_frozen_refit_id",
         default = NA_integer_
       )
       lines <- c(
@@ -1440,6 +1727,11 @@ print.adaptive_state <- function(x, ...) {
           "  spoke=",
           spoke_id,
           " frozen",
+          if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
+            paste0("  mode=", estimation_mode)
+          } else {
+            ""
+          },
           if (!is.na(transform_state) && nzchar(transform_state)) {
             paste0("  state=", transform_state)
           } else {
@@ -1452,8 +1744,18 @@ print.adaptive_state <- function(x, ...) {
           }
         ),
         paste0("  spoke=", spoke_id, " frozen"),
+        if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
+          paste0("    mode=", estimation_mode)
+        } else {
+          character()
+        },
         if (!is.na(transform_state) && nzchar(transform_state)) {
           paste0("    state=", transform_state)
+        } else {
+          character()
+        },
+        if (!is.na(init_method) && nzchar(init_method)) {
+          paste0("    init_state=", init_method)
         } else {
           character()
         },
@@ -1519,6 +1821,11 @@ print.adaptive_state <- function(x, ...) {
         "  spoke=",
         spoke_id,
         " active",
+        if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
+          paste0("  mode=", estimation_mode)
+        } else {
+          ""
+        },
         "  eligible=",
         .adaptive_progress_fmt_state(
           .adaptive_progress_col_value(link_row, "link_stop_eligible", default = NA),
@@ -1537,8 +1844,18 @@ print.adaptive_state <- function(x, ...) {
         if (is.na(probes_min)) "NA" else probes_min
       ),
       paste0("  spoke=", spoke_id, " active"),
+      if (!is.na(estimation_mode) && nzchar(estimation_mode)) {
+        paste0("    mode=", estimation_mode)
+      } else {
+        character()
+      },
       if (!is.na(transform_state) && nzchar(transform_state)) {
         paste0("    state=", transform_state)
+      } else {
+        character()
+      },
+      if (!is.na(init_method) && nzchar(init_method)) {
+        paste0("    init_state=", init_method)
       } else {
         character()
       },
@@ -1874,14 +2191,14 @@ adaptive_progress_step_event <- function(step_row, cfg) {
     }
   }
   if (isTRUE(is_probe_step) || run_mode %in% c("link_probe_holdout", "link_probe")) {
-    probe_label <- if (identical(run_mode, "link_probe_holdout") ||
-      ("is_holdout_probe_step" %in% names(step_row) &&
-        isTRUE(step_row$is_holdout_probe_step[[1L]] %||% FALSE))) {
-      "holdout"
-    } else if (identical(run_mode, "link_probe") ||
+    probe_label <- if (identical(run_mode, "link_probe") ||
       ("is_drift_probe_step" %in% names(step_row) &&
         isTRUE(step_row$is_drift_probe_step[[1L]] %||% FALSE))) {
       "drift_followup"
+    } else if (identical(run_mode, "link_probe_holdout") ||
+      ("is_holdout_probe_step" %in% names(step_row) &&
+        isTRUE(step_row$is_holdout_probe_step[[1L]] %||% FALSE))) {
+      "holdout"
     } else {
       "probe"
     }

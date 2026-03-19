@@ -73,6 +73,8 @@
     spoke_item_id = character(),
     spoke_bin = integer(),
     hub_bin = integer(),
+    probe_edges_planned = integer(),
+    probe_panel_reallocation_used = logical(),
     planned_rank = integer(),
     pair_key = character(),
     realized = logical(),
@@ -126,6 +128,15 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_anchored_joint_empty_state <- function() {
+  list(
+    accepted_state_by_spoke = list(),
+    fisher_t0_by_spoke = list()
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_stage_order <- function() {
   c("anchor_link", "long_link", "mid_link", "local_link")
 }
@@ -140,6 +151,47 @@
 #' @noRd
 .adaptive_link_transform_state_levels <- function() {
   c("shift_only", "shift_scale")
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_estimation_mode_levels <- function() {
+  c("transform", "anchored_joint")
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_hub_lock_mode_levels <- function() {
+  c("hard_lock", "soft_lock", "free")
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_hub_lock_mode_free_allowed <- function(run_mode,
+                                                 link_estimation_mode,
+                                                 link_refit_mode) {
+  identical(as.character(run_mode %||% "within_set"), "link_one_spoke") &&
+    identical(as.character(link_estimation_mode %||% "transform"), "transform") &&
+    identical(as.character(link_refit_mode %||% "shift_only"), "joint_refit")
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_normalize_link_estimation_mode <- function(mode = NULL) {
+  value <- mode %||% "transform"
+  if (!is.character(value) || length(value) != 1L || is.na(value) || value == "") {
+    rlang::abort("Link estimation mode must be a single non-empty string.")
+  }
+  if (!value %in% .adaptive_link_estimation_mode_levels()) {
+    rlang::abort(
+      paste0(
+        "Link estimation mode must be one of: ",
+        paste(.adaptive_link_estimation_mode_levels(), collapse = ", "),
+        "."
+      )
+    )
+  }
+  value
 }
 
 #' @keywords internal
@@ -175,6 +227,12 @@
 #' @keywords internal
 #' @noRd
 .adaptive_default_link_transform_state <- function(link_transform_policy) {
+  if (!is.character(link_transform_policy) ||
+    length(link_transform_policy) != 1L ||
+    is.na(link_transform_policy) ||
+    link_transform_policy == "") {
+    return(NA_character_)
+  }
   policy <- .adaptive_normalize_link_transform_policy(link_transform_policy)
   if (identical(policy, "fixed_shift_scale")) {
     return("shift_scale")
@@ -206,40 +264,74 @@
 .adaptive_controller_normalize_legacy_fields <- function(controller, n_items) {
   out <- controller %||% list()
   defaults <- .adaptive_controller_defaults(n_items)
-
-  out$link_transform_policy <- .adaptive_normalize_link_transform_policy(
-    policy = out$link_transform_policy %||% NULL,
-    legacy_mode = out$link_transform_mode %||% NULL
+  out$link_estimation_mode <- .adaptive_normalize_link_estimation_mode(
+    out$link_estimation_mode %||% defaults$link_estimation_mode
   )
-  out$link_transform_mode <- NULL
 
-  state_map <- out$link_transform_state_by_spoke %||% out$link_transform_mode_by_spoke %||% list()
-  if (!is.list(state_map)) {
-    state_map <- list()
-  }
-  if (length(state_map) > 0L) {
-    state_map <- lapply(
-      state_map,
-      function(value) .adaptive_normalize_link_transform_state(value, out$link_transform_policy)
+  if (identical(out$link_estimation_mode, "anchored_joint")) {
+    out$link_transform_policy <- NA_character_
+    out$link_transform_mode <- NULL
+    out$link_transform_state_by_spoke <- list()
+    out$link_transform_mode_by_spoke <- NULL
+  } else {
+    out$link_transform_policy <- .adaptive_normalize_link_transform_policy(
+      policy = out$link_transform_policy %||% NULL,
+      legacy_mode = out$link_transform_mode %||% NULL
     )
-  }
-  out$link_transform_state_by_spoke <- state_map
-  out$link_transform_mode_by_spoke <- NULL
+    out$link_transform_mode <- NULL
 
-  theta_treatment <- out$shift_only_theta_treatment %||% defaults$shift_only_theta_treatment
-  if (identical(theta_treatment, "normal_prior")) {
-    theta_treatment <- "fixed_eap_plugin_var"
-  }
-  if (!theta_treatment %in% .adaptive_shift_only_theta_treatment_levels()) {
-    rlang::abort(
-      paste0(
-        "`adaptive_config$shift_only_theta_treatment` must be one of: ",
-        paste(.adaptive_shift_only_theta_treatment_levels(), collapse = ", "),
-        "."
+    state_map <- out$link_transform_state_by_spoke %||% out$link_transform_mode_by_spoke %||% list()
+    if (!is.list(state_map)) {
+      state_map <- list()
+    }
+    if (length(state_map) > 0L) {
+      state_map <- lapply(
+        state_map,
+        function(value) .adaptive_normalize_link_transform_state(value, out$link_transform_policy)
       )
-    )
+    }
+    out$link_transform_state_by_spoke <- state_map
+    out$link_transform_mode_by_spoke <- NULL
   }
-  out$shift_only_theta_treatment <- theta_treatment
+
+  frozen_map <- out$link_state_frozen_by_spoke %||% list()
+  if (!is.list(frozen_map) || length(frozen_map) < 1L) {
+    frozen_map <- out$link_transform_frozen_by_spoke %||% list()
+  }
+  if (!is.list(frozen_map)) {
+    frozen_map <- list()
+  }
+  out$link_state_frozen_by_spoke <- frozen_map
+  out$link_transform_frozen_by_spoke <- frozen_map
+
+  frozen_refit_map <- out$link_state_frozen_refit_id_by_spoke %||% list()
+  if (!is.list(frozen_refit_map) || length(frozen_refit_map) < 1L) {
+    frozen_refit_map <- out$link_transform_frozen_refit_id_by_spoke %||% list()
+  }
+  if (!is.list(frozen_refit_map)) {
+    frozen_refit_map <- list()
+  }
+  out$link_state_frozen_refit_id_by_spoke <- frozen_refit_map
+  out$link_transform_frozen_refit_id_by_spoke <- frozen_refit_map
+
+  if (identical(out$link_estimation_mode, "anchored_joint")) {
+    out$shift_only_theta_treatment <- NA_character_
+  } else {
+    theta_treatment <- out$shift_only_theta_treatment %||% defaults$shift_only_theta_treatment
+    if (identical(theta_treatment, "normal_prior")) {
+      theta_treatment <- "fixed_eap_plugin_var"
+    }
+    if (!theta_treatment %in% .adaptive_shift_only_theta_treatment_levels()) {
+      rlang::abort(
+        paste0(
+          "`adaptive_config$shift_only_theta_treatment` must be one of: ",
+          paste(.adaptive_shift_only_theta_treatment_levels(), collapse = ", "),
+          "."
+        )
+      )
+    }
+    out$shift_only_theta_treatment <- theta_treatment
+  }
   out$cross_set_ppc_brier_max <- NULL
   out$ppc_calibration_id <- NULL
 
@@ -305,6 +397,13 @@
   )
   out$link_escalation_consecutive_pass_count_by_spoke <- NULL
 
+  if (identical(out$link_estimation_mode, "anchored_joint")) {
+    out$hub_lock_mode <- "hard_lock"
+    out$link_refit_mode <- NA_character_
+    out$shift_only_theta_treatment <- NA_character_
+    out$hub_lock_kappa <- NA_real_
+  }
+
   out
 }
 
@@ -361,12 +460,17 @@
     star_override_budget_per_round = as.integer(defaults$star_override_budget_per_round),
     run_mode = "within_set",
     hub_id = 1L,
+    link_estimation_mode = "transform",
     link_transform_policy = "auto",
     link_refit_mode = "shift_only",
     shift_only_theta_treatment = "fixed_eap_plugin_var",
     judge_param_mode = "global_shared",
+    within_phase_b_within_set_steps_allowed = FALSE,
     hub_lock_mode = "soft_lock",
     hub_lock_kappa = 0.75,
+    anchored_joint_spoke_prior_scale = 1.0,
+    anchored_joint_sd_floor = 0.02,
+    anchored_joint_spoke_prior_fallback_sd = 1.0,
     link_identified_reliability_min = 0.80,
     link_stop_reliability_min = 0.90,
     link_rank_corr_min = 0.90,
@@ -379,6 +483,7 @@
     link_transform_escalation_is_one_way = TRUE,
     max_pairs_after_stop = 0L,
     probe_pairs_per_refit_per_spoke = 2L,
+    probe_panel_edges = NA_integer_,
     probe_edges_min_for_stop = 30L,
     probe_brier_delta_min = 0.005,
     probe_brier_max = 0.19,
@@ -395,6 +500,7 @@
     shift_scale_min_distinct_spoke_items_per_bin = 2L,
     reliability_var_mu_epsilon = 1e-6,
     reliability_total_var_epsilon = 1e-6,
+    hub_anchor_required_phase_b = TRUE,
     probe_edges_count_toward_active_constraints = FALSE,
     spoke_quantile_coverage_bins = 3L,
     spoke_quantile_coverage_min_per_bin_per_refit = 1L,
@@ -430,6 +536,8 @@
     link_transform_bad_refits_by_spoke = list(),
     link_transform_last_delta_by_spoke = list(),
     link_transform_last_log_alpha_by_spoke = list(),
+    link_state_frozen_by_spoke = list(),
+    link_state_frozen_refit_id_by_spoke = list(),
     link_transform_frozen_by_spoke = list(),
     link_transform_frozen_delta_by_spoke = list(),
     link_transform_frozen_log_alpha_by_spoke = list(),
@@ -470,13 +578,18 @@
     "star_override_budget_per_round",
     "run_mode",
     "hub_id",
+    "link_estimation_mode",
     "link_transform_policy",
     "link_transform_mode",
     "link_refit_mode",
     "shift_only_theta_treatment",
     "judge_param_mode",
+    "within_phase_b_within_set_steps_allowed",
     "hub_lock_mode",
     "hub_lock_kappa",
+    "anchored_joint_spoke_prior_scale",
+    "anchored_joint_sd_floor",
+    "anchored_joint_spoke_prior_fallback_sd",
     "link_identified_reliability_min",
     "link_stop_reliability_min",
     "link_rank_corr_min",
@@ -490,6 +603,7 @@
     "link_transform_escalation_is_one_way",
     "max_pairs_after_stop",
     "probe_pairs_per_refit_per_spoke",
+    "probe_panel_edges",
     "probe_edges_min_for_stop",
     "probe_brier_delta_min",
     "probe_brier_max",
@@ -507,6 +621,7 @@
     "shift_scale_min_distinct_spoke_items_per_bin",
     "reliability_var_mu_epsilon",
     "reliability_total_var_epsilon",
+    "hub_anchor_required_phase_b",
     "probe_edges_count_toward_active_constraints",
     "spoke_quantile_coverage_bins",
     "spoke_quantile_coverage_min_per_bin_per_refit",
@@ -534,6 +649,16 @@
     "phase_a_artifacts",
     "phase_a_set_source"
   )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_abort_unsupported_phase_b_public_control <- function(field, detail) {
+  rlang::abort(paste0(
+    field,
+    " is not supported on the current normative Phase B path. ",
+    detail
+  ))
 }
 
 #' @keywords internal
@@ -644,6 +769,10 @@
   out$star_override_budget_per_round <- read_integer("star_override_budget_per_round", 0L, Inf)
   out$run_mode <- read_choice("run_mode", c("within_set", "link_one_spoke", "link_multi_spoke"))
   out$hub_id <- read_integer("hub_id", 1L, Inf)
+  out$link_estimation_mode <- read_choice(
+    "link_estimation_mode",
+    .adaptive_link_estimation_mode_levels()
+  )
   policy_value <- out$link_transform_policy %||% out$link_transform_mode %||% NULL
   if (!is.null(policy_value)) {
     out$link_transform_policy <- .adaptive_normalize_link_transform_policy(policy = policy_value)
@@ -669,8 +798,18 @@
     }
   }
   out$judge_param_mode <- read_choice("judge_param_mode", c("global_shared", "phase_specific"))
-  out$hub_lock_mode <- read_choice("hub_lock_mode", c("hard_lock", "soft_lock"))
+  out$within_phase_b_within_set_steps_allowed <- read_logical(
+    "within_phase_b_within_set_steps_allowed"
+  )
+  out$hub_lock_mode <- read_choice("hub_lock_mode", .adaptive_hub_lock_mode_levels())
   out$hub_lock_kappa <- read_double("hub_lock_kappa", 0, 1)
+  out$anchored_joint_spoke_prior_scale <- read_double("anchored_joint_spoke_prior_scale", 0, Inf)
+  out$anchored_joint_sd_floor <- read_double("anchored_joint_sd_floor", 0, Inf)
+  out$anchored_joint_spoke_prior_fallback_sd <- read_double(
+    "anchored_joint_spoke_prior_fallback_sd",
+    0,
+    Inf
+  )
   out$link_identified_reliability_min <- read_double("link_identified_reliability_min", 0, 1)
   out$link_stop_reliability_min <- read_double("link_stop_reliability_min", 0, 1)
   out$link_rank_corr_min <- read_double("link_rank_corr_min", 0, 1)
@@ -696,6 +835,7 @@
   out$link_transform_escalation_is_one_way <- read_logical("link_transform_escalation_is_one_way")
   out$max_pairs_after_stop <- read_integer("max_pairs_after_stop", 0L, Inf)
   out$probe_pairs_per_refit_per_spoke <- read_integer("probe_pairs_per_refit_per_spoke", 0L, Inf)
+  out$probe_panel_edges <- read_integer("probe_panel_edges", 1L, Inf)
   out$probe_edges_min_for_stop <- read_integer("probe_edges_min_for_stop", 1L, Inf)
   out$probe_brier_delta_min <- read_double("probe_brier_delta_min", 0, 1)
   out$probe_brier_max <- read_double("probe_brier_max", 0, 1)
@@ -720,6 +860,7 @@
   )
   out$reliability_var_mu_epsilon <- read_double("reliability_var_mu_epsilon", 0, Inf)
   out$reliability_total_var_epsilon <- read_double("reliability_total_var_epsilon", 0, Inf)
+  out$hub_anchor_required_phase_b <- read_logical("hub_anchor_required_phase_b")
   out$probe_edges_count_toward_active_constraints <- read_logical(
     "probe_edges_count_toward_active_constraints"
   )
@@ -758,6 +899,17 @@
     c("fail_fast", "fallback_to_run")
   )
   out$phase_a_required_reliability_min <- read_double("phase_a_required_reliability_min", 0, 1)
+
+  if (identical(out$link_estimation_mode %||% NULL, "anchored_joint") &&
+    "hub_lock_mode" %in% cfg_names &&
+    !identical(out$hub_lock_mode, "hard_lock")) {
+    rlang::abort(
+      paste0(
+        "`adaptive_config$link_estimation_mode = \"anchored_joint\"` requires ",
+        "`adaptive_config$hub_lock_mode = \"hard_lock\"`."
+      )
+    )
+  }
 
   if (!is.null(out$phase_a_compatible_model_ids)) {
     if (!is.character(out$phase_a_compatible_model_ids) ||
@@ -824,11 +976,51 @@
       rlang::abort("`run_mode = \"link_one_spoke\"` requires exactly one spoke set.")
     }
   }
+  if (identical(resolved$link_estimation_mode, "anchored_joint")) {
+    explicit_transform_fields <- c(
+      "link_transform_policy",
+      "link_transform_mode",
+      "link_refit_mode",
+      "shift_only_theta_treatment"
+    )
+    explicit_transform_fields <- explicit_transform_fields[explicit_transform_fields %in% cfg_names]
+    if (length(explicit_transform_fields) > 0L) {
+      rlang::abort(
+        paste0(
+          "`adaptive_config$link_estimation_mode = \"anchored_joint\"` does not support transform-only ",
+          "configuration fields: ",
+          paste(explicit_transform_fields, collapse = ", "),
+          "."
+        )
+      )
+    }
+    if (!identical(resolved$hub_lock_mode, "hard_lock")) {
+      rlang::abort(
+        paste0(
+          "`adaptive_config$link_estimation_mode = \"anchored_joint\"` requires ",
+          "`adaptive_config$hub_lock_mode = \"hard_lock\"`."
+        )
+      )
+    }
+  }
   if (identical(resolved$hub_lock_mode, "soft_lock") &&
     (!is.finite(resolved$hub_lock_kappa) || resolved$hub_lock_kappa <= 0 || resolved$hub_lock_kappa > 1)) {
     rlang::abort(
       "`adaptive_config$hub_lock_kappa` must be strictly in (0, 1] when `hub_lock_mode = \"soft_lock\"`."
     )
+  }
+  if (identical(resolved$hub_lock_mode, "free") &&
+    !.adaptive_hub_lock_mode_free_allowed(
+      run_mode = resolved$run_mode,
+      link_estimation_mode = resolved$link_estimation_mode,
+      link_refit_mode = resolved$link_refit_mode
+    )) {
+    rlang::abort(paste0(
+      "`adaptive_config$hub_lock_mode = \"free\"` is only supported for ",
+      "`adaptive_config$run_mode = \"link_one_spoke\"` with ",
+      "`adaptive_config$link_estimation_mode = \"transform\"` and ",
+      "`adaptive_config$link_refit_mode = \"joint_refit\"`."
+    ))
   }
   if (resolved$stability_passes_required > resolved$stability_window_refits) {
     rlang::abort(
@@ -844,13 +1036,28 @@
       )
     )
   }
-  if (isTRUE(is_link_mode) &&
+  if (identical(run_mode, "link_multi_spoke") &&
     identical(resolved$multi_spoke_mode, "concurrent") &&
     !resolved$hub_lock_mode %in% c("hard_lock", "soft_lock")) {
     rlang::abort(paste0(
       "`adaptive_config$hub_lock_mode` must be `hard_lock` or `soft_lock` ",
       "when `adaptive_config$multi_spoke_mode = \"concurrent\"`."
     ))
+  }
+  if (isTRUE(resolved$probe_edges_count_toward_active_constraints)) {
+    .adaptive_abort_unsupported_phase_b_public_control(
+      field = "`adaptive_config$probe_edges_count_toward_active_constraints = TRUE`",
+      detail = paste0(
+        "Held-out probes remain excluded from active-link duplicate suppression, degree counts, ",
+        "and star-cap exposure counters."
+      )
+    )
+  }
+  if (isTRUE(resolved$allow_spoke_spoke_cross_set)) {
+    .adaptive_abort_unsupported_phase_b_public_control(
+      field = "`adaptive_config$allow_spoke_spoke_cross_set = TRUE`",
+      detail = "The current reviewed hub-and-spoke runtime supports only hub<->spoke Phase B routing."
+    )
   }
   out
 }
@@ -907,6 +1114,7 @@
     hub_id = hub_id,
     spoke_ids = as.integer(spoke_ids),
     is_multi_set = length(set_ids) > 1L,
+    anchored_joint = linking$anchored_joint %||% .adaptive_anchored_joint_empty_state(),
     phase_a = linking$phase_a %||% list(
       set_status = .adaptive_phase_a_empty_state(set_ids),
       artifacts = list(),
@@ -933,7 +1141,10 @@
   if (length(overrides) == 0L) {
     return(.adaptive_sync_linking_meta(out))
   }
-  out$controller <- utils::modifyList(.adaptive_controller_resolve(out), overrides)
+  out$controller <- .adaptive_controller_normalize_legacy_fields(
+    utils::modifyList(.adaptive_controller_resolve(out), overrides),
+    n_items = out$n_items
+  )
   out <- .adaptive_sync_round_controller(out)
   .adaptive_sync_linking_meta(out)
 }
@@ -951,6 +1162,50 @@
   controller <- .adaptive_controller_normalize_legacy_fields(controller, n_items = n_items)
   defaults <- .adaptive_controller_defaults(n_items)
   utils::modifyList(defaults, controller)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_runtime_controller_resolve <- function(state, controller = NULL) {
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state` must be an adaptive_state object.")
+  }
+  if (is.null(controller)) {
+    return(.adaptive_controller_resolve(state))
+  }
+
+  n_items <- as.integer(state$n_items)
+  controller <- .adaptive_controller_normalize_legacy_fields(controller, n_items = n_items)
+  utils::modifyList(.adaptive_controller_defaults(n_items), controller)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_state_frozen_by_spoke <- function(controller) {
+  frozen_map <- controller$link_state_frozen_by_spoke %||% list()
+  if (!is.list(frozen_map)) {
+    frozen_map <- list()
+  }
+  frozen_map
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_state_frozen_refit_id_by_spoke <- function(controller) {
+  frozen_refit_map <- controller$link_state_frozen_refit_id_by_spoke %||% list()
+  if (!is.list(frozen_refit_map)) {
+    frozen_refit_map <- list()
+  }
+  frozen_refit_map
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_spoke_is_frozen <- function(controller, spoke_id) {
+  if (length(spoke_id) != 1L || is.na(spoke_id)) {
+    return(FALSE)
+  }
+  isTRUE(.adaptive_link_state_frozen_by_spoke(controller)[[as.character(spoke_id)]])
 }
 
 #' @keywords internal
@@ -1527,6 +1782,7 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         spoke_ids = integer(),
         is_multi_set = length(unique(set_ids)) > 1L,
         probe = .adaptive_link_probe_empty_state(),
+        anchored_joint = .adaptive_anchored_joint_empty_state(),
         phase_a = list(
           set_status = .adaptive_phase_a_empty_state(unique(set_ids)),
           artifacts = list(),

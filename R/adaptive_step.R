@@ -112,7 +112,8 @@ validate_judge_result <- function(result, A_id, B_id) {
   is_cross_set <- !is.na(set_i) && !is.na(set_j) && set_i != set_j
   utility_mode <- .adaptive_selection_utility_mode(
     run_mode = run_mode,
-    is_cross_set = isTRUE(is_cross_set)
+    is_cross_set = isTRUE(is_cross_set),
+    link_estimation_mode = controller$link_estimation_mode
   )
 
   list(
@@ -250,15 +251,20 @@ validate_judge_result <- function(result, A_id, B_id) {
       "."
     ))
   }
-  valid_utility_modes <- c(
-    "pairing_trueskill_u0",
-    "linking_d_optimal"
-  )
+  valid_utility_modes <- .adaptive_utility_mode_levels()
   utility_mode <- if ("utility_mode" %in% names(row)) {
     as.character(row$utility_mode[[1L]] %||% NA_character_)
   } else {
     NA_character_
   }
+  link_estimation_mode <- if ("link_estimation_mode" %in% names(row)) {
+    as.character(row$link_estimation_mode[[1L]] %||% "transform")
+  } else {
+    "transform"
+  }
+  expected_linking_utility_mode <- .adaptive_linking_utility_mode(
+    link_estimation_mode = link_estimation_mode
+  )
   if (!is.na(utility_mode) && !utility_mode %in% valid_utility_modes) {
     rlang::abort(
       paste0(
@@ -342,20 +348,20 @@ validate_judge_result <- function(result, A_id, B_id) {
     }
     if (isTRUE(is_link_run_mode) &&
       !isTRUE(is_probe_run_mode) &&
-      !identical(utility_mode, "linking_d_optimal")) {
+      !identical(utility_mode, expected_linking_utility_mode)) {
       rlang::abort(
         paste0(
           "step_log append completeness failure for cross-set row: ",
-          "`utility_mode` must be linking_d_optimal."
+          "`utility_mode` must be ", expected_linking_utility_mode, "."
         )
       )
     }
     if (isTRUE(is_probe_run_mode) &&
-      identical(utility_mode, "linking_d_optimal")) {
+      .adaptive_is_linking_d_optimal_mode(utility_mode, allow_legacy = TRUE)) {
       rlang::abort(
         paste0(
           "step_log append completeness failure for cross-set probe row: ",
-          "`utility_mode` must not be linking_d_optimal."
+          "`utility_mode` must not use a linking D-optimal audit label."
         )
       )
     }
@@ -413,7 +419,7 @@ validate_judge_result <- function(result, A_id, B_id) {
     }
     if (isTRUE(is_link_run_mode) &&
       !is.na(utility_mode) &&
-      !utility_mode %in% c("pairing_trueskill_u0")) {
+      !utility_mode %in% c("pairing_trueskill_u0", "pairing_trueskill_u")) {
       rlang::abort(
         "step_log append completeness failure: non-cross-set rows in linking runs must use pairing utility mode or NA."
       )
@@ -437,7 +443,10 @@ validate_judge_result <- function(result, A_id, B_id) {
   if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
     return(state_after)
   }
-  if (identical(as.character(row$utility_mode[[1L]] %||% NA_character_), "linking_d_optimal") &&
+  if (.adaptive_is_linking_d_optimal_mode(
+    as.character(row$utility_mode[[1L]] %||% NA_character_),
+    allow_legacy = TRUE
+  ) &&
     isTRUE(row$is_probe_step[[1L]] %||% FALSE)) {
     return(state_after)
   }
@@ -463,6 +472,66 @@ validate_judge_result <- function(result, A_id, B_id) {
   hub_item <- if (identical(i_set, hub_id)) i_id else if (identical(j_set, hub_id)) j_id else NA_character_
   spoke_item <- if (identical(i_set, spoke_id)) i_id else if (identical(j_set, spoke_id)) j_id else NA_character_
   if (is.na(hub_item) || is.na(spoke_item)) {
+    return(state_after)
+  }
+  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
+  if (identical(link_estimation_mode, "anchored_joint")) {
+    accepted_state <- .adaptive_link_anchored_joint_resolve_state(
+      state = state_before,
+      spoke_id = as.integer(spoke_id),
+      controller = controller
+    )
+    spoke_items <- as.character(names(accepted_state$theta_spoke_global_mean))
+    spoke_idx <- as.integer(match(spoke_item, spoke_items))
+    theta_h <- as.double(accepted_state$theta_hub_fixed[[as.character(hub_item)]] %||% NA_real_)
+    theta_x <- as.double(accepted_state$theta_spoke_global_mean[[as.character(spoke_item)]] %||% NA_real_)
+    if (!is.finite(theta_h) || !is.finite(theta_x) || is.na(spoke_idx)) {
+      return(state_after)
+    }
+    judge_params <- .adaptive_link_anchored_joint_judge_params(
+      state = state_before,
+      spoke_id = as.integer(spoke_id),
+      controller = controller,
+      accepted_state = accepted_state
+    )
+    pbar <- .adaptive_link_model_d_pbar(
+      theta_h = theta_h,
+      theta_x = theta_x,
+      beta = as.double(judge_params$beta %||% 0),
+      epsilon = as.double(judge_params$epsilon %||% 0)
+    )
+    if (!is.finite(pbar)) {
+      return(state_after)
+    }
+    g <- matrix(0, nrow = length(spoke_items), ncol = 1L)
+    g[spoke_idx, 1L] <- 1
+    ipair <- as.matrix(as.double(pbar * (1 - pbar)) * (g %*% t(g)))
+    refit_id <- .adaptive_link_refit_window_id(state_after)
+    d_opt_state <- .adaptive_link_d_opt_state_get(
+      controller = controller,
+      refit_id = refit_id,
+      spoke_id = as.integer(spoke_id),
+      transform_mode = NA_character_,
+      link_estimation_mode = "anchored_joint",
+      free_block_dim = length(spoke_items)
+    )
+    if (!is.matrix(d_opt_state$it) || any(dim(d_opt_state$it) != dim(ipair))) {
+      return(state_after)
+    }
+    d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
+    current_prefix <- paste0(as.integer(refit_id), "::")
+    map_names <- names(d_opt_map)
+    if (is.null(map_names)) {
+      d_opt_map <- list()
+    } else {
+      keep <- startsWith(as.character(map_names), current_prefix)
+      d_opt_map <- d_opt_map[keep]
+    }
+    d_opt_state$it <- as.matrix((d_opt_state$it + ipair + t(d_opt_state$it + ipair)) / 2)
+    d_opt_state$it_n_pairs_accumulated <- as.integer(d_opt_state$it_n_pairs_accumulated + 1L)
+    d_opt_map[[d_opt_state$key]] <- d_opt_state
+    controller$link_d_opt_it_by_spoke <- d_opt_map
+    state_after$controller <- controller
     return(state_after)
   }
   transform_state <- .adaptive_link_transform_state_for_spoke(controller, as.integer(spoke_id))
@@ -644,8 +713,10 @@ run_one_step <- function(state, judge, ...) {
     selection <- .adaptive_warm_start_selection(state, step_id = step_id)
   } else {
     state <- .adaptive_refresh_round_anchors(state)
-    probe_selection <- NULL
-    if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
+    selection <- select_next_pair(state, step_id = step_id)
+    if (isTRUE(selection$candidate_starved) &&
+      .adaptive_link_mode_active(controller) &&
+      identical(phase_ctx$phase, "phase_b")) {
       probe_spoke_id <- .adaptive_link_probe_next_holdout_spoke(
         state,
         controller,
@@ -662,9 +733,18 @@ run_one_step <- function(state, judge, ...) {
           step_id = step_id,
           spoke_id = probe_spoke_id
         )
+        if (!is.null(probe_selection) && nrow(tibble::as_tibble(probe_selection)) != 0L) {
+          active_fallback_path <- as.character(selection$fallback_path %||% NA_character_)
+          active_fallback_path <- active_fallback_path[!is.na(active_fallback_path) & nzchar(active_fallback_path)]
+          probe_selection$fallback_used <- "probe_panel_after_active_unavailable"
+          probe_selection$fallback_path <- paste(
+            c(active_fallback_path, "probe_panel_after_active_unavailable"),
+            collapse = ">"
+          )
+          selection <- probe_selection
+        }
       }
     }
-    selection <- probe_selection %||% select_next_pair(state, step_id = step_id)
   }
 
   is_valid <- FALSE
@@ -709,6 +789,7 @@ run_one_step <- function(state, judge, ...) {
 
   run_mode <- as.character(selection$run_mode %||% controller$run_mode %||% "within_set")
   hub_id <- as.integer(controller$hub_id %||% 1L)
+  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
   link_transform_policy <- as.character(controller$link_transform_policy %||% NA_character_)
   link_transform_state <- .adaptive_default_link_transform_state(link_transform_policy)
   utility_mode <- as.character(selection$utility_mode %||% NA_character_)
@@ -751,8 +832,8 @@ run_one_step <- function(state, judge, ...) {
     !is.na(selected_spoke_id)) {
     link_spoke_id <- selected_spoke_id
   }
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
-  if (isTRUE(is_cross_set) && !is.na(link_spoke_id) && isTRUE(frozen_map[[as.character(link_spoke_id)]])) {
+  if (isTRUE(is_cross_set) && !is.na(link_spoke_id) &&
+    isTRUE(.adaptive_link_spoke_is_frozen(controller, link_spoke_id))) {
     rlang::abort(
       paste0(
         "Phase B retirement invariant failed: runtime attempted to emit a cross-set step for frozen ",
@@ -789,15 +870,31 @@ run_one_step <- function(state, judge, ...) {
   if (isTRUE(is_probe_step)) {
     utility_mode <- NA_character_
   }
+  is_phase_b_link_ordering_step <- isTRUE(is_cross_set) &&
+    isTRUE(is_link_run_mode) &&
+    !isTRUE(is_probe_step) &&
+    identical(phase_ctx$phase, "phase_b") &&
+    !is.na(link_stage)
   cross_set_utility_pre <- if (isTRUE(is_cross_set) &&
     isTRUE(is_link_run_mode)) {
     explicit_utility <- as.double(selection$cross_set_utility_pre %||% NA_real_)
     if (is.finite(explicit_utility)) {
       explicit_utility
-    } else if (identical(utility_mode, "linking_d_optimal")) {
+    } else if (.adaptive_is_linking_d_optimal_mode(utility_mode, allow_legacy = TRUE)) {
+      d_opt_utility <- as.double(selection$link_d_opt_gain %||% NA_real_)
+      if (isTRUE(is_phase_b_link_ordering_step) && !is.finite(d_opt_utility)) {
+        rlang::abort(sprintf(
+          paste0(
+            "run_one_step invariant failed: canonical D-opt ordering utility is missing/non-finite ",
+            "for stage=%s, spoke_id=%s while preparing `cross_set_utility_pre`."
+          ),
+          as.character(link_stage),
+          as.integer(link_spoke_id)
+        ))
+      }
       as.double(
-        if (is.finite(as.double(selection$link_d_opt_gain %||% NA_real_))) {
-          selection$link_d_opt_gain
+        if (isTRUE(is_phase_b_link_ordering_step) || is.finite(d_opt_utility)) {
+          d_opt_utility
         } else {
           selection$link_u %||% selection$U0_ij %||% NA_real_
         }
@@ -927,6 +1024,7 @@ run_one_step <- function(state, judge, ...) {
     is_drift_probe_step = is_drift_probe_step,
     link_spoke_id = link_spoke_id,
     run_mode = run_mode,
+    link_estimation_mode = if (isTRUE(is_cross_set)) link_estimation_mode else NA_character_,
     link_stage = link_stage,
     delta_spoke_estimate_pre = delta_spoke_estimate_pre,
     delta_spoke_sd_pre = delta_spoke_sd_pre,

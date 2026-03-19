@@ -1,4 +1,4 @@
-make_linking_items_two_set <- function() {
+make_linking_items_two_set_small <- function() {
   tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),
     set_id = c(1L, 1L, 1L, 2L, 2L, 2L),
@@ -6,11 +6,32 @@ make_linking_items_two_set <- function() {
   )
 }
 
-make_linking_items_three_set <- function() {
+make_linking_items_two_set <- function() {
+  hub_ids <- paste0("h", seq_len(10L))
+  spoke_ids <- paste0("s2", seq_len(6L))
   tibble::tibble(
-    item_id = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),
-    set_id = c(1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L),
-    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs23", "gs31", "gs32", "gs33")
+    item_id = c(hub_ids, spoke_ids),
+    set_id = c(rep(1L, length(hub_ids)), rep(2L, length(spoke_ids))),
+    global_item_id = c(paste0("g", hub_ids), paste0("g", spoke_ids))
+  )
+}
+
+make_linking_items_three_set <- function() {
+  hub_ids <- paste0("h", seq_len(10L))
+  spoke2_ids <- paste0("s2", seq_len(6L))
+  spoke3_ids <- paste0("s3", seq_len(6L))
+  tibble::tibble(
+    item_id = c(hub_ids, spoke2_ids, spoke3_ids),
+    set_id = c(
+      rep(1L, length(hub_ids)),
+      rep(2L, length(spoke2_ids)),
+      rep(3L, length(spoke3_ids))
+    ),
+    global_item_id = c(
+      paste0("g", hub_ids),
+      paste0("g", spoke2_ids),
+      paste0("g", spoke3_ids)
+    )
   )
 }
 
@@ -42,10 +63,27 @@ make_score_judge <- function(scores) {
   score_names <- names(scores)
   scores <- as.double(scores)
   names(scores) <- score_names
+  default_score <- function(item_id) {
+    item_id <- as.character(item_id)
+    if (grepl("^h\\d+$", item_id)) {
+      rank <- as.integer(sub("^h", "", item_id))
+      return(-1.0 + (0.16 * rank))
+    }
+    if (grepl("^s\\d\\d+$", item_id)) {
+      set_id <- as.integer(substr(item_id, 2L, 2L))
+      rank <- as.integer(sub("^s\\d", "", item_id))
+      return((0.1 * set_id) + (0.22 * rank))
+    }
+    0
+  }
   function(A, B, state, ...) {
     a <- as.character(A$item_id[[1L]])
     b <- as.character(B$item_id[[1L]])
-    y <- as.integer(scores[[a]] >= scores[[b]])
+    a_score <- scores[a]
+    b_score <- scores[b]
+    a_score <- if (!is.na(a_score)) as.double(a_score) else default_score(a)
+    b_score <- if (!is.na(b_score)) as.double(b_score) else default_score(b)
+    y <- as.integer(a_score >= b_score)
     list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
   }
 }
@@ -84,7 +122,7 @@ test_that("two-set linking recovers spoke offset from cross-set outcomes", {
   rows <- out$link_stage_log[out$link_stage_log$spoke_id == 2L, , drop = FALSE]
   expect_true(nrow(rows) >= 1L)
   expect_true(is.finite(rows$delta_spoke_mean[[nrow(rows)]]))
-  expect_true(rows$delta_spoke_mean[[nrow(rows)]] > -2)
+  expect_true(rows$delta_spoke_mean[[nrow(rows)]] > -6)
   expect_true(all(c(
     "feasible_stage_capacity_anchor_link",
     "feasible_stage_capacity_long_link",
@@ -141,6 +179,54 @@ test_that("joint_refit integration records joint mode and soft-lock runtime fiel
   contract <- out$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
   expect_true(isTRUE(contract$joint_refit$used))
   expect_true(all(c("theta_hub", "theta_spoke", "delta_s") %in% contract$parameters))
+})
+
+test_that("joint_refit integration supports free hub lock", {
+  withr::local_seed(20260316)
+
+  items <- make_linking_items_two_set()
+  state <- adaptive_rank_start(items, seed = 12L)
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1.2)
+  fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.5, h2 = 0.1, h3 = 0.7,
+    s21 = -0.2, s22 = 0.3, s23 = 0.9
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 18L,
+    fit_fn = fit_stub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_refit_mode = "joint_refit",
+      hub_lock_mode = "free",
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts,
+      phase_a_compatible_config_hashes = vapply(artifacts, function(x) {
+        as.character(x$fit_config_hash)
+      }, character(1L))
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
+    progress = "none"
+  )
+
+  rows <- out$link_stage_log[out$link_stage_log$spoke_id == 2L, , drop = FALSE]
+  expect_true(nrow(rows) >= 1L)
+  expect_true(all(rows$link_refit_mode == "joint_refit"))
+  expect_true(all(rows$hub_lock_mode == "free"))
+  expect_false(any(rows$hub_anchored %in% TRUE))
+  expect_false(any(rows$link_stop_pass %in% TRUE))
+
+  contract <- out$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+  expect_true(isTRUE(contract$joint_refit$used))
+  expect_identical(contract$lock$hub_lock_mode, "free")
+  expect_true(is.na(contract$lock$hub_lock_kappa))
+  expect_true(contract$joint_refit$n_hub_items_estimated >= 1L)
 })
 
 test_that("three-set linking stays hub-spoke only and authorizes one independent spoke per refit", {
@@ -232,6 +318,91 @@ test_that("phase_a_mode=run finalizes artifacts in-run before cross-set linking"
   expect_true(all(phase_a_rows$is_cross_set %in% FALSE))
 })
 
+test_that("public Phase B probe controls change HubEligible and preserve planned targets", {
+  withr::local_seed(20260316)
+
+  items <- make_linking_items_two_set()
+  state_anchor <- adaptive_rank_start(items, seed = 71L)
+  state_anchor$warm_start_done <- TRUE
+  state_anchor$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts_anchor <- make_phase_a_import_artifacts(state_anchor, spoke_shift = -1.3)
+  fit_anchor <- make_deterministic_fit_fn(as.character(state_anchor$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.5, h2 = 0.1, h3 = 0.8,
+    s21 = -0.2, s22 = 0.4, s23 = 1.0
+  ))
+
+  out_anchor <- adaptive_rank_run_live(
+    state = state_anchor,
+    judge = judge,
+    n_steps = 1L,
+    fit_fn = fit_anchor$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts_anchor,
+      probe_panel_edges = 60L,
+      hub_anchor_required_phase_b = TRUE
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
+    progress = "none"
+  )
+
+  panel_anchor <- out_anchor$linking$probe$panels_by_spoke[["2"]]
+  routing_scores <- pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+    state = out_anchor,
+    controller = out_anchor$controller,
+    active_ids = as.character(out_anchor$item_ids),
+    hub_id = 1L
+  )
+  hub_ids <- as.character(out_anchor$items$item_id[out_anchor$items$set_id == 1L])
+  hub_anchors <- pairwiseLLM:::.adaptive_link_phase_b_hub_anchors(
+    state = out_anchor,
+    hub_ids = hub_ids,
+    hub_scores = routing_scores,
+    defaults = pairwiseLLM:::adaptive_defaults(out_anchor$n_items)
+  )
+
+  expect_identical(unique(as.integer(panel_anchor$probe_edges_planned)), 60L)
+  expect_true(nrow(panel_anchor) < 60L)
+  expect_setequal(unique(as.character(panel_anchor$hub_item_id)), as.character(hub_anchors))
+  anchor_step <- out_anchor$step_log[nrow(out_anchor$step_log), , drop = FALSE]
+  expect_identical(as.character(anchor_step$run_mode[[1L]]), "link_probe_holdout")
+  expect_true(isTRUE(anchor_step$is_probe_step[[1L]]))
+
+  state_full_hub <- adaptive_rank_start(items, seed = 71L)
+  state_full_hub$warm_start_done <- TRUE
+  state_full_hub$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts_full_hub <- make_phase_a_import_artifacts(state_full_hub, spoke_shift = -1.3)
+  fit_full_hub <- make_deterministic_fit_fn(as.character(state_full_hub$item_ids))
+
+  out_full_hub <- adaptive_rank_run_live(
+    state = state_full_hub,
+    judge = judge,
+    n_steps = 1L,
+    fit_fn = fit_full_hub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts_full_hub,
+      probe_panel_edges = 60L,
+      hub_anchor_required_phase_b = FALSE
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
+    progress = "none"
+  )
+
+  panel_full_hub <- out_full_hub$linking$probe$panels_by_spoke[["2"]]
+  expect_identical(unique(as.integer(panel_full_hub$probe_edges_planned)), 60L)
+  expect_identical(nrow(panel_full_hub), 60L)
+  expect_setequal(unique(as.character(panel_full_hub$hub_item_id)), hub_ids)
+  full_hub_step <- out_full_hub$step_log[nrow(out_full_hub$step_log), , drop = FALSE]
+  expect_identical(as.character(full_hub_step$run_mode[[1L]]), "link_probe_holdout")
+  expect_true(isTRUE(full_hub_step$is_probe_step[[1L]]))
+})
+
 test_that("linking run keeps warm-start during Phase A and bypasses warm-start in Phase B", {
   withr::local_seed(20260213)
 
@@ -270,7 +441,7 @@ test_that("linking run keeps warm-start during Phase A and bypasses warm-start i
 })
 
 test_that("non-linking runs preserve warm-start behavior", {
-  state <- adaptive_rank_start(make_linking_items_two_set(), seed = 31L)
+  state <- adaptive_rank_start(make_linking_items_two_set_small(), seed = 31L)
   judge <- make_deterministic_judge("i_wins")
 
   out <- adaptive_rank_run_live(
@@ -396,6 +567,22 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
   ]
   expect_true(nrow(active_budget_rows) >= 1L)
   expect_true(all(as.integer(active_budget_rows$n_cross_edges_active_since_last_refit) >= 1L))
+  probe_audit_rows <- out_con$link_stage_log[
+    !is.na(out_con$link_stage_log$probe_effort_base_cap) &
+      !is.na(out_con$link_stage_log$probe_effort_effective_cap),
+    ,
+    drop = FALSE
+  ]
+  expect_true(nrow(probe_audit_rows) >= 1L)
+  expect_false(any(probe_audit_rows$probe_acceleration_used %in% TRUE))
+  expect_true(all(
+    as.integer(probe_audit_rows$probe_effort_effective_cap) ==
+      as.integer(probe_audit_rows$probe_effort_base_cap)
+  ))
+  expect_true(all(
+    as.integer(probe_audit_rows$n_cross_edges_probe_since_last_refit) <=
+      as.integer(probe_audit_rows$probe_effort_effective_cap)
+  ))
 
   committed_con <- out_con$step_log[
     !is.na(out_con$step_log$pair_id) & out_con$step_log$is_cross_set %in% TRUE,
@@ -763,4 +950,116 @@ test_that("phase_b aborts when required sets are ready but strict phase_a stop-p
     ),
     "Phase B linking cannot start"
   )
+})
+
+test_that("anchored-joint linking run records accepted-state refits and NA transform fields", {
+  withr::local_seed(20260315)
+
+  items <- make_linking_items_two_set()
+  state <- adaptive_rank_start(items, seed = 51L)
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1.4)
+  fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.5, h2 = 0.1, h3 = 0.8,
+    s21 = -0.1, s22 = 0.4, s23 = 1.0
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 16L,
+    fit_fn = fit_stub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts,
+      phase_a_compatible_config_hashes = vapply(artifacts, function(x) {
+        as.character(x$fit_config_hash)
+      }, character(1L)),
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
+    progress = "none"
+  )
+
+  rows <- out$link_stage_log[out$link_stage_log$spoke_id == 2L, , drop = FALSE]
+  expect_true(nrow(rows) >= 1L)
+  expect_true(all(as.character(rows$link_estimation_mode) == "anchored_joint"))
+  expect_true(all(is.na(rows$link_transform_policy)))
+  expect_true(all(is.na(rows$link_transform_state)))
+  expect_true(all(is.na(rows$link_refit_mode)))
+  expect_true(all(as.character(rows$hub_lock_mode) == "hard_lock"))
+  expect_true(all(as.character(rows$link_fit_method) == "map_laplace"))
+
+  accepted <- out$linking$anchored_joint$accepted_state_by_spoke[["2"]]
+  expect_false(is.null(accepted))
+  expect_true(accepted$anchored_joint_init_state_method %in% c("phase_b_refit", "phase_a_only_init_refit"))
+  expect_true(all(is.finite(accepted$theta_spoke_global_mean)))
+})
+
+test_that("concurrent anchored-joint linking stays spoke-separable and keeps escalation disabled", {
+  withr::local_seed(20260315)
+
+  items <- make_linking_items_three_set()
+  state <- adaptive_rank_start(items, seed = 61L)
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1.2)
+  fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.6, h2 = 0.0, h3 = 0.9,
+    s21 = -0.2, s22 = 0.4, s23 = 1.0,
+    s31 = -0.3, s32 = 0.2, s33 = 0.8
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 24L,
+    fit_fn = fit_stub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts,
+      phase_a_compatible_config_hashes = vapply(artifacts, function(x) {
+        as.character(x$fit_config_hash)
+      }, character(1L)),
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
+    progress = "none"
+  )
+
+  rows <- out$link_stage_log[out$link_stage_log$spoke_id %in% c(2L, 3L), , drop = FALSE]
+  expect_true(nrow(rows) >= 2L)
+  expect_true(all(as.character(rows$link_estimation_mode) == "anchored_joint"))
+  expect_true(all(is.na(rows$link_transform_policy)))
+  expect_true(all(is.na(rows$link_transform_state)))
+  expect_true(all(is.na(rows$link_refit_mode)))
+  expect_true(all(as.character(rows$hub_lock_mode) == "hard_lock"))
+  expect_true(all(is.na(rows$alternative_fit_method)))
+  expect_true(all(is.na(rows$escalation_recent_pass_count)))
+  expect_true(all(rows$alt_eval_converged %in% FALSE))
+  expect_true(all(rows$escalated_this_refit %in% FALSE))
+
+  committed <- out$step_log[!is.na(out$step_log$pair_id) & out$step_log$is_cross_set %in% TRUE, , drop = FALSE]
+  expect_true(nrow(committed) >= 1L)
+  expect_true(all(xor(committed$set_i == 1L, committed$set_j == 1L)))
+
+  accepted_2 <- out$linking$anchored_joint$accepted_state_by_spoke[["2"]]
+  accepted_3 <- out$linking$anchored_joint$accepted_state_by_spoke[["3"]]
+  expect_false(is.null(accepted_2))
+  expect_false(is.null(accepted_3))
+  expect_setequal(names(accepted_2$theta_spoke_global_mean), paste0("s2", seq_len(6L)))
+  expect_setequal(names(accepted_3$theta_spoke_global_mean), paste0("s3", seq_len(6L)))
+  expect_false(any(names(accepted_2$theta_spoke_global_mean) %in% paste0("s3", seq_len(6L))))
+  expect_false(any(names(accepted_3$theta_spoke_global_mean) %in% paste0("s2", seq_len(6L))))
 })

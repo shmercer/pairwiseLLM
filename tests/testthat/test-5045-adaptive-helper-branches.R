@@ -593,7 +593,7 @@ test_that("adaptive progress refit block prints linking stop gates without misle
     reliability_link_global = c(0.972, 0.971),
     link_stop_pass = c(FALSE, FALSE),
     link_stop_eligible = c(FALSE, FALSE),
-    transform_frozen = c(FALSE, FALSE),
+    link_state_frozen = c(FALSE, FALSE),
     n_pairs_cross_set_done = c(680L, 679L),
     n_cross_edges_total_since_last_refit = c(38L, 37L),
     n_unique_cross_pairs_seen = c(448L, 467L),
@@ -683,8 +683,8 @@ test_that("adaptive progress refit block keeps frozen spokes compact and emits h
   )
   link_rows <- tibble::tibble(
     spoke_id = c(2L, 3L),
-    transform_frozen = c(FALSE, TRUE),
-    transform_frozen_refit_id = c(NA_integer_, 8L),
+    link_state_frozen = c(FALSE, TRUE),
+    link_state_frozen_refit_id = c(NA_integer_, 8L),
     link_transform_state = c("shift_only", "shift_only"),
     link_stop_eligible = c(TRUE, TRUE),
     link_stop_gate_open = c(TRUE, TRUE),
@@ -916,11 +916,16 @@ test_that("adaptive state and trueskill validators cover additional edge branche
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
-      list(run_mode = "link_multi_spoke", multi_spoke_mode = "concurrent", hub_lock_mode = "free"),
+      list(
+        run_mode = "link_multi_spoke",
+        multi_spoke_mode = "concurrent",
+        link_refit_mode = "joint_refit",
+        hub_lock_mode = "free"
+      ),
       5L,
       set_ids = c(1L, 2L, 2L)
     ),
-    "must be one of"
+    "only supported"
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
@@ -946,16 +951,18 @@ test_that("adaptive state and trueskill validators cover additional edge branche
     set_ids = c(1L, 2L, 3L)
   )
   expect_identical(cfg_link_ok$hub_id, 1L)
-  cfg_spoke_spoke <- pairwiseLLM:::.adaptive_validate_controller_config(
-    list(
-      run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      allow_spoke_spoke_cross_set = TRUE
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(
+        run_mode = "link_multi_spoke",
+        hub_id = 1L,
+        allow_spoke_spoke_cross_set = TRUE
+      ),
+      5L,
+      set_ids = c(1L, 2L, 3L)
     ),
-    5L,
-    set_ids = c(1L, 2L, 3L)
+    "allow_spoke_spoke_cross_set = TRUE"
   )
-  expect_true(isTRUE(cfg_spoke_spoke$allow_spoke_spoke_cross_set))
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
       list(ppc_calibration_id = NULL),

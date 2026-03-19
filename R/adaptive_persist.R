@@ -185,8 +185,29 @@ read_log <- function(path) {
       }
       out$link_transform_mode <- NULL
     }
+    if (!"link_estimation_mode" %in% names(out)) {
+      is_linking_row <- rep_len(FALSE, nrow(out))
+      if ("is_cross_set" %in% names(out)) {
+        is_linking_row <- as.logical(out$is_cross_set %||% FALSE)
+      }
+      if ("run_mode" %in% names(out)) {
+        run_mode_chr <- as.character(out$run_mode)
+        is_linking_row <- is_linking_row |
+          run_mode_chr %in% c("link_one_spoke", "link_multi_spoke", "link_probe_holdout", "link_probe")
+      }
+      out$link_estimation_mode <- ifelse(is_linking_row, "transform", NA_character_)
+    }
   }
   if (identical(name, "link_stage_log")) {
+    if ("transform_frozen" %in% names(out) && !"link_state_frozen" %in% names(out)) {
+      out$link_state_frozen <- as.logical(out$transform_frozen)
+    }
+    if ("transform_frozen_refit_id" %in% names(out) &&
+      !"link_state_frozen_refit_id" %in% names(out)) {
+      out$link_state_frozen_refit_id <- as.integer(out$transform_frozen_refit_id)
+    }
+    out$transform_frozen <- NULL
+    out$transform_frozen_refit_id <- NULL
     if ("link_transform_mode" %in% names(out)) {
       if (!"link_transform_policy" %in% names(out)) {
         out$link_transform_policy <- normalize_policy_col(out$link_transform_mode)
@@ -237,6 +258,40 @@ read_log <- function(path) {
     if ("reliability_EAP_link" %in% names(out)) {
       out$reliability_EAP_link <- NULL
     }
+    if (!"link_estimation_mode" %in% names(out)) {
+      out$link_estimation_mode <- rep("transform", nrow(out))
+    }
+    if (!"phase_b_global_metric_uncertainty_approximation" %in% names(out)) {
+      mode_vals <- as.character(out$link_estimation_mode %||% rep(NA_character_, nrow(out)))
+      uncertainty_vals <- if ("link_uncertainty_approximation" %in% names(out)) {
+        as.character(out$link_uncertainty_approximation)
+      } else {
+        rep(NA_character_, nrow(out))
+      }
+      fit_method_vals <- if ("link_fit_method" %in% names(out)) {
+        as.character(out$link_fit_method)
+      } else {
+        rep(NA_character_, nrow(out))
+      }
+      out$phase_b_global_metric_uncertainty_approximation <- vapply(
+        seq_len(nrow(out)),
+        function(idx) {
+          .adaptive_phase_b_global_metric_uncertainty_approximation(
+            link_estimation_mode = mode_vals[[idx]],
+            link_uncertainty_approximation = uncertainty_vals[[idx]],
+            link_fit_method = fit_method_vals[[idx]]
+          )
+        },
+        character(1)
+      )
+    }
+  }
+  if (identical(name, "step_log") || identical(name, "link_stage_log")) {
+    out <- .adaptive_log_normalize_mode_fields(
+      out,
+      if (identical(name, "step_log")) schema_step_log else schema_link_stage_log,
+      name
+    )
   }
   if (!isTRUE(fill_missing)) {
     return(out)
@@ -668,6 +723,8 @@ read_log <- function(path) {
     )
   }
   panel_id <- as.character(panel_id[[1L]])
+  panel_planned_edges <- .adaptive_link_probe_planned_edges(panel)
+  panel_reallocation_used <- .adaptive_link_probe_panel_reallocation_used(panel)
 
   if (anyDuplicated(as.character(panel$pair_key))) {
     .adaptive_link_probe_resume_abort(
@@ -717,6 +774,33 @@ read_log <- function(path) {
           row_panel_id,
           " does not match persisted panel id ",
           panel_id
+        ),
+        spoke_id = spoke_id
+      )
+    }
+    row_planned <- as.integer(last_row$probe_edges_planned[[1L]] %||% NA_integer_)
+    if (is.finite(row_planned) &&
+      row_planned > 0L &&
+      !identical(as.integer(row_planned), as.integer(panel_planned_edges))) {
+      .adaptive_link_probe_resume_abort(
+        paste0(
+          "latest `link_stage_log$probe_edges_planned`=",
+          as.integer(row_planned),
+          " does not match the canonical planned probe count ",
+          as.integer(panel_planned_edges)
+        ),
+        spoke_id = spoke_id
+      )
+    }
+    row_reallocation <- as.logical(last_row$probe_panel_reallocation_used[[1L]] %||% NA)
+    if (!is.na(row_reallocation) &&
+      !identical(isTRUE(row_reallocation), isTRUE(panel_reallocation_used))) {
+      .adaptive_link_probe_resume_abort(
+        paste0(
+          "latest `link_stage_log$probe_panel_reallocation_used`=",
+          isTRUE(row_reallocation),
+          " does not match the canonical panel construction value ",
+          isTRUE(panel_reallocation_used)
         ),
         spoke_id = spoke_id
       )

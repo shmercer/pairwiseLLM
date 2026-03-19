@@ -224,17 +224,35 @@
 #' @keywords internal
 #' @noRd
 .adaptive_link_probe_panel_size <- function(n_spoke_items,
-                                            n_available_pairs = NA_integer_,
-                                            probe_edges_min_for_stop = 30L) {
-  n_spoke_items <- as.integer(n_spoke_items)
-  n_available_pairs <- as.integer(n_available_pairs %||% NA_integer_)
-  probe_edges_min_for_stop <- max(1L, as.integer(probe_edges_min_for_stop %||% 30L))
-  base_target <- max(1L, as.integer(ceiling(0.25 * n_spoke_items)))
-  target <- max(base_target, probe_edges_min_for_stop)
-  if (!is.na(n_available_pairs)) {
-    target <- min(target, max(1L, as.integer(floor(0.5 * n_available_pairs))))
+                                            probe_panel_edges = NA_integer_,
+                                            n_available_pairs = NA_integer_) {
+  if (!is.null(probe_panel_edges) && !all(is.na(probe_panel_edges))) {
+    if (!.adaptive_is_integerish(probe_panel_edges) ||
+      length(probe_panel_edges) != 1L ||
+      is.na(probe_panel_edges)) {
+      rlang::abort("`probe_panel_edges` must be a single integer when supplied.")
+    }
+    probe_panel_edges <- as.integer(probe_panel_edges)
+    if (probe_panel_edges < 1L) {
+      rlang::abort("`probe_panel_edges` must be >= 1 when supplied.")
+    }
+    return(as.integer(probe_panel_edges))
   }
-  max(1L, as.integer(target))
+  n_spoke_items <- as.integer(n_spoke_items)
+  base_target <- as.integer(ceiling(0.25 * n_spoke_items))
+  max(0L, as.integer(min(160L, max(40L, base_target))))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_panel_feasible_size <- function(target_edges, n_available_pairs = NA_integer_) {
+  target_edges <- max(0L, as.integer(target_edges %||% 0L))
+  n_available_pairs <- as.integer(n_available_pairs %||% NA_integer_)
+  if (is.na(n_available_pairs)) {
+    return(as.integer(target_edges))
+  }
+  feasible_cap <- max(0L, as.integer(n_available_pairs))
+  as.integer(min(target_edges, feasible_cap))
 }
 
 #' @keywords internal
@@ -263,6 +281,43 @@
   on.exit(unlink(tmp), add = TRUE)
   saveRDS(keys, tmp)
   unname(tools::md5sum(tmp))[[1L]]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_planned_edges <- function(panel_tbl) {
+  panel_tbl <- tibble::as_tibble(panel_tbl)
+  if (nrow(panel_tbl) < 1L) {
+    return(0L)
+  }
+  if ("probe_edges_planned" %in% names(panel_tbl)) {
+    planned_vals <- unique(as.integer(panel_tbl$probe_edges_planned))
+    planned_vals <- planned_vals[!is.na(planned_vals)]
+    if (length(planned_vals) == 1L) {
+      return(as.integer(planned_vals))
+    }
+  }
+  as.integer(nrow(panel_tbl))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_panel_reallocation_used <- function(panel_tbl) {
+  panel_tbl <- tibble::as_tibble(panel_tbl)
+  if (nrow(panel_tbl) < 1L || !"probe_panel_reallocation_used" %in% names(panel_tbl)) {
+    return(FALSE)
+  }
+  values <- unique(as.logical(panel_tbl$probe_panel_reallocation_used))
+  values <- values[!is.na(values)]
+  if (length(values) < 1L) {
+    return(FALSE)
+  }
+  if (length(values) > 1L) {
+    rlang::abort(
+      "Phase B probe-panel invariant failed: current panel has multiple `probe_panel_reallocation_used` values."
+    )
+  }
+  isTRUE(values[[1L]])
 }
 
 #' @keywords internal
@@ -457,7 +512,7 @@
   realized_min <- max(1L, as.integer(controller$probe_edges_min_for_stop %||% 30L))
   epoch_id <- .adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)
   panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
-  panel_n <- as.integer(nrow(panel))
+  panel_n <- .adaptive_link_probe_planned_edges(panel)
   realized_total <- max(0L, .adaptive_link_probe_realized_count(state, spoke_id = spoke_id, epoch_id = epoch_id))
   realized_refit <- max(0L, .adaptive_link_probe_holdout_since_last_refit(state, spoke_id = spoke_id))
   realized_before_refit <- max(0L, as.integer(realized_total - realized_refit))
@@ -475,20 +530,13 @@
       if (nrow(last_stage_row) > 0L) last_stage_row$link_stop_eligible[[1L]] else FALSE
   )
 
-  acceleration_used <- isTRUE(linking_identified) &&
-    !isTRUE(link_stop_eligible) &&
-    remaining_to_min_start > base_cap &&
-    panel_shortfall_start > base_cap
-  effective_cap <- if (isTRUE(acceleration_used)) {
-    min(panel_shortfall_start, remaining_to_min_start)
-  } else {
-    base_cap
-  }
+  acceleration_used <- FALSE
+  effective_cap <- base_cap
 
   list(
     spoke_id = as.integer(spoke_id),
     base_cap = as.integer(base_cap),
-    effective_cap = as.integer(max(base_cap, effective_cap)),
+    effective_cap = as.integer(max(0L, effective_cap)),
     realized_min = as.integer(realized_min),
     realized_total = as.integer(realized_total),
     realized_refit = as.integer(realized_refit),
@@ -506,7 +554,7 @@
 .adaptive_link_probe_active_progress_guard <- function(state,
                                                        controller,
                                                        eligible_spoke_ids = NULL) {
-  controller <- controller %||% .adaptive_controller_resolve(state)
+  controller <- .adaptive_runtime_controller_resolve(state, controller)
   run_mode <- as.character(controller$run_mode %||% "within_set")
   concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
   if (!(identical(run_mode, "link_multi_spoke") && isTRUE(concurrent_mode))) {
@@ -554,7 +602,7 @@
       eligible_spoke_ids = effective_spokes
     )
   }
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
 
   budgeted_spokes <- integer()
@@ -596,7 +644,7 @@
 .adaptive_link_probe_next_holdout_spoke <- function(state,
                                                     controller,
                                                     eligible_spoke_ids = NULL) {
-  controller <- controller %||% .adaptive_controller_resolve(state)
+  controller <- .adaptive_runtime_controller_resolve(state, controller)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   spoke_ids <- as.integer(eligible_spoke_ids %||% phase_ctx$active_spokes %||% integer())
   spoke_ids <- sort(unique(spoke_ids[!is.na(spoke_ids)]))
@@ -637,10 +685,6 @@
     }
     spoke_ids <- as.integer(budgeted_spokes)
   }
-  link_stage_log <- tibble::as_tibble(state$link_stage_log %||% new_link_stage_log())
-  if (nrow(link_stage_log) < 1L) {
-    return(NA_integer_)
-  }
 
   realized_min <- as.integer(controller$probe_edges_min_for_stop %||% 30L)
   probe_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
@@ -665,7 +709,7 @@
   if (isTRUE(fairness_guard$block_probes)) {
     return(NA_integer_)
   }
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   ranked_spokes <- .adaptive_link_ranked_spokes(
     state = state,
     controller = controller,
@@ -725,7 +769,6 @@
   pending_tbl <- tibble::as_tibble(do.call(rbind, lapply(pending, as.data.frame)))
   pending_tbl <- pending_tbl[
     order(
-      -as.integer(pending_tbl$acceleration_used %in% TRUE),
       as.integer(pending_tbl$remaining_to_min_start),
       as.integer(pending_tbl$realized_refit),
       as.integer(pending_tbl$realized_total),
@@ -1052,10 +1095,10 @@
   stopped_map <- controller$link_stopped_by_spoke %||% list()
   stop_refit_map <- controller$link_stop_refit_id_by_spoke %||% list()
   stop_reason_map <- controller$link_stop_reason_by_spoke %||% list()
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   frozen_delta_map <- controller$link_transform_frozen_delta_by_spoke %||% list()
   frozen_log_alpha_map <- controller$link_transform_frozen_log_alpha_by_spoke %||% list()
-  frozen_refit_map <- controller$link_transform_frozen_refit_id_by_spoke %||% list()
+  frozen_refit_map <- .adaptive_link_state_frozen_refit_id_by_spoke(controller)
   state_map <- controller$link_transform_state_by_spoke %||% list()
 
   for (idx in seq_len(nrow(rows))) {
@@ -1102,9 +1145,11 @@
   controller$link_stopped_by_spoke <- stopped_map
   controller$link_stop_refit_id_by_spoke <- stop_refit_map
   controller$link_stop_reason_by_spoke <- stop_reason_map
+  controller$link_state_frozen_by_spoke <- frozen_map
   controller$link_transform_frozen_by_spoke <- frozen_map
   controller$link_transform_frozen_delta_by_spoke <- frozen_delta_map
   controller$link_transform_frozen_log_alpha_by_spoke <- frozen_log_alpha_map
+  controller$link_state_frozen_refit_id_by_spoke <- frozen_refit_map
   controller$link_transform_frozen_refit_id_by_spoke <- frozen_refit_map
   controller$link_transform_state_by_spoke <- state_map
   out$controller <- controller
@@ -1128,7 +1173,7 @@
     return(FALSE)
   }
   stopped_map <- controller$link_stopped_by_spoke %||% list()
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   all(vapply(
     as.character(spoke_ids),
     function(key) isTRUE(stopped_map[[key]]) || isTRUE(frozen_map[[key]]),
@@ -1142,7 +1187,7 @@
                                                    controller = NULL,
                                                    refit_id = NULL,
                                                    exclude_exhausted = FALSE) {
-  controller <- controller %||% .adaptive_controller_resolve(state)
+  controller <- .adaptive_runtime_controller_resolve(state, controller)
   if (!.adaptive_link_mode_active(controller)) {
     return(integer())
   }
@@ -1158,7 +1203,7 @@
   }
 
   stopped_map <- controller$link_stopped_by_spoke %||% list()
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   keep <- vapply(
     as.character(spoke_ids),
     function(key) !isTRUE(stopped_map[[key]]) && !isTRUE(frozen_map[[key]]),
@@ -1479,7 +1524,9 @@
         )
       }
     )
-    utility_col <- .adaptive_resolve_selection_column("linking_d_optimal")
+    utility_col <- .adaptive_resolve_selection_column(
+      .adaptive_linking_utility_mode(link_controller$link_estimation_mode)
+    )
     utility_vals <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
       as.double(cand[[utility_col]])
     } else {
@@ -2080,10 +2127,12 @@
 #' routing uses a linking-global score derived from Phase A raw summaries plus
 #' the current spoke transform (\eqn{\delta_s}, optional \eqn{\log \alpha_s}).
 #' In linking Phase B, eligible cross-set candidates are ranked by
-#' ridge-stabilized D-optimal log-det information gain on spoke transform
-#' parameters using order-averaged Model D probabilities. Linking inference
-#' parameters are used for
-#' inference/diagnostics/stopping, not as direct selection objectives.
+#' ridge-stabilized D-optimal log-det information gain on the active linking
+#' parameter block using order-averaged Model D probabilities. In
+#' \code{link_estimation_mode = "transform"}, this is the current spoke
+#' transform; in \code{link_estimation_mode = "anchored_joint"}, it is the
+#' spoke free block with the hub fixed. Linking inference parameters are used
+#' for inference/diagnostics/stopping, not as direct selection objectives.
 #' When \code{judge_param_mode = "phase_specific"}, the first Phase B startup
 #' step may use deterministic fallback from available within/shared judge
 #' estimates if link-specific estimates are not yet available; once link-specific
@@ -2091,7 +2140,7 @@
 #' Bayesian BTL posterior draws are not used as general pair-selection
 #' objectives; within-set pairing remains TrueSkill-routed, with accepted
 #' posterior refits contributing only to the long-link probability gate.
-#' Linking transform refits use Bayesian posterior estimation and posterior
+#' Linking Phase B refits use Bayesian posterior estimation and posterior
 #' summaries/diagnostics are logged per spoke at each linking refit.
 #'
 #' The returned state contains canonical logs:
@@ -2206,20 +2255,27 @@ adaptive_rank_start <- function(items,
 #' BTL posterior win probability for candidate eligibility; before that it
 #' falls back deterministically to TrueSkill.
 #' In linking Phase B, anchor/strata routing uses linking-global scores built
-#' from Phase A raw summaries and the current spoke transform.
-#' Linking Phase B routing ranks eligible cross-set candidates by
-#' ridge-stabilized D-optimal log-det information gain on spoke transform
-#' parameters using order-averaged Model D probabilities. Linking inference
-#' parameters remain inference-only
+#' from Phase A summaries and the active linking state. In
+#' \code{link_estimation_mode = "transform"}, that state is the current spoke
+#' transform. In \code{link_estimation_mode = "anchored_joint"}, it is the
+#' accepted anchored-joint state. Linking Phase B routing ranks eligible
+#' cross-set candidates by ridge-stabilized D-optimal log-det information gain
+#' on the active linking parameter block using order-averaged Model D
+#' probabilities. Linking inference parameters remain inference-only
 #' (diagnostics and stopping) and are not direct pair-selection objectives.
 #' When \code{judge_param_mode = "phase_specific"}, startup can use deterministic
 #' fallback from within/shared judge estimates only until link-specific estimates
 #' are expected, after which malformed link estimates abort.
-#' In linking \code{joint_refit} mode, hub+spoke item abilities and transform
-#' parameters are estimated together for the active hub+spoke graph, with hub
-#' behavior controlled by \code{hub_lock_mode} (\code{hard_lock}
-#' or \code{soft_lock}); \code{soft_lock} uses
-#' \code{hub_lock_kappa}-scaled regularization to Phase A hub summaries.
+#' In linking \code{transform} mode with \code{link_refit_mode = "joint_refit"},
+#' hub+spoke item abilities and transform parameters are estimated together for
+#' the active hub+spoke graph, with hub behavior controlled by
+#' \code{hub_lock_mode} (\code{hard_lock}, \code{soft_lock}, or \code{free});
+#' \code{free} is only supported for single-spoke transform joint refits and
+#' disables hub locking entirely;
+#' \code{soft_lock} uses \code{hub_lock_kappa}-scaled regularization to Phase A
+#' hub summaries. In \code{link_estimation_mode = "anchored_joint"}, Phase B
+#' uses a hard-lock hub-fixed fit and a deterministic accepted state before the
+#' first linking refit.
 #' Exploration/exploitation routing and fallback handling are recorded in
 #' \code{step_log}.
 #'

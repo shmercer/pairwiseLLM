@@ -244,6 +244,19 @@
 .adaptive_phase_b_global_metric_transform_stats <- function(state, spoke_id, controller = NULL) {
   controller <- controller %||% .adaptive_controller_resolve(state)
   key <- as.character(as.integer(spoke_id))
+  if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+    accepted_state <- .adaptive_link_anchored_joint_resolve_state(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      controller = controller
+    )
+    return(list(
+      link_transform_state = NA_character_,
+      delta_spoke_mean = NA_real_,
+      log_alpha_spoke_mean = NA_real_,
+      theta_spoke_global_mean = accepted_state$theta_spoke_global_mean
+    ))
+  }
   stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[key]] %||% list()
   last_row <- tibble::tibble()
   link_stage_log <- tibble::as_tibble(state$link_stage_log %||% new_link_stage_log())
@@ -315,6 +328,179 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_phase_b_global_metric_uncertainty_approximation <- function(link_estimation_mode = "transform",
+                                                                      link_uncertainty_approximation = NULL,
+                                                                      link_fit_method = NULL) {
+  mode <- as.character(link_estimation_mode %||% "transform")
+  approx <- as.character(link_uncertainty_approximation %||% NA_character_)
+  fit_method <- as.character(link_fit_method %||% NA_character_)
+
+  if (!identical(mode, "anchored_joint")) {
+    if (length(approx) != 1L || is.na(approx) || !nzchar(approx)) {
+      return(NA_character_)
+    }
+    return(approx)
+  }
+
+  if (identical(approx, "cmdstan_posterior_draws")) {
+    return("cmdstan_posterior_draws")
+  }
+  if (identical(approx, "laplace_hessian") || identical(fit_method, "map_laplace")) {
+    return("laplace_hessian_marginal_quantiles")
+  }
+  if (identical(approx, "accepted_state") || identical(fit_method, "accepted_state_reuse")) {
+    return("accepted_state_marginal_quantiles")
+  }
+  if ((length(approx) != 1L || is.na(approx) || !nzchar(approx)) &&
+    (length(fit_method) != 1L || is.na(fit_method) || !nzchar(fit_method))) {
+    return("accepted_state_marginal_quantiles")
+  }
+
+  rlang::abort(paste0(
+    "Unsupported anchored-joint Phase B global metric uncertainty approximation: `",
+    approx %||% NA_character_,
+    "`."
+  ))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_b_global_metric_marginal_quantile_draws <- function(theta_mean,
+                                                                    theta_sd,
+                                                                    n_draws,
+                                                                    name) {
+  mean_names <- as.character(names(theta_mean))
+  theta_mean <- as.double(theta_mean)
+  names(theta_mean) <- mean_names
+  sd_names <- as.character(names(theta_sd))
+  theta_sd <- as.double(theta_sd)
+  names(theta_sd) <- sd_names
+  n_draws <- as.integer(n_draws %||% NA_integer_)
+
+  if (!is.finite(n_draws) || is.na(n_draws) || n_draws < 2L) {
+    rlang::abort(paste0("`", name, "` requires at least two draws."))
+  }
+  if (length(theta_mean) < 1L || is.null(mean_names) || any(!nzchar(mean_names))) {
+    rlang::abort(paste0("`", name, "` requires named theta means."))
+  }
+  if (anyDuplicated(mean_names)) {
+    rlang::abort(paste0("`", name, "` requires unique theta ids."))
+  }
+  if (any(!mean_names %in% names(theta_sd))) {
+    rlang::abort(paste0("`", name, "` is missing required theta SD values."))
+  }
+
+  out <- matrix(
+    NA_real_,
+    nrow = n_draws,
+    ncol = length(theta_mean),
+    dimnames = list(NULL, mean_names)
+  )
+  base_probs <- (seq_len(n_draws) - 0.5) / n_draws
+  phi_shift <- 0.6180339887498949
+
+  for (idx in seq_along(theta_mean)) {
+    item_id <- mean_names[[idx]]
+    mu <- theta_mean[[idx]]
+    sd_i <- as.double(theta_sd[[item_id]])
+    if (!is.finite(mu)) {
+      rlang::abort(paste0("`", name, "` requires finite theta means for item `", item_id, "`."))
+    }
+    if (!is.finite(sd_i)) {
+      rlang::abort(paste0("`", name, "` requires finite theta SD values for item `", item_id, "`."))
+    }
+    if (sd_i < 0) {
+      rlang::abort(paste0("`", name, "` requires non-negative theta SD values for item `", item_id, "`."))
+    }
+    if (sd_i == 0) {
+      out[, idx] <- rep(mu, n_draws)
+      next
+    }
+
+    probs <- (base_probs + ((idx - 1L) * phi_shift)) %% 1
+    probs[probs <= 0] <- .Machine$double.eps
+    probs[probs >= 1] <- 1 - .Machine$double.eps
+    z <- stats::qnorm(probs)
+    z <- z - mean(z)
+    z_sd <- stats::sd(z)
+    if (!is.finite(z_sd) || z_sd <= 0) {
+      rlang::abort(paste0("`", name, "` could not construct deterministic draws for item `", item_id, "`."))
+    }
+    out[, idx] <- mu + sd_i * (z / z_sd)
+  }
+
+  .pairwiseLLM_sanitize_draws_matrix(out, name = name)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_b_global_metric_draws_anchored_joint <- function(state,
+                                                                 spoke_id,
+                                                                 n_draws,
+                                                                 controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  key <- as.character(as.integer(spoke_id))
+  stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[key]] %||% list()
+  accepted_state <- .adaptive_link_anchored_joint_resolve_state(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    controller = controller
+  )
+  approximation <- .adaptive_phase_b_global_metric_uncertainty_approximation(
+    link_estimation_mode = "anchored_joint",
+    link_uncertainty_approximation = stats_row$link_uncertainty_approximation %||% NA_character_,
+    link_fit_method = stats_row$link_fit_method %||% NA_character_
+  )
+  if (identical(approximation, "cmdstan_posterior_draws")) {
+    rlang::abort(paste0(
+      "Anchored-joint Phase B global metric reconstruction requires persisted authoritative posterior draws ",
+      "for spoke_id=",
+      as.integer(spoke_id),
+      ", but none are available."
+    ))
+  }
+
+  theta_mean <- as.double(accepted_state$theta_spoke_global_mean %||% numeric())
+  names(theta_mean) <- names(accepted_state$theta_spoke_global_mean)
+  theta_sd <- as.double(accepted_state$theta_spoke_global_sd %||% numeric())
+  names(theta_sd) <- names(accepted_state$theta_spoke_global_sd)
+
+  if (length(theta_mean) < 1L) {
+    rlang::abort(paste0(
+      "Anchored-joint Phase B global metric reconstruction requires spoke theta means for spoke_id=",
+      as.integer(spoke_id),
+      "."
+    ))
+  }
+  if (length(theta_sd) != length(theta_mean) || !all(names(theta_mean) %in% names(theta_sd))) {
+    rlang::abort(paste0(
+      "Anchored-joint Phase B global metric reconstruction requires named spoke theta SD values for spoke_id=",
+      as.integer(spoke_id),
+      "."
+    ))
+  }
+  if (any(!is.finite(theta_sd[names(theta_mean)]))) {
+    rlang::abort(paste0(
+      "Anchored-joint Phase B global metric reconstruction requires finite accepted-state uncertainty ",
+      "for spoke_id=",
+      as.integer(spoke_id),
+      "."
+    ))
+  }
+
+  list(
+    draws = .adaptive_phase_b_global_metric_marginal_quantile_draws(
+      theta_mean = theta_mean,
+      theta_sd = theta_sd[names(theta_mean)],
+      n_draws = n_draws,
+      name = paste0("phase_b_global_metric_draws_spoke_", as.integer(spoke_id))
+    ),
+    uncertainty_approximation = approximation
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_phase_b_global_metric_draws <- function(state, controller = NULL) {
   controller <- controller %||% .adaptive_controller_resolve(state)
   if (!isTRUE(.adaptive_link_phase_b_active(state, controller = controller))) {
@@ -350,6 +536,8 @@
 
   combined <- vector("list", length(required_sets))
   names(combined) <- names(per_set_draws)
+  method_map <- vector("list", length(required_sets))
+  names(method_map) <- names(per_set_draws)
   for (set_id in required_sets) {
     key <- as.character(set_id)
     set_draws <- per_set_draws[[key]][seq_len(common_n_draws), , drop = FALSE]
@@ -359,14 +547,34 @@
         spoke_id = as.integer(set_id),
         controller = controller
       )
-      alpha <- if (identical(transform$link_transform_state, "shift_scale")) {
-        exp(as.double(transform$log_alpha_spoke_mean))
+      if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+        anchored_draws <- .adaptive_phase_b_global_metric_draws_anchored_joint(
+          state = state,
+          spoke_id = as.integer(set_id),
+          n_draws = common_n_draws,
+          controller = controller
+        )
+        set_draws <- anchored_draws$draws
+        method_map[[key]] <- as.character(anchored_draws$uncertainty_approximation)
       } else {
-        1
+        alpha <- if (identical(transform$link_transform_state, "shift_scale")) {
+          exp(as.double(transform$log_alpha_spoke_mean))
+        } else {
+          1
+        }
+        set_draws <- as.double(transform$delta_spoke_mean) + alpha * set_draws
+        dim(set_draws) <- c(common_n_draws, ncol(per_set_draws[[key]]))
+        colnames(set_draws) <- colnames(per_set_draws[[key]])
+        method_map[[key]] <- .adaptive_phase_b_global_metric_uncertainty_approximation(
+          link_estimation_mode = "transform",
+          link_uncertainty_approximation = (
+            (controller$link_refit_stats_by_spoke %||% list())[[key]] %||% list()
+          )$link_uncertainty_approximation %||% NA_character_,
+          link_fit_method = (
+            (controller$link_refit_stats_by_spoke %||% list())[[key]] %||% list()
+          )$link_fit_method %||% NA_character_
+        )
       }
-      set_draws <- as.double(transform$delta_spoke_mean) + alpha * set_draws
-      dim(set_draws) <- c(common_n_draws, ncol(per_set_draws[[key]]))
-      colnames(set_draws) <- colnames(per_set_draws[[key]])
     }
     combined[[key]] <- set_draws
   }
@@ -379,10 +587,12 @@
     )
   }
 
-  .pairwiseLLM_sanitize_draws_matrix(
+  combined_draws <- .pairwiseLLM_sanitize_draws_matrix(
     combined_draws[, ids, drop = FALSE],
     name = "phase_b_global_metric_draws"
   )
+  attr(combined_draws, "phase_b_global_metric_uncertainty_approximation_by_set") <- method_map
+  combined_draws
 }
 
 #' @keywords internal
@@ -616,6 +826,9 @@
 }
 
 .adaptive_link_transform_state_for_spoke <- function(controller, spoke_id) {
+  if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+    return(NA_character_)
+  }
   policy <- .adaptive_normalize_link_transform_policy(
     controller$link_transform_policy %||% "auto"
   )
@@ -810,6 +1023,8 @@
                                                      refit_mode = "shift_only",
                                                      hub_lock_mode = "soft_lock",
                                                      shift_only_theta_treatment = "fixed_eap_plugin_var",
+                                                     link_estimation_mode = "transform",
+                                                     accepted_state = NULL,
                                                      var_mu_epsilon = 1e-6,
                                                      total_var_epsilon = 1e-6) {
   active_ids <- as.character(active_ids)
@@ -826,6 +1041,45 @@
 
   fit <- fit %||% list()
   fit_post <- fit$posterior_draws %||% list()
+  if (identical(as.character(link_estimation_mode %||% "transform"), "anchored_joint")) {
+    accepted_state <- accepted_state %||% .adaptive_link_anchored_joint_resolve_state(
+      state = state,
+      spoke_id = as.integer(spoke_id)
+    )
+    hub_mu <- as.double(accepted_state$theta_hub_fixed)
+    names(hub_mu) <- names(accepted_state$theta_hub_fixed)
+    hub_sd <- .adaptive_phase_a_artifact_item_field_map(state, hub_id, "theta_raw_sd")
+    hub_sd[!is.finite(hub_sd) | hub_sd < 0] <- 0
+    spoke_mu <- as.double(accepted_state$theta_spoke_global_mean)
+    names(spoke_mu) <- names(accepted_state$theta_spoke_global_mean)
+    spoke_sd <- as.double(accepted_state$theta_spoke_global_sd)
+    names(spoke_sd) <- names(accepted_state$theta_spoke_global_sd)
+    spoke_sd[!is.finite(spoke_sd) | spoke_sd < 0] <- 0
+    mean_map <- stats::setNames(rep(NA_real_, length(active_ids)), active_ids)
+    var_map <- stats::setNames(rep(NA_real_, length(active_ids)), active_ids)
+    for (item_id in active_ids) {
+      if (item_id %in% names(hub_mu)) {
+        mean_map[[item_id]] <- as.double(hub_mu[[item_id]])
+        var_map[[item_id]] <- as.double((hub_sd[[item_id]] %||% 0)^2)
+      } else if (item_id %in% names(spoke_mu)) {
+        mean_map[[item_id]] <- as.double(spoke_mu[[item_id]])
+        var_map[[item_id]] <- as.double((spoke_sd[[item_id]] %||% 0)^2)
+      }
+    }
+    decomp <- .adaptive_link_reliability_decomposition(
+      mu_vals = unname(mean_map),
+      var_vals = unname(var_map),
+      var_mu_epsilon = var_mu_epsilon,
+      total_var_epsilon = total_var_epsilon
+    )
+    return(c(
+      decomp,
+      list(
+        mean_map = mean_map,
+        var_map = var_map
+      )
+    ))
+  }
   mode <- as.character(transform_mode %||% "shift_only")
   if (!mode %in% c("shift_only", "shift_scale")) {
     mode <- "shift_only"
@@ -980,6 +1234,8 @@
                                                           refit_mode = "shift_only",
                                                           hub_lock_mode = "soft_lock",
                                                           shift_only_theta_treatment = "fixed_eap_plugin_var",
+                                                          link_estimation_mode = "transform",
+                                                          accepted_state = NULL,
                                                           var_mu_epsilon = 1e-6,
                                                           total_var_epsilon = 1e-6) {
   out <- .adaptive_link_global_score_stats_active(
@@ -994,6 +1250,8 @@
     refit_mode = refit_mode,
     hub_lock_mode = hub_lock_mode,
     shift_only_theta_treatment = shift_only_theta_treatment,
+    link_estimation_mode = link_estimation_mode,
+    accepted_state = accepted_state,
     var_mu_epsilon = var_mu_epsilon,
     total_var_epsilon = total_var_epsilon
   )
@@ -1309,12 +1567,114 @@
   sqrt(mean(diff^2))
 }
 
+#' @keywords internal
+#' @noRd
+.adaptive_phase_b_global_theta_history_at_refit <- function(state, refit_id) {
+  refit_id <- as.integer(refit_id %||% NA_integer_)
+  history <- state$refit_meta$phase_b_global_theta_mean_history %||% list()
+  if (!is.finite(refit_id) || is.na(refit_id) || refit_id < 1L || length(history) < refit_id) {
+    return(NULL)
+  }
+  theta <- history[[refit_id]]
+  if (!is.numeric(theta) || is.null(names(theta))) {
+    return(NULL)
+  }
+  theta <- as.double(theta)
+  names(theta) <- as.character(names(history[[refit_id]]))
+  theta
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_theta_global_rmse_from_maps <- function(current_theta, lag_theta, scope_ids) {
+  ids <- as.character(scope_ids)
+  if (length(ids) < 2L) {
+    return(NA_real_)
+  }
+  if (!is.numeric(current_theta) || !is.numeric(lag_theta) ||
+    is.null(names(current_theta)) || is.null(names(lag_theta))) {
+    return(NA_real_)
+  }
+  current_names <- as.character(names(current_theta))
+  current_theta <- as.double(current_theta)
+  names(current_theta) <- current_names
+  lag_names <- as.character(names(lag_theta))
+  lag_theta <- as.double(lag_theta)
+  names(lag_theta) <- lag_names
+  if (!all(ids %in% names(current_theta)) || !all(ids %in% names(lag_theta))) {
+    return(NA_real_)
+  }
+  diff <- as.double(current_theta[ids] - lag_theta[ids])
+  diff <- diff[is.finite(diff)]
+  if (length(diff) < 2L) {
+    return(NA_real_)
+  }
+  sqrt(mean(diff^2))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_pred_rmse_lagged_anchored_joint <- function(edges,
+                                                                 current_theta,
+                                                                 lag_theta,
+                                                                 judge_params = list(
+                                                                   beta = 0,
+                                                                   epsilon = 0
+                                                                 )) {
+  edges <- tibble::as_tibble(edges)
+  if (nrow(edges) < 1L) {
+    return(NA_real_)
+  }
+  if (!is.numeric(current_theta) || is.null(names(current_theta)) ||
+    !is.numeric(lag_theta) || is.null(names(lag_theta))) {
+    return(NA_real_)
+  }
+
+  current_names <- as.character(names(current_theta))
+  current_theta <- as.double(current_theta)
+  names(current_theta) <- current_names
+  lag_names <- as.character(names(lag_theta))
+  lag_theta <- as.double(lag_theta)
+  names(lag_theta) <- lag_names
+
+  hub_items <- unique(as.character(edges$hub_item))
+  spoke_items <- unique(as.character(edges$spoke_item))
+  if (!all(hub_items %in% names(current_theta)) || !all(hub_items %in% names(lag_theta)) ||
+    !all(spoke_items %in% names(current_theta)) || !all(spoke_items %in% names(lag_theta))) {
+    return(NA_real_)
+  }
+
+  p_now <- .adaptive_link_cross_probabilities(
+    edges = edges,
+    hub_theta = current_theta[hub_items],
+    spoke_theta = current_theta[spoke_items],
+    delta_mean = 0,
+    log_alpha_mean = NA_real_,
+    judge_params = judge_params
+  )
+  p_lag <- .adaptive_link_cross_probabilities(
+    edges = edges,
+    hub_theta = lag_theta[hub_items],
+    spoke_theta = lag_theta[spoke_items],
+    delta_mean = 0,
+    log_alpha_mean = NA_real_,
+    judge_params = judge_params
+  )
+  keep <- is.finite(p_now) & is.finite(p_lag)
+  if (!any(keep)) {
+    return(NA_real_)
+  }
+  sqrt(mean((p_now[keep] - p_lag[keep])^2))
+}
+
 .adaptive_link_epoch_signature_components <- function(transform_state,
                                                      refit_mode,
                                                      lock_mode,
                                                      hub_art,
-                                                     spoke_art) {
+                                                     spoke_art,
+                                                     link_estimation_mode = "transform") {
   c(
+    link_estimation_mode = as.character(link_estimation_mode),
     link_transform_state = as.character(transform_state),
     link_refit_mode = as.character(refit_mode),
     hub_lock_mode = as.character(lock_mode),
@@ -1366,6 +1726,7 @@
     return(NA_character_)
   }
   reason_map <- c(
+    link_estimation_mode = "link_estimation_mode_change",
     link_transform_state = "transform_state_change",
     link_refit_mode = "link_refit_mode_change",
     hub_lock_mode = "hub_lock_mode_change",
@@ -1541,7 +1902,7 @@
   keep <- !is.na(item_id)
   vals <- as.double(items_tbl[[field]][keep])
   names(vals) <- as.character(item_id[keep])
-  vals[is.finite(vals)]
+  vals
 }
 
 .adaptive_link_theta_mean_map <- function(state, set_id) {
@@ -1693,6 +2054,340 @@
   }
   has_refit_row <- any(as.integer(link_stage_log$spoke_id) == as.integer(spoke_id), na.rm = TRUE)
   !isTRUE(has_refit_row)
+}
+
+.adaptive_phase_a_artifact_item_field_map <- function(state, set_id, field) {
+  phase_a <- state$linking$phase_a %||% list()
+  artifact <- (phase_a$artifacts %||% list())[[as.character(set_id)]] %||% NULL
+  if (!is.list(artifact)) {
+    rlang::abort(paste0("Missing Phase A artifact for set_id=", as.integer(set_id), "."))
+  }
+  items_tbl <- tibble::as_tibble(artifact$items %||% tibble::tibble())
+  required <- c("global_item_id", field)
+  if (!all(required %in% names(items_tbl))) {
+    rlang::abort(paste0("Phase A artifact for set_id=", as.integer(set_id), " is missing required columns."))
+  }
+  expected_ids <- as.character(
+    state$items$item_id[as.integer(state$items$set_id) == as.integer(set_id)]
+  )
+  global_to_item <- stats::setNames(
+    as.character(state$items$item_id),
+    as.character(state$items$global_item_id)
+  )
+  item_ids <- as.character(global_to_item[as.character(items_tbl$global_item_id)])
+  keep <- !is.na(item_ids)
+  values <- as.double(items_tbl[[field]][keep])
+  names(values) <- item_ids[keep]
+  out <- stats::setNames(rep(NA_real_, length(expected_ids)), expected_ids)
+  out[names(values)] <- values
+  out
+}
+
+.adaptive_link_anchored_joint_resolve_state <- function(state, spoke_id, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  if (!identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+    rlang::abort("Anchored-joint accepted-state lookup requires `link_estimation_mode = anchored_joint`.")
+  }
+  anchored <- (state$linking %||% list())$anchored_joint %||% .adaptive_anchored_joint_empty_state()
+  accepted_state <- (anchored$accepted_state_by_spoke %||% list())[[as.character(spoke_id)]] %||% NULL
+  if (is.null(accepted_state)) {
+    accepted_state <- .adaptive_anchored_joint_artifact_copy_init(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      controller = controller
+    )
+  } else {
+    accepted_state <- .adaptive_anchored_joint_validate_current_state(
+      state_obj = accepted_state,
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      controller = controller
+    )
+  }
+  accepted_state
+}
+
+.adaptive_link_anchored_joint_free_block_dim <- function(state, spoke_id, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  fisher_map <- ((state$linking %||% list())$anchored_joint %||% list())$fisher_t0_by_spoke %||% list()
+  dim_n <- as.integer((fisher_map[[as.character(spoke_id)]] %||% list())$free_block_dim %||% NA_integer_)
+  if (is.finite(dim_n) && !is.na(dim_n) && dim_n >= 1L) {
+    return(dim_n)
+  }
+  accepted_state <- .adaptive_link_anchored_joint_resolve_state(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    controller = controller
+  )
+  as.integer(length(accepted_state$theta_spoke_global_mean %||% numeric()))
+}
+
+.adaptive_link_anchored_joint_global_theta_map <- function(state,
+                                                           spoke_id,
+                                                           controller = NULL,
+                                                           accepted_state = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  accepted_state <- accepted_state %||% .adaptive_link_anchored_joint_resolve_state(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    controller = controller
+  )
+  c(
+    accepted_state$theta_hub_fixed %||% stats::setNames(numeric(), character()),
+    accepted_state$theta_spoke_global_mean %||% stats::setNames(numeric(), character())
+  )
+}
+
+.adaptive_link_anchored_joint_judge_params <- function(state,
+                                                       spoke_id,
+                                                       controller = NULL,
+                                                       accepted_state = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  accepted_state <- accepted_state %||% .adaptive_link_anchored_joint_resolve_state(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    controller = controller
+  )
+  accepted_state$judge_params %||% list(
+    mode = as.character(controller$judge_param_mode %||% "global_shared"),
+    scope = "link",
+    beta = 0,
+    epsilon = 0,
+    cold_start_fallback_used = FALSE
+  )
+}
+
+.adaptive_link_anchored_joint_prior_sd <- function(spoke_sd, controller) {
+  raw_sd <- as.double(spoke_sd)
+  names(raw_sd) <- names(spoke_sd)
+  scale_mult <- as.double(controller$anchored_joint_spoke_prior_scale %||% 1.0)
+  sd_floor <- as.double(controller$anchored_joint_sd_floor %||% 0.02)
+  fallback_sd <- as.double(controller$anchored_joint_spoke_prior_fallback_sd %||% 1.0)
+  if (!is.finite(scale_mult) || scale_mult <= 0) {
+    scale_mult <- 1.0
+  }
+  if (!is.finite(sd_floor) || sd_floor < 0) {
+    sd_floor <- 0.02
+  }
+  if (!is.finite(fallback_sd) || fallback_sd <= 0) {
+    fallback_sd <- 1.0
+  }
+  fallback_used <- !is.finite(raw_sd)
+  prior_sd <- ifelse(
+    fallback_used,
+    fallback_sd,
+    scale_mult * pmax(raw_sd, sd_floor)
+  )
+  prior_sd[!is.finite(prior_sd) | prior_sd <= 0] <- fallback_sd
+  list(
+    prior_sd = as.double(prior_sd),
+    fallback_used = as.logical(fallback_used),
+    fallback_items = as.character(names(raw_sd)[fallback_used]),
+    fallback_sd = as.double(fallback_sd),
+    scale_mult = as.double(scale_mult),
+    sd_floor = as.double(sd_floor)
+  )
+}
+
+.adaptive_link_fit_anchored_joint <- function(state,
+                                              spoke_id,
+                                              controller = NULL,
+                                              cross_edges,
+                                              judge_params = NULL,
+                                              accepted_state = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  if (!identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+    rlang::abort("Anchored-joint fitting requires `link_estimation_mode = anchored_joint`.")
+  }
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  accepted_state <- accepted_state %||% .adaptive_link_anchored_joint_resolve_state(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    controller = controller
+  )
+  judge_params <- judge_params %||% .adaptive_link_judge_params(
+    state = state,
+    controller = controller,
+    scope = "link",
+    allow_cold_start_fallback = TRUE,
+    expected_link_params = FALSE
+  )
+  hub_evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
+    artifact = state$linking$phase_a$artifacts[[as.character(hub_id)]],
+    state = state,
+    set_id = hub_id,
+    controller = controller
+  )
+  spoke_evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
+    artifact = state$linking$phase_a$artifacts[[as.character(spoke_id)]],
+    state = state,
+    set_id = as.integer(spoke_id),
+    controller = controller
+  )
+
+  prior_mean <- .adaptive_phase_a_artifact_item_field_map(state, spoke_id, "theta_raw_mean")
+  prior_sd_info <- .adaptive_link_anchored_joint_prior_sd(
+    spoke_sd = .adaptive_phase_a_artifact_item_field_map(state, spoke_id, "theta_raw_sd"),
+    controller = controller
+  )
+  prior_sd <- prior_sd_info$prior_sd
+  names(prior_sd) <- names(prior_mean)
+  if (any(prior_sd_info$fallback_used)) {
+    rlang::warn(
+      paste0(
+        "Anchored-joint spoke prior SD fallback applied for spoke_id=",
+        as.integer(spoke_id),
+        ": ",
+        paste(prior_sd_info$fallback_items, collapse = ", "),
+        "."
+      )
+    )
+  }
+
+  theta_hub_fixed <- accepted_state$theta_hub_fixed
+  spoke_items <- as.character(names(prior_mean))
+  par_init <- as.double(accepted_state$theta_spoke_global_mean[spoke_items])
+  if (length(par_init) != length(spoke_items) || any(!is.finite(par_init))) {
+    par_init <- as.double(prior_mean[spoke_items])
+  }
+  names(par_init) <- spoke_items
+  idx_map <- stats::setNames(seq_along(spoke_items), spoke_items)
+
+  cross_edges <- tibble::as_tibble(cross_edges)
+  cross_h <- as.character(cross_edges$hub_item %||% character())
+  cross_x <- as.character(cross_edges$spoke_item %||% character())
+  cross_y <- as.integer(cross_edges$y_spoke %||% integer())
+  cross_spoke_in_a <- as.logical(cross_edges$spoke_in_A %||% logical())
+  cross_keep <- cross_y %in% c(0L, 1L) &
+    cross_h %in% names(theta_hub_fixed) &
+    cross_x %in% names(idx_map) &
+    !is.na(cross_spoke_in_a)
+  cross_h <- cross_h[cross_keep]
+  cross_x <- cross_x[cross_keep]
+  cross_y <- cross_y[cross_keep]
+  cross_beta_signed <- ifelse(cross_spoke_in_a[cross_keep], 1, -1) *
+    as.double(judge_params$beta %||% 0)
+
+  within_a <- as.character(spoke_evidence$A_item %||% character())
+  within_b <- as.character(spoke_evidence$B_item %||% character())
+  within_y <- as.integer(spoke_evidence$y_A %||% integer())
+  within_keep <- within_y %in% c(0L, 1L) &
+    within_a %in% names(idx_map) &
+    within_b %in% names(idx_map)
+  within_a <- within_a[within_keep]
+  within_b <- within_b[within_keep]
+  within_y <- within_y[within_keep]
+
+  beta_val <- as.double(judge_params$beta %||% 0)
+  epsilon_val <- max(0, min(1, as.double(judge_params$epsilon %||% 0)))
+  neg_log_post <- function(par) {
+    theta_spoke <- as.double(par)
+    names(theta_spoke) <- spoke_items
+    nll <- 0
+    if (length(cross_y) > 0L) {
+      eta_cross <- theta_spoke[cross_x] - theta_hub_fixed[cross_h] + cross_beta_signed
+      p_cross <- (1 - epsilon_val) * stats::plogis(eta_cross) + epsilon_val * 0.5
+      p_cross <- pmax(1e-10, pmin(1 - 1e-10, p_cross))
+      nll <- nll - sum(stats::dbinom(cross_y, size = 1L, prob = p_cross, log = TRUE))
+    }
+    if (length(within_y) > 0L) {
+      eta_within <- theta_spoke[within_a] - theta_spoke[within_b] + beta_val
+      p_within <- (1 - epsilon_val) * stats::plogis(eta_within) + epsilon_val * 0.5
+      p_within <- pmax(1e-10, pmin(1 - 1e-10, p_within))
+      nll <- nll - sum(stats::dbinom(within_y, size = 1L, prob = p_within, log = TRUE))
+    }
+    prior_z <- (theta_spoke - prior_mean[spoke_items]) / prior_sd[spoke_items]
+    nll + 0.5 * sum(prior_z^2 + log(2 * pi * prior_sd[spoke_items]^2))
+  }
+
+  opt <- tryCatch(
+    stats::optim(
+      par = unname(par_init),
+      fn = neg_log_post,
+      method = "BFGS",
+      hessian = TRUE,
+      control = list(maxit = 500, reltol = 1e-10)
+    ),
+    error = function(e) NULL
+  )
+  if (is.null(opt) || !is.list(opt) || opt$convergence != 0L || !all(is.finite(opt$par))) {
+    theta_spoke_post <- stats::setNames(as.double(par_init), spoke_items)
+    theta_spoke_sd_post <- stats::setNames(prior_sd[spoke_items], spoke_items)
+    hessian_posdef <- FALSE
+  } else {
+    theta_spoke_post <- stats::setNames(as.double(opt$par), spoke_items)
+    hessian <- opt$hessian %||% matrix(NA_real_, nrow = length(spoke_items), ncol = length(spoke_items))
+    vcov <- tryCatch(
+      solve(hessian),
+      error = function(e) matrix(NA_real_, nrow = length(spoke_items), ncol = length(spoke_items))
+    )
+    eig_vals <- tryCatch(eigen((hessian + t(hessian)) / 2, symmetric = TRUE, only.values = TRUE)$values,
+      error = function(e) rep(NA_real_, length(spoke_items))
+    )
+    hessian_posdef <- length(eig_vals) == length(spoke_items) && all(is.finite(eig_vals)) && all(eig_vals > 0)
+    theta_spoke_sd_post <- stats::setNames(rep(NA_real_, length(spoke_items)), spoke_items)
+    if (all(dim(vcov) == c(length(spoke_items), length(spoke_items))) && all(is.finite(diag(vcov))) &&
+      all(diag(vcov) >= 0)) {
+      theta_spoke_sd_post <- stats::setNames(sqrt(diag(vcov)), spoke_items)
+    }
+  }
+
+  fit_contract <- list(
+    contract_type = "link_refit",
+    estimation_method = "map_laplace",
+    uncertainty_approximation = "laplace_hessian",
+    link_refit_mode = NA_character_,
+    link_transform_policy = NA_character_,
+    link_transform_state = NA_character_,
+    parameters = "theta_spoke_global",
+    priors = list(
+      anchored_joint_spoke_prior_scale = as.double(prior_sd_info$scale_mult),
+      anchored_joint_sd_floor = as.double(prior_sd_info$sd_floor),
+      anchored_joint_spoke_prior_fallback_sd = as.double(prior_sd_info$fallback_sd),
+      prior_sd_fallback_used = any(prior_sd_info$fallback_used),
+      prior_sd_fallback_items = as.character(prior_sd_info$fallback_items)
+    ),
+    judge = list(
+      mode = as.character(judge_params$mode %||% "global_shared"),
+      scope = as.character(judge_params$scope %||% "link"),
+      beta = beta_val,
+      epsilon = epsilon_val,
+      cold_start_fallback_used = as.logical(judge_params$cold_start_fallback_used %||% FALSE)
+    ),
+    anchored_joint = list(
+      hub_fixed = TRUE,
+      free_block_dim = as.integer(length(spoke_items)),
+      within_hub_edges = as.integer(nrow(hub_evidence)),
+      within_spoke_edges = as.integer(nrow(spoke_evidence)),
+      cross_active_edges = as.integer(sum(cross_keep)),
+      full_evidence_link_domain = TRUE
+    )
+  )
+
+  list(
+    delta_mean = 0,
+    delta_sd = NA_real_,
+    log_alpha_mean = NA_real_,
+    log_alpha_sd = NA_real_,
+    theta_hub_post = theta_hub_fixed,
+    theta_spoke_post = theta_spoke_post,
+    theta_spoke_sd_post = theta_spoke_sd_post,
+    fit_contract = fit_contract,
+    diagnostics = list(
+      converged = isTRUE(!is.null(opt) && is.list(opt) && opt$convergence == 0L),
+      hessian_posdef = isTRUE(hessian_posdef),
+      diagnostics_divergences_pass = NA,
+      diagnostics_rhat_pass = NA,
+      diagnostics_ess_pass = NA
+    ),
+    posterior_draws = list(
+      theta_spoke = matrix(
+        theta_spoke_post,
+        nrow = 1L,
+        dimnames = list(NULL, names(theta_spoke_post))
+      )
+    )
+  )
 }
 
 .adaptive_link_cross_edges <- function(state, spoke_id, last_refit_step = NULL) {
@@ -1908,6 +2603,179 @@
   )
 }
 
+.adaptive_link_fit_summaries_finite <- function(fit) {
+  fit <- fit %||% list()
+
+  theta_hub <- fit$theta_hub_post %||% numeric()
+  theta_spoke <- fit$theta_spoke_post %||% numeric()
+  if (length(theta_hub) > 0L && any(!is.finite(as.double(theta_hub)))) {
+    return(FALSE)
+  }
+  if (length(theta_spoke) > 0L && any(!is.finite(as.double(theta_spoke)))) {
+    return(FALSE)
+  }
+
+  delta_mean <- as.double(fit$delta_mean %||% NA_real_)
+  if (!is.na(delta_mean) && !is.finite(delta_mean)) {
+    return(FALSE)
+  }
+
+  log_alpha_mean <- as.double(fit$log_alpha_mean %||% NA_real_)
+  if (!is.na(log_alpha_mean) && !is.finite(log_alpha_mean)) {
+    return(FALSE)
+  }
+
+  TRUE
+}
+
+.adaptive_link_fit_uncertainty_available <- function(fit) {
+  fit <- fit %||% list()
+
+  theta_spoke_sd <- fit$theta_spoke_sd_post %||% NULL
+  if (!is.null(theta_spoke_sd)) {
+    theta_spoke_sd <- as.double(theta_spoke_sd)
+    if (length(theta_spoke_sd) > 0L &&
+      all(is.finite(theta_spoke_sd)) &&
+      all(theta_spoke_sd >= 0)) {
+      return(TRUE)
+    }
+  }
+
+  delta_sd <- as.double(fit$delta_sd %||% NA_real_)
+  log_alpha_sd <- as.double(fit$log_alpha_sd %||% NA_real_)
+  delta_ok <- is.na(delta_sd) || (is.finite(delta_sd) && delta_sd >= 0)
+  log_alpha_ok <- is.na(log_alpha_sd) || (is.finite(log_alpha_sd) && log_alpha_sd >= 0)
+
+  isTRUE(delta_ok) && isTRUE(log_alpha_ok)
+}
+
+.adaptive_link_diagnostics_contract <- function(fit) {
+  fit <- fit %||% list()
+  fit_contract <- fit$fit_contract %||% list()
+  contract_type <- as.character(fit_contract$contract_type %||% NA_character_)
+  fit_method <- as.character(fit_contract$estimation_method %||% NA_character_)
+  diagnostics <- fit$diagnostics %||% list()
+  if (is.na(fit_method) || !nzchar(fit_method)) {
+    has_hmc_diag <- any(c(
+      "divergences", "max_rhat", "min_ess_bulk",
+      "diagnostics_divergences_pass", "diagnostics_rhat_pass",
+      "diagnostics_ess_pass"
+    ) %in% names(diagnostics))
+    has_det_diag <- any(c("converged", "hessian_posdef") %in% names(diagnostics))
+    if (isTRUE(has_hmc_diag)) {
+      fit_method <- "cmdstan_hmc"
+    } else if (isTRUE(has_det_diag)) {
+      fit_method <- "map_laplace"
+    }
+  }
+  if ((is.na(fit_method) || !nzchar(fit_method)) &&
+    identical(contract_type, "link_refit_frozen_reuse")) {
+    fit_method <- "accepted_state_reuse"
+  }
+  uncertainty <- as.character(fit_contract$uncertainty_approximation %||% NA_character_)
+  if ((is.na(uncertainty) || !nzchar(uncertainty)) &&
+    identical(fit_method, "cmdstan_hmc")) {
+    uncertainty <- "cmdstan_posterior_draws"
+  }
+  if ((is.na(uncertainty) || !nzchar(uncertainty)) &&
+    identical(fit_method, "map_laplace")) {
+    uncertainty <- "laplace_hessian"
+  }
+  if ((is.na(uncertainty) || !nzchar(uncertainty)) &&
+    identical(fit_method, "accepted_state_reuse")) {
+    uncertainty <- "accepted_state"
+  }
+  if (identical(fit_method, "cmdstan_hmc")) {
+    diagnostics_pass <- isTRUE(diagnostics$diagnostics_divergences_pass %||% NA) &&
+      isTRUE(diagnostics$diagnostics_rhat_pass %||% NA) &&
+      isTRUE(diagnostics$diagnostics_ess_pass %||% NA)
+    return(list(
+      link_fit_method = fit_method,
+      link_uncertainty_approximation = uncertainty,
+      link_diagnostics_pass = diagnostics_pass,
+      link_diagnostics_converged_pass = NA,
+      link_diagnostics_finite_summary_pass = NA,
+      link_diagnostics_uncertainty_pass = NA,
+      link_diagnostics_divergences = as.integer(diagnostics$divergences %||% NA_integer_),
+      link_diagnostics_max_rhat = as.double(diagnostics$max_rhat %||% NA_real_),
+      link_diagnostics_min_ess_bulk = as.double(diagnostics$min_ess_bulk %||% NA_real_),
+      link_diagnostics_divergences_pass = as.logical(
+        diagnostics$diagnostics_divergences_pass %||% NA
+      ),
+      link_diagnostics_rhat_pass = as.logical(diagnostics$diagnostics_rhat_pass %||% NA),
+      link_diagnostics_ess_pass = as.logical(diagnostics$diagnostics_ess_pass %||% NA)
+    ))
+  }
+
+  if (identical(fit_method, "map_laplace")) {
+    converged_pass <- as.logical(diagnostics$converged %||% NA)
+    hessian_posdef <- as.logical(diagnostics$hessian_posdef %||% NA)
+    if (is.na(converged_pass) || is.na(hessian_posdef)) {
+      rlang::abort(
+        paste0(
+          "Deterministic linking diagnostics contract requires `converged` and ",
+          "`hessian_posdef` for `map_laplace` fits."
+        )
+      )
+    }
+    if (!identical(uncertainty, "laplace_hessian")) {
+      rlang::abort(
+        paste0(
+          "Deterministic linking diagnostics contract requires ",
+          "`uncertainty_approximation = \"laplace_hessian\"` for `map_laplace` fits."
+        )
+      )
+    }
+    finite_summary_pass <- .adaptive_link_fit_summaries_finite(fit)
+    uncertainty_pass <- isTRUE(hessian_posdef) &&
+      isTRUE(.adaptive_link_fit_uncertainty_available(fit))
+    return(list(
+      link_fit_method = fit_method,
+      link_uncertainty_approximation = uncertainty,
+      link_diagnostics_pass = isTRUE(converged_pass) &&
+        isTRUE(finite_summary_pass) &&
+        isTRUE(uncertainty_pass),
+      link_diagnostics_converged_pass = as.logical(converged_pass),
+      link_diagnostics_finite_summary_pass = as.logical(finite_summary_pass),
+      link_diagnostics_uncertainty_pass = as.logical(uncertainty_pass),
+      link_diagnostics_divergences = NA_integer_,
+      link_diagnostics_max_rhat = NA_real_,
+      link_diagnostics_min_ess_bulk = NA_real_,
+      link_diagnostics_divergences_pass = NA,
+      link_diagnostics_rhat_pass = NA,
+      link_diagnostics_ess_pass = NA
+    ))
+  }
+
+  if (identical(fit_method, "accepted_state_reuse")) {
+    finite_summary_pass <- .adaptive_link_fit_summaries_finite(fit)
+    uncertainty_pass <- .adaptive_link_fit_uncertainty_available(fit)
+    return(list(
+      link_fit_method = fit_method,
+      link_uncertainty_approximation = uncertainty,
+      link_diagnostics_pass = isTRUE(finite_summary_pass) &&
+        isTRUE(uncertainty_pass),
+      link_diagnostics_converged_pass = TRUE,
+      link_diagnostics_finite_summary_pass = as.logical(finite_summary_pass),
+      link_diagnostics_uncertainty_pass = as.logical(uncertainty_pass),
+      link_diagnostics_divergences = NA_integer_,
+      link_diagnostics_max_rhat = NA_real_,
+      link_diagnostics_min_ess_bulk = NA_real_,
+      link_diagnostics_divergences_pass = NA,
+      link_diagnostics_rhat_pass = NA,
+      link_diagnostics_ess_pass = NA
+    ))
+  }
+
+  rlang::abort(
+    paste0(
+      "Linking diagnostics contract is undefined for fit method `",
+      fit_method,
+      "`."
+    )
+  )
+}
+
 .adaptive_link_cmdstan_schedule <- function(attempt, n_param, joint_used = FALSE) {
   attempt <- max(1L, as.integer(attempt %||% 1L))
   n_param <- max(1L, as.integer(n_param %||% 1L))
@@ -2074,7 +2942,7 @@
     empty$joint_refit <- list(
       used = FALSE,
       lock_mode = lock_mode,
-      hub_lock_kappa = as.double(lock_kappa)
+      hub_lock_kappa = if (identical(lock_mode, "soft_lock")) as.double(lock_kappa) else NA_real_
     )
     empty$diagnostics <- list(
       divergences = NA_integer_,
@@ -2187,15 +3055,18 @@
   within_spoke_idx_b <- within_spoke_idx_b[keep_within_spoke]
   within_spoke_y <- within_spoke_y[keep_within_spoke]
 
-  if (isTRUE(joint_used) && !lock_mode %in% c("hard_lock", "soft_lock")) {
+  if (isTRUE(joint_used) && !lock_mode %in% .adaptive_hub_lock_mode_levels()) {
     rlang::abort(
       paste0(
         "Unsupported `hub_lock_mode` in linking joint refit: ",
         lock_mode,
-        ". Expected `hard_lock` or `soft_lock`."
+        ". Expected one of: ",
+        paste(.adaptive_hub_lock_mode_levels(), collapse = ", "),
+        "."
       )
     )
   }
+  hub_prior_active <- isTRUE(estimate_hub) && identical(lock_mode, "soft_lock")
   hub_prior_sd <- if (isTRUE(estimate_hub) && identical(lock_mode, "soft_lock")) {
     pmax(hub_ref_sd / max(lock_kappa, 1e-8), 1e-8)
   } else {
@@ -2215,6 +3086,7 @@
     beta_within = as.double(beta),
     joint_used = as.integer(joint_used),
     estimate_hub = as.integer(estimate_hub),
+    hub_prior_active = as.integer(hub_prior_active),
     use_scale = as.integer(use_scale),
     N_hub = as.integer(length(hub_ref)),
     N_spoke = as.integer(length(spoke_ref)),
@@ -2388,7 +3260,7 @@
     ),
     lock = list(
       hub_lock_mode = as.character(lock_mode),
-      hub_lock_kappa = as.double(lock_kappa)
+      hub_lock_kappa = if (identical(lock_mode, "soft_lock")) as.double(lock_kappa) else NA_real_
     ),
     theta_treatment = as.character(refit_contract_ctx$shift_only_theta_treatment %||% NA_character_),
     joint_refit = list(
@@ -2852,6 +3724,10 @@
     escalation_recent_window_size = rep(NA_integer_, nrow(rows)),
     link_transform_escalation_window_refits_used = rep(NA_integer_, nrow(rows)),
     link_transform_escalation_passes_required_used = rep(NA_integer_, nrow(rows)),
+    link_diagnostics_pass = rep(NA, nrow(rows)),
+    link_diagnostics_converged_pass = rep(NA, nrow(rows)),
+    link_diagnostics_finite_summary_pass = rep(NA, nrow(rows)),
+    link_diagnostics_uncertainty_pass = rep(NA, nrow(rows)),
     link_stop_reliability_min_used = rep(NA_real_, nrow(rows)),
     probe_brier_max_used = rep(NA_real_, nrow(rows)),
     probe_brier_pass = rep(NA, nrow(rows)),
@@ -3283,7 +4159,7 @@
   state_map <- controller$link_transform_state_by_spoke %||% list()
   last_delta <- controller$link_transform_last_delta_by_spoke %||% list()
   last_log_alpha <- controller$link_transform_last_log_alpha_by_spoke %||% list()
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   frozen_delta_map <- controller$link_transform_frozen_delta_by_spoke %||% list()
   frozen_log_alpha_map <- controller$link_transform_frozen_log_alpha_by_spoke %||% list()
   spoke_ids <- spoke_ids[!vapply(
@@ -3313,16 +4189,40 @@
     epoch_start_step_map[[key]] <- as.integer(
       epoch_start_step_map[[key]] %||% .adaptive_link_epoch_start_step_default(out, spoke_id)
     )
+    link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
     transform_frozen <- isTRUE(frozen_map[[key]])
-    transform_policy <- .adaptive_normalize_link_transform_policy(
-      controller$link_transform_policy %||% "auto"
-    )
-    transform_state <- .adaptive_link_transform_state_for_spoke(controller, spoke_id)
-    refit_mode <- as.character(controller$link_refit_mode %||% "shift_only")
-    lock_mode <- as.character(controller$hub_lock_mode %||% "soft_lock")
-    kappa <- as.double(controller$hub_lock_kappa %||% 0.75)
-    theta_treatment <- as.character(controller$shift_only_theta_treatment %||% "fixed_eap_plugin_var")
-    theta_treatment_resolved <- theta_treatment
+    if (identical(link_estimation_mode, "anchored_joint")) {
+      transform_policy <- NA_character_
+      transform_state <- NA_character_
+      refit_mode <- NA_character_
+      lock_mode <- "hard_lock"
+      kappa <- NA_real_
+      theta_treatment <- NA_character_
+      theta_treatment_resolved <- NA_character_
+    } else {
+      transform_policy <- .adaptive_normalize_link_transform_policy(
+        controller$link_transform_policy %||% "auto"
+      )
+      transform_state <- .adaptive_link_transform_state_for_spoke(controller, spoke_id)
+      refit_mode <- as.character(controller$link_refit_mode %||% "shift_only")
+      lock_mode <- as.character(controller$hub_lock_mode %||% "soft_lock")
+      kappa <- as.double(controller$hub_lock_kappa %||% 0.75)
+      theta_treatment <- as.character(controller$shift_only_theta_treatment %||% "fixed_eap_plugin_var")
+      theta_treatment_resolved <- theta_treatment
+      if (identical(lock_mode, "free") &&
+        !.adaptive_hub_lock_mode_free_allowed(
+          run_mode = controller$run_mode %||% out$linking$run_mode %||% "within_set",
+          link_estimation_mode = link_estimation_mode,
+          link_refit_mode = refit_mode
+        )) {
+        rlang::abort(paste0(
+          "`state$controller$hub_lock_mode = \"free\"` is only supported for ",
+          "`state$linking$run_mode = \"link_one_spoke\"` with ",
+          "`state$controller$link_estimation_mode = \"transform\"` and ",
+          "`state$controller$link_refit_mode = \"joint_refit\"`."
+        ))
+      }
+    }
 
     hub_phase <- .adaptive_link_phase_a_theta_map(out, hub_id, "theta_raw_mean")
     hub_phase_sd <- .adaptive_link_phase_a_theta_map(out, hub_id, "theta_raw_sd")
@@ -3333,7 +4233,20 @@
     spoke_current <- .adaptive_link_theta_mean_map(out, spoke_id)
     spoke_current_sd <- .adaptive_link_theta_sd_map(out, spoke_id)
 
-    if (identical(refit_mode, "joint_refit")) {
+    accepted_state_current <- NULL
+    if (identical(link_estimation_mode, "anchored_joint")) {
+      accepted_state_current <- .adaptive_link_anchored_joint_resolve_state(
+        state = out,
+        spoke_id = as.integer(spoke_id),
+        controller = controller
+      )
+      hub_theta <- accepted_state_current$theta_hub_fixed
+      hub_theta_sd <- .adaptive_phase_a_artifact_item_field_map(out, hub_id, "theta_raw_sd")
+      hub_theta_sd[!is.finite(hub_theta_sd) | hub_theta_sd < 0] <- 0
+      spoke_theta <- accepted_state_current$theta_spoke_global_mean
+      spoke_theta_sd <- accepted_state_current$theta_spoke_global_sd
+      spoke_theta_sd[!is.finite(spoke_theta_sd) | spoke_theta_sd < 0] <- 0
+    } else if (identical(refit_mode, "joint_refit")) {
       if (identical(lock_mode, "hard_lock")) {
         hub_theta <- hub_phase
         hub_theta_sd <- stats::setNames(rep(0, length(hub_theta)), names(hub_theta))
@@ -3414,7 +4327,35 @@
     attr(spoke_theta, "theta_sd") <- spoke_theta_sd
     attr(spoke_theta, "theta_init") <- spoke_theta_init
     cross_active_all <- cross_all[!(cross_all$is_probe_step %in% TRUE), , drop = FALSE]
-    fit <- if (isTRUE(transform_frozen)) {
+    fit <- if (identical(link_estimation_mode, "anchored_joint")) {
+      if (isTRUE(transform_frozen)) {
+        list(
+          delta_mean = 0,
+          delta_sd = NA_real_,
+          log_alpha_mean = NA_real_,
+          log_alpha_sd = NA_real_,
+          theta_hub_post = accepted_state_current$theta_hub_fixed,
+          theta_spoke_post = accepted_state_current$theta_spoke_global_mean,
+          theta_spoke_sd_post = accepted_state_current$theta_spoke_global_sd,
+          posterior_draws = list(),
+          diagnostics = list(),
+          fit_contract = list(
+            contract_type = "link_refit_frozen_reuse",
+            estimation_method = "accepted_state_reuse",
+            uncertainty_approximation = "accepted_state"
+          )
+        )
+      } else {
+        .adaptive_link_fit_anchored_joint(
+          state = out,
+          spoke_id = as.integer(spoke_id),
+          controller = controller,
+          cross_edges = cross_active_all,
+          judge_params = judge_params,
+          accepted_state = accepted_state_current
+        )
+      }
+    } else if (isTRUE(transform_frozen)) {
       list(
         delta_mean = as.double(frozen_delta_map[[key]] %||% last_delta[[key]] %||% 0),
         delta_sd = as.double((link_stats[[key]] %||% list())$delta_spoke_sd %||% 0),
@@ -3429,8 +4370,53 @@
     } else {
       .adaptive_link_fit_transform(cross_active_all, hub_theta, spoke_theta, transform_mode = transform_state)
     }
+    if (identical(link_estimation_mode, "anchored_joint")) {
+      accepted_state_current <- .adaptive_anchored_joint_new_accepted_state(
+        state = out,
+        hub_id = hub_id,
+        spoke_id = as.integer(spoke_id),
+        theta_hub_fixed = fit$theta_hub_post %||% hub_theta,
+        theta_spoke_global_mean = fit$theta_spoke_post %||% spoke_theta,
+        theta_spoke_global_sd = fit$theta_spoke_sd_post %||% spoke_theta_sd,
+        judge_params = judge_params,
+        anchored_joint_init_state_method = if (nrow(cross_active_all) < 1L) {
+          "phase_a_only_init_refit"
+        } else {
+          "phase_b_refit"
+        },
+        phase_a_evidence_hash_hub = .adaptive_phase_a_hash_object(
+          .adaptive_phase_a_artifact_resolve_within_set_evidence(
+            artifact = out$linking$phase_a$artifacts[[as.character(hub_id)]],
+            state = out,
+            set_id = hub_id,
+            controller = controller
+          )
+        ),
+        phase_a_evidence_hash_spoke = .adaptive_phase_a_hash_object(
+          .adaptive_phase_a_artifact_resolve_within_set_evidence(
+            artifact = out$linking$phase_a$artifacts[[as.character(spoke_id)]],
+            state = out,
+            set_id = as.integer(spoke_id),
+            controller = controller
+          )
+        )
+      )
+      out$linking$anchored_joint$accepted_state_by_spoke[[key]] <- accepted_state_current
+      out$linking$anchored_joint$fisher_t0_by_spoke[[key]] <- list(
+        free_block_dim = as.integer(length(accepted_state_current$theta_spoke_global_mean)),
+        I_s_t0_zero = TRUE,
+        n_link_active_pairs = 0L,
+        anchored_joint_init_state_method = as.character(
+          accepted_state_current$anchored_joint_init_state_method
+        )
+      )
+    }
     ppc_hub_theta <- fit$theta_hub_post %||% hub_theta
-    ppc_spoke_theta <- fit$theta_spoke_post %||% spoke_theta
+    ppc_spoke_theta <- if (identical(link_estimation_mode, "anchored_joint")) {
+      fit$theta_spoke_post %||% accepted_state_current$theta_spoke_global_mean
+    } else {
+      fit$theta_spoke_post %||% spoke_theta
+    }
     probe_holdout_flag <- .adaptive_link_is_holdout_probe_rows(cross_since)
     cross_since_probe <- cross_since[
       probe_holdout_flag,
@@ -3474,7 +4460,8 @@
       refit_mode = refit_mode,
       lock_mode = lock_mode,
       hub_art = hub_art,
-      spoke_art = spoke_art
+      spoke_art = spoke_art,
+      link_estimation_mode = link_estimation_mode
     )
     epoch_signature <- .adaptive_link_epoch_signature_string(epoch_signature_components)
     previous_signature <- as.character(epoch_signature_map[[key]] %||% NA_character_)
@@ -3611,7 +4598,7 @@
       current_panel_id <- as.character(panel_eval$probe_panel_id[[1L]] %||% NA_character_)
     }
     probe_panel_id_eval <- as.character(panel_eval$probe_panel_id[[1L]] %||% NA_character_)
-    probe_edges_planned_eval <- as.integer(nrow(panel_eval))
+    probe_edges_planned_eval <- .adaptive_link_probe_planned_edges(panel_eval)
     probe_edges_realized_eval <- .adaptive_link_probe_realized_count(
       out,
       spoke_id = as.integer(spoke_id),
@@ -3638,6 +4625,11 @@
     lag_eligible <- isTRUE(lag_eligible) && nrow(lag_row) == 1L
     lag_delta <- if (nrow(lag_row) > 0L) as.double(lag_row$delta_spoke_mean[[1L]]) else NA_real_
     lag_log_alpha <- if (nrow(lag_row) > 0L) as.double(lag_row$log_alpha_spoke_mean[[1L]]) else NA_real_
+    lag_global_theta <- if (identical(link_estimation_mode, "anchored_joint") && isTRUE(lag_eligible)) {
+      .adaptive_phase_b_global_theta_history_at_refit(out, refit_id = lag_refit_id)
+    } else {
+      NULL
+    }
     delta_change <- if (is.finite(lag_delta)) abs(fit$delta_mean - lag_delta) else NA_real_
     log_alpha_change <- if (is.finite(lag_log_alpha) && is.finite(fit$log_alpha_mean)) {
       abs(fit$log_alpha_mean - lag_log_alpha)
@@ -3669,6 +4661,8 @@
       refit_mode = refit_mode,
       hub_lock_mode = lock_mode,
       shift_only_theta_treatment = theta_treatment_resolved,
+      link_estimation_mode = link_estimation_mode,
+      accepted_state = accepted_state_current,
       var_mu_epsilon = as.double(controller$reliability_var_mu_epsilon %||% 1e-6),
       total_var_epsilon = as.double(controller$reliability_total_var_epsilon %||% 1e-6)
     )
@@ -3684,48 +4678,72 @@
       refit_mode = refit_mode,
       hub_lock_mode = lock_mode,
       shift_only_theta_treatment = theta_treatment_resolved,
+      link_estimation_mode = link_estimation_mode,
+      accepted_state = accepted_state_current,
       var_mu_epsilon = as.double(controller$reliability_var_mu_epsilon %||% 1e-6),
       total_var_epsilon = as.double(controller$reliability_total_var_epsilon %||% 1e-6)
     )
     if (!is.finite(reliability_active)) {
       reliability_active <- as.double(reliability_stats$reliability %||% NA_real_)
     }
-    theta_mean_transformed <- .adaptive_link_transform_theta_mean_for_spoke(
-      state = out,
-      theta_mean = .adaptive_btl_fit_theta_mean(out$btl_fit %||% list()),
-      spoke_id = spoke_id,
-      hub_id = hub_id,
-      transform_mode = transform_state,
-      delta_mean = fit$delta_mean,
-      log_alpha_mean = fit$log_alpha_mean
-    )
+    theta_mean_transformed <- if (identical(link_estimation_mode, "anchored_joint")) {
+      .adaptive_link_anchored_joint_global_theta_map(
+        state = out,
+        spoke_id = as.integer(spoke_id),
+        controller = controller,
+        accepted_state = accepted_state_current
+      )
+    } else {
+      .adaptive_link_transform_theta_mean_for_spoke(
+        state = out,
+        theta_mean = .adaptive_btl_fit_theta_mean(out$btl_fit %||% list()),
+        spoke_id = spoke_id,
+        hub_id = hub_id,
+        transform_mode = transform_state,
+        delta_mean = fit$delta_mean,
+        log_alpha_mean = fit$log_alpha_mean
+      )
+    }
     ts_btl_rank_active <- .adaptive_link_ts_btl_rank_spearman_active(
       state = out,
       active_ids = active$active_all,
       theta_mean = theta_mean_transformed
     )
-    rank_stability <- .adaptive_link_rank_stability_lagged(
-      state = out,
-      active_ids = active$active_all,
-      stability_lag = lag,
-      spoke_id = spoke_id,
-      hub_id = hub_id,
-      transform_mode = transform_state,
-      delta_mean = fit$delta_mean,
-      log_alpha_mean = fit$log_alpha_mean,
-      lag_row = lag_row
-    )
-    fit_diag <- fit$diagnostics %||% list()
+    rank_stability <- if (identical(link_estimation_mode, "anchored_joint")) {
+      list(
+        lag_eligible = FALSE,
+        rho_rank_lagged = NA_real_,
+        rho_rank_lagged_pass = FALSE
+      )
+    } else {
+      .adaptive_link_rank_stability_lagged(
+        state = out,
+        active_ids = active$active_all,
+        stability_lag = lag,
+        spoke_id = spoke_id,
+        hub_id = hub_id,
+        transform_mode = transform_state,
+        delta_mean = fit$delta_mean,
+        log_alpha_mean = fit$log_alpha_mean,
+        lag_row = lag_row
+      )
+    }
+    fit_diag <- .adaptive_link_diagnostics_contract(fit)
     fit_contract <- fit$fit_contract %||% list()
-    hub_anchored <- if (identical(refit_mode, "shift_only") || identical(lock_mode, "hard_lock")) {
+    hub_anchored <- if (identical(link_estimation_mode, "anchored_joint") ||
+      identical(refit_mode, "shift_only") || identical(lock_mode, "hard_lock")) {
       TRUE
+    } else if (identical(lock_mode, "free")) {
+      FALSE
     } else if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
       if (!identical(lock_mode, "soft_lock")) {
         rlang::abort(
           paste0(
             "Unsupported `hub_lock_mode` in linking stop-gate logic: ",
             lock_mode,
-            ". Expected `hard_lock` or `soft_lock`."
+            ". Expected one of: ",
+            paste(.adaptive_hub_lock_mode_levels(), collapse = ", "),
+            "."
           )
         )
       }
@@ -3749,7 +4767,13 @@
       spoke_id = spoke_id,
       scope = controller$theta_global_rmse_scope %||% "direct_evidence_spoke"
     )
-    theta_global_rmse_lagged <- if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
+    theta_global_rmse_lagged <- if (identical(link_estimation_mode, "anchored_joint")) {
+      .adaptive_link_theta_global_rmse_from_maps(
+        current_theta = theta_mean_transformed,
+        lag_theta = lag_global_theta,
+        scope_ids = scope_ids
+      )
+    } else if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
       .adaptive_link_theta_global_rmse_lagged(
         state = out,
         spoke_id = spoke_id,
@@ -3769,9 +4793,7 @@
       spoke_id = spoke_id,
       epoch_id = eval_link_epoch_id
     )
-    link_diagnostics_pass <- isTRUE(fit_diag$diagnostics_divergences_pass %||% NA) &&
-      isTRUE(fit_diag$diagnostics_rhat_pass %||% NA) &&
-      isTRUE(fit_diag$diagnostics_ess_pass %||% NA)
+    link_diagnostics_pass <- isTRUE(fit_diag$link_diagnostics_pass %||% NA)
     probe_brier <- .adaptive_link_probe_brier_for_fit(
       edges = probe_edges_realized_tbl,
       hub_theta = ppc_hub_theta,
@@ -3780,7 +4802,14 @@
       log_alpha_mean = fit$log_alpha_mean,
       judge_params = judge_params
     )
-    probe_pred_rmse_lagged <- if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
+    probe_pred_rmse_lagged <- if (identical(link_estimation_mode, "anchored_joint")) {
+      .adaptive_link_probe_pred_rmse_lagged_anchored_joint(
+        edges = probe_edges_realized_tbl,
+        current_theta = theta_mean_transformed,
+        lag_theta = lag_global_theta,
+        judge_params = judge_params
+      )
+    } else if (isTRUE(lag_eligible) && nrow(lag_row) > 0L) {
       .adaptive_link_probe_pred_rmse_lagged_for_fit(
         edges = probe_edges_realized_tbl,
         hub_theta = ppc_hub_theta,
@@ -3960,7 +4989,8 @@
             refit_mode = refit_mode,
             lock_mode = lock_mode,
             hub_art = hub_art,
-            spoke_art = spoke_art
+            spoke_art = spoke_art,
+            link_estimation_mode = link_estimation_mode
           )
         )
         epoch_signature_map[[key]] <- as.character(epoch_signature)
@@ -3990,6 +5020,13 @@
     escalation_window_map[[key]] <- escalation_window
     escalation_recent_pass_count <- .adaptive_link_result_window_pass_count(escalation_window)
     escalation_recent_window_size <- length(escalation_window)
+    if (identical(link_estimation_mode, "anchored_joint")) {
+      scale_ready <- FALSE
+      escalation_recent_pass_count <- NA_integer_
+      escalation_recent_window_size <- NA_integer_
+      escalation_window_refits_used <- NA_integer_
+      escalation_passes_required_used <- NA_integer_
+    }
     stop_blockers <- .adaptive_link_stop_blockers(
       link_diagnostics_pass = link_diagnostics_pass,
       link_lag_eligible = link_lag_eligible,
@@ -4021,6 +5058,7 @@
       link_transform_state = as.character(transform_state),
       shift_only_theta_treatment = as.character(theta_treatment),
       shift_only_theta_treatment_resolved = as.character(theta_treatment_resolved),
+      link_state_frozen = as.logical(transform_frozen),
       transform_frozen = as.logical(transform_frozen),
       delta_spoke_mean = as.double(fit$delta_mean),
       delta_spoke_sd = as.double(fit$delta_sd),
@@ -4060,16 +5098,41 @@
       ppc_brier_cross_probe = as.double(ppc_brier_cross_probe),
       ppc_brier_cross = as.double(ppc_brier_cross),
       fit_contract = fit_contract,
-      link_fit_method = as.character(fit_contract$estimation_method %||% NA_character_),
+      link_fit_method = as.character(fit_diag$link_fit_method %||% NA_character_),
       link_uncertainty_approximation = as.character(
-        fit_contract$uncertainty_approximation %||% NA_character_
+        fit_diag$link_uncertainty_approximation %||% NA_character_
       ),
-      link_diagnostics_divergences = as.integer(fit_diag$divergences %||% NA_integer_),
-      link_diagnostics_max_rhat = as.double(fit_diag$max_rhat %||% NA_real_),
-      link_diagnostics_min_ess_bulk = as.double(fit_diag$min_ess_bulk %||% NA_real_),
-      link_diagnostics_divergences_pass = as.logical(fit_diag$diagnostics_divergences_pass %||% NA),
-      link_diagnostics_rhat_pass = as.logical(fit_diag$diagnostics_rhat_pass %||% NA),
-      link_diagnostics_ess_pass = as.logical(fit_diag$diagnostics_ess_pass %||% NA),
+      phase_b_global_metric_uncertainty_approximation = as.character(
+        .adaptive_phase_b_global_metric_uncertainty_approximation(
+          link_estimation_mode = link_estimation_mode,
+          link_uncertainty_approximation = fit_diag$link_uncertainty_approximation %||% NA_character_,
+          link_fit_method = fit_diag$link_fit_method %||% NA_character_
+        )
+      ),
+      link_diagnostics_pass = as.logical(fit_diag$link_diagnostics_pass %||% NA),
+      link_diagnostics_converged_pass = as.logical(
+        fit_diag$link_diagnostics_converged_pass %||% NA
+      ),
+      link_diagnostics_finite_summary_pass = as.logical(
+        fit_diag$link_diagnostics_finite_summary_pass %||% NA
+      ),
+      link_diagnostics_uncertainty_pass = as.logical(
+        fit_diag$link_diagnostics_uncertainty_pass %||% NA
+      ),
+      link_diagnostics_divergences = as.integer(
+        fit_diag$link_diagnostics_divergences %||% NA_integer_
+      ),
+      link_diagnostics_max_rhat = as.double(
+        fit_diag$link_diagnostics_max_rhat %||% NA_real_
+      ),
+      link_diagnostics_min_ess_bulk = as.double(
+        fit_diag$link_diagnostics_min_ess_bulk %||% NA_real_
+      ),
+      link_diagnostics_divergences_pass = as.logical(
+        fit_diag$link_diagnostics_divergences_pass %||% NA
+      ),
+      link_diagnostics_rhat_pass = as.logical(fit_diag$link_diagnostics_rhat_pass %||% NA),
+      link_diagnostics_ess_pass = as.logical(fit_diag$link_diagnostics_ess_pass %||% NA),
       hub_anchored = as.logical(hub_anchored),
       scale_ready = as.logical(scale_ready),
       stop_blocker_codes = as.character(stop_blockers$codes),
@@ -4090,17 +5153,47 @@
       probe_brier_shift_scale = as.double(probe_brier_shift_scale),
       probe_brier_delta = as.double(probe_brier_delta),
       log_alpha_spoke_sd_alt = as.double(alt_fit$log_alpha_sd %||% NA_real_),
-      alt_eval_active_edges = as.integer(nrow(cross_active_epoch)),
-      alt_eval_converged = as.logical(alt_fit$converged %||% FALSE),
-      alternative_fit_method = as.character(alt_fit$fit_method %||% "map_laplace_hessian"),
-      alternative_uncertainty_approximation = as.character(
-        alt_fit$uncertainty_approximation %||% "laplace_hessian"
-      ),
-      probe_brier_delta_min_used = as.double(controller$probe_brier_delta_min %||% 0.005),
-      logalpha_sd_guardrail_used = as.double(controller$logalpha_sd_guardrail %||% 0.10),
+      alt_eval_active_edges = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_integer_
+      } else {
+        as.integer(nrow(cross_active_epoch))
+      },
+      alt_eval_converged = if (identical(link_estimation_mode, "anchored_joint")) {
+        FALSE
+      } else {
+        as.logical(alt_fit$converged %||% FALSE)
+      },
+      alternative_fit_method = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_character_
+      } else {
+        as.character(alt_fit$fit_method %||% "map_laplace_hessian")
+      },
+      alternative_uncertainty_approximation = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_character_
+      } else {
+        as.character(alt_fit$uncertainty_approximation %||% "laplace_hessian")
+      },
+      probe_brier_delta_min_used = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_real_
+      } else {
+        as.double(controller$probe_brier_delta_min %||% 0.005)
+      },
+      logalpha_sd_guardrail_used = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_real_
+      } else {
+        as.double(controller$logalpha_sd_guardrail %||% 0.10)
+      },
       probe_edges_min_for_stop_used = as.integer(controller$probe_edges_min_for_stop %||% 30L),
-      link_transform_escalation_window_refits_used = as.integer(escalation_window_refits_used),
-      link_transform_escalation_passes_required_used = as.integer(escalation_passes_required_used),
+      link_transform_escalation_window_refits_used = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_integer_
+      } else {
+        as.integer(escalation_window_refits_used)
+      },
+      link_transform_escalation_passes_required_used = if (identical(link_estimation_mode, "anchored_joint")) {
+        NA_integer_
+      } else {
+        as.integer(escalation_passes_required_used)
+      },
       n_probe_pairs_since_last_refit = as.integer(nrow(cross_since_probe)),
       n_cross_edges_active_since_last_refit = as.integer(nrow(cross_since_active)),
       n_cross_edges_probe_since_last_refit = as.integer(nrow(cross_since_probe)),
@@ -4118,7 +5211,17 @@
       mean_var_theta_global_active = as.double(reliability_stats$V_post %||% NA_real_),
       reliability_var_mu_epsilon_used = as.double(controller$reliability_var_mu_epsilon %||% 1e-6),
       reliability_total_var_epsilon_used = as.double(controller$reliability_total_var_epsilon %||% 1e-6),
-      uncertainty = as.double(fit$delta_sd + if (is.finite(fit$log_alpha_sd)) fit$log_alpha_sd else 0)
+      uncertainty = if (identical(link_estimation_mode, "anchored_joint")) {
+        theta_sd_vals <- as.double(fit$theta_spoke_sd_post %||% numeric())
+        theta_sd_vals <- theta_sd_vals[is.finite(theta_sd_vals)]
+        if (length(theta_sd_vals) < 1L) {
+          NA_real_
+        } else {
+          as.double(mean(theta_sd_vals))
+        }
+      } else {
+        as.double(fit$delta_sd + if (is.finite(fit$log_alpha_sd)) fit$log_alpha_sd else 0)
+      }
     )
   }
 
@@ -4148,6 +5251,7 @@
   controller$link_transform_state_by_spoke <- state_map
   controller$link_transform_last_delta_by_spoke <- last_delta
   controller$link_transform_last_log_alpha_by_spoke <- last_log_alpha
+  controller$link_state_frozen_by_spoke <- frozen_map
   controller$link_transform_frozen_by_spoke <- frozen_map
   controller$link_transform_frozen_delta_by_spoke <- frozen_delta_map
   controller$link_transform_frozen_log_alpha_by_spoke <- frozen_log_alpha_map
@@ -4197,7 +5301,7 @@
   link_stats <- controller$link_refit_stats_by_spoke %||% list()
   d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
   stopped_map <- controller$link_stopped_by_spoke %||% list()
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   cached_budget_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
   cached_budget_map <- controller$link_budget_map %||% list()
   if (!is.na(cached_budget_refit_id) &&
@@ -4463,19 +5567,50 @@
       score_source = "linking_global_score"
     )
 
-    transform_policy <- as.character(stats_row$link_transform_policy %||%
-      controller$link_transform_policy %||% "auto")
-    transform_state <- as.character(stats_row$link_transform_state %||%
-      .adaptive_link_transform_state_for_spoke(controller, spoke_id))
+    link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
+    transform_policy <- if (identical(link_estimation_mode, "anchored_joint")) {
+      NA_character_
+    } else {
+      as.character(stats_row$link_transform_policy %||%
+        controller$link_transform_policy %||% "auto")
+    }
+    transform_state <- if (identical(link_estimation_mode, "anchored_joint")) {
+      NA_character_
+    } else {
+      as.character(stats_row$link_transform_state %||%
+        .adaptive_link_transform_state_for_spoke(controller, spoke_id))
+    }
     d_opt_key <- .adaptive_link_d_opt_state_key(refit_id = as.integer(refit_id), spoke_id = as.integer(spoke_id))
     d_opt_entry <- d_opt_map[[d_opt_key]] %||%
       .adaptive_link_d_opt_state_get(
         controller = controller,
         refit_id = as.integer(refit_id),
         spoke_id = as.integer(spoke_id),
-        transform_mode = transform_state
+        transform_mode = transform_state,
+        link_estimation_mode = link_estimation_mode,
+        free_block_dim = if (identical(link_estimation_mode, "anchored_joint")) {
+          .adaptive_link_anchored_joint_free_block_dim(
+            state = state,
+            spoke_id = as.integer(spoke_id),
+            controller = controller
+          )
+        } else {
+          NULL
+        }
       )
-    d_opt_dim <- .adaptive_link_d_opt_matrix_dim(transform_state)
+    d_opt_dim <- .adaptive_link_d_opt_matrix_dim(
+      transform_mode = transform_state,
+      link_estimation_mode = link_estimation_mode,
+      free_block_dim = if (identical(link_estimation_mode, "anchored_joint")) {
+        .adaptive_link_anchored_joint_free_block_dim(
+          state = state,
+          spoke_id = as.integer(spoke_id),
+          controller = controller
+        )
+      } else {
+        NULL
+      }
+    )
     d_opt_it <- as.matrix(d_opt_entry$it %||% matrix(0, nrow = d_opt_dim, ncol = d_opt_dim))
     d_opt_logdet_start <- as.double(d_opt_entry$it_logdet_start %||% NA_real_)
     d_opt_logdet_end <- .adaptive_link_logdet_spd(d_opt_it, ridge = 1e-6)
@@ -4492,7 +5627,11 @@
     link_stop_eligible <- as.logical(stats_row$link_stop_eligible %||%
       (isTRUE(lag_eligible) && isTRUE(link_min_refit_eligible) && isTRUE(link_stop_gate_open)))
     link_stop_pass <- as.logical(stats_row$link_stop_pass %||% FALSE)
-    transform_frozen <- isTRUE(stats_row$transform_frozen %||% FALSE) || isTRUE(link_stop_pass)
+    transform_frozen <- isTRUE(stats_row$link_state_frozen %||% FALSE)
+    if (!isTRUE(transform_frozen) && "transform_frozen" %in% names(stats_row)) {
+      transform_frozen <- isTRUE(stats_row$transform_frozen %||% FALSE)
+    }
+    transform_frozen <- isTRUE(transform_frozen) || isTRUE(link_stop_pass)
     stats_epoch_id <- as.integer(stats_row$link_epoch_id %||% .adaptive_link_probe_epoch_for_spoke(state, spoke_id))
     probe_panel <- .adaptive_link_probe_panel_for_spoke(
       state,
@@ -4503,7 +5642,9 @@
       stats_row$probe_panel_id %||%
         if (nrow(probe_panel) > 0L) probe_panel$probe_panel_id[[1L]] else NA_character_
     )
-    probe_edges_planned <- as.integer(stats_row$probe_edges_planned %||% nrow(probe_panel))
+    probe_edges_planned <- as.integer(
+      stats_row$probe_edges_planned %||% .adaptive_link_probe_planned_edges(probe_panel)
+    )
     realized_probe_log <- .adaptive_link_probe_realized_log_for_panel(
       state = state,
       spoke_id = as.integer(spoke_id),
@@ -4574,7 +5715,7 @@
       spoke_id = as.integer(spoke_id)
     )
     probe_effort_base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
-    probe_panel_reallocation_used <- as.logical(n_pairs_since_probe > probe_effort_base_cap)
+    probe_panel_reallocation_used <- .adaptive_link_probe_panel_reallocation_used(probe_panel)
     probe_cache <- tibble::as_tibble(.adaptive_link_probe_state(state)$prediction_cache)
     probe_pred_cache_used <- nrow(probe_cache[
       as.integer(probe_cache$refit_id) == as.integer(refit_id) &
@@ -4583,6 +5724,84 @@
       drop = FALSE
     ]) > 0L
 
+    anchored_phase_a_hub_edges <- NA_integer_
+    anchored_phase_a_spoke_edges <- NA_integer_
+    anchored_phase_b_active_edges <- NA_integer_
+    anchored_hub_fixed_count <- NA_integer_
+    anchored_init_method <- NA_character_
+    anchored_prior_scale_used <- NA_real_
+    anchored_sd_floor_used <- NA_real_
+    anchored_prior_fallback_used <- NA
+    anchored_prior_fallback_sd_used <- NA_real_
+    anchored_judge_fixed <- NA
+    anchored_free_block_dim <- NA_integer_
+    if (identical(link_estimation_mode, "anchored_joint")) {
+      accepted_state_current <- .adaptive_link_anchored_joint_resolve_state(
+        state = state,
+        spoke_id = as.integer(spoke_id),
+        controller = controller
+      )
+      anchored_hub_artifact <- (state$linking$phase_a$artifacts %||% list())[[as.character(hub_id)]] %||% NULL
+      anchored_spoke_artifact <- (state$linking$phase_a$artifacts %||% list())[[as.character(spoke_id)]] %||% NULL
+      anchored_phase_a_hub_edges <- if (is.list(anchored_hub_artifact)) {
+        nrow(.adaptive_phase_a_artifact_resolve_within_set_evidence(
+          artifact = anchored_hub_artifact,
+          state = state,
+          set_id = hub_id,
+          controller = controller
+        ))
+      } else {
+        NA_integer_
+      }
+      anchored_phase_a_spoke_edges <- if (is.list(anchored_spoke_artifact)) {
+        nrow(.adaptive_phase_a_artifact_resolve_within_set_evidence(
+          artifact = anchored_spoke_artifact,
+          state = state,
+          set_id = as.integer(spoke_id),
+          controller = controller
+        ))
+      } else {
+        NA_integer_
+      }
+      cumulative_probe_flag <- .adaptive_link_is_holdout_probe_rows(cumulative)
+      anchored_phase_b_active_edges <- as.integer(sum(!cumulative_probe_flag, na.rm = TRUE))
+      anchored_fit_contract <- stats_row$fit_contract %||% list()
+      anchored_priors <- anchored_fit_contract$priors %||% list()
+      anchored_joint_contract <- anchored_fit_contract$anchored_joint %||% list()
+      anchored_hub_fixed_count <- as.integer(length(accepted_state_current$theta_hub_fixed %||% numeric()))
+      anchored_init_method <- as.character(
+        accepted_state_current$anchored_joint_init_state_method %||% NA_character_
+      )
+      anchored_prior_scale_used <- as.double(
+        anchored_priors$anchored_joint_spoke_prior_scale %||%
+          controller$anchored_joint_spoke_prior_scale %||%
+          1.0
+      )
+      anchored_sd_floor_used <- as.double(
+        anchored_priors$anchored_joint_sd_floor %||%
+          controller$anchored_joint_sd_floor %||%
+          0.02
+      )
+      anchored_prior_fallback_used <- as.logical(
+        anchored_priors$prior_sd_fallback_used %||%
+          any(!is.finite(accepted_state_current$theta_spoke_global_sd))
+      )
+      anchored_prior_fallback_sd_used <- as.double(
+        anchored_priors$anchored_joint_spoke_prior_fallback_sd %||%
+          controller$anchored_joint_spoke_prior_fallback_sd %||%
+          1.0
+      )
+      anchored_judge_fixed <- TRUE
+      anchored_free_block_dim <- as.integer(
+        anchored_joint_contract$free_block_dim %||%
+          .adaptive_link_anchored_joint_free_block_dim(
+            state = state,
+            spoke_id = as.integer(spoke_id),
+            controller = controller
+          )
+      )
+    }
+
     reallocation_used <- isTRUE(quota_meta$feasibility_reallocation_used %||% FALSE) ||
       any(committed_stage > stage_quotas, na.rm = TRUE)
     reallocation_rule <- if (isTRUE(reallocation_used)) "pooled_utility_backfill" else "none"
@@ -4590,6 +5809,8 @@
       refit_id = as.integer(refit_id),
       spoke_id = as.integer(spoke_id),
       hub_id = as.integer(hub_id),
+      link_epoch_id = as.integer(stats_epoch_id),
+      link_estimation_mode = as.character(controller$link_estimation_mode %||% "transform"),
       link_transform_policy = as.character(transform_policy),
       link_transform_state = as.character(transform_state),
       link_refit_mode = as.character(controller$link_refit_mode %||% NA_character_),
@@ -4637,6 +5858,11 @@
         stats_row$stop_recent_window_size %||% stats_row$stop_consecutive_pass_count %||% 0L
       ),
       link_stop_pass = as.logical(link_stop_pass),
+      link_state_frozen = as.logical(transform_frozen),
+      link_state_frozen_refit_id = as.integer(
+        .adaptive_link_state_frozen_refit_id_by_spoke(controller)[[key]] %||%
+          if (isTRUE(transform_frozen)) refit_id else NA_integer_
+      ),
       stability_window_refits_used = as.integer(
         stats_row$stability_window_refits_used %||%
           controller$stability_window_refits %||%
@@ -4649,10 +5875,6 @@
           controller$stability_consecutive_k %||%
           2L
       ),
-      transform_frozen = as.logical(transform_frozen),
-      transform_frozen_refit_id = as.integer(controller$link_transform_frozen_refit_id_by_spoke[[key]] %||%
-        if (isTRUE(transform_frozen)) refit_id else NA_integer_),
-      link_epoch_id = as.integer(stats_epoch_id),
       ts_btl_rank_spearman = as.double(stats_row$ts_btl_rank_spearman_active %||% NA_real_),
       ppc_brier_cross_active = as.double(stats_row$ppc_brier_cross_active %||% NA_real_),
       ppc_brier_cross_probe = as.double(stats_row$ppc_brier_cross_probe %||% NA_real_),
@@ -4663,6 +5885,19 @@
       link_fit_method = as.character(stats_row$link_fit_method %||% NA_character_),
       link_uncertainty_approximation = as.character(
         stats_row$link_uncertainty_approximation %||% NA_character_
+      ),
+      phase_b_global_metric_uncertainty_approximation = as.character(
+        stats_row$phase_b_global_metric_uncertainty_approximation %||% NA_character_
+      ),
+      link_diagnostics_pass = as.logical(stats_row$link_diagnostics_pass %||% NA),
+      link_diagnostics_converged_pass = as.logical(
+        stats_row$link_diagnostics_converged_pass %||% NA
+      ),
+      link_diagnostics_finite_summary_pass = as.logical(
+        stats_row$link_diagnostics_finite_summary_pass %||% NA
+      ),
+      link_diagnostics_uncertainty_pass = as.logical(
+        stats_row$link_diagnostics_uncertainty_pass %||% NA
       ),
       link_diagnostics_divergences = as.integer(stats_row$link_diagnostics_divergences %||% NA_integer_),
       link_diagnostics_max_rhat = as.double(stats_row$link_diagnostics_max_rhat %||% NA_real_),
@@ -4823,6 +6058,10 @@
       theta_global_rmse_scope = as.character(
         stats_row$theta_global_rmse_scope %||% controller$theta_global_rmse_scope %||% "direct_evidence_spoke"
       ),
+      phase_a_within_edges_hub_used = as.integer(anchored_phase_a_hub_edges),
+      phase_a_within_edges_spoke_used = as.integer(anchored_phase_a_spoke_edges),
+      phase_b_active_edges_used = as.integer(anchored_phase_b_active_edges),
+      anchored_joint_hub_items_fixed_count = as.integer(anchored_hub_fixed_count),
       theta_global_rmse_lagged = as.double(stats_row$theta_global_rmse_lagged %||% NA_real_),
       theta_global_rmse_max_used = as.double(
         stats_row$theta_global_rmse_max_used %||% controller$theta_global_rmse_max %||% 0.05
@@ -4831,6 +6070,13 @@
       probe_edges_min_for_stop_used = as.integer(
         stats_row$probe_edges_min_for_stop_used %||% controller$probe_edges_min_for_stop %||% 30L
       ),
+      anchored_joint_init_state_method = as.character(anchored_init_method),
+      anchored_joint_spoke_prior_scale_used = as.double(anchored_prior_scale_used),
+      anchored_joint_sd_floor_used = as.double(anchored_sd_floor_used),
+      anchored_joint_spoke_prior_fallback_used = as.logical(anchored_prior_fallback_used),
+      anchored_joint_spoke_prior_fallback_sd_used = as.double(anchored_prior_fallback_sd_used),
+      judge_params_fixed_for_anchored_joint = as.logical(anchored_judge_fixed),
+      anchored_joint_free_block_dim = as.integer(anchored_free_block_dim),
       alternative_fit_method = as.character(stats_row$alternative_fit_method %||% NA_character_),
       alternative_uncertainty_approximation = as.character(
         stats_row$alternative_uncertainty_approximation %||% NA_character_
@@ -4857,9 +6103,7 @@
           controller$link_transform_escalation_refits_required %||%
           2L
       ),
-      probe_edges_count_toward_active_constraints_used = as.logical(
-        controller$probe_edges_count_toward_active_constraints %||% FALSE
-      ),
+      probe_edges_count_toward_active_constraints_used = FALSE,
       lag_domain_key = as.character(stats_row$lag_domain_key %||% NA_character_),
       lag_domain_reset = as.logical(stats_row$lag_domain_reset %||% NA),
       lag_domain_reset_reason = as.character(stats_row$lag_domain_reset_reason %||% NA_character_),
@@ -4880,14 +6124,17 @@
     return(invisible(TRUE))
   }
   required <- c(
-    "refit_id", "spoke_id", "hub_id", "link_transform_policy", "link_transform_state", "link_refit_mode",
+    "refit_id", "spoke_id", "hub_id", "link_epoch_id", "link_estimation_mode",
+    "link_transform_policy", "link_transform_state", "link_refit_mode",
     "hub_lock_mode", "reliability_link_global", "linking_identified", "link_stop_eligible", "link_stop_pass",
-    "transform_frozen",
+    "link_state_frozen",
     "stop_recent_pass_count", "stop_recent_window_size",
     "stability_window_refits_used", "stability_passes_required_used",
     "escalation_recent_pass_count", "escalation_recent_window_size",
     "link_transform_escalation_window_refits_used",
     "link_transform_escalation_passes_required_used",
+    "link_diagnostics_pass", "link_diagnostics_converged_pass",
+    "link_diagnostics_finite_summary_pass", "link_diagnostics_uncertainty_pass",
     "n_pairs_cross_set_done", "n_unique_cross_pairs_seen", "n_cross_edges_active_since_last_refit",
     "n_cross_edges_probe_since_last_refit", "n_cross_edges_total_since_last_refit", "coverage_bins_used",
     "B_spoke_refit_budget", "B_spoke_refit_budget_source",
@@ -4903,7 +6150,13 @@
     "probe_shortfall_reason",
     "probe_brier", "probe_brier_max_used", "probe_brier_pass",
     "probe_pred_rmse_lagged", "probe_pred_rmse_max_used", "probe_pred_rmse_pass",
+    "phase_a_within_edges_hub_used", "phase_a_within_edges_spoke_used",
+    "phase_b_active_edges_used", "anchored_joint_hub_items_fixed_count",
     "theta_global_rmse_lagged", "theta_global_rmse_max_used", "theta_global_rmse_pass",
+    "anchored_joint_init_state_method", "anchored_joint_spoke_prior_scale_used",
+    "anchored_joint_sd_floor_used", "anchored_joint_spoke_prior_fallback_used",
+    "anchored_joint_spoke_prior_fallback_sd_used", "judge_params_fixed_for_anchored_joint",
+    "anchored_joint_free_block_dim",
     "resumed_from_session"
   )
   missing <- setdiff(required, names(rows))
@@ -4919,9 +6172,15 @@
   if (nrow(key_na) > 0L) {
     rlang::abort("link_stage_log append completeness failure: key fields refit_id/spoke_id/hub_id must be non-NA.")
   }
+  mode <- as.character(rows$link_estimation_mode %||% rep_len("transform", nrow(rows)))
+  transform_idx <- is.na(mode) | mode == "transform"
   mode_na <- rows[
-    is.na(rows$link_transform_policy) | is.na(rows$link_transform_state) |
-      is.na(rows$link_refit_mode) | is.na(rows$hub_lock_mode),
+    is.na(rows$hub_lock_mode) |
+      (transform_idx & (
+        is.na(rows$link_transform_policy) |
+          is.na(rows$link_transform_state) |
+          is.na(rows$link_refit_mode)
+      )),
     ,
     drop = FALSE
   ]
@@ -4938,8 +6197,36 @@
       )
     )
   }
-  if (any(is.na(rows$transform_frozen))) {
-    rlang::abort("link_stage_log append completeness failure: `transform_frozen` must be populated.")
+  if (any(is.na(rows$link_state_frozen))) {
+    rlang::abort("link_stage_log append completeness failure: `link_state_frozen` must be populated.")
+  }
+  anchored_idx <- !is.na(mode) & mode == "anchored_joint"
+  if (any(anchored_idx)) {
+    anchored_required <- c(
+      "phase_a_within_edges_hub_used",
+      "phase_a_within_edges_spoke_used",
+      "phase_b_active_edges_used",
+      "anchored_joint_hub_items_fixed_count",
+      "anchored_joint_init_state_method",
+      "anchored_joint_spoke_prior_scale_used",
+      "anchored_joint_sd_floor_used",
+      "anchored_joint_spoke_prior_fallback_used",
+      "anchored_joint_spoke_prior_fallback_sd_used",
+      "judge_params_fixed_for_anchored_joint",
+      "anchored_joint_free_block_dim"
+    )
+    missing_anchored_values <- anchored_required[vapply(
+      anchored_required,
+      function(col) any(is.na(rows[[col]][anchored_idx])),
+      logical(1)
+    )]
+    if (length(missing_anchored_values) > 0L) {
+      rlang::abort(paste0(
+        "link_stage_log append completeness failure for anchored_joint rows: required columns must be populated: ",
+        paste(missing_anchored_values, collapse = ", "),
+        "."
+      ))
+    }
   }
   .adaptive_assert_link_stage_budget_invariants(rows)
 

@@ -135,8 +135,8 @@
       isTRUE(stopped_map[[key]])
     }, logical(1L))])
   }
-  # In linking Variant 2, spokes with link_stop_pass stay eligible for
-  # probe-only sampling until global stop.
+  # In linking Variant 2, freeze ends all remaining cross-set work for the
+  # spoke in the current run, including held-out probe collection.
   active_spokes <- as.integer(ready_spokes)
   strict_ready <- isTRUE(phase_a$strict_ready_for_phase_b %||% phase_a$ready_for_phase_b %||% FALSE)
   has_stop_map <- length(stop_pass_map) > 0L
@@ -256,6 +256,581 @@
   .pairwiseLLM_sanitize_draws_matrix(draws, name = "btl_posterior_draws")
 }
 
+.adaptive_phase_a_empty_within_set_evidence <- function() {
+  tibble::tibble(
+    pair_id = integer(),
+    step_id = integer(),
+    A_item = character(),
+    B_item = character(),
+    y_A = integer()
+  )
+}
+
+.adaptive_phase_a_within_set_evidence_from_state <- function(state, set_id) {
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  if (nrow(step_log) < 1L) {
+    return(.adaptive_phase_a_empty_within_set_evidence())
+  }
+  required <- c("pair_id", "step_id", "A", "B", "Y", "set_i", "set_j")
+  if (!all(required %in% names(step_log))) {
+    return(.adaptive_phase_a_empty_within_set_evidence())
+  }
+  rows <- step_log[
+    !is.na(step_log$pair_id) &
+      as.integer(step_log$set_i) == as.integer(set_id) &
+      as.integer(step_log$set_j) == as.integer(set_id),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(rows) < 1L) {
+    return(.adaptive_phase_a_empty_within_set_evidence())
+  }
+  ids <- as.character(state$item_ids %||% character())
+  A_item <- ids[as.integer(rows$A)]
+  B_item <- ids[as.integer(rows$B)]
+  y_A <- as.integer(rows$Y)
+  keep <- !is.na(A_item) & !is.na(B_item) & y_A %in% c(0L, 1L)
+  if (!any(keep)) {
+    return(.adaptive_phase_a_empty_within_set_evidence())
+  }
+  out <- tibble::tibble(
+    pair_id = as.integer(rows$pair_id[keep]),
+    step_id = as.integer(rows$step_id[keep]),
+    A_item = as.character(A_item[keep]),
+    B_item = as.character(B_item[keep]),
+    y_A = as.integer(y_A[keep])
+  )
+  out[order(out$step_id, out$pair_id), , drop = FALSE]
+}
+
+.adaptive_phase_a_validate_within_set_evidence <- function(evidence,
+                                                           state,
+                                                           set_id,
+                                                           expected_n_pairs = NULL,
+                                                           label = "Phase A within-set evidence") {
+  evidence <- tibble::as_tibble(evidence %||% .adaptive_phase_a_empty_within_set_evidence())
+  required <- c("pair_id", "step_id", "A_item", "B_item", "y_A")
+  missing <- setdiff(required, names(evidence))
+  if (length(missing) > 0L) {
+    rlang::abort(paste0(
+      label,
+      " for set ",
+      as.integer(set_id),
+      " is missing required columns: ",
+      paste(missing, collapse = ", "),
+      "."
+    ))
+  }
+
+  evidence <- evidence[, required, drop = FALSE]
+  evidence$pair_id <- as.integer(evidence$pair_id)
+  evidence$step_id <- as.integer(evidence$step_id)
+  evidence$A_item <- as.character(evidence$A_item)
+  evidence$B_item <- as.character(evidence$B_item)
+  evidence$y_A <- as.integer(evidence$y_A)
+
+  if (nrow(evidence) > 0L) {
+    if (any(!is.finite(evidence$pair_id) | evidence$pair_id < 1L)) {
+      rlang::abort(paste0(
+        label,
+        " for set ",
+        as.integer(set_id),
+        " must contain positive integer `pair_id` values."
+      ))
+    }
+    if (any(!is.finite(evidence$step_id) | evidence$step_id < 1L)) {
+      rlang::abort(paste0(
+        label,
+        " for set ",
+        as.integer(set_id),
+        " must contain positive integer `step_id` values."
+      ))
+    }
+    if (anyDuplicated(evidence$pair_id)) {
+      rlang::abort(paste0(
+        label,
+        " for set ",
+        as.integer(set_id),
+        " must not contain duplicate `pair_id` values."
+      ))
+    }
+    if (anyDuplicated(evidence$step_id)) {
+      rlang::abort(paste0(
+        label,
+        " for set ",
+        as.integer(set_id),
+        " must not contain duplicate `step_id` values."
+      ))
+    }
+    if (any(is.na(evidence$A_item) | !nzchar(evidence$A_item) |
+      is.na(evidence$B_item) | !nzchar(evidence$B_item))) {
+      rlang::abort(paste0(
+        label,
+        " for set ",
+        as.integer(set_id),
+        " must contain non-empty `A_item`/`B_item` values."
+      ))
+    }
+    if (any(evidence$y_A %in% c(0L, 1L) == FALSE)) {
+      rlang::abort(paste0(
+        label,
+        " for set ",
+        as.integer(set_id),
+        " must encode `y_A` in {0, 1}."
+      ))
+    }
+  }
+
+  set_items <- as.character(
+    state$items$item_id[as.integer(state$items$set_id) == as.integer(set_id)]
+  )
+  if (length(set_items) < 1L) {
+    rlang::abort(paste0("No items found for set_id ", as.integer(set_id), "."))
+  }
+  if (nrow(evidence) > 0L) {
+    bad_items <- !(evidence$A_item %in% set_items) | !(evidence$B_item %in% set_items)
+    if (any(bad_items)) {
+      rlang::abort(paste0(
+        label,
+        " for set ",
+        as.integer(set_id),
+        " contains items outside the set domain."
+      ))
+    }
+  }
+
+  if (!is.null(expected_n_pairs)) {
+    expected_n_pairs <- as.integer(expected_n_pairs %||% NA_integer_)
+    if (is.finite(expected_n_pairs) && !identical(nrow(evidence), expected_n_pairs)) {
+      rlang::abort(paste0(
+        label,
+        " for set ",
+        as.integer(set_id),
+        " did not reconcile to `n_pairs_committed`."
+      ))
+    }
+  }
+
+  evidence[order(evidence$step_id, evidence$pair_id), , drop = FALSE]
+}
+
+.adaptive_phase_a_within_set_evidence_hash <- function(evidence) {
+  .adaptive_phase_a_hash_object(tibble::as_tibble(evidence %||% .adaptive_phase_a_empty_within_set_evidence()))
+}
+
+.adaptive_phase_a_artifact_resolve_within_set_evidence <- function(artifact,
+                                                                   state,
+                                                                   set_id,
+                                                                   controller) {
+  artifact_has_evidence <- !is.null(artifact$phase_a_within_set_evidence) ||
+    !is.null(artifact$within_set_evidence)
+  evidence <- artifact$phase_a_within_set_evidence %||% artifact$within_set_evidence %||% NULL
+  if (is.null(evidence)) {
+    evidence <- .adaptive_phase_a_within_set_evidence_from_state(state, set_id = set_id)
+  }
+  evidence <- .adaptive_phase_a_validate_within_set_evidence(
+    evidence = evidence,
+    state = state,
+    set_id = set_id,
+    expected_n_pairs = NULL,
+    label = "Phase A within-set evidence"
+  )
+  expected_n_pairs <- as.integer(artifact$n_pairs_committed %||% NA_integer_)
+  if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint") &&
+    !isTRUE(artifact_has_evidence) &&
+    (!is.finite(expected_n_pairs) || nrow(evidence) != expected_n_pairs)) {
+    rlang::abort(paste0(
+      "Phase A artifact evidence-domain availability failure for set ",
+      as.integer(set_id),
+      ": exact within-set committed-edge history is unavailable for anchored_joint."
+    ))
+  }
+  evidence <- .adaptive_phase_a_validate_within_set_evidence(
+    evidence = evidence,
+    state = state,
+    set_id = set_id,
+    expected_n_pairs = expected_n_pairs,
+    label = "Phase A within-set evidence"
+  )
+  evidence
+}
+
+.adaptive_anchored_joint_init_state_method_levels <- function() {
+  c("artifact_copy_init", "phase_a_only_init_refit", "phase_b_refit")
+}
+
+.adaptive_normalize_anchored_joint_init_state_method <- function(method) {
+  value <- as.character(method %||% NA_character_)
+  if (length(value) != 1L || is.na(value) || !value %in% .adaptive_anchored_joint_init_state_method_levels()) {
+    rlang::abort(
+      paste0(
+        "`anchored_joint_init_state_method` must be one of: ",
+        paste(.adaptive_anchored_joint_init_state_method_levels(), collapse = ", "),
+        "."
+      )
+    )
+  }
+  value
+}
+
+.adaptive_anchored_joint_validate_named_numeric <- function(x, ids, field, allow_na = FALSE) {
+  ids <- as.character(ids)
+  vals <- x %||% NULL
+  if (!is.numeric(vals) || is.null(names(vals))) {
+    rlang::abort(paste0("Anchored-joint accepted state `", field, "` must be a named numeric vector."))
+  }
+  vals <- as.double(vals)
+  names(vals) <- as.character(names(x))
+  if (!setequal(names(vals), ids)) {
+    rlang::abort(paste0(
+      "Anchored-joint accepted state `",
+      field,
+      "` item domain mismatch."
+    ))
+  }
+  vals <- vals[ids]
+  ok <- is.finite(vals)
+  if (isTRUE(allow_na)) {
+    ok <- ok | is.na(vals)
+  }
+  if (any(!ok)) {
+    rlang::abort(paste0(
+      "Anchored-joint accepted state `",
+      field,
+      "` must be finite",
+      if (isTRUE(allow_na)) " or NA" else "",
+      "."
+    ))
+  }
+  vals
+}
+
+.adaptive_anchored_joint_new_accepted_state <- function(state,
+                                                        hub_id,
+                                                        spoke_id,
+                                                        theta_hub_fixed,
+                                                        theta_spoke_global_mean,
+                                                        theta_spoke_global_sd,
+                                                        judge_params,
+                                                        anchored_joint_init_state_method,
+                                                        phase_a_evidence_hash_hub,
+                                                        phase_a_evidence_hash_spoke) {
+  hub_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(hub_id)])
+  spoke_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(spoke_id)])
+  if (length(hub_items) < 1L || length(spoke_items) < 1L) {
+    rlang::abort("Anchored-joint accepted state requires non-empty hub and spoke item domains.")
+  }
+  theta_hub_fixed <- .adaptive_anchored_joint_validate_named_numeric(
+    theta_hub_fixed,
+    ids = hub_items,
+    field = "theta_hub_fixed"
+  )
+  theta_spoke_global_mean <- .adaptive_anchored_joint_validate_named_numeric(
+    theta_spoke_global_mean,
+    ids = spoke_items,
+    field = "theta_spoke_global_mean"
+  )
+  theta_spoke_global_sd <- .adaptive_anchored_joint_validate_named_numeric(
+    theta_spoke_global_sd,
+    ids = spoke_items,
+    field = "theta_spoke_global_sd",
+    allow_na = TRUE
+  )
+  if (any(theta_spoke_global_sd < 0, na.rm = TRUE)) {
+    rlang::abort("Anchored-joint accepted state `theta_spoke_global_sd` must be non-negative.")
+  }
+  if (!is.list(judge_params)) {
+    rlang::abort("Anchored-joint accepted state `judge_params` must be a list.")
+  }
+  beta <- as.double(judge_params$beta %||% NA_real_)
+  epsilon <- as.double(judge_params$epsilon %||% NA_real_)
+  if (!is.finite(beta) || !is.finite(epsilon)) {
+    rlang::abort("Anchored-joint accepted state requires finite fixed judge parameters.")
+  }
+  list(
+    hub_id = as.integer(hub_id),
+    spoke_id = as.integer(spoke_id),
+    theta_hub_fixed = theta_hub_fixed,
+    theta_spoke_global_mean = theta_spoke_global_mean,
+    theta_spoke_global_sd = theta_spoke_global_sd,
+    judge_params = list(
+      mode = as.character(judge_params$mode %||% NA_character_),
+      scope = as.character(judge_params$scope %||% "link"),
+      beta = beta,
+      epsilon = epsilon,
+      cold_start_fallback_used = as.logical(judge_params$cold_start_fallback_used %||% FALSE)
+    ),
+    anchored_joint_init_state_method = .adaptive_normalize_anchored_joint_init_state_method(
+      anchored_joint_init_state_method
+    ),
+    phase_a_evidence_hash_hub = as.character(phase_a_evidence_hash_hub %||% NA_character_),
+    phase_a_evidence_hash_spoke = as.character(phase_a_evidence_hash_spoke %||% NA_character_)
+  )
+}
+
+.adaptive_anchored_joint_artifact_copy_init <- function(state, spoke_id, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  if (!identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+    rlang::abort("Anchored-joint artifact-copy initialization requires `link_estimation_mode = anchored_joint`.")
+  }
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  phase_a <- state$linking$phase_a %||% list()
+  artifacts <- phase_a$artifacts %||% list()
+  hub_artifact <- artifacts[[as.character(hub_id)]] %||% NULL
+  spoke_artifact <- artifacts[[as.character(spoke_id)]] %||% NULL
+  if (!is.list(hub_artifact) || !is.list(spoke_artifact)) {
+    rlang::abort("Anchored-joint artifact-copy initialization requires hub and spoke Phase A artifacts.")
+  }
+
+  hub_evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
+    artifact = hub_artifact,
+    state = state,
+    set_id = hub_id,
+    controller = controller
+  )
+  spoke_evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
+    artifact = spoke_artifact,
+    state = state,
+    set_id = as.integer(spoke_id),
+    controller = controller
+  )
+  judge_params <- .adaptive_link_judge_params(
+    state = state,
+    controller = controller,
+    scope = "link",
+    allow_cold_start_fallback = TRUE,
+    expected_link_params = FALSE
+  )
+  .adaptive_anchored_joint_new_accepted_state(
+    state = state,
+    hub_id = hub_id,
+    spoke_id = as.integer(spoke_id),
+    theta_hub_fixed = .adaptive_link_phase_a_theta_map(state, hub_id, "theta_raw_mean"),
+    theta_spoke_global_mean = .adaptive_link_phase_a_theta_map(state, as.integer(spoke_id), "theta_raw_mean"),
+    theta_spoke_global_sd = .adaptive_phase_a_artifact_item_field_map(
+      state = state,
+      set_id = as.integer(spoke_id),
+      field = "theta_raw_sd"
+    ),
+    judge_params = judge_params,
+    anchored_joint_init_state_method = "artifact_copy_init",
+    phase_a_evidence_hash_hub = .adaptive_phase_a_hash_object(hub_evidence),
+    phase_a_evidence_hash_spoke = .adaptive_phase_a_hash_object(spoke_evidence)
+  )
+}
+
+.adaptive_anchored_joint_validate_current_state <- function(state_obj, state, spoke_id, controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  if (!is.list(state_obj)) {
+    rlang::abort("Anchored-joint accepted state must be a list.")
+  }
+  if (!identical(as.integer(state_obj$hub_id %||% NA_integer_), hub_id) ||
+    !identical(as.integer(state_obj$spoke_id %||% NA_integer_), as.integer(spoke_id))) {
+    rlang::abort("Anchored-joint accepted state spoke/hub identifiers do not match current state.")
+  }
+  hub_artifact <- (state$linking$phase_a$artifacts %||% list())[[as.character(hub_id)]] %||% NULL
+  spoke_artifact <- (state$linking$phase_a$artifacts %||% list())[[as.character(spoke_id)]] %||% NULL
+  if (!is.list(hub_artifact) || !is.list(spoke_artifact)) {
+    rlang::abort("Anchored-joint accepted state validation requires current hub and spoke Phase A artifacts.")
+  }
+  hub_evidence_hash_current <- .adaptive_phase_a_hash_object(
+    .adaptive_phase_a_artifact_resolve_within_set_evidence(
+      artifact = hub_artifact,
+      state = state,
+      set_id = hub_id,
+      controller = controller
+    )
+  )
+  spoke_evidence_hash_current <- .adaptive_phase_a_hash_object(
+    .adaptive_phase_a_artifact_resolve_within_set_evidence(
+      artifact = spoke_artifact,
+      state = state,
+      set_id = as.integer(spoke_id),
+      controller = controller
+    )
+  )
+  stored_hub_hash <- as.character(state_obj$phase_a_evidence_hash_hub %||% NA_character_)
+  stored_spoke_hash <- as.character(state_obj$phase_a_evidence_hash_spoke %||% NA_character_)
+  if (!is.na(stored_hub_hash) && nzchar(stored_hub_hash) &&
+    !identical(stored_hub_hash, hub_evidence_hash_current)) {
+    rlang::abort("Anchored-joint accepted state hub evidence hash does not match the current Phase A artifact.")
+  }
+  if (!is.na(stored_spoke_hash) && nzchar(stored_spoke_hash) &&
+    !identical(stored_spoke_hash, spoke_evidence_hash_current)) {
+    rlang::abort("Anchored-joint accepted state spoke evidence hash does not match the current Phase A artifact.")
+  }
+  .adaptive_anchored_joint_new_accepted_state(
+    state = state,
+    hub_id = hub_id,
+    spoke_id = as.integer(spoke_id),
+    theta_hub_fixed = state_obj$theta_hub_fixed,
+    theta_spoke_global_mean = state_obj$theta_spoke_global_mean,
+    theta_spoke_global_sd = state_obj$theta_spoke_global_sd,
+    judge_params = state_obj$judge_params,
+    anchored_joint_init_state_method = state_obj$anchored_joint_init_state_method,
+    phase_a_evidence_hash_hub = hub_evidence_hash_current,
+    phase_a_evidence_hash_spoke = spoke_evidence_hash_current
+  )
+}
+
+.adaptive_anchored_joint_sync_scaffolding <- function(state) {
+  out <- state
+  controller <- .adaptive_controller_resolve(out)
+  out$linking <- out$linking %||% list()
+  anchored <- out$linking$anchored_joint %||% .adaptive_anchored_joint_empty_state()
+  if (!identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+    out$linking$anchored_joint <- anchored
+    return(out)
+  }
+
+  phase_a <- out$linking$phase_a %||% list()
+  artifacts <- phase_a$artifacts %||% list()
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  spoke_ids <- as.integer(
+    phase_a$ready_spokes %||% .adaptive_phase_a_ready_spokes(out, controller = controller)
+  )
+  spoke_ids <- sort(unique(spoke_ids[!is.na(spoke_ids)]))
+  if (length(spoke_ids) < 1L) {
+    out$linking$anchored_joint <- anchored
+    return(out)
+  }
+  if (is.null(artifacts[[as.character(hub_id)]])) {
+    rlang::abort("Anchored-joint initialization requires a hub Phase A artifact.")
+  }
+
+  accepted_map <- anchored$accepted_state_by_spoke %||% list()
+  fisher_map <- anchored$fisher_t0_by_spoke %||% list()
+  for (spoke_id in spoke_ids) {
+    key <- as.character(spoke_id)
+    if (is.null(artifacts[[key]])) {
+      rlang::abort(paste0(
+        "Anchored-joint initialization requires a Phase A artifact for spoke set_id=",
+        as.integer(spoke_id),
+        "."
+      ))
+    }
+    hub_artifact <- artifacts[[as.character(hub_id)]]
+    spoke_artifact <- artifacts[[key]]
+    hub_artifact$phase_a_within_set_evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
+      artifact = hub_artifact,
+      state = out,
+      set_id = hub_id,
+      controller = controller
+    )
+    hub_artifact$phase_a_within_set_evidence_hash <- .adaptive_phase_a_hash_object(
+      hub_artifact$phase_a_within_set_evidence
+    )
+    hub_artifact$phase_a_within_set_evidence_source <- as.character(
+      hub_artifact$phase_a_within_set_evidence_source %||% "canonical_committed_step_log"
+    )
+    spoke_artifact$phase_a_within_set_evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
+      artifact = spoke_artifact,
+      state = out,
+      set_id = as.integer(spoke_id),
+      controller = controller
+    )
+    spoke_artifact$phase_a_within_set_evidence_hash <- .adaptive_phase_a_hash_object(
+      spoke_artifact$phase_a_within_set_evidence
+    )
+    spoke_artifact$phase_a_within_set_evidence_source <- as.character(
+      spoke_artifact$phase_a_within_set_evidence_source %||% "canonical_committed_step_log"
+    )
+    artifacts[[as.character(hub_id)]] <- hub_artifact
+    artifacts[[key]] <- spoke_artifact
+
+    accepted_state <- accepted_map[[key]] %||% NULL
+    if (is.null(accepted_state)) {
+      accepted_state <- .adaptive_anchored_joint_artifact_copy_init(
+        out,
+        spoke_id = as.integer(spoke_id),
+        controller = controller
+      )
+    } else {
+      accepted_state <- tryCatch(
+        {
+          .adaptive_anchored_joint_validate_current_state(
+            state_obj = accepted_state,
+            state = out,
+            spoke_id = as.integer(spoke_id),
+            controller = controller
+          )
+        },
+        error = function(e) {
+          if (isTRUE(.adaptive_is_resumed_session(out))) {
+            rlang::abort(paste0(
+              "Adaptive resume anchored-joint invariant failed for spoke_id=",
+              as.integer(spoke_id),
+              ": persisted accepted-state scaffolding could not be preserved: ",
+              conditionMessage(e),
+              "."
+            ))
+          }
+          .adaptive_anchored_joint_artifact_copy_init(
+            out,
+            spoke_id = as.integer(spoke_id),
+            controller = controller
+          )
+        }
+      )
+    }
+    accepted_map[[key]] <- accepted_state
+    prior_fisher <- fisher_map[[key]] %||% list()
+    expected_dim <- as.integer(length(accepted_state$theta_spoke_global_mean))
+    prior_dim <- as.integer(prior_fisher$free_block_dim %||% NA_integer_)
+    if (is.finite(prior_dim) && !identical(prior_dim, expected_dim)) {
+      if (isTRUE(.adaptive_is_resumed_session(out))) {
+        rlang::abort(paste0(
+          "Adaptive resume anchored-joint invariant failed for spoke_id=",
+          as.integer(spoke_id),
+          ": persisted fisher free-block dimension does not match the accepted-state domain."
+        ))
+      }
+      prior_fisher <- list()
+    }
+    prior_pairs <- as.integer(prior_fisher$n_link_active_pairs %||% 0L)
+    if (!is.finite(prior_pairs) || prior_pairs < 0L) {
+      if (isTRUE(.adaptive_is_resumed_session(out))) {
+        rlang::abort(paste0(
+          "Adaptive resume anchored-joint invariant failed for spoke_id=",
+          as.integer(spoke_id),
+          ": persisted fisher active-edge count must be a non-negative integer."
+        ))
+      }
+      prior_pairs <- 0L
+    }
+    prior_init_method <- prior_fisher$anchored_joint_init_state_method %||%
+      accepted_state$anchored_joint_init_state_method
+    prior_init_method <- tryCatch(
+      .adaptive_normalize_anchored_joint_init_state_method(prior_init_method),
+      error = function(e) {
+        if (isTRUE(.adaptive_is_resumed_session(out))) {
+          rlang::abort(paste0(
+            "Adaptive resume anchored-joint invariant failed for spoke_id=",
+            as.integer(spoke_id),
+            ": persisted fisher init-state method is invalid."
+          ))
+        }
+        .adaptive_normalize_anchored_joint_init_state_method(
+          accepted_state$anchored_joint_init_state_method
+        )
+      }
+    )
+    fisher_map[[key]] <- list(
+      free_block_dim = expected_dim,
+      I_s_t0_zero = as.logical(prior_fisher$I_s_t0_zero %||% TRUE),
+      n_link_active_pairs = as.integer(prior_pairs),
+      anchored_joint_init_state_method = as.character(prior_init_method)
+    )
+  }
+
+  anchored$accepted_state_by_spoke <- accepted_map
+  anchored$fisher_t0_by_spoke <- fisher_map
+  out$linking$anchored_joint <- anchored
+  out$linking$phase_a$artifacts <- artifacts
+  out
+}
+
 .adaptive_phase_a_build_artifact <- function(state, set_id) {
   set_id <- as.integer(set_id)
   items_set <- state$items[state$items$set_id == set_id, , drop = FALSE]
@@ -370,6 +945,7 @@
   } else {
     NA_integer_
   }
+  within_set_evidence <- .adaptive_phase_a_within_set_evidence_from_state(state, set_id = set_id)
 
   list(
     set_id = set_id,
@@ -395,6 +971,9 @@
       ts_btl_rank_spearman = ts_rank,
       diagnostics_pass = diagnostics_pass
     ),
+    phase_a_within_set_evidence = within_set_evidence,
+    phase_a_within_set_evidence_hash = .adaptive_phase_a_hash_object(within_set_evidence),
+    phase_a_within_set_evidence_source = "canonical_committed_step_log",
     posterior_draws = draws,
     judge_param_mode = as.character(controller$judge_param_mode %||% NA_character_),
     created_at = Sys.time()
@@ -609,7 +1188,16 @@
     ))
   }
 
-  invisible(TRUE)
+  if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+    .adaptive_phase_a_artifact_resolve_within_set_evidence(
+      artifact = artifact,
+      state = state,
+      set_id = set_id,
+      controller = controller
+    )
+  }
+
+  invisible(artifact)
 }
 
 .adaptive_phase_a_collect_import_map <- function(controller) {
@@ -728,12 +1316,27 @@
     if (!is.null(persisted)) {
       persisted_ok <- tryCatch(
         {
-          .adaptive_phase_a_validate_imported_artifact(
+          normalized <- .adaptive_phase_a_validate_imported_artifact(
             persisted,
             out,
             set_id = set_id,
             controller = controller
           )
+          if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+            normalized$phase_a_within_set_evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
+              artifact = normalized,
+              state = out,
+              set_id = set_id,
+              controller = controller
+            )
+            normalized$phase_a_within_set_evidence_hash <- .adaptive_phase_a_hash_object(
+              normalized$phase_a_within_set_evidence
+            )
+            normalized$phase_a_within_set_evidence_source <- as.character(
+              normalized$phase_a_within_set_evidence_source %||% "canonical_committed_step_log"
+            )
+          }
+          artifacts[[set_key]] <<- normalized
           TRUE
         },
         error = function(e) {
@@ -742,7 +1345,6 @@
         }
       )
       if (isTRUE(persisted_ok)) {
-        artifacts[[set_key]] <- persisted
         if (identical(source, "run") && identical(prior_status, "pending_finalization")) {
           status <- "pending_finalization"
           message <- "pending_finalization: within-set stop criteria not yet met"
@@ -761,7 +1363,27 @@
       } else {
         validated <- tryCatch(
           {
-            .adaptive_phase_a_validate_imported_artifact(artifact, out, set_id = set_id, controller = controller)
+            normalized <- .adaptive_phase_a_validate_imported_artifact(
+              artifact,
+              out,
+              set_id = set_id,
+              controller = controller
+            )
+            if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+              normalized$phase_a_within_set_evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
+                artifact = normalized,
+                state = out,
+                set_id = set_id,
+                controller = controller
+              )
+              normalized$phase_a_within_set_evidence_hash <- .adaptive_phase_a_hash_object(
+                normalized$phase_a_within_set_evidence
+              )
+              normalized$phase_a_within_set_evidence_source <- as.character(
+                normalized$phase_a_within_set_evidence_source %||% "canonical_committed_step_log"
+              )
+            }
+            artifact <<- normalized
             TRUE
           },
           error = function(e) {
@@ -917,7 +1539,7 @@
     warm_start_scope_set = prior_warm_start_scope_set
   )
 
-  out
+  .adaptive_anchored_joint_sync_scaffolding(out)
 }
 
 .adaptive_phase_a_finalize_if_ready <- function(state) {
@@ -1057,6 +1679,15 @@
     return(invisible(state))
   }
   if (identical(phase_ctx$phase, "phase_b")) {
+    if (isTRUE(controller$within_phase_b_within_set_steps_allowed %||% FALSE)) {
+      rlang::abort(
+        paste0(
+          "Phase B runtime does not support ",
+          "`adaptive_config$within_phase_b_within_set_steps_allowed = TRUE`; ",
+          "current Phase B execution remains cross-set only."
+        )
+      )
+    }
     if (length(phase_ctx$ready_spokes) < 1L) {
       rlang::abort(
         paste0(

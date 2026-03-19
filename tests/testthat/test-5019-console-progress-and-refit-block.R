@@ -45,9 +45,9 @@ test_that("adaptive_rank_run_live prints refit blocks and stop criteria", {
 
 test_that("adaptive_rank_run_live prints linking-specific refit summary lines", {
   items <- tibble::tibble(
-    item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),
-    set_id = c(1L, 1L, 1L, 2L, 2L, 2L),
-    global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs23")
+    item_id = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
+    set_id = c(rep(1L, 10L), rep(2L, 6L)),
+    global_item_id = c(paste0("gh", seq_len(10L)), paste0("gs2", seq_len(6L)))
   )
   state <- adaptive_rank_start(items = items, seed = 7L)
   ids <- as.character(state$item_ids)
@@ -62,7 +62,16 @@ test_that("adaptive_rank_run_live prints linking-specific refit summary lines", 
   names(artifacts) <- as.character(sort(unique(items$set_id)))
 
   judge <- function(A, B, state, ...) {
-    y <- as.integer(A$item_id[[1L]] >= B$item_id[[1L]])
+    item_score <- function(item_id) {
+      item_id <- as.character(item_id)
+      if (grepl("^h\\d+$", item_id)) {
+        rank <- as.integer(sub("^h", "", item_id))
+        return(-1.0 + (0.16 * rank))
+      }
+      rank <- as.integer(sub("^s\\d", "", item_id))
+      0.2 + (0.22 * rank)
+    }
+    y <- as.integer(item_score(A$item_id[[1L]]) >= item_score(B$item_id[[1L]]))
     list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
   }
   stub <- make_deterministic_fit_fn(state$item_ids)
@@ -176,4 +185,46 @@ test_that("adaptive progress step events distinguish active linking from probe f
 
   expect_match(active_msg, "link=active")
   expect_false(grepl("probe=", active_msg))
+})
+
+test_that("adaptive progress Phase B spoke lines label anchored-joint mode without transform state", {
+  lines <- pairwiseLLM:::.adaptive_progress_phase_b_spoke_lines(
+    link_stage_rows = tibble::tibble(
+      spoke_id = 2L,
+      link_estimation_mode = "anchored_joint",
+      link_transform_state = NA_character_,
+      anchored_joint_init_state_method = "artifact_copy_init",
+      link_state_frozen = TRUE,
+      link_state_frozen_refit_id = 4L
+    ),
+    thresholds = list(),
+    stability_window_refits = 3L,
+    stability_passes_required = 2L
+  )
+
+  expect_true(any(grepl("mode=anchored_joint", lines)))
+  expect_true(any(grepl("init_state=artifact_copy_init", lines)))
+  expect_false(any(grepl("^\\s+state=", lines)))
+})
+
+test_that("adaptive progress diagnostics use deterministic link contract for anchored-joint fits", {
+  lines <- pairwiseLLM:::.adaptive_progress_diagnostics_lines(
+    row = tibble::tibble(diagnostics_pass = TRUE),
+    link_stage_rows = tibble::tibble(
+      spoke_id = 2L,
+      link_fit_method = "map_laplace",
+      link_diagnostics_pass = FALSE,
+      link_diagnostics_converged_pass = TRUE,
+      link_diagnostics_finite_summary_pass = FALSE,
+      link_diagnostics_uncertainty_pass = TRUE,
+      link_diagnostics_divergences_pass = NA,
+      link_diagnostics_rhat_pass = NA,
+      link_diagnostics_ess_pass = NA
+    )
+  )
+
+  expect_true(any(grepl("method=map_laplace", lines)))
+  expect_true(any(grepl("finite_summary=fail", lines)))
+  expect_false(any(grepl("max_rhat=", lines, fixed = TRUE)))
+  expect_false(any(grepl("min_ess_bulk=", lines, fixed = TRUE)))
 })

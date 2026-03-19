@@ -6,11 +6,35 @@ matrix_two_set_items <- function() {
   )
 }
 
+matrix_two_set_linking_items <- function() {
+  tibble::tibble(
+    item_id = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
+    set_id = c(rep.int(1L, 10L), rep.int(2L, 6L)),
+    global_item_id = c(paste0("gh", seq_len(10L)), paste0("gs2", seq_len(6L)))
+  )
+}
+
 matrix_three_set_items <- function() {
   tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),
     set_id = c(1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L),
     global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs23", "gs31", "gs32", "gs33")
+  )
+}
+
+matrix_three_set_linking_items <- function() {
+  tibble::tibble(
+    item_id = c(
+      paste0("h", seq_len(10L)),
+      paste0("s2", seq_len(6L)),
+      paste0("s3", seq_len(6L))
+    ),
+    set_id = c(rep.int(1L, 10L), rep.int(2L, 6L), rep.int(3L, 6L)),
+    global_item_id = c(
+      paste0("gh", seq_len(10L)),
+      paste0("gs2", seq_len(6L)),
+      paste0("gs3", seq_len(6L))
+    )
   )
 }
 
@@ -56,13 +80,13 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
     ),
     list(
       name = "link_one_spoke",
-      items = matrix_two_set_items(),
+      items = matrix_two_set_linking_items(),
       adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "import"),
       linking = TRUE
     ),
     list(
       name = "link_multi_independent",
-      items = matrix_three_set_items(),
+      items = matrix_three_set_linking_items(),
       adaptive_config = list(
         run_mode = "link_multi_spoke",
         hub_id = 1L,
@@ -73,7 +97,7 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
     ),
     list(
       name = "link_multi_concurrent",
-      items = matrix_three_set_items(),
+      items = matrix_three_set_linking_items(),
       adaptive_config = list(
         run_mode = "link_multi_spoke",
         hub_id = 1L,
@@ -304,7 +328,58 @@ test_that("freeze state in regression matrix remains one-way across subsequent u
     )
   )
 
-  expect_true(isTRUE(frozen_twice$controller$link_transform_frozen_by_spoke[["2"]]))
+  expect_true(isTRUE(frozen_twice$controller$link_state_frozen_by_spoke[["2"]]))
+  expect_identical(frozen_twice$controller$link_state_frozen_refit_id_by_spoke[["2"]], 1L)
   expect_equal(frozen_twice$controller$link_transform_frozen_delta_by_spoke[["2"]], 0.22, tolerance = 1e-12)
-  expect_identical(frozen_twice$controller$link_transform_frozen_refit_id_by_spoke[["2"]], 1L)
+})
+
+test_that("anchored-joint frozen spokes are removed from active and probe routing", {
+  state <- adaptive_rank_start(
+    matrix_two_set_items(),
+    seed = 142L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "import")
+  )
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  state$linking$phase_a$phase <- "phase_b"
+  state$linking$phase_a$ready_spokes <- 2L
+  state$linking$phase_a$active_spokes <- 2L
+  state$controller$probe_edges_min_for_stop <- 1L
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 1L)
+  state$linking$probe <- pairwiseLLM:::.adaptive_link_probe_empty_state()
+  state$linking$probe$panels_by_spoke[["2"]] <- tibble::tibble(
+    probe_panel_id = "panel_a",
+    link_epoch_id = 1L,
+    spoke_id = 2L,
+    hub_item_id = "h1",
+    spoke_item_id = "s21",
+    spoke_bin = 1L,
+    hub_bin = 1L,
+    planned_rank = 1L,
+    pair_key = pairwiseLLM:::make_unordered_key("h1", "s21"),
+    realized = FALSE,
+    realized_step_id = NA_integer_,
+    realized_pair_id = NA_integer_,
+    realized_run_mode = NA_character_
+  )
+  state$controller$link_estimation_mode <- "anchored_joint"
+  state$controller$hub_lock_mode <- "hard_lock"
+
+  frozen <- pairwiseLLM:::.adaptive_link_apply_stop_state(
+    state,
+    tibble::tibble(
+      refit_id = 3L,
+      spoke_id = 2L,
+      link_stop_pass = TRUE,
+      link_estimation_mode = "anchored_joint"
+    )
+  )
+
+  expect_true(isTRUE(frozen$controller$link_state_frozen_by_spoke[["2"]]))
+  expect_identical(pairwiseLLM:::.adaptive_link_effective_active_spokes(frozen), integer())
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
+    frozen,
+    controller = frozen$controller
+  )))
+  expect_true(isTRUE(pairwiseLLM:::.adaptive_link_all_spokes_stopped(frozen)))
 })

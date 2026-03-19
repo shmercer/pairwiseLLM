@@ -236,6 +236,7 @@
 }
 
 .adaptive_link_ranked_spokes <- function(state, controller, eligible_spoke_ids = NULL) {
+  controller <- .adaptive_runtime_controller_resolve(state, controller)
   set_ids <- unique(as.integer(state$items$set_id))
   hub_id <- as.integer(controller$hub_id %||% 1L)
   spoke_ids <- setdiff(set_ids, hub_id)
@@ -257,7 +258,7 @@
   if (length(spoke_ids) < 1L) {
     return(integer())
   }
-  frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
   keep_spokes <- vapply(
     spoke_ids,
     function(spoke_id) !isTRUE(frozen_map[[as.character(spoke_id)]]),
@@ -431,12 +432,52 @@
   stats::setNames(as.integer(idx), sorted)
 }
 
+.adaptive_link_require_phase_a_theta_map <- function(state,
+                                                     set_id,
+                                                     field,
+                                                     required_item_ids,
+                                                     helper_name) {
+  set_id <- as.integer(set_id)
+  required_item_ids <- unique(as.character(required_item_ids))
+  required_item_ids <- required_item_ids[!is.na(required_item_ids)]
+
+  theta_map <- tryCatch(
+    .adaptive_link_phase_a_theta_map(state, set_id = set_id, field = field),
+    error = function(e) {
+      rlang::abort(
+        sprintf(
+          "%s invariant failed: Phase A %s unavailable for set_id=%s.",
+          helper_name,
+          field,
+          set_id
+        ),
+        parent = e
+      )
+    }
+  )
+
+  theta_vals <- as.double(theta_map[required_item_ids])
+  names(theta_vals) <- required_item_ids
+  if (any(!is.finite(theta_vals))) {
+    rlang::abort(
+      sprintf(
+        "%s invariant failed: Phase A %s missing/non-finite for set_id=%s.",
+        helper_name,
+        field,
+        set_id
+      )
+    )
+  }
+
+  theta_vals
+}
+
 .adaptive_link_phase_b_routing_scores <- function(state, controller, active_ids, hub_id) {
   active_ids <- as.character(active_ids)
   set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
-  proxy_scores <- .adaptive_rank_proxy(state)$scores
   link_refit_mode <- as.character(controller$link_refit_mode %||% "shift_only")
   use_current_theta <- identical(link_refit_mode, "joint_refit")
+  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
   active_sets <- sort(unique(as.integer(set_map[active_ids])))
   active_sets <- active_sets[!is.na(active_sets)]
   if (length(active_sets) < 1L) {
@@ -448,20 +489,12 @@
   for (set_id in active_sets) {
     set_items <- active_ids[as.integer(set_map[active_ids]) == as.integer(set_id)]
     phase_a_theta <- function() {
-      tryCatch(
-        .adaptive_link_phase_a_theta_map(state, set_id = set_id, field = "theta_raw_mean"),
-        error = function(e) {
-          if (as.integer(set_id) == as.integer(hub_id)) {
-            return(stats::setNames(numeric(), character()))
-          }
-          rlang::abort(
-            message = sprintf(
-              "Linking routing invariant failed: Phase A theta_raw_mean unavailable for set_id=%s.",
-              as.integer(set_id)
-            ),
-            parent = e
-          )
-        }
+      .adaptive_link_require_phase_a_theta_map(
+        state = state,
+        set_id = set_id,
+        field = "theta_raw_mean",
+        required_item_ids = set_items,
+        helper_name = "Linking routing"
       )
     }
     raw_theta <- if (isTRUE(use_current_theta)) {
@@ -481,11 +514,10 @@
       phase_vals
     }
     names(raw_theta) <- as.character(set_items)
-    if (as.integer(set_id) == as.integer(hub_id)) {
-      missing_raw <- !is.finite(raw_theta)
-      if (any(missing_raw)) {
-        raw_theta[missing_raw] <- as.double(proxy_scores[names(raw_theta)[missing_raw]])
-      }
+    if (identical(link_estimation_mode, "anchored_joint") &&
+      as.integer(set_id) == as.integer(hub_id)) {
+      raw_theta <- as.double(phase_a_theta()[set_items])
+      names(raw_theta) <- as.character(set_items)
     }
     if (any(!is.finite(raw_theta))) {
       source_label <- if (isTRUE(use_current_theta)) "current theta_mean" else "Phase A theta_raw_mean"
@@ -500,6 +532,30 @@
 
     if (as.integer(set_id) == as.integer(hub_id)) {
       scores[set_items] <- as.double(raw_theta)
+      next
+    }
+
+    if (identical(link_estimation_mode, "anchored_joint")) {
+      accepted_map <- (state$linking$anchored_joint %||% list())$accepted_state_by_spoke %||% list()
+      accepted_state <- accepted_map[[as.character(set_id)]] %||% NULL
+      if (is.null(accepted_state)) {
+        accepted_state <- .adaptive_anchored_joint_artifact_copy_init(
+          state = state,
+          spoke_id = as.integer(set_id),
+          controller = controller
+        )
+      }
+      spoke_scores <- as.double(accepted_state$theta_spoke_global_mean[set_items])
+      names(spoke_scores) <- as.character(set_items)
+      if (any(!is.finite(spoke_scores))) {
+        rlang::abort(
+          sprintf(
+            "Anchored-joint routing invariant failed: accepted spoke scores missing/non-finite for set_id=%s.",
+            as.integer(set_id)
+          )
+        )
+      }
+      scores[set_items] <- spoke_scores
       next
     }
 
@@ -681,6 +737,21 @@
     return(.adaptive_link_probe_empty_panel())
   }
 
+  hub_theta_all <- .adaptive_link_require_phase_a_theta_map(
+    state = state,
+    set_id = hub_id,
+    field = "theta_raw_mean",
+    required_item_ids = hub_ids,
+    helper_name = "Probe panel construction"
+  )
+  spoke_theta_all <- .adaptive_link_require_phase_a_theta_map(
+    state = state,
+    set_id = spoke_id,
+    field = "theta_raw_mean",
+    required_item_ids = spoke_ids,
+    helper_name = "Probe panel construction"
+  )
+
   routing_scores <- .adaptive_link_phase_b_routing_scores(
     state = state,
     controller = controller,
@@ -693,26 +764,26 @@
     hub_scores = routing_scores,
     defaults = adaptive_defaults(max(2L, length(unique(c(hub_ids, spoke_ids)))))
   )
-  hub_pool <- unique(c(as.character(hub_anchors), hub_ids))
-  if (length(hub_pool) < 1L) {
-    hub_pool <- hub_ids
+  anchor_required <- isTRUE(controller$hub_anchor_required_phase_b %||% TRUE)
+  if (anchor_required) {
+    hub_pool <- unique(as.character(hub_anchors))
+    if (length(hub_pool) < 1L) {
+      rlang::abort(
+        paste0(
+          "Phase B probe-panel invariant failed: `HubEligible` anchor pool is empty for spoke_id=",
+          as.integer(spoke_id),
+          " while `hub_anchor_required_phase_b=TRUE`."
+        )
+      )
+    }
+  } else {
+    hub_pool <- unique(as.character(hub_ids))
   }
 
-  spoke_theta <- tryCatch(
-    .adaptive_link_phase_a_theta_map(state, set_id = spoke_id, field = "theta_raw_mean"),
-    error = function(e) routing_scores[spoke_ids]
-  )
-  hub_theta <- tryCatch(
-    .adaptive_link_phase_a_theta_map(state, set_id = hub_id, field = "theta_raw_mean"),
-    error = function(e) routing_scores[hub_pool]
-  )
-  spoke_theta <- as.double(spoke_theta[spoke_ids])
-  hub_theta <- as.double(hub_theta[hub_pool])
+  spoke_theta <- as.double(spoke_theta_all[spoke_ids])
+  hub_theta <- as.double(hub_theta_all[hub_pool])
   names(spoke_theta) <- spoke_ids
   names(hub_theta) <- hub_pool
-  if (any(!is.finite(spoke_theta)) || any(!is.finite(hub_theta))) {
-    rlang::abort("Probe panel construction invariant failed: Phase A theta maps must be finite.")
-  }
 
   q_bins <- max(1L, as.integer(controller$spoke_quantile_coverage_bins %||% 3L))
   h_bins <- 3L
@@ -720,8 +791,7 @@
   hub_bin_map <- .adaptive_link_probe_quantile_bins(hub_pool, hub_theta, h_bins)
   target_edges <- .adaptive_link_probe_panel_size(
     n_spoke_items = n_spoke_start,
-    n_available_pairs = as.integer(length(hub_pool) * length(spoke_ids)),
-    probe_edges_min_for_stop = as.integer(controller$probe_edges_min_for_stop %||% 30L)
+    probe_panel_edges = controller$probe_panel_edges %||% NA_integer_
   )
 
   observed_keys <- character()
@@ -737,6 +807,9 @@
       drop = FALSE
     ]
     if (nrow(cross_rows) > 0L) {
+      cross_rows <- cross_rows[!.adaptive_link_is_holdout_probe_rows(cross_rows), , drop = FALSE]
+    }
+    if (nrow(cross_rows) > 0L) {
       observed_keys <- vapply(seq_len(nrow(cross_rows)), function(idx) {
         make_unordered_key(
           ids_all[[as.integer(cross_rows$A[[idx]])]],
@@ -746,12 +819,28 @@
     }
   }
 
+  legal_pairs <- expand.grid(
+    hub_item_id = sort(hub_pool),
+    spoke_item_id = sort(spoke_ids),
+    stringsAsFactors = FALSE
+  )
+  legal_pairs$pair_key <- vapply(seq_len(nrow(legal_pairs)), function(idx) {
+    make_unordered_key(legal_pairs$hub_item_id[[idx]], legal_pairs$spoke_item_id[[idx]])
+  }, character(1L))
+  legal_pairs <- legal_pairs[!legal_pairs$pair_key %in% observed_keys, , drop = FALSE]
+  feasible_target_edges <- .adaptive_link_probe_panel_feasible_size(
+    target_edges = target_edges,
+    n_available_pairs = as.integer(nrow(legal_pairs))
+  )
+
   planned <- vector("list", length = 0L)
   seen_keys <- observed_keys
   spoke_q_targets <- rep.int(as.integer(target_edges %/% q_bins), q_bins)
   if ((target_edges %% q_bins) > 0L) {
-    spoke_q_targets[seq_len(target_edges %% q_bins)] <- spoke_q_targets[seq_len(target_edges %% q_bins)] + 1L
+    spoke_q_targets[seq_len(target_edges %% q_bins)] <-
+      spoke_q_targets[seq_len(target_edges %% q_bins)] + 1L
   }
+  cell_shortfall_detected <- FALSE
 
   for (q in seq_len(q_bins)) {
     q_target <- spoke_q_targets[[q]]
@@ -764,22 +853,27 @@
       cell_target <- as.integer(hub_targets[[h]])
       hub_bin_ids <- names(hub_bin_map)[as.integer(hub_bin_map) == h]
       if (cell_target < 1L || length(spoke_bin_ids) < 1L || length(hub_bin_ids) < 1L) {
+        if (cell_target > 0L) {
+          cell_shortfall_detected <- TRUE
+        }
         next
       }
-      cell_pairs <- expand.grid(
-        hub_item_id = sort(hub_bin_ids),
-        spoke_item_id = sort(spoke_bin_ids),
-        stringsAsFactors = FALSE
-      )
-      cell_pairs$pair_key <- vapply(seq_len(nrow(cell_pairs)), function(idx) {
-        make_unordered_key(cell_pairs$hub_item_id[[idx]], cell_pairs$spoke_item_id[[idx]])
-      }, character(1L))
-      cell_pairs <- cell_pairs[!cell_pairs$pair_key %in% seen_keys, , drop = FALSE]
+      cell_pairs <- legal_pairs[
+        as.character(legal_pairs$hub_item_id) %in% hub_bin_ids &
+          as.character(legal_pairs$spoke_item_id) %in% spoke_bin_ids &
+          !as.character(legal_pairs$pair_key) %in% seen_keys,
+        ,
+        drop = FALSE
+      ]
       if (nrow(cell_pairs) < 1L) {
+        cell_shortfall_detected <- TRUE
         next
       }
       seed <- as.integer((state$meta$seed %||% 1L) + (spoke_id * 1009L) + (q * 101L) + h)
       take <- min(cell_target, nrow(cell_pairs))
+      if (take < cell_target) {
+        cell_shortfall_detected <- TRUE
+      }
       picked_idx <- withr::with_seed(seed, sample.int(nrow(cell_pairs), size = take, replace = FALSE))
       picked <- cell_pairs[picked_idx, , drop = FALSE]
       picked <- picked[order(picked$hub_item_id, picked$spoke_item_id), , drop = FALSE]
@@ -798,17 +892,10 @@
     }
   }
 
-  if (length(planned) < target_edges) {
+  fallback_reallocation_count <- 0L
+  if (length(planned) < feasible_target_edges) {
     existing_keys <- unique(c(seen_keys, vapply(planned, function(x) x$pair_key, character(1L))))
-    fallback_pairs <- expand.grid(
-      hub_item_id = sort(hub_pool),
-      spoke_item_id = sort(spoke_ids),
-      stringsAsFactors = FALSE
-    )
-    fallback_pairs$pair_key <- vapply(seq_len(nrow(fallback_pairs)), function(idx) {
-      make_unordered_key(fallback_pairs$hub_item_id[[idx]], fallback_pairs$spoke_item_id[[idx]])
-    }, character(1L))
-    fallback_pairs <- fallback_pairs[!fallback_pairs$pair_key %in% existing_keys, , drop = FALSE]
+    fallback_pairs <- legal_pairs[!as.character(legal_pairs$pair_key) %in% existing_keys, , drop = FALSE]
     if (nrow(fallback_pairs) > 0L) {
       fallback_pairs$spoke_bin <- as.integer(spoke_bin_map[fallback_pairs$spoke_item_id])
       fallback_pairs$hub_bin <- as.integer(hub_bin_map[fallback_pairs$hub_item_id])
@@ -822,8 +909,9 @@
         ,
         drop = FALSE
       ]
-      take <- min(target_edges - length(planned), nrow(fallback_pairs))
+      take <- min(feasible_target_edges - length(planned), nrow(fallback_pairs))
       picked <- fallback_pairs[seq_len(take), , drop = FALSE]
+      fallback_reallocation_count <- as.integer(nrow(picked))
       planned <- c(planned, lapply(seq_len(nrow(picked)), function(idx) {
         list(
           link_epoch_id = as.integer(epoch_id),
@@ -839,10 +927,24 @@
   }
 
   if (length(planned) < 1L) {
+    if (nrow(legal_pairs) > 0L) {
+      rlang::abort(
+        paste0(
+          "Phase B probe-panel invariant failed: legal held-out probe candidates exist for spoke_id=",
+          as.integer(spoke_id),
+          " in link_epoch_id=",
+          as.integer(epoch_id),
+          " but construction produced an empty panel."
+        )
+      )
+    }
     return(.adaptive_link_probe_empty_panel())
   }
 
   panel <- tibble::as_tibble(do.call(rbind, lapply(planned, as.data.frame, stringsAsFactors = FALSE)))
+  panel$probe_edges_planned <- as.integer(target_edges)
+  panel$probe_panel_reallocation_used <- isTRUE(cell_shortfall_detected) &&
+    as.integer(fallback_reallocation_count) > 0L
   panel$planned_rank <- as.integer(seq_len(nrow(panel)))
   panel$realized <- FALSE
   panel$realized_step_id <- NA_integer_
@@ -850,6 +952,7 @@
   panel$realized_run_mode <- NA_character_
   panel <- panel[, c(
     "link_epoch_id", "spoke_id", "hub_item_id", "spoke_item_id", "spoke_bin", "hub_bin",
+    "probe_edges_planned", "probe_panel_reallocation_used",
     "planned_rank", "pair_key", "realized", "realized_step_id", "realized_pair_id", "realized_run_mode"
   )]
   panel$probe_panel_id <- .adaptive_link_probe_panel_id(panel)
@@ -938,10 +1041,11 @@
         built_panel_id <- as.character(built_panel$probe_panel_id[[1L]] %||% NA_character_)
         realized_pairs_compatible <- nrow(epoch_realized) < 1L ||
           all(as.character(epoch_realized$pair_key) %in% as.character(built_panel$pair_key))
+        panel_planned_edges <- .adaptive_link_probe_planned_edges(built_panel)
         planned_size_compatible <- !is.finite(latest_stage_planned) ||
           is.na(latest_stage_planned) ||
           latest_stage_planned <= 0L ||
-          identical(as.integer(nrow(built_panel)), as.integer(latest_stage_planned))
+          identical(as.integer(latest_stage_planned), as.integer(panel_planned_edges))
         stage_id_mismatch <- length(stage_panel_ids) > 1L ||
           (length(stage_panel_ids) == 1L && !identical(stage_panel_ids[[1L]], built_panel_id))
         realized_id_mismatch <- length(realized_panel_ids) > 1L ||
@@ -1209,10 +1313,14 @@ generate_stage_candidates_from_state <- function(state,
         )
       )
     }
-    allow_spoke_spoke <- isTRUE(controller$allow_spoke_spoke_cross_set %||% FALSE)
+    if (isTRUE(controller$allow_spoke_spoke_cross_set %||% FALSE)) {
+      .adaptive_abort_unsupported_phase_b_public_control(
+        field = "`allow_spoke_spoke_cross_set = TRUE`",
+        detail = "The current reviewed hub-and-spoke runtime supports only hub<->spoke Phase B routing."
+      )
+    }
     hub_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
     spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == spoke_id])
-    active_spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) %in% eligible_spokes])
     active_items <- .adaptive_link_active_item_ids(state, spoke_id = spoke_id, hub_id = hub_id)
     active_hub_ids <- as.character(active_items$active_hub)
     if (length(hub_ids) < 1L) {
@@ -1235,11 +1343,7 @@ generate_stage_candidates_from_state <- function(state,
       )
     }
     routing_hub_ids <- if (identical(stage_name, "anchor_link")) hub_ids else active_hub_ids
-    active_ids <- if (isTRUE(allow_spoke_spoke)) {
-      unique(c(routing_hub_ids, active_spoke_ids))
-    } else {
-      unique(c(routing_hub_ids, spoke_ids))
-    }
+    active_ids <- unique(c(routing_hub_ids, spoke_ids))
     if (length(active_ids) < 2L) {
       return(tibble::tibble(i = character(), j = character()))
     }
@@ -1329,10 +1433,7 @@ generate_stage_candidates_from_state <- function(state,
         }
         i_hub <- i_id %in% hub_ids
         j_hub <- j_id %in% hub_ids
-        if (!isTRUE(allow_spoke_spoke) && !isTRUE(xor(i_hub, j_hub))) {
-          next
-        }
-        if (isTRUE(allow_spoke_spoke) && !isTRUE(i_set == spoke_id || j_set == spoke_id)) {
+        if (!isTRUE(xor(i_hub, j_hub))) {
           next
         }
         n_after_route_filters <- as.integer(n_after_route_filters + 1L)
@@ -1429,9 +1530,8 @@ generate_stage_candidates_from_state <- function(state,
       spoke_ids = spoke_ids,
       spoke_id = spoke_id
     )
-    frozen_map <- controller$link_transform_frozen_by_spoke %||% list()
     reserved_keys <- character()
-    if (!isTRUE(frozen_map[[as.character(spoke_id)]])) {
+    if (!isTRUE(.adaptive_link_spoke_is_frozen(controller, spoke_id))) {
       reserved_keys <- .adaptive_link_probe_reserved_keys(
         state,
         spoke_id = spoke_id,
@@ -1478,7 +1578,9 @@ generate_stage_candidates_from_state <- function(state,
 #' @keywords internal
 #' @noRd
 .adaptive_linking_selection_order <- function(candidates,
-                                              utility_mode = "linking_d_optimal") {
+                                              utility_mode = "linking_d_optimal_transform",
+                                              stage_name = NA_character_,
+                                              spoke_id = NA_integer_) {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) == 0L) {
     return(integer())
@@ -1490,26 +1592,29 @@ generate_stage_candidates_from_state <- function(state,
       idx <- coverage_idx
     }
   }
-  # Linking ordering priority is resolver-selected utility. If all values are
-  # non-finite, fall back deterministically to link_u, then U0, then lexical.
   utility_col <- .adaptive_resolve_selection_column(utility_mode)
-  utility <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
-    as.double(cand[[utility_col]][idx])
-  } else {
-    rep_len(NA_real_, length(idx))
+  if (is.na(utility_col) || !utility_col %in% names(cand)) {
+    rlang::abort(sprintf(
+      paste0(
+        ".adaptive_linking_selection_order invariant failed: canonical D-opt ordering ",
+        "could not proceed%s%s because `%s` is unavailable."
+      ),
+      if (!is.na(stage_name)) paste0(" for stage=", stage_name) else "",
+      if (!is.na(spoke_id)) paste0(", spoke_id=", as.integer(spoke_id)) else "",
+      "link_d_opt_gain"
+    ))
   }
+  utility <- as.double(cand[[utility_col]][idx])
   if (!any(is.finite(utility))) {
-    fallback_link <- if ("link_u" %in% names(cand)) as.double(cand$link_u[idx]) else rep_len(NA_real_, length(idx))
-    if (any(is.finite(fallback_link))) {
-      fallback_link[!is.finite(fallback_link)] <- -Inf
-      return(idx[order(-fallback_link, cand$i[idx], cand$j[idx])])
-    }
-    fallback <- if ("u0" %in% names(cand)) as.double(cand$u0[idx]) else rep_len(NA_real_, length(idx))
-    if (!any(is.finite(fallback))) {
-      return(idx[order(cand$i[idx], cand$j[idx])])
-    }
-    fallback[!is.finite(fallback)] <- -Inf
-    return(idx[order(-fallback, cand$i[idx], cand$j[idx])])
+    rlang::abort(sprintf(
+      paste0(
+        ".adaptive_linking_selection_order invariant failed: canonical D-opt ordering ",
+        "could not proceed%s%s because all `%s` values were non-finite."
+      ),
+      if (!is.na(stage_name)) paste0(" for stage=", stage_name) else "",
+      if (!is.na(spoke_id)) paste0(", spoke_id=", as.integer(spoke_id)) else "",
+      "link_d_opt_gain"
+    ))
   }
   utility[!is.finite(utility)] <- -Inf
   idx[order(-utility, cand$i[idx], cand$j[idx])]
@@ -1587,7 +1692,9 @@ generate_stage_candidates_from_state <- function(state,
     ),
     error = function(e) tibble::tibble()
   )
-  utility_col <- .adaptive_resolve_selection_column("linking_d_optimal")
+  utility_col <- .adaptive_resolve_selection_column(
+    .adaptive_linking_utility_mode(controller$link_estimation_mode)
+  )
   utility <- if (!is.na(utility_col) && utility_col %in% names(pool)) {
     as.double(pool[[utility_col]])
   } else {
@@ -1609,16 +1716,33 @@ generate_stage_candidates_from_state <- function(state,
 .adaptive_link_backfill_order <- function(candidates,
                                          hub_id,
                                          set_map,
-                                         blocker_stage_weights = NULL) {
+                                         blocker_stage_weights = NULL,
+                                         spoke_id = NA_integer_) {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) < 1L) {
     return(integer())
   }
-  utility_col <- .adaptive_resolve_selection_column("linking_d_optimal")
-  utility <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
-    as.double(cand[[utility_col]])
-  } else {
-    rep_len(NA_real_, nrow(cand))
+  utility_col <- .adaptive_resolve_selection_column("linking_d_optimal_transform")
+  if (is.na(utility_col) || !utility_col %in% names(cand)) {
+    rlang::abort(sprintf(
+      paste0(
+        ".adaptive_link_backfill_order invariant failed: canonical D-opt ordering ",
+        "could not proceed for stage=pooled_backfill%s because `%s` is unavailable."
+      ),
+      if (!is.na(spoke_id)) paste0(", spoke_id=", as.integer(spoke_id)) else "",
+      "link_d_opt_gain"
+    ))
+  }
+  utility <- as.double(cand[[utility_col]])
+  if (!any(is.finite(utility))) {
+    rlang::abort(sprintf(
+      paste0(
+        ".adaptive_link_backfill_order invariant failed: canonical D-opt ordering ",
+        "could not proceed for stage=pooled_backfill%s because all `%s` values were non-finite."
+      ),
+      if (!is.na(spoke_id)) paste0(", spoke_id=", as.integer(spoke_id)) else "",
+      "link_d_opt_gain"
+    ))
   }
   utility[!is.finite(utility)] <- -Inf
   stage_priority <- .adaptive_link_stage_priority()

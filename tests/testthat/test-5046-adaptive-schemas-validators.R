@@ -448,6 +448,167 @@ test_that("validate_state enforces linking identifiers and mode guards", {
 
   bad_concurrent <- state
   bad_concurrent$controller$multi_spoke_mode <- "concurrent"
+  bad_concurrent$linking$run_mode <- "link_multi_spoke"
+  bad_concurrent$controller$link_refit_mode <- "joint_refit"
   bad_concurrent$controller$hub_lock_mode <- "free"
-  expect_error(pairwiseLLM:::validate_state(bad_concurrent), "must be hard_lock or soft_lock")
+  expect_error(pairwiseLLM:::validate_state(bad_concurrent), "only supported")
+})
+
+test_that("controller config validates anchored-joint mode requirements", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+
+  expect_no_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L,
+        link_estimation_mode = "anchored_joint"
+      ),
+      n_items = nrow(items),
+      set_ids = items$set_id
+    )
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L,
+        link_estimation_mode = "anchored_joint",
+        hub_lock_mode = "soft_lock"
+      ),
+      n_items = nrow(items),
+      set_ids = items$set_id
+    ),
+    "requires `adaptive_config\\$hub_lock_mode = \"hard_lock\"`"
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L,
+        link_estimation_mode = "anchored_joint",
+        link_refit_mode = "shift_only"
+      ),
+      n_items = nrow(items),
+      set_ids = items$set_id
+    ),
+    "does not support transform-only configuration fields"
+  )
+})
+
+test_that("controller config accepts free only for single-spoke transform joint refit", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = paste0("g", seq_len(6L))
+  )
+
+  expect_no_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L,
+        link_refit_mode = "joint_refit",
+        hub_lock_mode = "free"
+      ),
+      n_items = 4L,
+      set_ids = c(1L, 1L, 2L, 2L)
+    )
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L,
+        hub_lock_mode = "free"
+      ),
+      n_items = 4L,
+      set_ids = c(1L, 1L, 2L, 2L)
+    ),
+    "only supported"
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(
+        run_mode = "link_multi_spoke",
+        hub_id = 1L,
+        multi_spoke_mode = "independent",
+        link_refit_mode = "joint_refit",
+        hub_lock_mode = "free"
+      ),
+      n_items = nrow(items),
+      set_ids = items$set_id
+    ),
+    "only supported"
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L,
+        link_estimation_mode = "anchored_joint",
+        hub_lock_mode = "free"
+      ),
+      n_items = 4L,
+      set_ids = c(1L, 1L, 2L, 2L)
+    ),
+    "requires `adaptive_config\\$hub_lock_mode = \"hard_lock\"`"
+  )
+})
+
+test_that("controller config exposes reviewed public Phase B fields", {
+  defaults <- pairwiseLLM:::.adaptive_controller_defaults(8L)
+  keys <- pairwiseLLM:::.adaptive_controller_public_keys()
+
+  expect_false(isTRUE(defaults$within_phase_b_within_set_steps_allowed))
+  expect_true(isTRUE(defaults$hub_anchor_required_phase_b))
+  expect_true(is.na(defaults$probe_panel_edges))
+  expect_true(all(c(
+    "within_phase_b_within_set_steps_allowed",
+    "hub_anchor_required_phase_b",
+    "probe_panel_edges"
+  ) %in% keys))
+
+  validated <- pairwiseLLM:::.adaptive_validate_controller_config(
+    adaptive_config = list(
+      within_phase_b_within_set_steps_allowed = FALSE,
+      hub_anchor_required_phase_b = FALSE,
+      probe_panel_edges = 12L
+    ),
+    n_items = 8L,
+    set_ids = c(1L, 2L)
+  )
+
+  expect_false(isTRUE(validated$within_phase_b_within_set_steps_allowed))
+  expect_false(isTRUE(validated$hub_anchor_required_phase_b))
+  expect_identical(validated$probe_panel_edges, 12L)
+})
+
+test_that("controller config hard-gates unsupported Phase B public controls", {
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(probe_edges_count_toward_active_constraints = TRUE),
+      n_items = 8L,
+      set_ids = c(1L, 2L)
+    ),
+    "probe_edges_count_toward_active_constraints = TRUE"
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(allow_spoke_spoke_cross_set = TRUE),
+      n_items = 8L,
+      set_ids = c(1L, 2L, 3L)
+    ),
+    "allow_spoke_spoke_cross_set = TRUE"
+  )
 })

@@ -73,7 +73,7 @@ test_that("step row linking completeness guard rejects malformed linking metadat
   )
   expect_error(
     pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(bad_cross_utility),
-    "must be linking_d_optimal"
+    "must be linking_d_optimal_transform"
   )
 
   bad_non_cross_cols <- list(
@@ -105,6 +105,8 @@ test_that("link-stage append completeness guard rejects missing key/mode fields"
     refit_id = 1L,
     spoke_id = NA_integer_,
     hub_id = 1L,
+    link_epoch_id = 1L,
+    link_estimation_mode = "transform",
     link_transform_state = NA_character_,
     link_refit_mode = "shift_only",
     hub_lock_mode = "soft_lock",
@@ -112,7 +114,7 @@ test_that("link-stage append completeness guard rejects missing key/mode fields"
     linking_identified = TRUE,
     link_stop_eligible = TRUE,
     link_stop_pass = TRUE,
-    transform_frozen = FALSE,
+    link_state_frozen = FALSE,
     n_pairs_cross_set_done = 1L,
     n_unique_cross_pairs_seen = 1L,
     n_cross_edges_active_since_last_refit = 1L,
@@ -137,7 +139,7 @@ test_that("link-stage completeness guard requires canonical policy/state fields"
 
   expect_error(
     pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(legacy_rows),
-    "missing required columns: link_transform_policy, link_transform_state"
+    "missing required columns"
   )
 })
 
@@ -379,4 +381,105 @@ test_that("all-spokes-stopped helper is phase and mode aware", {
   state$controller$probe_pairs_per_refit_per_spoke <- 0L
   state$controller$link_stopped_by_spoke <- list(`2` = TRUE, `3` = TRUE)
   expect_true(pairwiseLLM:::.adaptive_link_all_spokes_stopped(state))
+})
+
+test_that("anchored-joint link-stage completeness allows transform-only typed NA fields", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 19L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock"
+    )
+  )
+  controller <- pairwiseLLM:::.adaptive_controller_resolve(state)
+
+  row <- tibble::tibble(
+    refit_id = 1L,
+    spoke_id = 2L,
+    hub_id = 1L,
+    link_epoch_id = 1L,
+    link_estimation_mode = "anchored_joint",
+    link_transform_policy = NA_character_,
+    link_transform_state = NA_character_,
+    link_refit_mode = NA_character_,
+    hub_lock_mode = "hard_lock",
+    reliability_link_global = 0.9,
+    linking_identified = TRUE,
+    link_stop_eligible = FALSE,
+    link_stop_pass = FALSE,
+    link_state_frozen = FALSE,
+    stop_recent_pass_count = 0L,
+    stop_recent_window_size = 0L,
+    stability_window_refits_used = 3L,
+    stability_passes_required_used = 2L,
+    escalation_recent_pass_count = 0L,
+    escalation_recent_window_size = 0L,
+    link_transform_escalation_window_refits_used = NA_integer_,
+    link_transform_escalation_passes_required_used = NA_integer_,
+    n_pairs_cross_set_done = 1L,
+    n_unique_cross_pairs_seen = 1L,
+    n_cross_edges_active_since_last_refit = 1L,
+    n_cross_edges_probe_since_last_refit = 0L,
+    n_cross_edges_total_since_last_refit = 1L,
+    coverage_bins_used = 2L,
+    B_spoke_refit_budget = 1L,
+    B_spoke_refit_budget_source = "single_spoke_controller",
+    stage_target_anchor_link = 1L,
+    stage_target_long_link = 0L,
+    stage_target_mid_link = 0L,
+    stage_target_local_link = 0L,
+    feasible_stage_capacity_anchor_link = 1L,
+    feasible_stage_capacity_long_link = 0L,
+    feasible_stage_capacity_mid_link = 0L,
+    feasible_stage_capacity_local_link = 0L,
+    feasibility_budget_released = 0L,
+    feasibility_reallocation_used = FALSE,
+    feasibility_reallocation_rule = "none",
+    stage_realized_anchor_link = 1L,
+    stage_realized_long_link = 0L,
+    stage_realized_mid_link = 0L,
+    stage_realized_local_link = 0L,
+    stage_shortfall_anchor_link = 0L,
+    stage_shortfall_long_link = 0L,
+    stage_shortfall_mid_link = 0L,
+    stage_shortfall_local_link = 0L,
+    stage_reallocation_used = FALSE,
+    stage_reallocation_rule_used = "none",
+    stage_budget_unfilled = 0L,
+    probe_edges_realized_before_refit = 0L,
+    probe_edges_realized_delta_since_last_refit = 0L,
+    probe_shortfall_reason = "none",
+    probe_brier = NA_real_,
+    probe_brier_max_used = NA_real_,
+    probe_brier_pass = NA,
+    probe_pred_rmse_lagged = NA_real_,
+    probe_pred_rmse_max_used = NA_real_,
+    probe_pred_rmse_pass = NA,
+    phase_a_within_edges_hub_used = 1L,
+    phase_a_within_edges_spoke_used = 1L,
+    phase_b_active_edges_used = 1L,
+    anchored_joint_hub_items_fixed_count = 2L,
+    theta_global_rmse_lagged = NA_real_,
+    theta_global_rmse_max_used = NA_real_,
+    theta_global_rmse_pass = NA,
+    resumed_from_session = FALSE
+  )
+  row$anchored_joint_init_state_method <- "artifact_copy_init"
+  row$anchored_joint_spoke_prior_scale_used <- 1.0
+  row$anchored_joint_sd_floor_used <- 0.02
+  row$anchored_joint_spoke_prior_fallback_used <- FALSE
+  row$anchored_joint_spoke_prior_fallback_sd_used <- 1.0
+  row$judge_params_fixed_for_anchored_joint <- TRUE
+  row$anchored_joint_free_block_dim <- 2L
+
+  expect_invisible(pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(row))
+  expect_identical(controller$link_estimation_mode, "anchored_joint")
 })
