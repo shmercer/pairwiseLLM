@@ -513,13 +513,16 @@ test_that("candidate helpers cover probe panels, selection metadata, and backfil
   ensured <- pairwiseLLM:::.adaptive_link_probe_ensure_panels(state, controller = state$controller, spoke_ids = 2L)
   expect_true(is.data.frame(ensured$linking$probe$panels_by_spoke[["2"]]))
   expect_true(nrow(ensured$linking$probe$panels_by_spoke[["2"]]) >= 1L)
+  ensured$refit_meta$refit_pairs_target_current <- 3L
+  ensured$controller$refit_pairs_target <- 3L
+  ensured$controller$probe_pairs_per_refit_per_spoke <- 1L
 
   next_spoke <- pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
     ensured,
     controller = ensured$controller,
     eligible_spoke_ids = 2L
   )
-  expect_true(is.na(next_spoke))
+  expect_identical(next_spoke, 2L)
 
   ensured$link_stage_log <- pairwiseLLM:::append_link_stage_log(
     pairwiseLLM:::new_link_stage_log(),
@@ -533,9 +536,6 @@ test_that("candidate helpers cover probe panels, selection metadata, and backfil
       link_state_frozen = FALSE
     )
   )
-  ensured$refit_meta$refit_pairs_target_current <- 3L
-  ensured$controller$refit_pairs_target <- 3L
-  ensured$controller$probe_pairs_per_refit_per_spoke <- 1L
   next_spoke <- pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
     ensured,
     controller = ensured$controller,

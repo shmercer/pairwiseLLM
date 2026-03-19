@@ -382,19 +382,6 @@ test_that("run_one_step uses link_probe_holdout after active-link starvation", {
   )
   state$refit_meta$refit_pairs_target_current <- 3L
   state$controller$refit_pairs_target <- 3L
-  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
-    pairwiseLLM:::new_link_stage_log(),
-    list(
-      refit_id = 1L,
-      spoke_id = 2L,
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      link_transform_policy = "auto",
-      link_transform_state = "shift_only",
-      link_stop_pass = FALSE,
-      link_state_frozen = FALSE
-    )
-  )
 
   starved_selection <- list(
     i = NA_integer_,

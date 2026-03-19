@@ -685,10 +685,6 @@
     }
     spoke_ids <- as.integer(budgeted_spokes)
   }
-  link_stage_log <- tibble::as_tibble(state$link_stage_log %||% new_link_stage_log())
-  if (nrow(link_stage_log) < 1L) {
-    return(NA_integer_)
-  }
 
   realized_min <- as.integer(controller$probe_edges_min_for_stop %||% 30L)
   probe_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
