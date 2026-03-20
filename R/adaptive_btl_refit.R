@@ -6035,6 +6035,15 @@
       probe_edges_realized_delta_since_last_refit = as.integer(probe_edges_realized_delta_since_last_refit),
       probe_panel_shortfall = as.integer(probe_panel_shortfall),
       probe_shortfall_reason = as.character(probe_shortfall_reason),
+      probe_acceleration_mode_used = as.character(
+        probe_effort_plan$acceleration_mode_used %||%
+          controller$probe_acceleration_mode %||%
+          "active_floor_plus_sole_blocker"
+      ),
+      probe_active_floor_used = as.integer(probe_effort_plan$active_floor_used %||% 0L),
+      probe_only_blocker_trigger = as.logical(
+        probe_effort_plan$probe_only_blocker_trigger %||% FALSE
+      ),
       probe_acceleration_used = as.logical(probe_effort_plan$acceleration_used %||% FALSE),
       probe_effort_base_cap = as.integer(probe_effort_plan$base_cap %||% probe_effort_base_cap),
       probe_effort_effective_cap = as.integer(

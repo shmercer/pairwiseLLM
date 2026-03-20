@@ -505,11 +505,104 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_budget_info_for_spoke <- function(state, controller, spoke_id) {
+  controller <- .adaptive_runtime_controller_resolve(state, controller)
+  spoke_id <- as.integer(spoke_id %||% NA_integer_)
+  if (is.na(spoke_id)) {
+    return(list(
+      B_spoke_refit_budget = 0L,
+      B_spoke_refit_budget_source = "single_spoke_default"
+    ))
+  }
+
+  refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+  cached_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
+  cached_budget_map <- controller$link_budget_map %||% list()
+  budget_map <- if (identical(cached_refit_id, refit_id) && length(cached_budget_map) > 0L) {
+    cached_budget_map
+  } else {
+    phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+    eligible_spokes <- unique(c(
+      spoke_id,
+      as.integer(phase_ctx$active_spokes %||% integer())
+    ))
+    .adaptive_link_budget_map_for_refit(
+      state = state,
+      controller = controller,
+      eligible_spoke_ids = eligible_spokes[!is.na(eligible_spokes)]
+    )
+  }
+
+  budget_info <- budget_map[[as.character(spoke_id)]] %||% list()
+  list(
+    B_spoke_refit_budget = max(
+      0L,
+      as.integer(budget_info$B_spoke_refit_budget %||% 0L)
+    ),
+    B_spoke_refit_budget_source = as.character(
+      budget_info$B_spoke_refit_budget_source %||% "single_spoke_default"
+    )
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_window_progress <- function(state, spoke_id) {
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  required <- c("pair_id", "step_id", "is_cross_set", "link_spoke_id")
+  if (nrow(step_log) < 1L || !all(required %in% names(step_log))) {
+    return(list(active_nonprobe = 0L, anchor_active = 0L))
+  }
+
+  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
+  rows <- step_log[
+    !is.na(step_log$pair_id) &
+      as.integer(step_log$step_id) > last_refit_step &
+      step_log$is_cross_set %in% TRUE &
+      as.integer(step_log$link_spoke_id) == as.integer(spoke_id),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(rows) < 1L) {
+    return(list(active_nonprobe = 0L, anchor_active = 0L))
+  }
+
+  is_probe <- if ("is_probe_step" %in% names(rows)) {
+    as.logical(rows$is_probe_step %||% FALSE)
+  } else {
+    rep(FALSE, nrow(rows))
+  }
+  stage_col <- if ("link_stage" %in% names(rows)) {
+    "link_stage"
+  } else if ("round_stage" %in% names(rows)) {
+    "round_stage"
+  } else {
+    NA_character_
+  }
+  anchor_active <- 0L
+  if (!is.na(stage_col)) {
+    anchor_active <- as.integer(sum(
+      !is_probe & as.character(rows[[stage_col]]) == "anchor_link",
+      na.rm = TRUE
+    ))
+  }
+
+  list(
+    active_nonprobe = as.integer(sum(!is_probe, na.rm = TRUE)),
+    anchor_active = as.integer(anchor_active)
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_probe_effort_plan <- function(state, controller, spoke_id) {
-  controller <- controller %||% .adaptive_controller_resolve(state)
+  controller <- .adaptive_runtime_controller_resolve(state, controller)
   spoke_id <- as.integer(spoke_id %||% NA_integer_)
   base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
   realized_min <- max(1L, as.integer(controller$probe_edges_min_for_stop %||% 30L))
+  mode_used <- as.character(
+    controller$probe_acceleration_mode %||% "active_floor_plus_sole_blocker"
+  )
   epoch_id <- .adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)
   panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
   panel_n <- .adaptive_link_probe_planned_edges(panel)
@@ -530,8 +623,71 @@
       if (nrow(last_stage_row) > 0L) last_stage_row$link_stop_eligible[[1L]] else FALSE
   )
 
-  acceleration_used <- FALSE
-  effective_cap <- base_cap
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  phase_b_active <- .adaptive_link_mode_active(controller) &&
+    identical(as.character(phase_ctx$phase %||% NA_character_), "phase_b")
+  spoke_frozen <- .adaptive_link_spoke_is_frozen(controller, spoke_id)
+  budget_info <- .adaptive_link_probe_budget_info_for_spoke(
+    state = state,
+    controller = controller,
+    spoke_id = spoke_id
+  )
+  budget <- max(0L, as.integer(budget_info$B_spoke_refit_budget %||% 0L))
+  active_floor_used <- if (isTRUE(controller$probe_active_floor_enabled) && budget > 0L) {
+    max(
+      as.integer(controller$probe_active_floor_min %||% 20L),
+      as.integer(ceiling(as.double(controller$probe_active_floor_frac %||% 0.5) * budget))
+    )
+  } else {
+    0L
+  }
+  progress <- .adaptive_link_probe_window_progress(state, spoke_id = spoke_id)
+  active_nonprobe <- as.integer(progress$active_nonprobe %||% 0L)
+  anchor_active <- as.integer(progress$anchor_active %||% 0L)
+  anchor_progress_met <- TRUE
+  if (isTRUE(controller$probe_active_floor_requires_anchor_progress)) {
+    anchor_progress_met <- anchor_active > 0L
+    if (!isTRUE(anchor_progress_met) && phase_b_active && budget > 0L) {
+      quota_controller <- controller
+      quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+      quota_controller$B_spoke_refit_budget <- as.integer(budget)
+      quota_controller$B_spoke_refit_budget_source <-
+        as.character(budget_info$B_spoke_refit_budget_source)
+      stage_quotas <- .adaptive_round_compute_quotas(
+        round_id = as.integer(state$round$round_id %||% 1L),
+        n_items = as.integer(state$n_items),
+        controller = quota_controller
+      )
+      stage_progress <- .adaptive_link_stage_progress(
+        state = state,
+        spoke_id = as.integer(spoke_id),
+        stage_quotas = stage_quotas,
+        stage_order = .adaptive_stage_order(),
+        refit_id = .adaptive_link_refit_window_id(state)
+      )
+      anchor_progress_met <- as.integer(stage_progress$stage_committed[["anchor_link"]] %||% 0L) >=
+        as.integer(stage_progress$stage_quotas[["anchor_link"]] %||% 0L)
+    }
+  }
+
+  bootstrap_gate_open <- isTRUE(controller$probe_active_floor_enabled) &&
+    phase_b_active &&
+    !isTRUE(spoke_frozen) &&
+    budget > 0L &&
+    realized_total < as.integer(controller$probe_accel_bootstrap_target %||% 12L) &&
+    realized_total < realized_min &&
+    active_nonprobe >= active_floor_used &&
+    isTRUE(anchor_progress_met)
+  probe_only_blocker_trigger <- FALSE
+  effective_cap <- if (isTRUE(bootstrap_gate_open)) {
+    min(
+      as.integer(controller$probe_pairs_per_refit_per_spoke_bootstrap_max %||% base_cap),
+      remaining_to_min_start
+    )
+  } else {
+    base_cap
+  }
+  acceleration_used <- isTRUE(effective_cap > base_cap)
 
   list(
     spoke_id = as.integer(spoke_id),
@@ -545,6 +701,13 @@
     panel_shortfall_start = as.integer(panel_shortfall_start),
     linking_identified = as.logical(linking_identified),
     link_stop_eligible = as.logical(link_stop_eligible),
+    acceleration_mode_used = as.character(mode_used),
+    active_floor_used = as.integer(active_floor_used),
+    active_floor_met = as.logical(active_nonprobe >= active_floor_used),
+    active_nonprobe_since_refit = as.integer(active_nonprobe),
+    anchor_progress_met = as.logical(anchor_progress_met),
+    probe_only_blocker_trigger = as.logical(probe_only_blocker_trigger),
+    allow_when_active = as.logical(bootstrap_gate_open),
     acceleration_used = as.logical(acceleration_used)
   )
 }
@@ -643,7 +806,8 @@
 #' @noRd
 .adaptive_link_probe_next_holdout_spoke <- function(state,
                                                     controller,
-                                                    eligible_spoke_ids = NULL) {
+                                                    eligible_spoke_ids = NULL,
+                                                    allow_when_active = FALSE) {
   controller <- .adaptive_runtime_controller_resolve(state, controller)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   spoke_ids <- as.integer(eligible_spoke_ids %||% phase_ctx$active_spokes %||% integer())
@@ -730,6 +894,9 @@
       controller = controller,
       spoke_id = as.integer(spoke_id)
     )
+    if (isTRUE(allow_when_active) && !isTRUE(plan$allow_when_active %||% FALSE)) {
+      return(NULL)
+    }
     epoch_id <- .adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)
     panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
     if (nrow(panel) < 1L) {

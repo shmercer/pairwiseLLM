@@ -555,6 +555,9 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
   expect_true(length(stats_con) >= 2L)
   expect_true(all(vapply(stats_con, function(x) !is.null(x$concurrent_target_pairs), logical(1L))))
   expect_true(all(c(
+    "probe_acceleration_mode_used",
+    "probe_active_floor_used",
+    "probe_only_blocker_trigger",
     "probe_acceleration_used",
     "probe_effort_base_cap",
     "probe_effort_effective_cap",

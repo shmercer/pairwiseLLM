@@ -688,6 +688,75 @@ test_that("probe effort plan accelerates deterministically for identified probe-
   )))
 })
 
+test_that("probe effort plan opens active-floor routing only after floor and anchor progress", {
+  append_active_step <- function(state, step_id, A_id, B_id, spoke_id, stage_name) {
+    out <- append_cross_probe_step(
+      state = state,
+      step_id = step_id,
+      A_id = A_id,
+      B_id = B_id,
+      Y = 1L,
+      spoke_id = spoke_id,
+      is_probe_step = FALSE,
+      run_mode = "link_multi_spoke"
+    )
+    idx <- nrow(out$step_log)
+    out$step_log$round_stage[[idx]] <- as.character(stage_name)
+    out$step_log$link_stage[[idx]] <- as.character(stage_name)
+    out
+  }
+
+  state <- make_link_probe_state()
+  state$controller$probe_pairs_per_refit_per_spoke <- 2L
+  state$controller$probe_pairs_per_refit_per_spoke_bootstrap_max <- 6L
+  state$controller$probe_accel_bootstrap_target <- 12L
+  state$controller$probe_active_floor_frac <- 0.5
+  state$controller$probe_active_floor_min <- 2L
+  state$controller$probe_active_floor_requires_anchor_progress <- TRUE
+  state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
+  state$controller$link_budget_map <- list(
+    `2` = list(
+      B_spoke_refit_budget = 4L,
+      B_spoke_refit_budget_source = "single_spoke_controller"
+    )
+  )
+
+  plan0 <- pairwiseLLM:::.adaptive_link_probe_effort_plan(
+    state = state,
+    controller = state$controller,
+    spoke_id = 2L
+  )
+  expect_identical(plan0$acceleration_mode_used, "active_floor_plus_sole_blocker")
+  expect_identical(plan0$active_floor_used, 2L)
+  expect_false(isTRUE(plan0$allow_when_active))
+  expect_identical(plan0$effective_cap, 2L)
+
+  state_no_anchor <- append_active_step(state, 11L, "h1", "s21", 2L, "long_link")
+  state_no_anchor <- append_active_step(state_no_anchor, 12L, "h2", "s22", 2L, "long_link")
+  plan1 <- pairwiseLLM:::.adaptive_link_probe_effort_plan(
+    state = state_no_anchor,
+    controller = state_no_anchor$controller,
+    spoke_id = 2L
+  )
+  expect_true(isTRUE(plan1$active_floor_met))
+  expect_false(isTRUE(plan1$anchor_progress_met))
+  expect_false(isTRUE(plan1$allow_when_active))
+  expect_false(isTRUE(plan1$acceleration_used))
+  expect_identical(plan1$effective_cap, 2L)
+
+  state_with_anchor <- append_active_step(state, 21L, "h1", "s21", 2L, "anchor_link")
+  state_with_anchor <- append_active_step(state_with_anchor, 22L, "h2", "s22", 2L, "long_link")
+  plan2 <- pairwiseLLM:::.adaptive_link_probe_effort_plan(
+    state = state_with_anchor,
+    controller = state_with_anchor$controller,
+    spoke_id = 2L
+  )
+  expect_true(isTRUE(plan2$anchor_progress_met))
+  expect_true(isTRUE(plan2$allow_when_active))
+  expect_true(isTRUE(plan2$acceleration_used))
+  expect_identical(plan2$effective_cap, 6L)
+})
+
 test_that("independent multi-spoke holdout routing ignores inactive spokes", {
   state <- make_link_probe_state()
   state$controller$multi_spoke_mode <- "independent"

@@ -1691,6 +1691,12 @@ test_that("link_stage_log rows expose feasibility and blocker explanations canon
   expect_identical(as.character(row$probe_panel_id[[1L]]), "panel_eval")
   expect_identical(as.integer(row$probe_edges_planned[[1L]]), 30L)
   expect_identical(as.integer(row$probe_edges_realized[[1L]]), 15L)
+  expect_identical(
+    as.character(row$probe_acceleration_mode_used[[1L]]),
+    "active_floor_plus_sole_blocker"
+  )
+  expect_identical(as.integer(row$probe_active_floor_used[[1L]]), 20L)
+  expect_false(isTRUE(row$probe_only_blocker_trigger[[1L]]))
   expect_false(isTRUE(row$probe_acceleration_used[[1L]]))
   expect_identical(as.integer(row$probe_effort_base_cap[[1L]]), 2L)
   expect_identical(as.integer(row$probe_effort_effective_cap[[1L]]), 2L)
@@ -4176,7 +4182,50 @@ test_that("adaptive_state validation branches for linking controls are covered",
     ),
     "must match one observed"
   )
-
+  probe_defaults <- pairwiseLLM:::.adaptive_controller_resolve(5L)
+  expect_identical(
+    probe_defaults$probe_acceleration_mode,
+    "active_floor_plus_sole_blocker"
+  )
+  expect_true(isTRUE(probe_defaults$probe_active_floor_enabled))
+  expect_true(isTRUE(probe_defaults$probe_sole_blocker_acceleration_enabled))
+  expect_identical(probe_defaults$probe_pairs_per_refit_per_spoke_bootstrap_max, 6L)
+  expect_identical(probe_defaults$probe_pairs_per_refit_per_spoke_sole_blocker_max, 12L)
+  expect_identical(probe_defaults$probe_accel_bootstrap_target, 12L)
+  expect_identical(probe_defaults$probe_active_floor_frac, 0.5)
+  expect_identical(probe_defaults$probe_active_floor_min, 20L)
+  expect_true(isTRUE(probe_defaults$probe_active_floor_requires_anchor_progress))
+  expect_identical(probe_defaults$probe_sole_blocker_min_realized, 20L)
+  expect_identical(probe_defaults$probe_sole_blocker_active_floor_min, 10L)
+  probe_ok <- pairwiseLLM:::.adaptive_validate_controller_config(
+    list(
+      probe_acceleration_mode = "active_floor_plus_sole_blocker",
+      probe_pairs_per_refit_per_spoke = 2L,
+      probe_pairs_per_refit_per_spoke_bootstrap_max = 6L,
+      probe_pairs_per_refit_per_spoke_sole_blocker_max = 12L,
+      probe_accel_bootstrap_target = 12L,
+      probe_active_floor_frac = 0.5,
+      probe_active_floor_min = 20L,
+      probe_active_floor_requires_anchor_progress = TRUE,
+      probe_sole_blocker_min_realized = 20L,
+      probe_sole_blocker_active_floor_min = 10L
+    ),
+    n_items = 5L
+  )
+  expect_identical(
+    probe_ok$probe_acceleration_mode,
+    "active_floor_plus_sole_blocker"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(
+        probe_pairs_per_refit_per_spoke = 3L,
+        probe_pairs_per_refit_per_spoke_bootstrap_max = 2L
+      ),
+      n_items = 5L
+    ),
+    "bootstrap_max"
+  )
   q <- pairwiseLLM:::.adaptive_round_compute_quotas(
     round_id = 1L,
     n_items = 10L,

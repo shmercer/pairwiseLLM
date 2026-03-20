@@ -229,6 +229,41 @@ The controller may exceed this only through documented probe
 acceleration/reallocation rules used to satisfy the held-out minimum.
 Under the current normative design, no additional cross-set work is
 scheduled after a spoke freezes. Default is \code{2L}.}
+\item{\code{probe_acceleration_mode}}{Held-out probe acceleration controller
+family. The current normative runtime supports only
+\code{"active_floor_plus_sole_blocker"}. Default is
+\code{"active_floor_plus_sole_blocker"}.}
+\item{\code{probe_active_floor_enabled}}{When \code{TRUE}, held-out probe effort may
+rise above the base cap only after the current refit window reaches the
+canonical active floor. Default is \code{TRUE}.}
+\item{\code{probe_sole_blocker_acceleration_enabled}}{When \code{TRUE}, the runtime
+carries canonical sole-blocker acceleration scaffolding. The end-to-end
+sole-blocker trigger still follows the current reviewed Phase B runtime.
+Default is \code{TRUE}.}
+\item{\code{probe_pairs_per_refit_per_spoke_bootstrap_max}}{Maximum held-out
+probe cap permitted by active-floor bootstrap acceleration. Must be at
+least \code{probe_pairs_per_refit_per_spoke}. Default is \code{6L}.}
+\item{\code{probe_pairs_per_refit_per_spoke_sole_blocker_max}}{Maximum held-out
+probe cap permitted by sole-blocker acceleration. Must be at least
+\code{probe_pairs_per_refit_per_spoke}. Default is \code{12L}.}
+\item{\code{probe_accel_bootstrap_target}}{Bootstrap probe-realization target
+used by active-floor acceleration. Default is \code{12L}.}
+\item{\code{probe_active_floor_frac}}{Fraction of the current per-spoke
+linking-active budget used to form the active-floor threshold for probe
+acceleration. Default is \code{0.50}.}
+\item{\code{probe_active_floor_min}}{Minimum active-link count required before
+active-floor acceleration may begin in a refit window. Default is
+\code{20L}.}
+\item{\code{probe_active_floor_requires_anchor_progress}}{When \code{TRUE}, active-
+floor acceleration also requires either at least one committed
+anchor-link edge in the current refit window or an exhausted anchor-link
+stage. Default is \code{TRUE}.}
+\item{\code{probe_sole_blocker_min_realized}}{Minimum realized held-out probe
+count required before sole-blocker acceleration can be considered.
+Default is \code{20L}.}
+\item{\code{probe_sole_blocker_active_floor_min}}{Reduced positive active floor
+used by sole-blocker acceleration when that controller path is active.
+Default is \code{10L}.}
 \item{\code{probe_edges_min_for_stop}}{Minimum realized held-out probe edges
 required before Phase B stop or escalation can be evaluated. Default is
 \code{30L}.}

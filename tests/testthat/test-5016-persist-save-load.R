@@ -980,6 +980,78 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
   )
 })
 
+test_that("save/load preserves probe acceleration controller fields and canonical log columns", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 61L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      probe_acceleration_mode = "active_floor_plus_sole_blocker",
+      probe_active_floor_enabled = TRUE,
+      probe_sole_blocker_acceleration_enabled = TRUE,
+      probe_pairs_per_refit_per_spoke_bootstrap_max = 6L,
+      probe_pairs_per_refit_per_spoke_sole_blocker_max = 12L,
+      probe_accel_bootstrap_target = 12L,
+      probe_active_floor_frac = 0.5,
+      probe_active_floor_min = 20L,
+      probe_active_floor_requires_anchor_progress = TRUE,
+      probe_sole_blocker_min_realized = 20L,
+      probe_sole_blocker_active_floor_min = 10L
+    )
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_stop_pass = FALSE,
+      link_state_frozen = FALSE,
+      probe_acceleration_mode_used = "active_floor_plus_sole_blocker",
+      probe_active_floor_used = 20L,
+      probe_only_blocker_trigger = FALSE
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  restored <- load_adaptive_session(session_dir)
+
+  expect_identical(
+    restored$controller$probe_acceleration_mode,
+    "active_floor_plus_sole_blocker"
+  )
+  expect_true(isTRUE(restored$controller$probe_active_floor_enabled))
+  expect_true(isTRUE(restored$controller$probe_sole_blocker_acceleration_enabled))
+  expect_identical(restored$controller$probe_pairs_per_refit_per_spoke_bootstrap_max, 6L)
+  expect_identical(restored$controller$probe_pairs_per_refit_per_spoke_sole_blocker_max, 12L)
+  expect_identical(restored$controller$probe_accel_bootstrap_target, 12L)
+  expect_identical(restored$controller$probe_active_floor_frac, 0.5)
+  expect_identical(restored$controller$probe_active_floor_min, 20L)
+  expect_true(isTRUE(restored$controller$probe_active_floor_requires_anchor_progress))
+  expect_identical(restored$controller$probe_sole_blocker_min_realized, 20L)
+  expect_identical(restored$controller$probe_sole_blocker_active_floor_min, 10L)
+  expect_true(all(c(
+    "probe_acceleration_mode_used",
+    "probe_active_floor_used",
+    "probe_only_blocker_trigger"
+  ) %in% names(restored$link_stage_log)))
+  expect_identical(
+    as.character(restored$link_stage_log$probe_acceleration_mode_used[[1L]]),
+    "active_floor_plus_sole_blocker"
+  )
+  expect_identical(as.integer(restored$link_stage_log$probe_active_floor_used[[1L]]), 20L)
+  expect_false(isTRUE(restored$link_stage_log$probe_only_blocker_trigger[[1L]]))
+})
+
 test_that("resume preserves probe panel identity, epoch, and realized counts across a chunk boundary", {
   state <- make_probe_resume_state()
   state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
