@@ -530,6 +530,29 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_required_surface_fields <- function(surface_row,
+                                                         required_fields,
+                                                         spoke_id,
+                                                         source) {
+  missing_fields <- required_fields[!required_fields %in% names(surface_row)]
+  if (length(missing_fields) > 0L) {
+    rlang::abort(
+      paste0(
+        "Phase B probe-controller invariant failed: canonical stop-blocker surface for spoke_id=",
+        as.integer(spoke_id),
+        " from ",
+        source,
+        " is incomplete for ",
+        paste(missing_fields, collapse = ", "),
+        "."
+      )
+    )
+  }
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_probe_runtime_surface_row <- function(state, controller, spoke_id) {
   key <- as.character(as.integer(spoke_id %||% NA_integer_))
   stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[key]] %||% list()
@@ -553,32 +576,112 @@
 
 #' @keywords internal
 #' @noRd
-.adaptive_link_probe_validate_blocker_surface <- function(blockers,
-                                                         link_lag_eligible,
-                                                         link_min_refit_eligible,
-                                                         link_diagnostics_pass,
-                                                         reliability_stop_pass,
-                                                         probe_brier_pass,
-                                                         probe_pred_rmse_pass,
-                                                         theta_global_rmse_pass,
+.adaptive_link_probe_validate_blocker_surface <- function(surface_row,
                                                          realized_before_refit,
                                                          realized_min,
                                                          spoke_id,
                                                          source) {
-  blocker_map <- list(
-    diagnostics_failed = !isTRUE(link_diagnostics_pass),
-    lag_not_eligible = !isTRUE(link_lag_eligible),
-    min_refits_not_met = !isTRUE(link_min_refit_eligible),
-    probe_edges_min_for_stop = as.integer(realized_before_refit %||% 0L) < as.integer(realized_min %||% 0L),
-    reliability_link_global = !isTRUE(reliability_stop_pass),
-    probe_brier = !isTRUE(probe_brier_pass),
-    probe_pred_rmse_lagged = !isTRUE(probe_pred_rmse_pass),
-    theta_global_rmse_lagged = !isTRUE(theta_global_rmse_pass)
+  .adaptive_link_probe_required_surface_fields(
+    surface_row = surface_row,
+    required_fields = c(
+      "stop_blocker_codes",
+      "link_diagnostics_pass",
+      "link_lag_eligible",
+      "link_min_refit_eligible",
+      "reliability_link_global",
+      "link_stop_reliability_min_used",
+      "probe_brier",
+      "probe_brier_max_used",
+      "probe_pred_rmse_lagged",
+      "probe_pred_rmse_max_used",
+      "theta_global_rmse_lagged",
+      "theta_global_rmse_max_used",
+      "hub_anchored",
+      "probe_edges_min_for_stop_used"
+    ),
+    spoke_id = spoke_id,
+    source = source
   )
-  blocker_names <- names(blocker_map)
-  blocker_present <- stats::setNames(blocker_names %in% blockers, blocker_names)
-  blocker_expected <- stats::setNames(as.logical(unname(blocker_map)), blocker_names)
-  mismatch <- blocker_names[blocker_present != blocker_expected]
+
+  blocker_codes_raw <- .adaptive_link_probe_surface_value(
+    surface_row,
+    "stop_blocker_codes",
+    default = NA_character_
+  )
+  if (length(as.character(blocker_codes_raw)) != 1L ||
+    is.na(blocker_codes_raw) ||
+    !nzchar(as.character(blocker_codes_raw))) {
+    rlang::abort(
+      paste0(
+        "Phase B probe-controller invariant failed: canonical stop blockers are unavailable for ",
+        "spoke_id=",
+        as.integer(spoke_id),
+        " from ",
+        source,
+        "."
+      )
+    )
+  }
+
+  realized_min_surface <- as.integer(
+    .adaptive_link_probe_surface_value(surface_row, "probe_edges_min_for_stop_used", default = NA_integer_)
+  )
+  if (!identical(realized_min_surface, as.integer(realized_min))) {
+    rlang::abort(
+      paste0(
+        "Phase B probe-controller invariant failed: canonical `probe_edges_min_for_stop_used` for ",
+        "spoke_id=",
+        as.integer(spoke_id),
+        " from ",
+        source,
+        " does not match the current controller threshold."
+      )
+    )
+  }
+
+  canonical_blockers <- .adaptive_link_stop_blockers(
+    link_diagnostics_pass = as.logical(
+      .adaptive_link_probe_surface_value(surface_row, "link_diagnostics_pass", default = NA)
+    ),
+    link_lag_eligible = as.logical(
+      .adaptive_link_probe_surface_value(surface_row, "link_lag_eligible", default = NA)
+    ),
+    link_min_refit_eligible = as.logical(
+      .adaptive_link_probe_surface_value(surface_row, "link_min_refit_eligible", default = NA)
+    ),
+    probe_edges_realized = as.integer(realized_before_refit %||% 0L),
+    probe_edges_min_for_stop = as.integer(realized_min_surface),
+    link_stop_reliability_min = as.double(
+      .adaptive_link_probe_surface_value(surface_row, "link_stop_reliability_min_used", default = NA_real_)
+    ),
+    reliability_active = as.double(
+      .adaptive_link_probe_surface_value(surface_row, "reliability_link_global", default = NA_real_)
+    ),
+    probe_brier = as.double(
+      .adaptive_link_probe_surface_value(surface_row, "probe_brier", default = NA_real_)
+    ),
+    probe_brier_max = as.double(
+      .adaptive_link_probe_surface_value(surface_row, "probe_brier_max_used", default = NA_real_)
+    ),
+    probe_pred_rmse_lagged = as.double(
+      .adaptive_link_probe_surface_value(surface_row, "probe_pred_rmse_lagged", default = NA_real_)
+    ),
+    probe_pred_rmse_max = as.double(
+      .adaptive_link_probe_surface_value(surface_row, "probe_pred_rmse_max_used", default = NA_real_)
+    ),
+    theta_global_rmse_lagged = as.double(
+      .adaptive_link_probe_surface_value(surface_row, "theta_global_rmse_lagged", default = NA_real_)
+    ),
+    theta_global_rmse_max = as.double(
+      .adaptive_link_probe_surface_value(surface_row, "theta_global_rmse_max_used", default = NA_real_)
+    ),
+    hub_anchored = as.logical(
+      .adaptive_link_probe_surface_value(surface_row, "hub_anchored", default = NA)
+    )
+  )
+  blockers <- .adaptive_link_probe_parse_blocker_codes(blocker_codes_raw)
+  canonical_active <- names(canonical_blockers$blockers)[canonical_blockers$blockers]
+  mismatch <- setdiff(union(blockers, canonical_active), intersect(blockers, canonical_active))
   if (length(mismatch) > 0L) {
     rlang::abort(
       paste0(
@@ -592,7 +695,8 @@
       )
     )
   }
-  invisible(TRUE)
+
+  canonical_active
 }
 
 #' @keywords internal
@@ -611,80 +715,17 @@
     return(FALSE)
   }
 
-  link_lag_eligible <- as.logical(
-    .adaptive_link_probe_surface_value(surface_row, "link_lag_eligible", default = NA)
-  )
-  link_min_refit_eligible <- as.logical(
-    .adaptive_link_probe_surface_value(surface_row, "link_min_refit_eligible", default = NA)
-  )
-  link_diagnostics_pass <- as.logical(
-    .adaptive_link_probe_surface_value(surface_row, "link_diagnostics_pass", default = NA)
-  )
-  reliability_stop_pass <- as.logical(
-    .adaptive_link_probe_surface_value(surface_row, "reliability_stop_pass", default = NA)
-  )
-  probe_brier_pass <- as.logical(
-    .adaptive_link_probe_surface_value(surface_row, "probe_brier_pass", default = NA)
-  )
-  probe_pred_rmse_pass <- as.logical(
-    .adaptive_link_probe_surface_value(surface_row, "probe_pred_rmse_pass", default = NA)
-  )
-  theta_global_rmse_pass <- as.logical(
-    .adaptive_link_probe_surface_value(surface_row, "theta_global_rmse_pass", default = NA)
-  )
-  blockers <- .adaptive_link_probe_parse_blocker_codes(
-    .adaptive_link_probe_surface_value(surface_row, "stop_blocker_codes", default = NA_character_)
-  )
-  required_flags_available <- all(!is.na(c(
-    link_lag_eligible,
-    link_min_refit_eligible,
-    link_diagnostics_pass,
-    reliability_stop_pass,
-    probe_brier_pass,
-    probe_pred_rmse_pass,
-    theta_global_rmse_pass
-  )))
-
   prelim_conditions <- c(
-    isTRUE(link_lag_eligible),
-    isTRUE(link_min_refit_eligible),
-    isTRUE(link_diagnostics_pass),
-    isTRUE(reliability_stop_pass),
-    isTRUE(probe_brier_pass),
-    isTRUE(probe_pred_rmse_pass),
-    isTRUE(theta_global_rmse_pass),
     as.integer(realized_before_refit) >= as.integer(controller$probe_sole_blocker_min_realized %||% 20L),
     as.integer(realized_before_refit) < as.integer(realized_min),
     as.integer(panel_shortfall_start) > 0L
   )
-  if (all(prelim_conditions) && length(blockers) < 1L) {
-    rlang::abort(
-      paste0(
-        "Phase B probe-controller invariant failed: canonical stop blockers are unavailable for ",
-        "spoke_id=", as.integer(spoke_id),
-        " from ", surface_source, "."
-      )
-    )
-  }
-  if (!isTRUE(required_flags_available)) {
-    return(FALSE)
-  }
   if (!isTRUE(all(prelim_conditions))) {
     return(FALSE)
   }
-  if (length(blockers) < 1L) {
-    return(FALSE)
-  }
 
-  .adaptive_link_probe_validate_blocker_surface(
-    blockers = blockers,
-    link_lag_eligible = link_lag_eligible,
-    link_min_refit_eligible = link_min_refit_eligible,
-    link_diagnostics_pass = link_diagnostics_pass,
-    reliability_stop_pass = reliability_stop_pass,
-    probe_brier_pass = probe_brier_pass,
-    probe_pred_rmse_pass = probe_pred_rmse_pass,
-    theta_global_rmse_pass = theta_global_rmse_pass,
+  blockers <- .adaptive_link_probe_validate_blocker_surface(
+    surface_row = surface_row,
     realized_before_refit = realized_before_refit,
     realized_min = realized_min,
     spoke_id = spoke_id,

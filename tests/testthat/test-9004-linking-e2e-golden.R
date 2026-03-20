@@ -136,7 +136,10 @@ golden_e2e_run <- function() {
   ), drop = FALSE]
   link_focus <- out$link_stage_log[, c(
     "refit_id", "spoke_id", "link_state_frozen", "link_stop_eligible", "link_stop_pass",
-    "n_cross_edges_active_since_last_refit", "n_cross_edges_probe_since_last_refit"
+    "n_cross_edges_active_since_last_refit", "n_cross_edges_probe_since_last_refit",
+    "probe_acceleration_mode_used", "probe_active_floor_used", "probe_only_blocker_trigger",
+    "probe_acceleration_used", "probe_effort_base_cap", "probe_effort_effective_cap",
+    "probe_remaining_to_min_start"
   ), drop = FALSE]
 
   list(
@@ -218,8 +221,9 @@ test_that("deterministic linking e2e run preserves canonical golden logs", {
 
   # After the Phase B starvation/runtime alignment work, this deterministic
   # trace includes the last committed anchor-link step before the final
-  # pooled_backfill starvation step. The prior golden was missing that
-  # committed Phase B step/refit window and is no longer canonical.
+  # pooled_backfill starvation step. The prior golden was also missing the
+  # canonical probe-acceleration audit fields now required by the normative
+  # held-out controller and is no longer complete.
   fixture_path <- testthat::test_path("fixtures", "linking-e2e-golden.rds")
   expect_true(file.exists(fixture_path))
   fixture <- readRDS(fixture_path)

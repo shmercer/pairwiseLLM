@@ -1033,7 +1033,8 @@ test_that("save/load preserves probe acceleration controller fields and canonica
       probe_only_blocker_trigger = TRUE,
       probe_acceleration_used = TRUE,
       probe_effort_base_cap = 2L,
-      probe_effort_effective_cap = 7L
+      probe_effort_effective_cap = 7L,
+      probe_remaining_to_min_start = 9L
     )
   )
 
@@ -1061,7 +1062,8 @@ test_that("save/load preserves probe acceleration controller fields and canonica
     "probe_only_blocker_trigger",
     "probe_acceleration_used",
     "probe_effort_base_cap",
-    "probe_effort_effective_cap"
+    "probe_effort_effective_cap",
+    "probe_remaining_to_min_start"
   ) %in% names(restored$link_stage_log)))
   expect_identical(
     as.character(restored$link_stage_log$probe_acceleration_mode_used[[1L]]),
@@ -1072,6 +1074,7 @@ test_that("save/load preserves probe acceleration controller fields and canonica
   expect_true(isTRUE(restored$link_stage_log$probe_acceleration_used[[1L]]))
   expect_identical(as.integer(restored$link_stage_log$probe_effort_base_cap[[1L]]), 2L)
   expect_identical(as.integer(restored$link_stage_log$probe_effort_effective_cap[[1L]]), 7L)
+  expect_identical(as.integer(restored$link_stage_log$probe_remaining_to_min_start[[1L]]), 9L)
   expect_identical(
     as.character(restored$controller$link_refit_stats_by_spoke$`2`$stop_blocker_codes),
     "probe_edges_min_for_stop"

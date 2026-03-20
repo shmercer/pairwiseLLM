@@ -806,6 +806,31 @@ test_that("probe effort plan treats canonical anchor-stage exhaustion as anchor 
   expect_identical(plan$effective_cap, 6L)
 })
 
+make_probe_blocker_surface <- function(stop_blocker_codes,
+                                       probe_edges_min_for_stop_used = 6L,
+                                       hub_anchored = TRUE,
+                                       reliability_link_global = 0.95,
+                                       probe_brier = 0.10,
+                                       probe_pred_rmse_lagged = 0.01,
+                                       theta_global_rmse_lagged = 0.04) {
+  tibble::tibble(
+    link_lag_eligible = TRUE,
+    link_min_refit_eligible = TRUE,
+    link_diagnostics_pass = TRUE,
+    reliability_link_global = reliability_link_global,
+    link_stop_reliability_min_used = 0.90,
+    probe_brier = probe_brier,
+    probe_brier_max_used = 0.19,
+    probe_pred_rmse_lagged = probe_pred_rmse_lagged,
+    probe_pred_rmse_max_used = 0.015,
+    theta_global_rmse_lagged = theta_global_rmse_lagged,
+    theta_global_rmse_max_used = 0.05,
+    hub_anchored = hub_anchored,
+    probe_edges_min_for_stop_used = as.integer(probe_edges_min_for_stop_used),
+    stop_blocker_codes = as.character(stop_blocker_codes)
+  )
+}
+
 test_that("probe effort plan applies sole-blocker acceleration only when probe count is the only blocker", {
   append_active_step <- function(state, step_id, A_id, B_id, spoke_id, stage_name) {
     out <- append_cross_probe_step(
@@ -892,14 +917,7 @@ test_that("probe effort plan applies sole-blocker acceleration only when probe c
   state <- append_active_step(state, 4L, "h1", "s21", 2L, "anchor_link")
   state <- append_active_step(state, 5L, "h2", "s22", 2L, "long_link")
 
-  surface_ok <- tibble::tibble(
-    link_lag_eligible = TRUE,
-    link_min_refit_eligible = TRUE,
-    link_diagnostics_pass = TRUE,
-    reliability_stop_pass = TRUE,
-    probe_brier_pass = TRUE,
-    probe_pred_rmse_pass = TRUE,
-    theta_global_rmse_pass = TRUE,
+  surface_ok <- make_probe_blocker_surface(
     stop_blocker_codes = "probe_edges_min_for_stop"
   )
   plan_ok <- pairwiseLLM:::.adaptive_link_probe_effort_plan(
@@ -915,14 +933,8 @@ test_that("probe effort plan applies sole-blocker acceleration only when probe c
   expect_true(isTRUE(plan_ok$acceleration_used))
   expect_identical(plan_ok$effective_cap, 3L)
 
-  surface_blocked <- tibble::tibble(
-    link_lag_eligible = TRUE,
-    link_min_refit_eligible = TRUE,
-    link_diagnostics_pass = TRUE,
-    reliability_stop_pass = FALSE,
-    probe_brier_pass = TRUE,
-    probe_pred_rmse_pass = TRUE,
-    theta_global_rmse_pass = TRUE,
+  surface_blocked <- make_probe_blocker_surface(
+    reliability_link_global = 0.80,
     stop_blocker_codes = "probe_edges_min_for_stop,reliability_link_global"
   )
   plan_blocked <- pairwiseLLM:::.adaptive_link_probe_effort_plan(
@@ -937,6 +949,72 @@ test_that("probe effort plan applies sole-blocker acceleration only when probe c
   expect_false(isTRUE(plan_blocked$allow_when_active))
   expect_false(isTRUE(plan_blocked$acceleration_used))
   expect_identical(plan_blocked$effective_cap, 1L)
+})
+
+test_that("probe effort plan blocks sole-blocker acceleration when hub anchoring is still a blocker", {
+  state <- make_link_probe_state()
+  state$controller$probe_pairs_per_refit_per_spoke <- 1L
+  state$controller$probe_edges_min_for_stop <- 6L
+  state$controller$probe_sole_blocker_min_realized <- 3L
+  state$controller$probe_active_floor_frac <- 0.5
+  state$controller$probe_active_floor_min <- 4L
+  state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
+  state$controller$link_budget_map <- list(
+    `2` = list(
+      B_spoke_refit_budget = 8L,
+      B_spoke_refit_budget_source = "single_spoke_controller"
+    )
+  )
+  state$linking$probe <- pairwiseLLM:::.adaptive_link_probe_empty_state()
+  state$linking$probe$panels_by_spoke[["2"]] <- tibble::tibble(
+    probe_panel_id = rep("panel-sole", 6L),
+    link_epoch_id = rep(3L, 6L),
+    spoke_id = rep(2L, 6L),
+    hub_item_id = c("h1", "h2", "h3", "h1", "h2", "h3"),
+    spoke_item_id = c("s21", "s21", "s21", "s22", "s22", "s22"),
+    spoke_bin = c(1L, 1L, 1L, 2L, 2L, 2L),
+    hub_bin = c(1L, 2L, 3L, 1L, 2L, 3L),
+    probe_edges_planned = rep(6L, 6L),
+    probe_panel_reallocation_used = rep(FALSE, 6L),
+    planned_rank = seq_len(6L),
+    pair_key = make_unordered_key(
+      c("h1", "h2", "h3", "h1", "h2", "h3"),
+      c("s21", "s21", "s21", "s22", "s22", "s22")
+    ),
+    realized = c(TRUE, TRUE, TRUE, FALSE, FALSE, FALSE),
+    realized_step_id = c(1L, 2L, 3L, NA, NA, NA),
+    realized_pair_id = c(1L, 2L, 3L, NA, NA, NA),
+    realized_run_mode = c("link_probe_holdout", "link_probe_holdout", "link_probe_holdout", NA, NA, NA)
+  )
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = 1:3,
+    pair_id = 1:3,
+    run_mode = rep("link_probe_holdout", 3L),
+    spoke_id = rep(2L, 3L),
+    link_epoch_id = rep(3L, 3L),
+    probe_panel_id = rep("panel-sole", 3L),
+    hub_item_id = c("h1", "h2", "h3"),
+    spoke_item_id = c("s21", "s21", "s21"),
+    pair_key = make_unordered_key(c("h1", "h2", "h3"), c("s21", "s21", "s21")),
+    Y = rep(1L, 3L)
+  )
+  state$refit_meta$last_refit_step <- 3L
+
+  plan <- pairwiseLLM:::.adaptive_link_probe_effort_plan(
+    state = state,
+    controller = state$controller,
+    spoke_id = 2L,
+    surface_row = make_probe_blocker_surface(
+      hub_anchored = FALSE,
+      stop_blocker_codes = "probe_edges_min_for_stop,hub_not_anchored"
+    ),
+    surface_source = "test_surface"
+  )
+
+  expect_false(isTRUE(plan$probe_only_blocker_trigger))
+  expect_identical(plan$active_floor_used, 4L)
+  expect_false(isTRUE(plan$allow_when_active))
+  expect_false(isTRUE(plan$acceleration_used))
 })
 
 test_that("probe effort plan aborts when sole-blocker evaluation lacks canonical blocker state", {
@@ -986,14 +1064,7 @@ test_that("probe effort plan aborts when sole-blocker evaluation lacks canonical
   )
   state$refit_meta$last_refit_step <- 3L
 
-  surface_missing <- tibble::tibble(
-    link_lag_eligible = TRUE,
-    link_min_refit_eligible = TRUE,
-    link_diagnostics_pass = TRUE,
-    reliability_stop_pass = TRUE,
-    probe_brier_pass = TRUE,
-    probe_pred_rmse_pass = TRUE,
-    theta_global_rmse_pass = TRUE,
+  surface_missing <- make_probe_blocker_surface(
     stop_blocker_codes = NA_character_
   )
 
@@ -1006,6 +1077,68 @@ test_that("probe effort plan aborts when sole-blocker evaluation lacks canonical
       surface_source = "test_surface"
     ),
     "canonical stop blockers are unavailable"
+  )
+})
+
+test_that("probe effort plan aborts when canonical blocker codes omit hub anchoring blockers", {
+  state <- make_link_probe_state()
+  state$controller$probe_pairs_per_refit_per_spoke <- 1L
+  state$controller$probe_edges_min_for_stop <- 6L
+  state$controller$probe_sole_blocker_min_realized <- 3L
+  state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
+  state$controller$link_budget_map <- list(
+    `2` = list(
+      B_spoke_refit_budget = 8L,
+      B_spoke_refit_budget_source = "single_spoke_controller"
+    )
+  )
+  state$linking$probe <- pairwiseLLM:::.adaptive_link_probe_empty_state()
+  state$linking$probe$panels_by_spoke[["2"]] <- tibble::tibble(
+    probe_panel_id = rep("panel-sole", 6L),
+    link_epoch_id = rep(3L, 6L),
+    spoke_id = rep(2L, 6L),
+    hub_item_id = c("h1", "h2", "h3", "h1", "h2", "h3"),
+    spoke_item_id = c("s21", "s21", "s21", "s22", "s22", "s22"),
+    spoke_bin = c(1L, 1L, 1L, 2L, 2L, 2L),
+    hub_bin = c(1L, 2L, 3L, 1L, 2L, 3L),
+    probe_edges_planned = rep(6L, 6L),
+    probe_panel_reallocation_used = rep(FALSE, 6L),
+    planned_rank = seq_len(6L),
+    pair_key = make_unordered_key(
+      c("h1", "h2", "h3", "h1", "h2", "h3"),
+      c("s21", "s21", "s21", "s22", "s22", "s22")
+    ),
+    realized = c(TRUE, TRUE, TRUE, FALSE, FALSE, FALSE),
+    realized_step_id = c(1L, 2L, 3L, NA, NA, NA),
+    realized_pair_id = c(1L, 2L, 3L, NA, NA, NA),
+    realized_run_mode = c("link_probe_holdout", "link_probe_holdout", "link_probe_holdout", NA, NA, NA)
+  )
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = 1:3,
+    pair_id = 1:3,
+    run_mode = rep("link_probe_holdout", 3L),
+    spoke_id = rep(2L, 3L),
+    link_epoch_id = rep(3L, 3L),
+    probe_panel_id = rep("panel-sole", 3L),
+    hub_item_id = c("h1", "h2", "h3"),
+    spoke_item_id = c("s21", "s21", "s21"),
+    pair_key = make_unordered_key(c("h1", "h2", "h3"), c("s21", "s21", "s21")),
+    Y = rep(1L, 3L)
+  )
+  state$refit_meta$last_refit_step <- 3L
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_probe_effort_plan(
+      state = state,
+      controller = state$controller,
+      spoke_id = 2L,
+      surface_row = make_probe_blocker_surface(
+        hub_anchored = FALSE,
+        stop_blocker_codes = "probe_edges_min_for_stop"
+      ),
+      surface_source = "test_surface"
+    ),
+    "hub_not_anchored"
   )
 })
 
