@@ -505,6 +505,199 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_surface_value <- function(row, field, default = NULL) {
+  if (is.null(row) || length(row) < 1L || is.null(row[[field]])) {
+    return(default)
+  }
+  value <- row[[field]]
+  if (length(value) < 1L) {
+    return(default)
+  }
+  value[[1L]]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_parse_blocker_codes <- function(codes) {
+  codes <- as.character(codes %||% NA_character_)
+  if (length(codes) != 1L || is.na(codes) || !nzchar(codes)) {
+    return(character())
+  }
+  blockers <- trimws(unlist(strsplit(codes, "[,|]", fixed = FALSE), use.names = FALSE))
+  blockers <- blockers[!is.na(blockers) & nzchar(blockers) & blockers != "none"]
+  unique(as.character(blockers))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_runtime_surface_row <- function(state, controller, spoke_id) {
+  key <- as.character(as.integer(spoke_id %||% NA_integer_))
+  stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[key]] %||% list()
+  stage_row <- .adaptive_link_probe_last_stage_row(state, spoke_id = spoke_id)
+  stage_list <- if (nrow(stage_row) > 0L) {
+    as.list(stage_row[1L, , drop = FALSE])
+  } else {
+    list()
+  }
+  if (length(stats_row) < 1L && length(stage_list) < 1L) {
+    return(list(row = NULL, source = "none"))
+  }
+  if (length(stats_row) < 1L) {
+    return(list(row = stage_list, source = "link_stage_log"))
+  }
+  list(
+    row = utils::modifyList(stage_list, stats_row),
+    source = if (length(stage_list) > 0L) "controller_stats+link_stage_log" else "controller_stats"
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_validate_blocker_surface <- function(blockers,
+                                                         link_lag_eligible,
+                                                         link_min_refit_eligible,
+                                                         link_diagnostics_pass,
+                                                         reliability_stop_pass,
+                                                         probe_brier_pass,
+                                                         probe_pred_rmse_pass,
+                                                         theta_global_rmse_pass,
+                                                         realized_before_refit,
+                                                         realized_min,
+                                                         spoke_id,
+                                                         source) {
+  blocker_map <- list(
+    diagnostics_failed = !isTRUE(link_diagnostics_pass),
+    lag_not_eligible = !isTRUE(link_lag_eligible),
+    min_refits_not_met = !isTRUE(link_min_refit_eligible),
+    probe_edges_min_for_stop = as.integer(realized_before_refit %||% 0L) < as.integer(realized_min %||% 0L),
+    reliability_link_global = !isTRUE(reliability_stop_pass),
+    probe_brier = !isTRUE(probe_brier_pass),
+    probe_pred_rmse_lagged = !isTRUE(probe_pred_rmse_pass),
+    theta_global_rmse_lagged = !isTRUE(theta_global_rmse_pass)
+  )
+  blocker_names <- names(blocker_map)
+  blocker_present <- stats::setNames(blocker_names %in% blockers, blocker_names)
+  blocker_expected <- stats::setNames(as.logical(unname(blocker_map)), blocker_names)
+  mismatch <- blocker_names[blocker_present != blocker_expected]
+  if (length(mismatch) > 0L) {
+    rlang::abort(
+      paste0(
+        "Phase B probe-controller invariant failed: canonical stop blockers for spoke_id=",
+        as.integer(spoke_id),
+        " from ",
+        source,
+        " are inconsistent for ",
+        paste(mismatch, collapse = ", "),
+        "."
+      )
+    )
+  }
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_sole_blocker_trigger <- function(surface_row,
+                                                      surface_source,
+                                                      controller,
+                                                      spoke_id,
+                                                      realized_before_refit,
+                                                      realized_min,
+                                                      panel_shortfall_start) {
+  if (!isTRUE(controller$probe_sole_blocker_acceleration_enabled)) {
+    return(FALSE)
+  }
+  if (is.null(surface_row) || length(surface_row) < 1L) {
+    return(FALSE)
+  }
+
+  link_lag_eligible <- as.logical(
+    .adaptive_link_probe_surface_value(surface_row, "link_lag_eligible", default = NA)
+  )
+  link_min_refit_eligible <- as.logical(
+    .adaptive_link_probe_surface_value(surface_row, "link_min_refit_eligible", default = NA)
+  )
+  link_diagnostics_pass <- as.logical(
+    .adaptive_link_probe_surface_value(surface_row, "link_diagnostics_pass", default = NA)
+  )
+  reliability_stop_pass <- as.logical(
+    .adaptive_link_probe_surface_value(surface_row, "reliability_stop_pass", default = NA)
+  )
+  probe_brier_pass <- as.logical(
+    .adaptive_link_probe_surface_value(surface_row, "probe_brier_pass", default = NA)
+  )
+  probe_pred_rmse_pass <- as.logical(
+    .adaptive_link_probe_surface_value(surface_row, "probe_pred_rmse_pass", default = NA)
+  )
+  theta_global_rmse_pass <- as.logical(
+    .adaptive_link_probe_surface_value(surface_row, "theta_global_rmse_pass", default = NA)
+  )
+  blockers <- .adaptive_link_probe_parse_blocker_codes(
+    .adaptive_link_probe_surface_value(surface_row, "stop_blocker_codes", default = NA_character_)
+  )
+  required_flags_available <- all(!is.na(c(
+    link_lag_eligible,
+    link_min_refit_eligible,
+    link_diagnostics_pass,
+    reliability_stop_pass,
+    probe_brier_pass,
+    probe_pred_rmse_pass,
+    theta_global_rmse_pass
+  )))
+
+  prelim_conditions <- c(
+    isTRUE(link_lag_eligible),
+    isTRUE(link_min_refit_eligible),
+    isTRUE(link_diagnostics_pass),
+    isTRUE(reliability_stop_pass),
+    isTRUE(probe_brier_pass),
+    isTRUE(probe_pred_rmse_pass),
+    isTRUE(theta_global_rmse_pass),
+    as.integer(realized_before_refit) >= as.integer(controller$probe_sole_blocker_min_realized %||% 20L),
+    as.integer(realized_before_refit) < as.integer(realized_min),
+    as.integer(panel_shortfall_start) > 0L
+  )
+  if (all(prelim_conditions) && length(blockers) < 1L) {
+    rlang::abort(
+      paste0(
+        "Phase B probe-controller invariant failed: canonical stop blockers are unavailable for ",
+        "spoke_id=", as.integer(spoke_id),
+        " from ", surface_source, "."
+      )
+    )
+  }
+  if (!isTRUE(required_flags_available)) {
+    return(FALSE)
+  }
+  if (!isTRUE(all(prelim_conditions))) {
+    return(FALSE)
+  }
+  if (length(blockers) < 1L) {
+    return(FALSE)
+  }
+
+  .adaptive_link_probe_validate_blocker_surface(
+    blockers = blockers,
+    link_lag_eligible = link_lag_eligible,
+    link_min_refit_eligible = link_min_refit_eligible,
+    link_diagnostics_pass = link_diagnostics_pass,
+    reliability_stop_pass = reliability_stop_pass,
+    probe_brier_pass = probe_brier_pass,
+    probe_pred_rmse_pass = probe_pred_rmse_pass,
+    theta_global_rmse_pass = theta_global_rmse_pass,
+    realized_before_refit = realized_before_refit,
+    realized_min = realized_min,
+    spoke_id = spoke_id,
+    source = surface_source
+  )
+
+  isTRUE(all(prelim_conditions)) &&
+    identical(length(blockers), 1L) &&
+    identical(blockers[[1L]], "probe_edges_min_for_stop")
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_probe_budget_info_for_spoke <- function(state, controller, spoke_id) {
   controller <- .adaptive_runtime_controller_resolve(state, controller)
   spoke_id <- as.integer(spoke_id %||% NA_integer_)
@@ -595,7 +788,11 @@
 
 #' @keywords internal
 #' @noRd
-.adaptive_link_probe_effort_plan <- function(state, controller, spoke_id) {
+.adaptive_link_probe_effort_plan <- function(state,
+                                             controller,
+                                             spoke_id,
+                                             surface_row = NULL,
+                                             surface_source = NULL) {
   controller <- .adaptive_runtime_controller_resolve(state, controller)
   spoke_id <- as.integer(spoke_id %||% NA_integer_)
   base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
@@ -612,15 +809,23 @@
   remaining_to_min_start <- max(0L, as.integer(realized_min - realized_before_refit))
   panel_shortfall_start <- max(0L, as.integer(panel_n - realized_before_refit))
 
-  stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[as.character(spoke_id)]] %||% list()
-  last_stage_row <- .adaptive_link_probe_last_stage_row(state, spoke_id = spoke_id)
+  if (is.null(surface_row)) {
+    surface_info <- .adaptive_link_probe_runtime_surface_row(
+      state = state,
+      controller = controller,
+      spoke_id = spoke_id
+    )
+    surface_row <- surface_info$row
+    surface_source <- as.character(surface_info$source %||% "none")
+  } else {
+    surface_source <- as.character(surface_source %||% "explicit_surface")
+  }
   linking_identified <- isTRUE(
-    stats_row$link_identified %||%
-      if (nrow(last_stage_row) > 0L) last_stage_row$linking_identified[[1L]] else FALSE
+    .adaptive_link_probe_surface_value(surface_row, "link_identified", default = NULL) %||%
+      .adaptive_link_probe_surface_value(surface_row, "linking_identified", default = FALSE)
   )
   link_stop_eligible <- isTRUE(
-    stats_row$link_stop_eligible %||%
-      if (nrow(last_stage_row) > 0L) last_stage_row$link_stop_eligible[[1L]] else FALSE
+    .adaptive_link_probe_surface_value(surface_row, "link_stop_eligible", default = FALSE)
   )
 
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
@@ -633,7 +838,7 @@
     spoke_id = spoke_id
   )
   budget <- max(0L, as.integer(budget_info$B_spoke_refit_budget %||% 0L))
-  active_floor_used <- if (isTRUE(controller$probe_active_floor_enabled) && budget > 0L) {
+  bootstrap_active_floor <- if (isTRUE(controller$probe_active_floor_enabled) && budget > 0L) {
     max(
       as.integer(controller$probe_active_floor_min %||% 20L),
       as.integer(ceiling(as.double(controller$probe_active_floor_frac %||% 0.5) * budget))
@@ -670,7 +875,26 @@
     }
   }
 
-  bootstrap_gate_open <- isTRUE(controller$probe_active_floor_enabled) &&
+  probe_only_blocker_trigger <- .adaptive_link_probe_sole_blocker_trigger(
+    surface_row = surface_row,
+    surface_source = surface_source,
+    controller = controller,
+    spoke_id = spoke_id,
+    realized_before_refit = realized_before_refit,
+    realized_min = realized_min,
+    panel_shortfall_start = panel_shortfall_start
+  )
+  active_floor_used <- if (isTRUE(probe_only_blocker_trigger) && budget > 0L) {
+    min(
+      as.integer(budget),
+      as.integer(controller$probe_sole_blocker_active_floor_min %||% 10L)
+    )
+  } else {
+    as.integer(bootstrap_active_floor)
+  }
+
+  bootstrap_gate_open <- !isTRUE(probe_only_blocker_trigger) &&
+    isTRUE(controller$probe_active_floor_enabled) &&
     phase_b_active &&
     !isTRUE(spoke_frozen) &&
     budget > 0L &&
@@ -678,8 +902,17 @@
     realized_total < realized_min &&
     active_nonprobe >= active_floor_used &&
     isTRUE(anchor_progress_met)
-  probe_only_blocker_trigger <- FALSE
-  effective_cap <- if (isTRUE(bootstrap_gate_open)) {
+  sole_blocker_gate_open <- isTRUE(probe_only_blocker_trigger) &&
+    phase_b_active &&
+    !isTRUE(spoke_frozen) &&
+    budget > 0L &&
+    active_nonprobe >= active_floor_used
+  effective_cap <- if (isTRUE(sole_blocker_gate_open)) {
+    min(
+      as.integer(controller$probe_pairs_per_refit_per_spoke_sole_blocker_max %||% base_cap),
+      remaining_to_min_start
+    )
+  } else if (isTRUE(bootstrap_gate_open)) {
     min(
       as.integer(controller$probe_pairs_per_refit_per_spoke_bootstrap_max %||% base_cap),
       remaining_to_min_start
@@ -707,7 +940,7 @@
     active_nonprobe_since_refit = as.integer(active_nonprobe),
     anchor_progress_met = as.logical(anchor_progress_met),
     probe_only_blocker_trigger = as.logical(probe_only_blocker_trigger),
-    allow_when_active = as.logical(bootstrap_gate_open),
+    allow_when_active = as.logical(sole_blocker_gate_open || bootstrap_gate_open),
     acceleration_used = as.logical(acceleration_used)
   )
 }

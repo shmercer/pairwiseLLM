@@ -5709,10 +5709,20 @@
     } else {
       "insufficient_realization"
     }
+    prior_stage_row <- .adaptive_link_probe_last_stage_row(
+      state = state,
+      spoke_id = as.integer(spoke_id)
+    )
     probe_effort_plan <- .adaptive_link_probe_effort_plan(
       state = state,
       controller = controller,
-      spoke_id = as.integer(spoke_id)
+      spoke_id = as.integer(spoke_id),
+      surface_row = if (nrow(prior_stage_row) > 0L) prior_stage_row[1L, , drop = FALSE] else NULL,
+      surface_source = if (nrow(prior_stage_row) > 0L) {
+        "link_stage_log_window_start"
+      } else {
+        "none"
+      }
     )
     probe_effort_base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
     probe_panel_reallocation_used <- .adaptive_link_probe_panel_reallocation_used(probe_panel)

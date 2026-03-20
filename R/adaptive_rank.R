@@ -566,9 +566,8 @@ make_adaptive_judge_llm <- function(
 #'     rise above the base cap only after the current refit window reaches the
 #'     canonical active floor. Default is `TRUE`.}
 #'   \item{`probe_sole_blocker_acceleration_enabled`}{When `TRUE`, the runtime
-#'     carries canonical sole-blocker acceleration scaffolding. The end-to-end
-#'     sole-blocker trigger still follows the current reviewed Phase B runtime.
-#'     Default is `TRUE`.}
+#'     enables the canonical sole-blocker acceleration path when probe count is
+#'     the only remaining stop blocker for the spoke. Default is `TRUE`.}
 #'   \item{`probe_pairs_per_refit_per_spoke_bootstrap_max`}{Maximum held-out
 #'     probe cap permitted by active-floor bootstrap acceleration. Must be at
 #'     least `probe_pairs_per_refit_per_spoke`. Default is `6L`.}

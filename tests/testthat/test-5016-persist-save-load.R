@@ -1005,6 +1005,19 @@ test_that("save/load preserves probe acceleration controller fields and canonica
       probe_sole_blocker_active_floor_min = 10L
     )
   )
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_epoch_id = 4L,
+      link_lag_eligible = TRUE,
+      link_min_refit_eligible = TRUE,
+      link_diagnostics_pass = TRUE,
+      reliability_stop_pass = TRUE,
+      probe_brier_pass = TRUE,
+      probe_pred_rmse_pass = TRUE,
+      theta_global_rmse_pass = TRUE,
+      stop_blocker_codes = "probe_edges_min_for_stop"
+    )
+  )
   state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
     pairwiseLLM:::new_link_stage_log(),
     list(
@@ -1016,8 +1029,11 @@ test_that("save/load preserves probe acceleration controller fields and canonica
       link_stop_pass = FALSE,
       link_state_frozen = FALSE,
       probe_acceleration_mode_used = "active_floor_plus_sole_blocker",
-      probe_active_floor_used = 20L,
-      probe_only_blocker_trigger = FALSE
+      probe_active_floor_used = 10L,
+      probe_only_blocker_trigger = TRUE,
+      probe_acceleration_used = TRUE,
+      probe_effort_base_cap = 2L,
+      probe_effort_effective_cap = 7L
     )
   )
 
@@ -1042,14 +1058,24 @@ test_that("save/load preserves probe acceleration controller fields and canonica
   expect_true(all(c(
     "probe_acceleration_mode_used",
     "probe_active_floor_used",
-    "probe_only_blocker_trigger"
+    "probe_only_blocker_trigger",
+    "probe_acceleration_used",
+    "probe_effort_base_cap",
+    "probe_effort_effective_cap"
   ) %in% names(restored$link_stage_log)))
   expect_identical(
     as.character(restored$link_stage_log$probe_acceleration_mode_used[[1L]]),
     "active_floor_plus_sole_blocker"
   )
-  expect_identical(as.integer(restored$link_stage_log$probe_active_floor_used[[1L]]), 20L)
-  expect_false(isTRUE(restored$link_stage_log$probe_only_blocker_trigger[[1L]]))
+  expect_identical(as.integer(restored$link_stage_log$probe_active_floor_used[[1L]]), 10L)
+  expect_true(isTRUE(restored$link_stage_log$probe_only_blocker_trigger[[1L]]))
+  expect_true(isTRUE(restored$link_stage_log$probe_acceleration_used[[1L]]))
+  expect_identical(as.integer(restored$link_stage_log$probe_effort_base_cap[[1L]]), 2L)
+  expect_identical(as.integer(restored$link_stage_log$probe_effort_effective_cap[[1L]]), 7L)
+  expect_identical(
+    as.character(restored$controller$link_refit_stats_by_spoke$`2`$stop_blocker_codes),
+    "probe_edges_min_for_stop"
+  )
 })
 
 test_that("resume preserves probe panel identity, epoch, and realized counts across a chunk boundary", {
