@@ -340,7 +340,7 @@ test_that("run_one_step gives active-link work precedence over held-out probes",
   expect_true(nrow(out$linking$probe$panels_by_spoke[["2"]]) >= 1L)
 })
 
-test_that("run_one_step can route held-out probes after the active floor path opens", {
+test_that("run_one_step preserves a legal active selection after probe acceleration opens", {
   items <- tibble::tibble(
     item_id = c(paste0("h", seq_len(4L)), paste0("s2", seq_len(4L))),
     set_id = c(rep(1L, 4L), rep(2L, 4L)),
@@ -386,28 +386,26 @@ test_that("run_one_step can route held-out probes after the active floor path op
   state$refit_meta$refit_pairs_target_current <- 4L
   state$controller$refit_pairs_target <- 4L
 
-  active_selection <- list(
-    candidate_starved = FALSE,
-    A = 1L,
-    B = 5L
-  )
+  active_selection <- pairwiseLLM:::select_next_pair(state, step_id = 1L)
+  expect_false(isTRUE(active_selection$candidate_starved))
 
   out <- testthat::with_mocked_bindings(
     pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins")),
     select_next_pair = function(...) active_selection,
     .adaptive_link_probe_next_holdout_spoke = function(..., allow_when_active = FALSE) {
-      expect_true(isTRUE(allow_when_active))
-      2L
+      rlang::abort("probe routing should not replace a legal active selection")
+    },
+    .adaptive_link_probe_select_holdout = function(...) {
+      rlang::abort("probe selection should not run while active-link work is legal")
     },
     .package = "pairwiseLLM"
   )
 
   row <- out$step_log[nrow(out$step_log), , drop = FALSE]
-  expect_identical(as.character(row$run_mode[[1L]]), "link_probe_holdout")
-  expect_true(isTRUE(row$is_probe_step[[1L]]))
-  expect_true(isTRUE(row$is_holdout_probe_step[[1L]]))
-  expect_identical(as.integer(row$link_spoke_id[[1L]]), 2L)
-  expect_identical(nrow(out$linking$probe$realized_edges), 1L)
+  expect_identical(as.character(row$run_mode[[1L]]), "link_one_spoke")
+  expect_false(isTRUE(row$is_probe_step[[1L]]))
+  expect_false(isTRUE(row$is_holdout_probe_step[[1L]]))
+  expect_identical(nrow(out$linking$probe$realized_edges), 0L)
 })
 
 test_that("run_one_step uses link_probe_holdout after active-link starvation", {

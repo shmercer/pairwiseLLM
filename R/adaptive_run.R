@@ -870,8 +870,15 @@
         stage_order = .adaptive_stage_order(),
         refit_id = .adaptive_link_refit_window_id(state)
       )
-      anchor_progress_met <- as.integer(stage_progress$stage_committed[["anchor_link"]] %||% 0L) >=
-        as.integer(stage_progress$stage_quotas[["anchor_link"]] %||% 0L)
+      exhausted_map <- .adaptive_link_refit_exhausted_map(state)
+      refit_key <- .adaptive_link_refit_spoke_key(
+        refit_id = .adaptive_link_refit_window_id(state),
+        spoke_id = as.integer(spoke_id)
+      )
+      exhausted_state <- exhausted_map[[refit_key]] %||% list()
+      anchor_stage_exhausted <- isTRUE(exhausted_state[["anchor_link"]])
+      anchor_progress_met <- as.integer(stage_progress$stage_realized[["anchor_link"]] %||% 0L) > 0L ||
+        isTRUE(anchor_stage_exhausted)
     }
   }
 
@@ -999,10 +1006,8 @@
     )
   }
   frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
-  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
 
   budgeted_spokes <- integer()
-  pending_spokes <- integer()
   for (spoke_id in effective_spokes) {
     key <- as.character(spoke_id)
     if (isTRUE(frozen_map[[key]])) {
@@ -1013,24 +1018,11 @@
       next
     }
     budgeted_spokes <- c(budgeted_spokes, as.integer(spoke_id))
-    cross_since <- .adaptive_link_cross_edges(
-      state = state,
-      spoke_id = as.integer(spoke_id),
-      last_refit_step = last_refit_step
-    )
-    active_edges_since_refit <- if (nrow(cross_since) > 0L) {
-      as.integer(sum(!as.logical(cross_since$is_probe_step %||% FALSE), na.rm = TRUE))
-    } else {
-      0L
-    }
-    if (active_edges_since_refit < 1L) {
-      pending_spokes <- c(pending_spokes, as.integer(spoke_id))
-    }
   }
 
   list(
-    block_probes = length(pending_spokes) > 0L,
-    pending_spokes = as.integer(sort(unique(pending_spokes))),
+    block_probes = FALSE,
+    pending_spokes = integer(),
     budgeted_spokes = as.integer(sort(unique(budgeted_spokes)))
   )
 }

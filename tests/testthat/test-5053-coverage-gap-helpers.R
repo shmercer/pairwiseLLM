@@ -757,6 +757,55 @@ test_that("probe effort plan opens active-floor routing only after floor and anc
   expect_identical(plan2$effective_cap, 6L)
 })
 
+test_that("probe effort plan treats canonical anchor-stage exhaustion as anchor progress", {
+  append_active_step <- function(state, step_id, A_id, B_id, spoke_id, stage_name) {
+    out <- append_cross_probe_step(
+      state = state,
+      step_id = step_id,
+      A_id = A_id,
+      B_id = B_id,
+      Y = 1L,
+      spoke_id = spoke_id,
+      is_probe_step = FALSE,
+      run_mode = "link_multi_spoke"
+    )
+    idx <- nrow(out$step_log)
+    out$step_log$round_stage[[idx]] <- as.character(stage_name)
+    out$step_log$link_stage[[idx]] <- as.character(stage_name)
+    out
+  }
+
+  state <- make_link_probe_state()
+  state$controller$probe_pairs_per_refit_per_spoke <- 2L
+  state$controller$probe_pairs_per_refit_per_spoke_bootstrap_max <- 6L
+  state$controller$probe_accel_bootstrap_target <- 12L
+  state$controller$probe_active_floor_frac <- 0.5
+  state$controller$probe_active_floor_min <- 1L
+  state$controller$probe_active_floor_requires_anchor_progress <- TRUE
+  state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
+  state$controller$link_budget_map <- list(
+    `2` = list(
+      B_spoke_refit_budget = 2L,
+      B_spoke_refit_budget_source = "single_spoke_controller"
+    )
+  )
+  state$refit_meta$link_stage_exhausted_by_refit_spoke <- list(
+    `1::2` = list(anchor_link = TRUE)
+  )
+  state <- append_active_step(state, 31L, "h1", "s21", 2L, "long_link")
+
+  plan <- pairwiseLLM:::.adaptive_link_probe_effort_plan(
+    state = state,
+    controller = state$controller,
+    spoke_id = 2L
+  )
+  expect_true(isTRUE(plan$active_floor_met))
+  expect_true(isTRUE(plan$anchor_progress_met))
+  expect_true(isTRUE(plan$allow_when_active))
+  expect_true(isTRUE(plan$acceleration_used))
+  expect_identical(plan$effective_cap, 6L)
+})
+
 test_that("probe effort plan applies sole-blocker acceleration only when probe count is the only blocker", {
   append_active_step <- function(state, step_id, A_id, B_id, spoke_id, stage_name) {
     out <- append_cross_probe_step(
@@ -1040,7 +1089,7 @@ test_that("independent multi-spoke holdout routing ignores inactive spokes", {
   expect_identical(next_spoke, 2L)
 })
 
-test_that("concurrent probe fairness guard waits for minimum active progress before holdout catch-up", {
+test_that("concurrent probe progress guard does not impose a cross-spoke startup gate", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),
     set_id = c(1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L),
@@ -1136,8 +1185,9 @@ test_that("concurrent probe fairness guard waits for minimum active progress bef
     ),
     .package = "pairwiseLLM"
   )
-  expect_true(isTRUE(guard0$block_probes))
-  expect_identical(guard0$pending_spokes, c(2L, 3L))
+  expect_false(isTRUE(guard0$block_probes))
+  expect_identical(guard0$pending_spokes, integer())
+  expect_identical(guard0$budgeted_spokes, c(2L, 3L))
 
   state <- append_cross_probe_step(state, 11L, "h1", "s21", 1L, 2L, run_mode = "link_multi_spoke")
   state$step_log$is_probe_step[nrow(state$step_log)] <- FALSE
@@ -1151,8 +1201,9 @@ test_that("concurrent probe fairness guard waits for minimum active progress bef
     ),
     .package = "pairwiseLLM"
   )
-  expect_true(isTRUE(guard1$block_probes))
-  expect_identical(guard1$pending_spokes, 3L)
+  expect_false(isTRUE(guard1$block_probes))
+  expect_identical(guard1$pending_spokes, integer())
+  expect_identical(guard1$budgeted_spokes, c(2L, 3L))
 
   state <- append_cross_probe_step(state, 12L, "h1", "s31", 1L, 3L, run_mode = "link_multi_spoke")
   state$step_log$is_probe_step[nrow(state$step_log)] <- FALSE
@@ -1168,6 +1219,7 @@ test_that("concurrent probe fairness guard waits for minimum active progress bef
   )
   expect_false(isTRUE(guard2$block_probes))
   expect_identical(guard2$pending_spokes, integer())
+  expect_identical(guard2$budgeted_spokes, c(2L, 3L))
 
   single_spoke_guard <- pairwiseLLM:::.adaptive_link_probe_active_progress_guard(
     state,

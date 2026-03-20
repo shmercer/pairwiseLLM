@@ -714,31 +714,6 @@ run_one_step <- function(state, judge, ...) {
   } else {
     state <- .adaptive_refresh_round_anchors(state)
     selection <- select_next_pair(state, step_id = step_id)
-    if (.adaptive_link_mode_active(controller) &&
-      identical(phase_ctx$phase, "phase_b") &&
-      !isTRUE(selection$candidate_starved)) {
-      probe_spoke_id <- .adaptive_link_probe_next_holdout_spoke(
-        state,
-        controller,
-        eligible_spoke_ids = .adaptive_link_effective_active_spokes(
-          state = state,
-          controller = controller,
-          refit_id = .adaptive_link_refit_window_id(state),
-          exclude_exhausted = TRUE
-        ),
-        allow_when_active = TRUE
-      )
-      if (!is.na(probe_spoke_id)) {
-        probe_selection <- .adaptive_link_probe_select_holdout(
-          state,
-          step_id = step_id,
-          spoke_id = probe_spoke_id
-        )
-        if (!is.null(probe_selection) && nrow(tibble::as_tibble(probe_selection)) != 0L) {
-          selection <- probe_selection
-        }
-      }
-    }
     if (isTRUE(selection$candidate_starved) &&
       .adaptive_link_mode_active(controller) &&
       identical(phase_ctx$phase, "phase_b")) {
