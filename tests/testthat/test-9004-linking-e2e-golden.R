@@ -55,84 +55,11 @@ golden_import_artifacts <- function(state, spoke_shift = -0.8) {
 }
 
 golden_e2e_run <- function() {
-  out <- withr::with_seed(20260217, {
-    items <- golden_two_set_items()
-    base <- pairwiseLLM::adaptive_rank_start(items, seed = 313L)
-    base$warm_start_done <- TRUE
-    base$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
-    artifacts <- golden_import_artifacts(base, spoke_shift = -0.8)
-    fit_stub <- make_deterministic_fit_fn(as.character(base$item_ids))
-    judge <- golden_score_judge(c(h1 = -0.6, h2 = 0.1, h3 = 0.8, s21 = -0.7, s22 = 0.0, s23 = 0.9))
-
-    out_a <- pairwiseLLM::adaptive_rank_run_live(
-      state = base,
-      judge = judge,
-      n_steps = 12L,
-      fit_fn = fit_stub$fit_fn,
-      adaptive_config = list(
-        run_mode = "link_one_spoke",
-        hub_id = 1L,
-        phase_a_mode = "import",
-        phase_a_artifacts = artifacts,
-        link_transform_policy = "auto",
-        link_stop_reliability_min = 0.0,
-        link_rank_corr_min = 0.0,
-        delta_sd_max = 100,
-        delta_change_max = 100,
-        probe_pairs_per_refit_per_spoke = 2L
-      ),
-      btl_config = test_link_btl_config(list(
-        refit_pairs_target = 1L,
-        stability_lag = 1L,
-        eap_reliability_min = 0.0,
-        theta_corr_min = 0.0,
-        rank_spearman_min = 0.0
-      )),
-      progress = "none"
-    )
-
-    out_b <- pairwiseLLM:::.adaptive_link_apply_stop_state(
-      out_a,
-      tibble::tibble(
-        refit_id = as.integer(nrow(out_a$round_log) + 1L),
-        spoke_id = 2L,
-        link_stop_pass = TRUE,
-        link_transform_state = "shift_only",
-        delta_spoke_mean = 0.0,
-        log_alpha_spoke_mean = NA_real_
-      )
-    )
-    pairwiseLLM::adaptive_rank_run_live(
-      state = out_b,
-      judge = judge,
-      n_steps = 18L,
-      fit_fn = fit_stub$fit_fn,
-      adaptive_config = list(
-        run_mode = "link_one_spoke",
-        hub_id = 1L,
-        phase_a_mode = "import",
-        phase_a_artifacts = artifacts,
-        link_transform_policy = "auto",
-        link_stop_reliability_min = 0.0,
-        link_rank_corr_min = 0.0,
-        delta_sd_max = 100,
-        delta_change_max = 100,
-        probe_pairs_per_refit_per_spoke = 2L
-      ),
-      btl_config = test_link_btl_config(list(
-        refit_pairs_target = 1L,
-        stability_lag = 1L,
-        eap_reliability_min = 0.0,
-        theta_corr_min = 0.0,
-        rank_spearman_min = 0.0
-      )),
-      progress = "none"
-    )
-  })
+  out <- make_positive_probe_acceleration_runtime_state()
 
   step_focus <- out$step_log[, c(
     "step_id", "run_mode", "is_probe_step", "is_cross_set", "link_spoke_id",
-    "round_stage", "link_stage", "utility_mode"
+    "round_stage", "link_stage", "fallback_used", "candidate_starved", "utility_mode"
   ), drop = FALSE]
   link_focus <- out$link_stage_log[, c(
     "refit_id", "spoke_id", "link_state_frozen", "link_stop_eligible", "link_stop_pass",
@@ -219,11 +146,10 @@ run_golden_e2e_in_clean_r <- function() {
 test_that("deterministic linking e2e run preserves canonical golden logs", {
   run <- run_golden_e2e_in_clean_r()
 
-  # After the Phase B starvation/runtime alignment work, this deterministic
-  # trace includes the last committed anchor-link step before the final
-  # pooled_backfill starvation step. The prior golden was also missing the
-  # canonical probe-acceleration audit fields now required by the normative
-  # held-out controller and is no longer complete.
+  # The prior golden only proved the acceleration audit columns existed while
+  # remaining inactive. The normative runtime now requires a deterministic
+  # trace with actual accelerated holdout work and canonical acceleration
+  # audit rows.
   fixture_path <- testthat::test_path("fixtures", "linking-e2e-golden.rds")
   expect_true(file.exists(fixture_path))
   fixture <- readRDS(fixture_path)

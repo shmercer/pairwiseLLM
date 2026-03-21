@@ -5725,6 +5725,12 @@
       }
     )
     probe_effort_base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
+    probe_acceleration_used_logged <- isTRUE(probe_effort_plan$acceleration_used %||% FALSE) ||
+      n_pairs_since_probe > probe_effort_base_cap
+    probe_effort_effective_cap_logged <- max(
+      as.integer(probe_effort_plan$effective_cap %||% probe_effort_base_cap),
+      as.integer(n_pairs_since_probe)
+    )
     probe_panel_reallocation_used <- .adaptive_link_probe_panel_reallocation_used(probe_panel)
     probe_cache <- tibble::as_tibble(.adaptive_link_probe_state(state)$prediction_cache)
     probe_pred_cache_used <- nrow(probe_cache[
@@ -6054,11 +6060,9 @@
       probe_only_blocker_trigger = as.logical(
         probe_effort_plan$probe_only_blocker_trigger %||% FALSE
       ),
-      probe_acceleration_used = as.logical(probe_effort_plan$acceleration_used %||% FALSE),
+      probe_acceleration_used = as.logical(probe_acceleration_used_logged),
       probe_effort_base_cap = as.integer(probe_effort_plan$base_cap %||% probe_effort_base_cap),
-      probe_effort_effective_cap = as.integer(
-        probe_effort_plan$effective_cap %||% probe_effort_base_cap
-      ),
+      probe_effort_effective_cap = as.integer(probe_effort_effective_cap_logged),
       probe_remaining_to_min_start = as.integer(
         probe_effort_plan$remaining_to_min_start %||% NA_integer_
       ),
