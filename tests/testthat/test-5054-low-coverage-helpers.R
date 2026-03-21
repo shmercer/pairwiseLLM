@@ -1124,11 +1124,11 @@ test_that("low-coverage probe panel restoration, run helpers, and cost estimator
 
   blocked_holdout <- holdout_state
   blocked_holdout$refit_meta$refit_pairs_target_current <- 1L
-  expect_true(is.na(pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
+  expect_identical(pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
     blocked_holdout,
     controller = blocked_holdout$controller,
     eligible_spoke_ids = c(2L, 3L)
-  )))
+  ), 2L)
 
   fully_realized <- state
   full_panel <- panel

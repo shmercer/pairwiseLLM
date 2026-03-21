@@ -995,6 +995,26 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_released_cap_when_active <- function(plan) {
+  plan <- plan %||% list()
+  if (!isTRUE(plan$allow_when_active %||% FALSE)) {
+    return(0L)
+  }
+  active_nonprobe <- max(0L, as.integer(plan$active_nonprobe_since_refit %||% 0L))
+  active_floor <- max(0L, as.integer(plan$active_floor_used %||% 0L))
+  effective_cap <- max(0L, as.integer(plan$effective_cap %||% 0L))
+  if (effective_cap < 1L) {
+    return(0L)
+  }
+
+  # Release one accelerated hold-out slot when the floor is first met, then
+  # at most one additional slot for each further active-link commit.
+  released_cap <- max(0L, active_nonprobe - active_floor + 1L)
+  as.integer(min(effective_cap, released_cap))
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_probe_active_progress_guard <- function(state,
                                                        controller,
                                                        eligible_spoke_ids = NULL) {
@@ -1118,19 +1138,6 @@
 
   realized_min <- as.integer(controller$probe_edges_min_for_stop %||% 30L)
   probe_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
-  refit_target <- max(0L, as.integer(
-    state$refit_meta$refit_pairs_target_current %||%
-      controller$refit_pairs_target %||%
-      0L
-  ))
-  global_probe_cap <- max(0L, refit_target - 1L)
-  if (global_probe_cap <= 0L) {
-    return(NA_integer_)
-  }
-  holdout_total_since_refit <- .adaptive_link_probe_holdout_total_since_last_refit(state)
-  if (holdout_total_since_refit >= global_probe_cap) {
-    return(NA_integer_)
-  }
   fairness_guard <- .adaptive_link_probe_active_progress_guard(
     state = state,
     controller = controller,
@@ -1182,6 +1189,9 @@
     }
     realized_refit <- as.integer(plan$realized_refit %||% 0L)
     effective_cap <- as.integer(plan$effective_cap %||% probe_cap)
+    if (isTRUE(allow_when_active)) {
+      effective_cap <- .adaptive_link_probe_released_cap_when_active(plan)
+    }
     if (realized_refit >= effective_cap) {
       return(NULL)
     }

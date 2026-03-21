@@ -755,6 +755,15 @@ test_that("probe effort plan opens active-floor routing only after floor and anc
   expect_true(isTRUE(plan2$allow_when_active))
   expect_true(isTRUE(plan2$acceleration_used))
   expect_identical(plan2$effective_cap, 6L)
+  expect_identical(pairwiseLLM:::.adaptive_link_probe_released_cap_when_active(plan2), 1L)
+
+  state_with_anchor_more <- append_active_step(state_with_anchor, 23L, "h3", "s21", 2L, "mid_link")
+  plan3 <- pairwiseLLM:::.adaptive_link_probe_effort_plan(
+    state = state_with_anchor_more,
+    controller = state_with_anchor_more$controller,
+    spoke_id = 2L
+  )
+  expect_identical(pairwiseLLM:::.adaptive_link_probe_released_cap_when_active(plan3), 2L)
 })
 
 test_that("probe effort plan treats canonical anchor-stage exhaustion as anchor progress", {
