@@ -354,6 +354,85 @@ test_that("round_log_row handles prior-round attribution and quota source select
   expect_true(is.na(row$ts_btl_rank_spearman))
 })
 
+test_that("round_log_row suppresses global stop reasons during phase_b linking", {
+  state <- adaptive_rank_start(
+    tibble::tibble(
+      item_id = c("h1", "h2", "s21", "s22"),
+      set_id = c(1L, 1L, 2L, 2L),
+      global_item_id = c("gh1", "gh2", "gs21", "gs22")
+    ),
+    seed = 17L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$linking$phase_a$phase <- "phase_b"
+  state$linking$phase_a$ready_for_phase_b <- TRUE
+  state$linking$phase_a$strict_ready_for_phase_b <- TRUE
+  state$linking$phase_a$ready_spokes <- 2L
+  state$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L),
+    source = c("run", "run"),
+    status = c("ready", "ready"),
+    validation_message = c("ok", "ok"),
+    artifact_path = c(NA_character_, NA_character_)
+  )
+  state$trueskill_state <- NULL
+  draws <- matrix(
+    c(
+      0.2, 0.1, -0.1, -0.2,
+      0.3, 0.0, -0.2, -0.1
+    ),
+    nrow = 2L,
+    byrow = TRUE,
+    dimnames = list(NULL, c("h1", "h2", "s21", "s22"))
+  )
+  state$btl_fit <- list(
+    btl_posterior_draws = draws,
+    theta_mean = c(h1 = 0.25, h2 = 0.05, s21 = -0.15, s22 = -0.15),
+    model_variant = "btl_e_b"
+  )
+
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+      pair_id = 1L,
+      i = 1L,
+      j = 3L,
+      A = 1L,
+      B = 3L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_one_spoke",
+      is_probe_step = FALSE,
+      round_stage = "anchor_link"
+    )
+  )
+
+  row <- pairwiseLLM:::.adaptive_round_log_row(
+    state = state,
+    metrics = list(diagnostics_pass = TRUE),
+    stop_decision = TRUE,
+    stop_reason = "btl_converged",
+    refit_context = list(
+      step_id_at_refit = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:01:00", tz = "UTC"),
+      last_refit_M_done = 0L,
+      last_refit_step = 0L
+    ),
+    config = list(near_tie_p_low = 0.4, near_tie_p_high = 0.6)
+  )
+
+  expect_false(isTRUE(row$stop_decision))
+  expect_true(is.na(row$stop_reason))
+  expect_identical(as.integer(row$new_active_pairs_since_last_refit), 1L)
+  expect_identical(as.integer(row$new_probe_pairs_since_last_refit), 0L)
+  expect_identical(as.integer(row$new_total_cross_pairs_since_last_refit), 1L)
+})
+
 test_that("default_btl_fit_fn scopes Phase A linking refits to active set ids", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s1", "s2"),

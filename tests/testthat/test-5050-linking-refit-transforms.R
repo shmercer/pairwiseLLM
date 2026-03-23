@@ -81,6 +81,34 @@ append_cross_step <- function(state, step_id, A_id, B_id, Y, spoke_id) {
   state
 }
 
+append_probe_step <- function(state, step_id, hub_item_id, spoke_item_id, Y, spoke_id) {
+  ids <- as.character(state$item_ids)
+  hub_idx <- match(hub_item_id, ids)
+  spoke_idx <- match(spoke_item_id, ids)
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = as.integer(step_id),
+      timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC") + as.integer(step_id),
+      pair_id = as.integer(step_id),
+      i = as.integer(hub_idx),
+      j = as.integer(spoke_idx),
+      A = as.integer(hub_idx),
+      B = as.integer(spoke_idx),
+      Y = as.integer(Y),
+      set_i = as.integer(state$set_ids[[hub_idx]]),
+      set_j = as.integer(state$set_ids[[spoke_idx]]),
+      is_cross_set = TRUE,
+      link_spoke_id = as.integer(spoke_id),
+      run_mode = "link_probe_holdout",
+      is_probe_step = TRUE,
+      link_stage = "probe_panel",
+      round_stage = "probe_panel"
+    )
+  )
+  state
+}
+
 current_link_epoch_signature <- function(state,
                                          spoke_id,
                                          transform_state = "shift_only",
@@ -1719,6 +1747,202 @@ test_that("link_stage_log rows expose feasibility and blocker explanations canon
   expect_false(isTRUE(row$probe_pred_rmse_pass[[1L]]))
   expect_false(isTRUE(row$theta_global_rmse_pass[[1L]]))
   expect_identical(as.character(row$lag_domain_reset_reason[[1L]]), "spoke_artifact_replaced")
+})
+
+test_that("link_stage_log probe sole-blocker audit uses refit-start blocker state", {
+  build_probe_audit_state <- function(realized_before_refit,
+                                      realized_current_refit,
+                                      current_stop_blocker_codes) {
+    total_realized <- as.integer(realized_before_refit + realized_current_refit)
+    state <- make_linking_refit_state(list(
+      multi_spoke_mode = "independent",
+      probe_edges_min_for_stop = 30L,
+      probe_sole_blocker_min_realized = 20L,
+      probe_pairs_per_refit_per_spoke = 2L,
+      probe_pairs_per_refit_per_spoke_sole_blocker_max = 10L
+    ))
+    state$controller$linking_identified_by_spoke <- list(`2` = TRUE)
+    state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+    state$controller$link_budget_refit_id <- 7L
+    state$controller$link_budget_map <- list(
+      `2` = list(
+        B_spoke_refit_budget = 10L,
+        B_spoke_refit_budget_source = "single_spoke_controller"
+      )
+    )
+    state$refit_meta$last_refit_step <- as.integer(realized_before_refit)
+
+    panel_keys <- paste0("probe_pair_", seq_len(40L))
+    spoke_probe_ids <- rep(c("s21", "s22"), length.out = 40L)
+    state$linking$probe$panels_by_spoke <- list(
+      `2` = tibble::tibble(
+        probe_panel_id = "panel_a",
+        link_epoch_id = 4L,
+        spoke_id = 2L,
+        hub_item_id = rep("h1", 40L),
+        spoke_item_id = spoke_probe_ids,
+        spoke_bin = rep(1L, 40L),
+        hub_bin = rep(1L, 40L),
+        planned_rank = seq_len(40L),
+        pair_key = panel_keys,
+        realized = seq_len(40L) <= total_realized,
+        realized_step_id = c(seq_len(total_realized), rep(NA_integer_, 40L - total_realized)),
+        realized_pair_id = c(seq_len(total_realized), rep(NA_integer_, 40L - total_realized)),
+        realized_run_mode = c(
+          rep("link_probe_holdout", total_realized),
+          rep(NA_character_, 40L - total_realized)
+        )
+      )
+    )
+    state$linking$probe$realized_edges <- tibble::tibble(
+      step_id = seq_len(total_realized),
+      pair_id = seq_len(total_realized),
+      run_mode = rep("link_probe_holdout", total_realized),
+      spoke_id = rep(2L, total_realized),
+      link_epoch_id = rep(4L, total_realized),
+      probe_panel_id = rep("panel_a", total_realized),
+      hub_item_id = rep("h1", total_realized),
+      spoke_item_id = spoke_probe_ids[seq_len(total_realized)],
+      pair_key = panel_keys[seq_len(total_realized)],
+      Y = rep(1L, total_realized)
+    )
+    for (step_id in seq_len(total_realized)) {
+      state <- append_probe_step(
+        state = state,
+        step_id = step_id,
+        hub_item_id = "h1",
+        spoke_item_id = spoke_probe_ids[[step_id]],
+        Y = 1L,
+        spoke_id = 2L
+      )
+    }
+
+    state$controller$link_refit_stats_by_spoke <- list(
+      `2` = list(
+        link_epoch_id = 4L,
+        link_identified = TRUE,
+        linking_identified = TRUE,
+        link_stop_eligible = identical(current_stop_blocker_codes, "none"),
+        probe_panel_shortfall = max(0L, 40L - total_realized),
+        probe_panel_id = "panel_a",
+        probe_edges_planned = 40L,
+        probe_edges_realized = total_realized,
+        probe_edges_min_for_stop_used = 30L,
+        probe_brier = 0.10,
+        probe_brier_max_used = 0.19,
+        probe_brier_pass = TRUE,
+        probe_pred_rmse_lagged = 0.01,
+        probe_pred_rmse_max_used = 0.015,
+        probe_pred_rmse_pass = TRUE,
+        theta_global_rmse_lagged = 0.02,
+        theta_global_rmse_max_used = 0.05,
+        theta_global_rmse_pass = TRUE,
+        delta_spoke_sd = 0.20,
+        link_stop_reliability_min_used = 0.90,
+        reliability_link_global = 0.95,
+        reliability_stop_pass = TRUE,
+        link_diagnostics_pass = TRUE,
+        link_lag_eligible = TRUE,
+        lag_eligible = TRUE,
+        link_min_refit_eligible = TRUE,
+        hub_anchored = TRUE,
+        stop_blocker_codes = current_stop_blocker_codes
+      )
+    )
+
+    prior_surface_row <- list(
+      refit_id = 6L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_refit_mode = "shift_only",
+      hub_lock_mode = "soft_lock",
+      link_epoch_id = 4L,
+      probe_panel_id = "panel_a",
+      probe_edges_planned = 40L,
+      probe_edges_realized_before_refit = max(0L, realized_before_refit - 2L),
+      probe_edges_realized_delta_since_last_refit = 2L,
+      probe_edges_realized = as.integer(realized_before_refit),
+      probe_edges_min_for_stop_used = 30L,
+      probe_panel_shortfall = max(0L, 40L - realized_before_refit),
+      link_diagnostics_pass = TRUE,
+      link_lag_eligible = TRUE,
+      link_min_refit_eligible = TRUE,
+      link_stop_reliability_min_used = 0.90,
+      reliability_link_global = 0.95,
+      probe_brier = 0.10,
+      probe_brier_max_used = 0.19,
+      probe_pred_rmse_lagged = 0.01,
+      probe_pred_rmse_max_used = 0.015,
+      theta_global_rmse_lagged = 0.02,
+      theta_global_rmse_max_used = 0.05,
+      hub_anchored = TRUE,
+      stop_blocker_codes = "probe_edges_min_for_stop",
+      link_stop_pass = FALSE,
+      link_state_frozen = FALSE
+    )
+    state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+      state$link_stage_log,
+      prior_surface_row
+    )
+
+    state
+  }
+
+  rows_before_threshold <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(...) tibble::tibble(),
+    .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+      list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      tibble::as_tibble(candidates)
+    },
+    pairwiseLLM:::.adaptive_link_stage_refit_rows(
+      state = build_probe_audit_state(
+        realized_before_refit = 18L,
+        realized_current_refit = 2L,
+        current_stop_blocker_codes = "probe_edges_min_for_stop"
+      ),
+      refit_id = 7L,
+      refit_context = list(last_refit_step = 18L)
+    ),
+    .package = "pairwiseLLM"
+  )
+  row_before_threshold <- rows_before_threshold[rows_before_threshold$spoke_id == 2L, , drop = FALSE]
+  expect_identical(as.integer(row_before_threshold$probe_edges_realized_before_refit[[1L]]), 18L)
+  expect_false(isTRUE(row_before_threshold$probe_only_blocker_trigger[[1L]]))
+  expect_false(isTRUE(row_before_threshold$probe_acceleration_used[[1L]]))
+  expect_identical(as.integer(row_before_threshold$probe_effort_effective_cap[[1L]]), 2L)
+  expect_identical(as.integer(row_before_threshold$probe_remaining_to_min_start[[1L]]), 12L)
+
+  rows_at_threshold <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(...) tibble::tibble(),
+    .adaptive_filter_link_backfill_candidates = function(candidates, ...) {
+      list(candidates = tibble::as_tibble(candidates), counts = list(), star_caps = list())
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      tibble::as_tibble(candidates)
+    },
+    pairwiseLLM:::.adaptive_link_stage_refit_rows(
+      state = build_probe_audit_state(
+        realized_before_refit = 20L,
+        realized_current_refit = 10L,
+        current_stop_blocker_codes = "none"
+      ),
+      refit_id = 7L,
+      refit_context = list(last_refit_step = 20L)
+    ),
+    .package = "pairwiseLLM"
+  )
+  row_at_threshold <- rows_at_threshold[rows_at_threshold$spoke_id == 2L, , drop = FALSE]
+  expect_identical(as.character(row_at_threshold$stop_blocker_codes[[1L]]), "none")
+  expect_identical(as.integer(row_at_threshold$probe_edges_realized_before_refit[[1L]]), 20L)
+  expect_true(isTRUE(row_at_threshold$probe_only_blocker_trigger[[1L]]))
+  expect_true(isTRUE(row_at_threshold$probe_acceleration_used[[1L]]))
+  expect_identical(as.integer(row_at_threshold$probe_active_floor_used[[1L]]), 10L)
+  expect_identical(as.integer(row_at_threshold$probe_effort_effective_cap[[1L]]), 10L)
+  expect_identical(as.integer(row_at_threshold$probe_remaining_to_min_start[[1L]]), 10L)
 })
 
 test_that("linking stage targets are deterministic from budget, floors, and taper", {
