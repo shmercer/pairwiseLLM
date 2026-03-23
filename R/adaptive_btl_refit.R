@@ -5734,6 +5734,7 @@
     probe_remaining_to_min_start_logged <- as.integer(
       probe_effort_plan$remaining_to_min_start %||% NA_integer_
     )
+    bootstrap_acceleration_used_logged <- FALSE
     probe_active_floor_used_logged <- as.integer(
       probe_effort_plan$active_floor_used %||% 0L
     )
@@ -5741,10 +5742,7 @@
       probe_effort_plan$probe_only_blocker_trigger %||% FALSE
     )
     probe_effort_effective_cap_logged <- as.integer(
-      max(
-        as.integer(probe_effort_plan$effective_cap %||% probe_effort_base_cap),
-        as.integer(n_pairs_since_probe)
-      )
+      probe_effort_plan$effective_cap %||% probe_effort_base_cap
     )
     if (nrow(prior_stage_row) > 0L) {
       probe_remaining_to_min_start_logged <- max(
@@ -5794,14 +5792,19 @@
         as.integer(probe_edges_realized_before_refit) <
           as.integer(controller$probe_accel_bootstrap_target %||% 12L) &&
         as.integer(probe_edges_realized_before_refit) <
-          as.integer(controller$probe_edges_min_for_stop %||% 30L)
+          as.integer(controller$probe_edges_min_for_stop %||% 30L) &&
+        as.integer(n_pairs_since_active) >= as.integer(probe_active_floor_used_logged) &&
+        isTRUE(probe_effort_plan$anchor_progress_met %||% TRUE)
+      bootstrap_acceleration_used_logged <- isTRUE(bootstrap_acceleration_logged) &&
+        any(as.character(since_last_probe$fallback_used %||% character()) %in%
+          "probe_panel_acceleration")
       probe_effort_effective_cap_logged <- if (isTRUE(probe_only_blocker_trigger_logged)) {
         min(
           as.integer(controller$probe_pairs_per_refit_per_spoke_sole_blocker_max %||%
             probe_effort_base_cap),
           as.integer(probe_remaining_to_min_start_logged)
         )
-      } else if (isTRUE(bootstrap_acceleration_logged)) {
+      } else if (isTRUE(bootstrap_acceleration_used_logged)) {
         min(
           as.integer(controller$probe_pairs_per_refit_per_spoke_bootstrap_max %||%
             probe_effort_base_cap),
@@ -5810,13 +5813,14 @@
       } else {
         as.integer(probe_effort_base_cap)
       }
-      probe_effort_effective_cap_logged <- as.integer(max(
-        as.integer(probe_effort_effective_cap_logged),
-        as.integer(n_pairs_since_probe)
-      ))
     }
     probe_acceleration_used_logged <- as.logical(
-      as.integer(n_pairs_since_probe) > as.integer(probe_effort_base_cap)
+      (isTRUE(probe_only_blocker_trigger_logged) ||
+        isTRUE(bootstrap_acceleration_used_logged) ||
+        as.integer(probe_effort_effective_cap_logged) > as.integer(probe_effort_base_cap)) %||%
+        probe_effort_plan$acceleration_used %||%
+        (as.integer(probe_effort_effective_cap_logged) >
+          as.integer(probe_effort_base_cap))
     )
     probe_panel_reallocation_used <- .adaptive_link_probe_panel_reallocation_used(probe_panel)
     probe_cache <- tibble::as_tibble(.adaptive_link_probe_state(state)$prediction_cache)
