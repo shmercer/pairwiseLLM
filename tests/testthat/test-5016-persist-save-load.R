@@ -384,6 +384,7 @@ test_that("load_adaptive_session reconciles refit boundaries and committed histo
     nrow(restored$history_pairs),
     as.integer(sum(!is.na(step_log$pair_id)))
   )
+  expect_history_state_matches_history(restored)
 })
 
 test_that("load_adaptive_session aborts when canonical round totals do not reconcile to committed steps", {
@@ -495,6 +496,29 @@ test_that("load_adaptive_session accepts canonical round totals with held-out pr
   expect_identical(nrow(restored$history_pairs), 1L)
   expect_identical(as.character(restored$history_pairs$A_id[[1L]]), "h1")
   expect_identical(as.character(restored$history_pairs$B_id[[1L]]), "s21")
+  expect_history_state_matches_history(restored)
+})
+
+test_that("load_adaptive_session aborts on persisted history-state divergence", {
+  items <- make_test_items(4)
+  state <- adaptive_rank_start(items, seed = 34L)
+  judge <- make_deterministic_judge("i_wins")
+
+  withr::local_seed(1)
+  state <- adaptive_rank_run_live(state, judge, n_steps = 2L, progress = "none")
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  state_path <- file.path(session_dir, "state.rds")
+  persisted_state <- readRDS(state_path)
+  persisted_state$history_state$deg[[1L]] <- persisted_state$history_state$deg[[1L]] + 1L
+  saveRDS(persisted_state, state_path)
+
+  expect_error(
+    load_adaptive_session(session_dir),
+    "history-state invariant failed during resume"
+  )
 })
 
 test_that("load_adaptive_session rebuilds current refit summary cache from canonical logs", {

@@ -968,7 +968,7 @@ test_that("low-coverage CmdStan, concurrent allocation, selector, and print help
     controller = pairwiseLLM:::.adaptive_controller_resolve(selector_state),
     generation_stage = "long_link",
     round = selector_state$round,
-    history = pairwiseLLM:::.adaptive_history_tbl(selector_state),
+    history_state = pairwiseLLM:::.adaptive_history_state_resolve(selector_state),
     counts = pairwiseLLM:::.adaptive_pair_counts(
       pairwiseLLM:::.adaptive_history_tbl(selector_state),
       selector_state$item_ids
@@ -1478,7 +1478,7 @@ test_that("low-coverage holdout commit, selector fallback, CmdStan wrapper, and 
       ),
       generation_stage = "long_link",
       round = selector_state$round,
-      history = pairwiseLLM:::.adaptive_history_tbl(selector_state),
+      history_state = pairwiseLLM:::.adaptive_history_state_resolve(selector_state),
       counts = pairwiseLLM:::.adaptive_pair_counts(
         pairwiseLLM:::.adaptive_history_tbl(selector_state),
         selector_state$item_ids

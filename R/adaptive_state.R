@@ -1824,6 +1824,7 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
     A_id = character(),
     B_id = character()
   )
+  history_state <- .adaptive_history_state_empty(item_ids)
 
   state <- structure(
     list(
@@ -1834,6 +1835,7 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
       n_items = as.integer(length(item_ids)),
       items = items,
       history_pairs = history_pairs,
+      history_state = history_state,
       step_log = new_step_log(now_fn = now_fn),
       round_log = new_round_log(),
       item_log = list(),

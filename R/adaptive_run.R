@@ -2370,9 +2370,13 @@
 
   i_id <- as.character(probe_row$hub_item_id[[1L]])
   j_id <- as.character(probe_row$spoke_item_id[[1L]])
-  history <- .adaptive_history_tbl(state)
-  counts <- .adaptive_pair_counts(history, state$item_ids)
-  recent_deg <- .adaptive_recent_deg(history, state$item_ids, adaptive_defaults(length(state$item_ids))$W_cap)
+  history_state <- .adaptive_history_state_resolve(state, ids = state$item_ids)
+  counts <- .adaptive_history_state_counts(history_state, state$item_ids)
+  recent_deg <- .adaptive_history_state_recent_deg(
+    history_state,
+    state$item_ids,
+    adaptive_defaults(length(state$item_ids))$W_cap
+  )
   order_vals <- .adaptive_assign_order(
     tibble::tibble(i = i_id, j = j_id),
     counts$posA,

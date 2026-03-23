@@ -81,8 +81,8 @@ validate_judge_result <- function(result, A_id, B_id) {
 
   i_id <- as.character(pair$i_id[[1L]])
   j_id <- as.character(pair$j_id[[1L]])
-  history <- .adaptive_history_tbl(state)
-  counts <- .adaptive_pair_counts(history, state$item_ids)
+  history_state <- .adaptive_history_state_resolve(state, ids = state$item_ids)
+  counts <- .adaptive_history_state_counts(history_state, state$item_ids)
   seed_base <- as.integer(state$meta$seed %||% 1L)
 
   order_vals <- .adaptive_assign_order(
@@ -103,7 +103,11 @@ validate_judge_result <- function(result, A_id, B_id) {
   u0_ij <- p_ij * (1 - p_ij)
 
   idx_map <- state$item_index %||% stats::setNames(seq_along(state$item_ids), state$item_ids)
-  recent_deg <- .adaptive_recent_deg(history, state$item_ids, adaptive_defaults(length(state$item_ids))$W_cap)
+  recent_deg <- .adaptive_history_state_recent_deg(
+    history_state,
+    state$item_ids,
+    adaptive_defaults(length(state$item_ids))$W_cap
+  )
   defaults <- adaptive_defaults(length(state$item_ids))
   controller <- .adaptive_controller_resolve(state)
   run_mode <- as.character(controller$run_mode %||% "within_set")
@@ -732,6 +736,11 @@ apply_step_update <- function(state, step) {
   }
 
   out$history_pairs <- dplyr::bind_rows(out$history_pairs, new_history)
+  history_state <- .adaptive_history_state_resolve(
+    out,
+    ids = as.character(out$item_ids)
+  )
+  out$history_state <- .adaptive_history_state_update(history_state, step$A_id, step$B_id)
 
   winner_id <- if (step$Y == 1L) step$A_id else step$B_id
   loser_id <- if (step$Y == 1L) step$B_id else step$A_id
@@ -739,7 +748,7 @@ apply_step_update <- function(state, step) {
 
   items <- out$trueskill_state$items
   item_ids <- as.character(items$item_id)
-  counts <- .adaptive_pair_counts(out$history_pairs, item_ids)
+  counts <- .adaptive_history_state_counts(out$history_state, item_ids)
   degree <- as.integer(counts$deg[item_ids])
 
   rows <- tibble::tibble(

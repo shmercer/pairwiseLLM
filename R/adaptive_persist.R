@@ -458,6 +458,20 @@ read_log <- function(path) {
   state
 }
 
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_rebuild_state <- function(state,
+                                                  validate_existing = FALSE,
+                                                  context = "runtime") {
+  state$history_state <- .adaptive_history_state_resolve(
+    state,
+    ids = as.character(state$item_ids %||% character()),
+    validate_existing = validate_existing,
+    context = context
+  )
+  state
+}
+
 .adaptive_resume_history_pairs_from_step_log <- function(state, step_log) {
   step_log <- tibble::as_tibble(step_log %||% tibble::tibble())
   if (nrow(step_log) < 1L || !all(c("pair_id", "A", "B") %in% names(step_log))) {
@@ -486,6 +500,7 @@ read_log <- function(path) {
   step_log <- tibble::as_tibble(step_log %||% tibble::tibble())
   round_log <- tibble::as_tibble(round_log %||% tibble::tibble())
   state$history_pairs <- .adaptive_resume_history_pairs_from_step_log(state, step_log)
+  state <- .adaptive_history_state_rebuild_state(state, validate_existing = TRUE, context = "resume")
 
   refit_meta <- state$refit_meta %||% list()
   if (nrow(round_log) < 1L) {
@@ -1083,6 +1098,7 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
     context = "save",
     validate_existing = FALSE
   )
+  state <- .adaptive_history_state_rebuild_state(state, validate_existing = TRUE, context = "save")
 
   metadata <- list(
     schema_version = as.character(state$meta$schema_version %||% "adaptive-session"),
@@ -1234,6 +1250,7 @@ load_adaptive_session <- function(session_dir) {
     step_log = state$step_log,
     round_log = state$round_log
   )
+  state <- .adaptive_history_state_rebuild_state(state, validate_existing = TRUE, context = "load")
   state <- .adaptive_link_refit_summary_rebuild_current(state)
   state <- .adaptive_link_probe_realized_index_rebuild_state(
     state,

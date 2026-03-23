@@ -38,6 +38,10 @@ make_test_state <- function(items, trueskill_state, history = tibble::tibble()) 
   state <- pairwiseLLM:::new_adaptive_state(items)
   state$trueskill_state <- trueskill_state
   state$history_pairs <- make_history(history)
+  state$history_state <- pairwiseLLM:::.adaptive_history_state_rebuild(
+    state$history_pairs,
+    state$item_ids
+  )
   state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
   state$warm_start_idx <- 1L
   state$warm_start_done <- TRUE
@@ -66,6 +70,7 @@ snapshot_state_core <- function(state) {
     "n_items",
     "items",
     "history_pairs",
+    "history_state",
     "item_log",
     "item_step_log",
     "trueskill_state",
@@ -77,6 +82,38 @@ snapshot_state_core <- function(state) {
     "config",
     "meta"
   )]
+}
+
+expect_history_state_matches_history <- function(state, W_cap = NULL) {
+  ids <- as.character(state$item_ids)
+  history <- pairwiseLLM:::.adaptive_history_tbl(state)
+  cache <- pairwiseLLM:::.adaptive_history_state_resolve(
+    state,
+    ids = ids,
+    validate_existing = TRUE,
+    context = "test"
+  )
+  raw_counts <- pairwiseLLM:::.adaptive_pair_counts(history, ids)
+  cache_counts <- pairwiseLLM:::.adaptive_history_state_counts(cache, ids)
+
+  expect_identical(as.integer(cache$n_pairs), as.integer(nrow(history)))
+  expect_identical(cache_counts$deg, raw_counts$deg)
+  expect_identical(cache_counts$posA, raw_counts$posA)
+  expect_identical(cache_counts$posB, raw_counts$posB)
+  expect_identical(
+    pairwiseLLM:::.adaptive_history_state_pair_count_normalize(cache_counts$pair_count),
+    pairwiseLLM:::.adaptive_history_state_pair_count_normalize(raw_counts$pair_count)
+  )
+  expect_identical(
+    pairwiseLLM:::.adaptive_history_state_pair_last_order_normalize(cache_counts$pair_last_order),
+    pairwiseLLM:::.adaptive_history_state_pair_last_order_normalize(raw_counts$pair_last_order)
+  )
+
+  W_cap <- as.integer(W_cap %||% pairwiseLLM:::adaptive_defaults(length(ids))$W_cap)
+  expect_identical(
+    pairwiseLLM:::.adaptive_history_state_recent_deg(cache, ids, W_cap),
+    pairwiseLLM:::.adaptive_recent_deg(history, ids, W_cap)
+  )
 }
 
 make_test_btl_fit <- function(ids,

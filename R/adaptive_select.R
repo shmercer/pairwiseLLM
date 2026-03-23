@@ -165,6 +165,426 @@ adaptive_defaults <- function(N) {
   recent
 }
 
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_recent_window_max <- function() {
+  2000L
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_empty <- function(ids) {
+  ids <- as.character(ids)
+  zero <- stats::setNames(rep.int(0L, length(ids)), ids)
+  list(
+    n_pairs = 0L,
+    deg = zero,
+    posA = zero,
+    posB = zero,
+    pair_count = stats::setNames(integer(), character()),
+    pair_last_order = list(),
+    recent_pairs = tibble::tibble(
+      A_id = character(),
+      B_id = character()
+    )
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_validate <- function(cache, ids, context = "runtime") {
+  ids <- as.character(ids)
+  required <- c("n_pairs", "deg", "posA", "posB", "pair_count", "pair_last_order", "recent_pairs")
+  if (!is.list(cache)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state` must be a list."
+      )
+    )
+  }
+  missing <- setdiff(required, names(cache))
+  if (length(missing) > 0L) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state` is missing required fields: ",
+        paste(missing, collapse = ", "),
+        "."
+      )
+    )
+  }
+  n_pairs <- as.integer(cache$n_pairs %||% NA_integer_)
+  if (length(n_pairs) != 1L || is.na(n_pairs) || n_pairs < 0L) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$n_pairs` must be a single non-negative integer."
+      )
+    )
+  }
+
+  .validate_named_counts <- function(x, field) {
+    if (!is.integer(x)) {
+      rlang::abort(
+        paste0(
+          "Adaptive history-state invariant failed during ",
+          context,
+          ": `history_state$",
+          field,
+          "` must be an integer vector."
+        )
+      )
+    }
+    if (is.null(names(x)) || !identical(names(x), ids)) {
+      rlang::abort(
+        paste0(
+          "Adaptive history-state invariant failed during ",
+          context,
+          ": `history_state$",
+          field,
+          "` names must exactly match `state$item_ids`."
+        )
+      )
+    }
+    if (any(is.na(x)) || any(x < 0L)) {
+      rlang::abort(
+        paste0(
+          "Adaptive history-state invariant failed during ",
+          context,
+          ": `history_state$",
+          field,
+          "` must be non-missing and non-negative."
+        )
+      )
+    }
+  }
+
+  .validate_named_counts(cache$deg, "deg")
+  .validate_named_counts(cache$posA, "posA")
+  .validate_named_counts(cache$posB, "posB")
+
+  pair_count <- cache$pair_count %||% integer()
+  if (!is.integer(pair_count)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_count` must be an integer vector."
+      )
+    )
+  }
+  if (length(pair_count) > 0L && is.null(names(pair_count))) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_count` must be named when non-empty."
+      )
+    )
+  }
+  if (any(is.na(pair_count)) || any(pair_count < 0L)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_count` must be non-missing and non-negative."
+      )
+    )
+  }
+
+  pair_last_order <- cache$pair_last_order %||% list()
+  if (!is.list(pair_last_order)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_last_order` must be a list."
+      )
+    )
+  }
+  pair_last_names <- names(pair_last_order) %||% character()
+  if (length(pair_last_order) > 0L &&
+    (length(pair_last_names) != length(pair_last_order) || anyNA(pair_last_names) || any(pair_last_names == ""))) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_last_order` must use non-empty pair-key names."
+      )
+    )
+  }
+  invalid_last_order <- vapply(
+    pair_last_order,
+    function(value) {
+      !is.character(value) || length(value) != 2L || any(is.na(value)) || identical(value[[1L]], value[[2L]])
+    },
+    logical(1L)
+  )
+  if (any(invalid_last_order)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_last_order` values must be length-2 non-self character vectors."
+      )
+    )
+  }
+
+  recent_pairs <- tibble::as_tibble(cache$recent_pairs %||% tibble::tibble())
+  if (!all(c("A_id", "B_id") %in% names(recent_pairs))) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$recent_pairs` must contain `A_id` and `B_id`."
+      )
+    )
+  }
+  recent_pairs <- recent_pairs[, c("A_id", "B_id"), drop = FALSE]
+  recent_pairs$A_id <- as.character(recent_pairs$A_id)
+  recent_pairs$B_id <- as.character(recent_pairs$B_id)
+  max_recent <- .adaptive_history_state_recent_window_max()
+  expected_recent_n <- min(n_pairs, max_recent)
+  if (!identical(nrow(recent_pairs), expected_recent_n)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$recent_pairs` must contain exactly min(n_pairs, ",
+        max_recent,
+        ") rows."
+      )
+    )
+  }
+
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_pair_count_normalize <- function(pair_count) {
+  pair_count_raw <- pair_count %||% integer()
+  pair_count <- as.integer(pair_count_raw)
+  names(pair_count) <- names(pair_count_raw)
+  if (length(pair_count) < 1L) {
+    return(stats::setNames(integer(), character()))
+  }
+  pair_count[order(names(pair_count))]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_pair_last_order_normalize <- function(pair_last_order) {
+  pair_last_order <- pair_last_order %||% list()
+  pair_last_names <- names(pair_last_order) %||% character()
+  if (length(pair_last_order) < 1L) {
+    return(list())
+  }
+  ord <- order(pair_last_names)
+  out <- pair_last_order[ord]
+  names(out) <- pair_last_names[ord]
+  lapply(out, as.character)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_equivalent <- function(cache, rebuilt) {
+  identical(as.integer(cache$n_pairs), as.integer(rebuilt$n_pairs)) &&
+    identical(cache$deg, rebuilt$deg) &&
+    identical(cache$posA, rebuilt$posA) &&
+    identical(cache$posB, rebuilt$posB) &&
+    identical(
+      .adaptive_history_state_pair_count_normalize(cache$pair_count),
+      .adaptive_history_state_pair_count_normalize(rebuilt$pair_count)
+    ) &&
+    identical(
+      .adaptive_history_state_pair_last_order_normalize(cache$pair_last_order),
+      .adaptive_history_state_pair_last_order_normalize(rebuilt$pair_last_order)
+    ) &&
+    identical(
+      tibble::as_tibble(cache$recent_pairs)[, c("A_id", "B_id"), drop = FALSE],
+      tibble::as_tibble(rebuilt$recent_pairs)[, c("A_id", "B_id"), drop = FALSE]
+    )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_rebuild <- function(history, ids) {
+  ids <- as.character(ids)
+  history <- .adaptive_history_tbl(list(history_pairs = history))
+  counts <- .adaptive_pair_counts(history, ids)
+  deg <- as.integer(counts$deg)
+  names(deg) <- names(counts$deg)
+  posA <- as.integer(counts$posA)
+  names(posA) <- names(counts$posA)
+  posB <- as.integer(counts$posB)
+  names(posB) <- names(counts$posB)
+  pair_count <- as.integer(counts$pair_count)
+  names(pair_count) <- names(counts$pair_count)
+  max_recent <- .adaptive_history_state_recent_window_max()
+  recent_pairs <- if (nrow(history) > 0L) {
+    recent <- utils::tail(history, n = min(nrow(history), max_recent))
+    tibble::tibble(
+      A_id = as.character(recent$A_id),
+      B_id = as.character(recent$B_id)
+    )
+  } else {
+    tibble::tibble(A_id = character(), B_id = character())
+  }
+  list(
+    n_pairs = as.integer(nrow(history)),
+    deg = deg,
+    posA = posA,
+    posB = posB,
+    pair_count = pair_count,
+    pair_last_order = counts$pair_last_order,
+    recent_pairs = recent_pairs
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_reconcile <- function(cache, history, ids, context = "runtime") {
+  ids <- as.character(ids)
+  .adaptive_history_state_validate(cache, ids, context = context)
+  rebuilt <- .adaptive_history_state_rebuild(history, ids)
+  if (!isTRUE(.adaptive_history_state_equivalent(cache, rebuilt))) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": persisted cache diverged from canonical committed non-probe history."
+      )
+    )
+  }
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_resolve <- function(state, ids = NULL, validate_existing = FALSE, context = "runtime") {
+  ids <- as.character(ids %||% state$item_ids %||% character())
+  history <- .adaptive_history_tbl(state)
+  cache <- state$history_state %||% NULL
+  if (is.null(cache)) {
+    return(.adaptive_history_state_rebuild(history, ids))
+  }
+
+  cache_ok <- tryCatch(
+    {
+      .adaptive_history_state_validate(cache, ids, context = context)
+      TRUE
+    },
+    error = function(e) {
+      if (isTRUE(validate_existing)) {
+        stop(e)
+      }
+      FALSE
+    }
+  )
+  if (!isTRUE(cache_ok)) {
+    return(.adaptive_history_state_rebuild(history, ids))
+  }
+  if (!identical(as.integer(cache$n_pairs %||% NA_integer_), as.integer(nrow(history)))) {
+    return(.adaptive_history_state_rebuild(history, ids))
+  }
+  if (isTRUE(validate_existing)) {
+    .adaptive_history_state_reconcile(cache, history, ids, context = context)
+  }
+  cache
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_counts <- function(cache, ids) {
+  ids <- as.character(ids)
+  list(
+    deg = cache$deg[ids],
+    posA = cache$posA[ids],
+    posB = cache$posB[ids],
+    pair_count = cache$pair_count,
+    pair_last_order = cache$pair_last_order
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_recent_deg <- function(cache, ids, W_cap) {
+  ids <- as.character(ids)
+  recent <- stats::setNames(rep.int(0L, length(ids)), ids)
+  W_cap <- max(0L, as.integer(W_cap %||% 0L))
+  if (W_cap < 1L || nrow(cache$recent_pairs) < 1L) {
+    return(recent)
+  }
+  window <- utils::tail(cache$recent_pairs, n = min(nrow(cache$recent_pairs), W_cap))
+  A_id <- as.character(window$A_id)
+  B_id <- as.character(window$B_id)
+  for (idx in seq_len(nrow(window))) {
+    A <- A_id[[idx]]
+    B <- B_id[[idx]]
+    if (!A %in% ids || !B %in% ids || identical(A, B)) {
+      next
+    }
+    recent[[A]] <- recent[[A]] + 1L
+    recent[[B]] <- recent[[B]] + 1L
+  }
+  recent
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_update <- function(cache, A_id, B_id) {
+  ids <- names(cache$deg %||% integer())
+  .adaptive_history_state_validate(cache, ids, context = "commit update")
+  A_id <- as.character(A_id %||% NA_character_)
+  B_id <- as.character(B_id %||% NA_character_)
+  if (!A_id %in% ids || !B_id %in% ids || identical(A_id, B_id)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during commit update: invalid committed pair `",
+        A_id,
+        "` vs `",
+        B_id,
+        "`."
+      )
+    )
+  }
+
+  out <- cache
+  out$n_pairs <- as.integer(out$n_pairs) + 1L
+  out$posA[[A_id]] <- out$posA[[A_id]] + 1L
+  out$posB[[B_id]] <- out$posB[[B_id]] + 1L
+  out$deg[[A_id]] <- out$deg[[A_id]] + 1L
+  out$deg[[B_id]] <- out$deg[[B_id]] + 1L
+
+  key <- make_unordered_key(A_id, B_id)
+  pair_count <- out$pair_count %||% stats::setNames(integer(), character())
+  current_count <- as.integer(pair_count[key] %||% 0L)
+  current_count[is.na(current_count)] <- 0L
+  pair_count[key] <- current_count[[1L]] + 1L
+  out$pair_count <- pair_count
+
+  pair_last_order <- out$pair_last_order %||% list()
+  pair_last_order[[key]] <- c(A_id, B_id)
+  out$pair_last_order <- pair_last_order
+
+  recent_pairs <- tibble::as_tibble(out$recent_pairs %||% tibble::tibble())
+  recent_pairs <- dplyr::bind_rows(
+    recent_pairs,
+    tibble::tibble(A_id = A_id, B_id = B_id)
+  )
+  max_recent <- .adaptive_history_state_recent_window_max()
+  if (nrow(recent_pairs) > max_recent) {
+    recent_pairs <- utils::tail(recent_pairs, n = max_recent)
+  }
+  out$recent_pairs <- recent_pairs
+  out
+}
+
 .adaptive_low_degree_set <- function(deg) {
   .adaptive_underrep_set(deg)
 }
@@ -1055,7 +1475,7 @@ adaptive_defaults <- function(N) {
   controller = NULL,
   generation_stage = NULL,
   round,
-  history,
+  history_state,
   counts,
   step_id,
   seed_base,
@@ -1153,7 +1573,7 @@ adaptive_defaults <- function(N) {
   n_after_hard <- nrow(candidates)
 
   cap_count <- ceiling(config$cap_frac * config$W_cap)
-  recent_deg <- .adaptive_recent_deg(history, ids, config$W_cap)
+  recent_deg <- .adaptive_history_state_recent_deg(history_state, ids, config$W_cap)
   allow_repeats <- identical(stage$dup_policy, "relaxed")
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   link_phase_b <- .adaptive_link_mode_active(controller) &&
@@ -1412,8 +1832,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   # Use the full controller for linking predictive utility paths, which need
   # transform and judge-mode fields not carried by the reduced selector view.
   link_controller <- controller_full
-  history <- .adaptive_history_tbl(state)
-  counts <- .adaptive_pair_counts(history, ids)
+  history_state <- .adaptive_history_state_resolve(state, ids = ids)
+  counts <- .adaptive_history_state_counts(history_state, ids)
   step_id <- as.integer(step_id %||% (nrow(state$step_log) + 1L))
   if (length(step_id) != 1L || is.na(step_id) || step_id < 1L) {
     rlang::abort("`step_id` must be a positive integer.")
@@ -1594,7 +2014,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   selected_stage_quota <- as.integer(stage_quota)
   selected_stage_committed_so_far <- as.integer(stage_committed_so_far)
   phase_b_budget_depleted <- FALSE
-  recent_deg <- .adaptive_recent_deg(history, ids, defaults$W_cap)
+  recent_deg <- .adaptive_history_state_recent_deg(history_state, ids, defaults$W_cap)
   .starvation_reason_from_counts <- function(counts) {
     generated <- as.integer(counts$n_candidates_generated %||% 0L)
     after_route <- as.integer(counts$n_candidates_after_route_filters %||% NA_integer_)
@@ -1835,7 +2255,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         controller = controller,
         generation_stage = attempt_generation_stage,
         round = round,
-        history = history,
+        history_state = history_state,
         counts = counts,
         step_id = step_id,
         seed_base = seed_base,
