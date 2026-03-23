@@ -609,6 +609,97 @@ validate_judge_result <- function(result, A_id, B_id) {
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_refit_summary_update_after_commit <- function(state_before, state_after, step_row) {
+  row <- tibble::as_tibble(step_row)
+  if (nrow(row) != 1L) {
+    return(state_after)
+  }
+  if (is.na(as.integer(row$pair_id[[1L]] %||% NA_integer_))) {
+    return(state_after)
+  }
+  if (!isTRUE(row$is_cross_set[[1L]] %||% FALSE)) {
+    return(state_after)
+  }
+  run_mode <- as.character(row$run_mode[[1L]] %||% NA_character_)
+  if (!run_mode %in% c("link_one_spoke", "link_multi_spoke", "link_probe_holdout")) {
+    return(state_after)
+  }
+  spoke_id <- as.integer(row$link_spoke_id[[1L]] %||% NA_integer_)
+  if (is.na(spoke_id)) {
+    return(state_after)
+  }
+  refit_id <- as.integer(.adaptive_link_refit_window_id(state_after))
+  key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = spoke_id)
+  cache <- .adaptive_link_refit_summary_cache(state_after)
+  entry <- cache[[key]] %||% .adaptive_link_refit_summary_current(
+    state = state_after,
+    refit_id = refit_id,
+    spoke_id = spoke_id,
+    refit_context = list(last_refit_step = as.integer(state_after$refit_meta$last_refit_step %||% 0L))
+  )
+  entry <- .adaptive_link_refit_summary_validate(
+    entry = entry,
+    refit_id = refit_id,
+    spoke_id = spoke_id,
+    context = "cache"
+  )
+
+  ids <- as.character(state_before$item_ids %||% character())
+  a_idx <- as.integer(row$A[[1L]] %||% NA_integer_)
+  b_idx <- as.integer(row$B[[1L]] %||% NA_integer_)
+  if (is.na(a_idx) || is.na(b_idx) || a_idx < 1L || b_idx < 1L ||
+    a_idx > length(ids) || b_idx > length(ids)) {
+    rlang::abort(
+      paste0(
+        "Phase B refit summary cache invariant failed for refit_id=",
+        as.integer(refit_id),
+        ", spoke_id=",
+        as.integer(spoke_id),
+        ": committed cross-set cache update requires valid `A`/`B` item indices."
+      )
+    )
+  }
+  pair_key <- make_unordered_key(ids[[a_idx]], ids[[b_idx]])
+  pair_keys_by_spoke <- .adaptive_link_unique_cross_pair_keys(state_after)
+  pair_key_set <- sort(unique(as.character(pair_keys_by_spoke[[as.character(spoke_id)]] %||% character())))
+  if (!pair_key %in% pair_key_set) {
+    pair_key_set <- sort(c(pair_key_set, pair_key))
+  }
+  pair_keys_by_spoke[[as.character(spoke_id)]] <- pair_key_set
+
+  is_probe <- isTRUE(.adaptive_link_is_holdout_probe_rows(row)[[1L]])
+  entry$n_pairs_cross_set_done <- as.integer(entry$n_pairs_cross_set_done + 1L)
+  entry$n_unique_cross_pairs_seen <- as.integer(length(pair_key_set))
+  entry$n_cross_edges_total_since_last_refit <- as.integer(entry$n_cross_edges_total_since_last_refit + 1L)
+  if (isTRUE(is_probe)) {
+    entry$n_pairs_cross_set_probe_done <- as.integer(entry$n_pairs_cross_set_probe_done + 1L)
+    entry$n_cross_edges_probe_since_last_refit <- as.integer(entry$n_cross_edges_probe_since_last_refit + 1L)
+    if (identical(as.character(row$fallback_used[[1L]] %||% NA_character_), "probe_panel_acceleration")) {
+      entry$probe_panel_acceleration_used_since_last_refit <- TRUE
+    }
+  } else {
+    entry$n_pairs_cross_set_active_done <- as.integer(entry$n_pairs_cross_set_active_done + 1L)
+    entry$n_cross_edges_active_since_last_refit <- as.integer(entry$n_cross_edges_active_since_last_refit + 1L)
+    stage_name <- as.character(row$link_stage[[1L]] %||% row$round_stage[[1L]] %||% NA_character_)
+    if (!stage_name %in% .adaptive_stage_order()) {
+      return(state_after)
+    }
+    entry$stage_realized[[stage_name]] <- as.integer(entry$stage_realized[[stage_name]] %||% 0L) + 1L
+  }
+
+  entry <- .adaptive_link_refit_summary_validate(
+    entry = entry,
+    refit_id = refit_id,
+    spoke_id = spoke_id,
+    context = "cache"
+  )
+  state_after$refit_meta <- state_after$refit_meta %||% list()
+  state_after$refit_meta$link_unique_cross_pair_keys_by_spoke <- pair_keys_by_spoke
+  .adaptive_link_refit_summary_store(state_after, entry)
+}
+
+#' @keywords internal
+#' @noRd
 apply_step_update <- function(state, step) {
   out <- state
   if (!all(names(schema_step_log) %in% names(out$step_log))) {
@@ -632,6 +723,11 @@ apply_step_update <- function(state, step) {
 
   if (isTRUE(step$row$is_probe_step %||% FALSE)) {
     out <- .adaptive_link_probe_register_commit(out, step$row)
+    out <- .adaptive_link_refit_summary_update_after_commit(
+      state_before = state,
+      state_after = out,
+      step_row = step$row
+    )
     return(out)
   }
 
@@ -655,7 +751,11 @@ apply_step_update <- function(state, step) {
     degree = degree
   )
   out$item_step_log <- append_item_step_log(out$item_step_log, rows)
-  out
+  .adaptive_link_refit_summary_update_after_commit(
+    state_before = state,
+    state_after = out,
+    step_row = step$row
+  )
 }
 
 #' @keywords internal
@@ -706,6 +806,11 @@ run_one_step <- function(state, judge, ...) {
       state,
       controller = controller,
       spoke_ids = as.integer(active_phase_b_spokes)
+    )
+    state <- .adaptive_link_refit_summary_ensure_current_entries(
+      state = state,
+      spoke_ids = as.integer(active_phase_b_spokes),
+      refit_id = current_refit_id
     )
   }
 

@@ -784,6 +784,24 @@ test_that("round_log and link_stage_log canonically reconcile probe and active w
       as.integer(phase_b_rounds$new_total_cross_pairs_since_last_refit[[idx]]),
       as.integer(sum(link_rows$n_cross_edges_total_since_last_refit, na.rm = TRUE))
     )
+    active_window <- committed_window[
+      !(committed_window$is_probe_step %in% TRUE),
+      ,
+      drop = FALSE
+    ]
+    stage_col <- if ("link_stage" %in% names(active_window)) {
+      "link_stage"
+    } else {
+      "round_stage"
+    }
+    for (stage_name in pairwiseLLM:::.adaptive_stage_order()) {
+      raw_stage_count <- as.integer(sum(as.character(active_window[[stage_col]]) == stage_name, na.rm = TRUE))
+      realized_col <- paste0("stage_realized_", stage_name)
+      expect_identical(
+        as.integer(sum(link_rows[[realized_col]], na.rm = TRUE)),
+        raw_stage_count
+      )
+    }
     expect_identical(
       as.integer(phase_b_rounds$total_pairs_done[[idx]]),
       as.integer(sum(!is.na(step_log$pair_id[seq_len(step_hi)])))

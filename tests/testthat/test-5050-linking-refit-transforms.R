@@ -4599,6 +4599,36 @@ test_that("linking lag domain metadata resets once per spoke domain and persists
   expect_identical(stats2$lag_domain_key, stats1$lag_domain_key)
 })
 
+test_that("current refit summary cache reconciles exactly to canonical step-log counts", {
+  state <- make_linking_refit_state()
+  state <- append_cross_step(state, 1L, "h1", "s21", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+  state <- append_probe_step(state, 3L, "h3", "s21", 1L, spoke_id = 2L)
+  state$step_log$round_stage[1:2] <- c("anchor_link", "mid_link")
+  state$step_log$link_stage[1:2] <- c("anchor_link", "mid_link")
+  state$refit_meta$last_refit_step <- 1L
+
+  state <- pairwiseLLM:::.adaptive_link_refit_summary_rebuild_current(state)
+  summary <- pairwiseLLM:::.adaptive_link_refit_summary_current(
+    state = state,
+    refit_id = pairwiseLLM:::.adaptive_link_refit_window_id(state),
+    spoke_id = 2L,
+    refit_context = list(last_refit_step = 1L),
+    reconcile = TRUE
+  )
+
+  expect_identical(summary$n_pairs_cross_set_done, 3L)
+  expect_identical(summary$n_pairs_cross_set_active_done, 2L)
+  expect_identical(summary$n_pairs_cross_set_probe_done, 1L)
+  expect_identical(summary$n_unique_cross_pairs_seen, 3L)
+  expect_identical(summary$n_cross_edges_active_since_last_refit, 1L)
+  expect_identical(summary$n_cross_edges_probe_since_last_refit, 1L)
+  expect_identical(summary$n_cross_edges_total_since_last_refit, 2L)
+  expect_false(isTRUE(summary$probe_panel_acceleration_used_since_last_refit))
+  expect_identical(summary$stage_realized[["anchor_link"]], 0L)
+  expect_identical(summary$stage_realized[["mid_link"]], 1L)
+})
+
 test_that("D-opt information state accumulates by refit window and logs audit fields", {
   state <- make_linking_refit_state()
   id_map <- stats::setNames(seq_along(state$item_ids), as.character(state$item_ids))

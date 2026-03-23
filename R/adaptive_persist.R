@@ -1240,6 +1240,7 @@ load_adaptive_session <- function(session_dir) {
     step_log = state$step_log,
     round_log = state$round_log
   )
+  state <- .adaptive_link_refit_summary_rebuild_current(state)
   state$controller <- .adaptive_controller_resolve(state)
 
   state$config$session_dir <- session_dir

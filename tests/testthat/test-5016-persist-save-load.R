@@ -497,6 +497,124 @@ test_that("load_adaptive_session accepts canonical round totals with held-out pr
   expect_identical(as.character(restored$history_pairs$B_id[[1L]]), "s21")
 })
 
+test_that("load_adaptive_session rebuilds current refit summary cache from canonical logs", {
+  state <- make_probe_resume_state()
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+      pair_id = 1L,
+      status = "ok",
+      A = 1L,
+      B = 4L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_one_spoke",
+      round_stage = "anchor_link",
+      link_stage = "anchor_link",
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 2L,
+      timestamp = as.POSIXct("2026-01-01 00:01:00", tz = "UTC"),
+      pair_id = 2L,
+      status = "ok",
+      A = 2L,
+      B = 5L,
+      Y = 0L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_probe_holdout",
+      round_stage = "probe_panel",
+      link_stage = "probe_panel",
+      fallback_used = "probe_panel_acceleration",
+      is_probe_step = TRUE,
+      is_holdout_probe_step = TRUE
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  restored <- load_adaptive_session(session_dir)
+  summary <- pairwiseLLM:::.adaptive_link_refit_summary_current(
+    state = restored,
+    refit_id = 1L,
+    spoke_id = 2L,
+    refit_context = list(last_refit_step = 0L),
+    reconcile = TRUE
+  )
+
+  expect_identical(summary$n_pairs_cross_set_done, 2L)
+  expect_identical(summary$n_pairs_cross_set_active_done, 1L)
+  expect_identical(summary$n_pairs_cross_set_probe_done, 1L)
+  expect_identical(summary$n_unique_cross_pairs_seen, 2L)
+  expect_identical(summary$n_cross_edges_active_since_last_refit, 1L)
+  expect_identical(summary$n_cross_edges_probe_since_last_refit, 1L)
+  expect_identical(summary$n_cross_edges_total_since_last_refit, 2L)
+  expect_true(isTRUE(summary$probe_panel_acceleration_used_since_last_refit))
+  expect_identical(summary$stage_realized[["anchor_link"]], 1L)
+})
+
+test_that("load_adaptive_session aborts on refit summary cache drift from canonical logs", {
+  state <- make_probe_resume_state()
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+      pair_id = 1L,
+      status = "ok",
+      A = 1L,
+      B = 4L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_one_spoke",
+      round_stage = "anchor_link",
+      link_stage = "anchor_link",
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE
+    )
+  )
+  state$refit_meta$link_refit_summary_cache_by_refit_spoke <- list(
+    `1::2` = list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      n_pairs_cross_set_done = 999L,
+      n_pairs_cross_set_active_done = 999L,
+      n_pairs_cross_set_probe_done = 0L,
+      n_unique_cross_pairs_seen = 1L,
+      n_cross_edges_active_since_last_refit = 999L,
+      n_cross_edges_probe_since_last_refit = 0L,
+      n_cross_edges_total_since_last_refit = 999L,
+      probe_panel_acceleration_used_since_last_refit = FALSE,
+      stage_realized = c(anchor_link = 999L, long_link = 0L, mid_link = 0L, local_link = 0L)
+    )
+  )
+  state$refit_meta$link_unique_cross_pair_keys_by_spoke <- list(`2` = c("h1::s21"))
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  expect_error(
+    load_adaptive_session(session_dir),
+    "refit summary cache invariant failed"
+  )
+})
+
 test_that("load_adaptive_session accepts legacy round totals that exclude held-out probes", {
   state <- make_probe_resume_state()
   state$step_log <- pairwiseLLM:::append_step_log(

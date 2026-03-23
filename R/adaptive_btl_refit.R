@@ -5329,41 +5329,16 @@
       FALSE
     }
 
-    is_cross <- rep(FALSE, nrow(step_log))
-    if (nrow(step_log) > 0L && all(c("pair_id", "is_cross_set", "link_spoke_id") %in% names(step_log))) {
-      link_spoke <- as.integer(step_log$link_spoke_id)
-      is_cross <- !is.na(step_log$pair_id) &
-        step_log$is_cross_set %in% TRUE &
-        !is.na(link_spoke) &
-        link_spoke == spoke_id
-    }
-    cumulative <- step_log[is_cross, , drop = FALSE]
-    since_last <- cumulative
-    if (nrow(cumulative) > 0L && "step_id" %in% names(cumulative)) {
-      since_last <- cumulative[cumulative$step_id > as.integer(refit_context$last_refit_step %||% 0L), , drop = FALSE]
-    }
-    if (!"run_mode" %in% names(since_last)) {
-      since_last$run_mode <- NA_character_
-    }
-    if (!"is_probe_step" %in% names(since_last)) {
-      since_last$is_probe_step <- NA
-    }
-
-    n_pairs_done <- as.integer(nrow(cumulative))
-    since_last_probe_flag <- .adaptive_link_is_holdout_probe_rows(since_last)
-    since_last_probe <- since_last[
-      since_last_probe_flag,
-      ,
-      drop = FALSE
-    ]
-    since_last_active <- since_last[
-      !since_last_probe_flag,
-      ,
-      drop = FALSE
-    ]
-    n_pairs_since_probe <- as.integer(nrow(since_last_probe))
-    n_pairs_since_active <- as.integer(nrow(since_last_active))
-    n_pairs_since_total <- as.integer(nrow(since_last))
+    refit_summary <- .adaptive_link_refit_summary_current(
+      state = state,
+      refit_id = as.integer(refit_id),
+      spoke_id = as.integer(spoke_id),
+      refit_context = refit_context
+    )
+    n_pairs_done <- as.integer(refit_summary$n_pairs_cross_set_done %||% 0L)
+    n_pairs_since_probe <- as.integer(refit_summary$n_cross_edges_probe_since_last_refit %||% 0L)
+    n_pairs_since_active <- as.integer(refit_summary$n_cross_edges_active_since_last_refit %||% 0L)
+    n_pairs_since_total <- as.integer(refit_summary$n_cross_edges_total_since_last_refit %||% 0L)
     retired_spoke <- isTRUE(stopped_map[[key]]) || isTRUE(frozen_map[[key]])
     budget_info <- budget_map[[key]] %||% if (isTRUE(retired_spoke)) {
       list(
@@ -5407,7 +5382,16 @@
     }
     quota_taper_spoke_id <- as.integer(quota_meta$link_spoke_id %||% spoke_id)
     stage_order <- .adaptive_stage_order()
-    committed_stage <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
+    committed_stage <- stats::setNames(
+      vapply(
+        stage_order,
+        function(stage_name) {
+          as.integer((refit_summary$stage_realized %||% list())[[stage_name]] %||% 0L)
+        },
+        integer(1L)
+      ),
+      stage_order
+    )
     refit_spoke_key <- .adaptive_link_refit_spoke_key(
       refit_id = as.integer(refit_id),
       spoke_id = as.integer(spoke_id)
@@ -5419,24 +5403,6 @@
       0L
     }
     refit_step_start <- as.integer(refit_context$last_refit_step %||% 0L)
-    if (nrow(step_log) > 0L && all(c("pair_id", "step_id", "link_spoke_id", "is_cross_set") %in%
-      names(step_log))) {
-      stage_col <- if ("link_stage" %in% names(step_log)) "link_stage" else "round_stage"
-      stage_rows <- step_log[
-        !is.na(step_log$pair_id) &
-          step_log$is_cross_set %in% TRUE &
-          as.integer(step_log$step_id) > refit_step_start &
-          as.integer(step_log$step_id) <= refit_step_end &
-          as.integer(step_log$link_spoke_id) == as.integer(spoke_id) &
-          as.character(step_log[[stage_col]]) %in% stage_order,
-        ,
-        drop = FALSE
-      ]
-      if (nrow(stage_rows) > 0L) {
-        tab_stage <- table(factor(as.character(stage_rows[[stage_col]]), levels = stage_order))
-        committed_stage[names(tab_stage)] <- as.integer(tab_stage)
-      }
-    }
     stage_quotas <- stats::setNames(
       vapply(
         stage_order,
@@ -5540,13 +5506,7 @@
         )
       )
     }
-    n_unique <- 0L
-    if (nrow(cumulative) > 0L && all(c("A", "B") %in% names(cumulative))) {
-      ids <- as.character(state$item_ids)
-      a_id <- ids[as.integer(cumulative$A)]
-      b_id <- ids[as.integer(cumulative$B)]
-      n_unique <- as.integer(length(unique(make_unordered_key(a_id, b_id))))
-    }
+    n_unique <- as.integer(refit_summary$n_unique_cross_pairs_seen %||% 0L)
 
     spoke_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == spoke_id])
 
@@ -5680,15 +5640,15 @@
         )
       )
     }
-    if (nrow(since_last_probe) > 0L &&
-      !identical(as.integer(nrow(since_last_probe)), as.integer(nrow(realized_probe_log_current_window)))) {
+    if (n_pairs_since_probe > 0L &&
+      !identical(as.integer(n_pairs_since_probe), as.integer(nrow(realized_probe_log_current_window)))) {
       rlang::abort(
         paste0(
           "Phase B probe accounting invariant failed: `n_probe_pairs_since_last_refit` from committed ",
           "probe steps does not match canonical realized probe rows for spoke_id=",
           as.integer(spoke_id),
           " at refit_id=", as.integer(refit_id),
-          ". steps=", as.integer(nrow(since_last_probe)),
+          ". steps=", as.integer(n_pairs_since_probe),
           ", canonical=", as.integer(nrow(realized_probe_log_current_window)),
           "."
         )
@@ -5796,8 +5756,7 @@
         as.integer(n_pairs_since_active) >= as.integer(probe_active_floor_used_logged) &&
         isTRUE(probe_effort_plan$anchor_progress_met %||% TRUE)
       bootstrap_acceleration_used_logged <- isTRUE(bootstrap_acceleration_logged) &&
-        any(as.character(since_last_probe$fallback_used %||% character()) %in%
-          "probe_panel_acceleration")
+        isTRUE(refit_summary$probe_panel_acceleration_used_since_last_refit %||% FALSE)
       probe_effort_effective_cap_logged <- if (isTRUE(probe_only_blocker_trigger_logged)) {
         min(
           as.integer(controller$probe_pairs_per_refit_per_spoke_sole_blocker_max %||%
@@ -5870,8 +5829,9 @@
       } else {
         NA_integer_
       }
-      cumulative_probe_flag <- .adaptive_link_is_holdout_probe_rows(cumulative)
-      anchored_phase_b_active_edges <- as.integer(sum(!cumulative_probe_flag, na.rm = TRUE))
+      anchored_phase_b_active_edges <- as.integer(
+        refit_summary$n_pairs_cross_set_active_done %||% 0L
+      )
       anchored_fit_contract <- stats_row$fit_contract %||% list()
       anchored_priors <- anchored_fit_contract$priors %||% list()
       anchored_joint_contract <- anchored_fit_contract$anchored_joint %||% list()
