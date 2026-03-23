@@ -117,11 +117,18 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_empty_realized_index <- function() {
+  list()
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_probe_empty_state <- function() {
   list(
     panels_by_spoke = list(),
     prediction_cache = .adaptive_link_probe_empty_cache(),
     realized_edges = .adaptive_link_probe_empty_realized_log(),
+    realized_index_by_panel = .adaptive_link_probe_empty_realized_index(),
     collect_holdout_now_by_spoke = list()
   )
 }

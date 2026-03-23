@@ -782,8 +782,299 @@
   probe$realized_edges <- tibble::as_tibble(
     probe$realized_edges %||% .adaptive_link_probe_empty_realized_log()
   )
+  probe$realized_index_by_panel <- probe$realized_index_by_panel %||%
+    .adaptive_link_probe_empty_realized_index()
+  if (!is.list(probe$realized_index_by_panel)) {
+    probe$realized_index_by_panel <- .adaptive_link_probe_empty_realized_index()
+  }
   probe$collect_holdout_now_by_spoke <- probe$collect_holdout_now_by_spoke %||% list()
   probe
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_key <- function(spoke_id, epoch_id, probe_panel_id) {
+  panel_id <- as.character(probe_panel_id %||% NA_character_)
+  if (length(panel_id) != 1L) {
+    panel_id <- panel_id[[1L]] %||% NA_character_
+  }
+  panel_id <- if (is.na(panel_id)) "<NA>" else panel_id
+  paste0(
+    as.integer(spoke_id %||% NA_integer_),
+    "::",
+    as.integer(epoch_id %||% NA_integer_),
+    "::",
+    panel_id
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_entry <- function(spoke_id,
+                                                      epoch_id,
+                                                      probe_panel_id,
+                                                      row_ids = integer(),
+                                                      last_realized_step_id = NA_integer_) {
+  row_ids <- as.integer(row_ids %||% integer())
+  list(
+    spoke_id = as.integer(spoke_id %||% NA_integer_),
+    link_epoch_id = as.integer(epoch_id %||% NA_integer_),
+    probe_panel_id = as.character(probe_panel_id %||% NA_character_),
+    row_ids = as.integer(row_ids),
+    realized_count = as.integer(length(row_ids)),
+    last_realized_step_id = as.integer(last_realized_step_id %||% NA_integer_)
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_build <- function(realized_edges) {
+  realized_edges <- tibble::as_tibble(realized_edges %||% .adaptive_link_probe_empty_realized_log())
+  if (nrow(realized_edges) < 1L) {
+    return(.adaptive_link_probe_empty_realized_index())
+  }
+
+  key_vec <- vapply(
+    seq_len(nrow(realized_edges)),
+    function(idx) {
+      .adaptive_link_probe_realized_index_key(
+        spoke_id = realized_edges$spoke_id[[idx]] %||% NA_integer_,
+        epoch_id = realized_edges$link_epoch_id[[idx]] %||% NA_integer_,
+        probe_panel_id = realized_edges$probe_panel_id[[idx]] %||% NA_character_
+      )
+    },
+    character(1L)
+  )
+  row_ids_by_key <- split(seq_len(nrow(realized_edges)), key_vec)
+  out <- vector("list", length(row_ids_by_key))
+  names(out) <- names(row_ids_by_key)
+  for (key in names(row_ids_by_key)) {
+    group_row_ids <- as.integer(row_ids_by_key[[key]])
+    group_edges <- realized_edges[group_row_ids, , drop = FALSE]
+    latest_idx <- !duplicated(as.character(group_edges$pair_key), fromLast = TRUE)
+    row_ids <- as.integer(group_row_ids[latest_idx])
+    step_ids <- as.integer(realized_edges$step_id[row_ids] %||% integer())
+    last_realized_step_id <- if (length(step_ids) > 0L && any(is.finite(step_ids), na.rm = TRUE)) {
+      suppressWarnings(max(step_ids, na.rm = TRUE))
+    } else {
+      NA_integer_
+    }
+    out[[key]] <- .adaptive_link_probe_realized_index_entry(
+      spoke_id = group_edges$spoke_id[[1L]] %||% NA_integer_,
+      epoch_id = group_edges$link_epoch_id[[1L]] %||% NA_integer_,
+      probe_panel_id = group_edges$probe_panel_id[[1L]] %||% NA_character_,
+      row_ids = row_ids,
+      last_realized_step_id = last_realized_step_id
+    )
+  }
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_compare <- function(index,
+                                                        canonical,
+                                                        context = "runtime") {
+  index <- index %||% .adaptive_link_probe_empty_realized_index()
+  canonical <- canonical %||% .adaptive_link_probe_empty_realized_index()
+  index_keys <- sort(names(index))
+  canonical_keys <- sort(names(canonical))
+  if (!identical(index_keys, canonical_keys)) {
+    rlang::abort(
+      paste0(
+        "Phase B probe realization index invariant failed in ",
+        context,
+        ": indexed panel keys do not match canonical realized-edge reconstruction."
+      )
+    )
+  }
+  for (key in canonical_keys) {
+    indexed_entry <- index[[key]] %||% list()
+    canonical_entry <- canonical[[key]] %||% list()
+    scalar_fields <- c("spoke_id", "link_epoch_id", "probe_panel_id", "realized_count", "last_realized_step_id")
+    for (field in scalar_fields) {
+      indexed_value <- indexed_entry[[field]] %||% NULL
+      canonical_value <- canonical_entry[[field]] %||% NULL
+      if (!identical(indexed_value, canonical_value)) {
+        rlang::abort(
+          paste0(
+            "Phase B probe realization index invariant failed in ",
+            context,
+            ": indexed `",
+            field,
+            "` does not match canonical realized-edge reconstruction for key `",
+            key,
+            "`."
+          )
+        )
+      }
+    }
+    if (!identical(
+      as.integer(indexed_entry$row_ids %||% integer()),
+      as.integer(canonical_entry$row_ids %||% integer())
+    )) {
+      rlang::abort(
+        paste0(
+          "Phase B probe realization index invariant failed in ",
+          context,
+          ": indexed row ids do not match canonical realized-edge reconstruction for key `",
+          key,
+          "`."
+        )
+      )
+    }
+  }
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_reconcile <- function(probe,
+                                                          context = "runtime",
+                                                          validate_existing = FALSE) {
+  probe <- probe %||% .adaptive_link_probe_empty_state()
+  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
+  existing <- probe$realized_index_by_panel %||% .adaptive_link_probe_empty_realized_index()
+  if (!is.list(existing)) {
+    existing <- .adaptive_link_probe_empty_realized_index()
+  }
+  canonical <- .adaptive_link_probe_realized_index_build(realized_edges)
+  if (isTRUE(validate_existing) && length(existing) > 0L) {
+    .adaptive_link_probe_realized_index_compare(existing, canonical, context = context)
+  }
+  probe$realized_edges <- realized_edges
+  probe$realized_index_by_panel <- canonical
+  probe
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_rebuild_state <- function(state,
+                                                              context = "runtime",
+                                                              validate_existing = FALSE) {
+  out <- state
+  out$linking <- out$linking %||% list()
+  probe <- .adaptive_link_probe_state(out)
+  probe <- .adaptive_link_probe_realized_index_reconcile(
+    probe,
+    context = context,
+    validate_existing = validate_existing
+  )
+  out$linking$probe <- probe
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_entry_get <- function(state,
+                                                          spoke_id,
+                                                          epoch_id,
+                                                          probe_panel_id) {
+  probe <- .adaptive_link_probe_state(state)
+  key <- .adaptive_link_probe_realized_index_key(
+    spoke_id = spoke_id,
+    epoch_id = epoch_id,
+    probe_panel_id = probe_panel_id
+  )
+  entry <- probe$realized_index_by_panel[[key]] %||% NULL
+  if (!is.null(entry)) {
+    return(entry)
+  }
+  canonical <- .adaptive_link_probe_realized_index_build(probe$realized_edges)
+  canonical[[key]] %||% NULL
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_rows_from_entry <- function(state, entry) {
+  entry <- entry %||% list()
+  row_ids <- as.integer(entry$row_ids %||% integer())
+  probe <- .adaptive_link_probe_state(state)
+  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
+  if (length(row_ids) < 1L || nrow(realized_edges) < 1L) {
+    return(.adaptive_link_probe_empty_realized_log())
+  }
+  if (any(!is.finite(row_ids) | is.na(row_ids) | row_ids < 1L | row_ids > nrow(realized_edges))) {
+    rlang::abort(
+      paste(
+        "Phase B probe realization index invariant failed:",
+        "indexed row ids are out of range for canonical realized-edge log."
+      )
+    )
+  }
+  rows <- realized_edges[row_ids, , drop = FALSE]
+  if (!all(as.integer(rows$spoke_id) == as.integer(entry$spoke_id %||% NA_integer_))) {
+    rlang::abort(
+      "Phase B probe realization index invariant failed: indexed rows do not match stored `spoke_id`."
+    )
+  }
+  if (!all(as.integer(rows$link_epoch_id) == as.integer(entry$link_epoch_id %||% NA_integer_))) {
+    rlang::abort(
+      "Phase B probe realization index invariant failed: indexed rows do not match stored `link_epoch_id`."
+    )
+  }
+  entry_panel_id <- as.character(entry$probe_panel_id %||% NA_character_)
+  if (!all(as.character(rows$probe_panel_id) == entry_panel_id)) {
+    rlang::abort(
+      "Phase B probe realization index invariant failed: indexed rows do not match stored `probe_panel_id`."
+    )
+  }
+  if (!identical(as.integer(nrow(rows)), as.integer(entry$realized_count %||% NA_integer_))) {
+    rlang::abort(
+      "Phase B probe realization index invariant failed: indexed realized count does not match stored row count."
+    )
+  }
+  last_step_id <- if (nrow(rows) > 0L && any(is.finite(as.integer(rows$step_id)), na.rm = TRUE)) {
+    suppressWarnings(max(as.integer(rows$step_id), na.rm = TRUE))
+  } else {
+    NA_integer_
+  }
+  if (!identical(as.integer(last_step_id), as.integer(entry$last_realized_step_id %||% NA_integer_))) {
+    rlang::abort(
+      paste(
+        "Phase B probe realization index invariant failed:",
+        "indexed `last_realized_step_id` does not match canonical realized-edge log."
+      )
+    )
+  }
+  rows
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_log_for_epoch <- function(state, spoke_id, epoch_id) {
+  probe <- .adaptive_link_probe_state(state)
+  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
+  entries <- probe$realized_index_by_panel %||% .adaptive_link_probe_empty_realized_index()
+  if (length(entries) < 1L) {
+    entries <- .adaptive_link_probe_realized_index_build(realized_edges)
+  }
+  hits <- Filter(
+    f = function(entry) {
+      identical(as.integer(entry$spoke_id %||% NA_integer_), as.integer(spoke_id)) &&
+        identical(as.integer(entry$link_epoch_id %||% NA_integer_), as.integer(epoch_id))
+    },
+    x = entries
+  )
+  if (length(hits) < 1L) {
+    return(.adaptive_link_probe_empty_realized_log())
+  }
+  row_ids <- sort(unique(unlist(
+    lapply(hits, function(entry) as.integer(entry$row_ids %||% integer())),
+    use.names = FALSE
+  )))
+  if (length(row_ids) < 1L) {
+    return(.adaptive_link_probe_empty_realized_log())
+  }
+  if (any(!is.finite(row_ids) | is.na(row_ids) | row_ids < 1L | row_ids > nrow(realized_edges))) {
+    rlang::abort(
+      paste(
+        "Phase B probe realization index invariant failed:",
+        "epoch row ids are out of range for canonical realized-edge log."
+      )
+    )
+  }
+  realized_edges[row_ids, , drop = FALSE]
 }
 
 #' @keywords internal
@@ -887,6 +1178,30 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_panel_identity <- function(panel_tbl,
+                                                spoke_id = NA_integer_,
+                                                epoch_id = NA_integer_) {
+  panel_tbl <- tibble::as_tibble(panel_tbl)
+  panel_ids <- unique(as.character(panel_tbl$probe_panel_id %||% character()))
+  panel_ids <- panel_ids[!is.na(panel_ids) & nzchar(panel_ids)]
+  if (length(panel_ids) > 1L) {
+    rlang::abort(
+      paste0(
+        "Phase B probe-panel invariant failed: current panel has multiple `probe_panel_id` values ",
+        "for spoke_id=", as.integer(spoke_id),
+        " in link_epoch_id=", as.integer(epoch_id),
+        "."
+      )
+    )
+  }
+  if (length(panel_ids) < 1L) {
+    return(NA_character_)
+  }
+  as.character(panel_ids[[1L]])
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_is_holdout_probe_rows <- function(step_tbl) {
   step_tbl <- tibble::as_tibble(step_tbl)
   if (nrow(step_tbl) < 1L) {
@@ -920,29 +1235,20 @@
   if (nrow(panel) < 1L) {
     return(panel)
   }
-  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
-  if (nrow(realized_edges) < 1L) {
+  panel_id <- .adaptive_link_probe_panel_identity(
+    panel_tbl = panel,
+    spoke_id = spoke_id,
+    epoch_id = panel$link_epoch_id[[1L]] %||% NA_integer_
+  )
+  epoch_realized <- .adaptive_link_probe_realized_log_for_epoch(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(panel$link_epoch_id[[1L]] %||% NA_integer_)
+  )
+  if (nrow(epoch_realized) < 1L) {
     return(panel)
   }
-  realized_edges <- realized_edges[
-    as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
-      as.integer(realized_edges$link_epoch_id) == as.integer(panel$link_epoch_id[[1L]] %||% NA_integer_),
-    ,
-    drop = FALSE
-  ]
-  panel_ids <- unique(as.character(panel$probe_panel_id))
-  panel_ids <- panel_ids[!is.na(panel_ids) & nzchar(panel_ids)]
-  if (length(panel_ids) > 1L) {
-    rlang::abort(
-      paste0(
-        "Phase B probe-panel invariant failed: current panel has multiple `probe_panel_id` values ",
-        "for spoke_id=", as.integer(spoke_id),
-        " in link_epoch_id=", as.integer(panel$link_epoch_id[[1L]] %||% NA_integer_),
-        "."
-      )
-    )
-  }
-  panel_id <- if (length(panel_ids) == 1L) panel_ids[[1L]] else NA_character_
+  realized_edges <- epoch_realized
   if (nrow(realized_edges) > 0L) {
     realized_panel_ids <- unique(as.character(realized_edges$probe_panel_id))
     realized_panel_ids <- realized_panel_ids[!is.na(realized_panel_ids) & nzchar(realized_panel_ids)]
@@ -968,14 +1274,6 @@
       )
     }
   }
-  if (nrow(realized_edges) < 1L) {
-    return(panel)
-  }
-  realized_edges <- realized_edges[
-    !duplicated(as.character(realized_edges$pair_key), fromLast = TRUE),
-    ,
-    drop = FALSE
-  ]
   realized_idx <- match(as.character(panel$pair_key), as.character(realized_edges$pair_key))
   hit <- !is.na(realized_idx)
   if (!any(hit)) {
@@ -1002,13 +1300,73 @@
   if (nrow(panel) < 1L) {
     return(0L)
   }
+  panel_id <- .adaptive_link_probe_panel_identity(
+    panel_tbl = panel,
+    spoke_id = spoke_id,
+    epoch_id = panel$link_epoch_id[[1L]] %||% epoch_id %||% NA_integer_
+  )
+  entry <- .adaptive_link_probe_realized_index_entry_get(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(panel$link_epoch_id[[1L]] %||% epoch_id %||% NA_integer_),
+    probe_panel_id = panel_id
+  )
+  if (is.null(entry)) {
+    return(0L)
+  }
+  as.integer(entry$realized_count %||% 0L)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_last_step_id <- function(state, spoke_id, epoch_id = NULL, panel = NULL) {
+  panel <- tibble::as_tibble(panel %||% .adaptive_link_probe_panel_for_spoke(
+    state,
+    spoke_id = spoke_id,
+    epoch_id = epoch_id
+  ))
+  if (nrow(panel) < 1L) {
+    return(NA_integer_)
+  }
+  panel_id <- .adaptive_link_probe_panel_identity(
+    panel_tbl = panel,
+    spoke_id = spoke_id,
+    epoch_id = panel$link_epoch_id[[1L]] %||% epoch_id %||% NA_integer_
+  )
+  entry <- .adaptive_link_probe_realized_index_entry_get(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(panel$link_epoch_id[[1L]] %||% epoch_id %||% NA_integer_),
+    probe_panel_id = panel_id
+  )
+  as.integer(entry$last_realized_step_id %||% NA_integer_)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_count_since_step <- function(state,
+                                                           spoke_id,
+                                                           epoch_id = NULL,
+                                                           last_step_id = 0L,
+                                                           panel = NULL) {
+  panel <- tibble::as_tibble(panel %||% .adaptive_link_probe_panel_for_spoke(
+    state,
+    spoke_id = spoke_id,
+    epoch_id = epoch_id
+  ))
+  if (nrow(panel) < 1L) {
+    return(0L)
+  }
   realized_edges <- .adaptive_link_probe_realized_log_for_panel(
     state = state,
     spoke_id = as.integer(spoke_id),
     epoch_id = as.integer(panel$link_epoch_id[[1L]] %||% epoch_id %||% NA_integer_),
     panel = panel
   )
-  as.integer(nrow(realized_edges))
+  if (nrow(realized_edges) < 1L) {
+    return(0L)
+  }
+  as.integer(sum(as.integer(realized_edges$step_id) > as.integer(last_step_id %||% 0L), na.rm = TRUE))
 }
 
 #' @keywords internal
@@ -1962,6 +2320,7 @@
       Y = "integer"
     )
   )
+  probe$realized_index_by_panel <- .adaptive_link_probe_realized_index_build(probe$realized_edges)
   out$linking$probe <- probe
   out
 }
@@ -2041,25 +2400,33 @@
     realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
     return(realized_edges[0, , drop = FALSE])
   }
-  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
-  if (nrow(realized_edges) < 1L) {
+  panel_id <- .adaptive_link_probe_panel_identity(
+    panel_tbl = panel,
+    spoke_id = spoke_id,
+    epoch_id = epoch_id
+  )
+  entry <- .adaptive_link_probe_realized_index_entry_get(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(epoch_id),
+    probe_panel_id = panel_id
+  )
+  if (is.null(entry)) {
     return(.adaptive_link_probe_empty_realized_log())
   }
+  realized_edges <- .adaptive_link_probe_realized_rows_from_entry(
+    state = state,
+    entry = entry
+  )
   realized_edges <- realized_edges[
-    as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
-      as.integer(realized_edges$link_epoch_id) == as.integer(epoch_id) &
-      as.character(realized_edges$pair_key) %in% as.character(panel$pair_key),
+    as.character(realized_edges$pair_key) %in% as.character(panel$pair_key),
     ,
     drop = FALSE
   ]
   if (nrow(realized_edges) < 1L) {
     return(.adaptive_link_probe_empty_realized_log())
   }
-  realized_edges[
-    !duplicated(as.character(realized_edges$pair_key), fromLast = TRUE),
-    ,
-    drop = FALSE
-  ]
+  realized_edges
 }
 
 #' @keywords internal

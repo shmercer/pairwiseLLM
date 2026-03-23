@@ -1040,9 +1040,9 @@ test_that("low-coverage probe panel restoration, run helpers, and cost estimator
   dup_panel$probe_panel_id <- c("p-one", "p-two")
   dup_panel$pair_key <- c("k-one", "k-two")
   panel_state$linking$probe$panels_by_spoke <- list(`2` = dup_panel)
-  expect_identical(
-    nrow(pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(panel_state, spoke_id = 2L, epoch_id = 1L)),
-    2L
+  expect_error(
+    pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(panel_state, spoke_id = 2L, epoch_id = 1L),
+    "multiple `probe_panel_id`"
   )
 
   guard_state <- state

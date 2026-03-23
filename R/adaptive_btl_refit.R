@@ -5611,15 +5611,16 @@
       epoch_id = as.integer(stats_epoch_id),
       panel = probe_panel
     )
-    realized_probe_log_current_window <- realized_probe_log[
-      as.integer(realized_probe_log$step_id) > refit_step_start &
-        as.integer(realized_probe_log$step_id) <= refit_step_end,
-      ,
-      drop = FALSE
-    ]
     canonical_probe_edges_realized <- as.integer(nrow(realized_probe_log))
+    current_window_realized_probe_count <- .adaptive_link_probe_realized_count_since_step(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      epoch_id = as.integer(stats_epoch_id),
+      last_step_id = as.integer(refit_step_start),
+      panel = probe_panel
+    )
     probe_edges_realized_before_refit <- as.integer(
-      max(0L, canonical_probe_edges_realized - nrow(realized_probe_log_current_window))
+      max(0L, canonical_probe_edges_realized - current_window_realized_probe_count)
     )
     prior_probe_edges_realized_max <- .adaptive_link_probe_prior_realized_max(
       link_stage_log = state$link_stage_log,
@@ -5641,7 +5642,7 @@
       )
     }
     if (n_pairs_since_probe > 0L &&
-      !identical(as.integer(n_pairs_since_probe), as.integer(nrow(realized_probe_log_current_window)))) {
+      !identical(as.integer(n_pairs_since_probe), as.integer(current_window_realized_probe_count))) {
       rlang::abort(
         paste0(
           "Phase B probe accounting invariant failed: `n_probe_pairs_since_last_refit` from committed ",
@@ -5649,12 +5650,12 @@
           as.integer(spoke_id),
           " at refit_id=", as.integer(refit_id),
           ". steps=", as.integer(n_pairs_since_probe),
-          ", canonical=", as.integer(nrow(realized_probe_log_current_window)),
+          ", canonical=", as.integer(current_window_realized_probe_count),
           "."
         )
       )
     }
-    n_pairs_since_probe <- as.integer(nrow(realized_probe_log_current_window))
+    n_pairs_since_probe <- as.integer(current_window_realized_probe_count)
     probe_edges_realized <- canonical_probe_edges_realized
     probe_edges_realized_delta_since_last_refit <- as.integer(n_pairs_since_probe)
     probe_panel_shortfall <- as.integer(

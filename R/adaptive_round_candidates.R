@@ -975,19 +975,18 @@
   }
   out$linking <- out$linking %||% list()
   probe <- .adaptive_link_probe_state(out)
-  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
   link_stage_log <- tibble::as_tibble(out$link_stage_log %||% new_link_stage_log())
   for (spoke_id in unique(spoke_ids)) {
     epoch_id <- .adaptive_link_probe_epoch_for_spoke(out, spoke_id = spoke_id)
     panel <- probe$panels_by_spoke[[as.character(spoke_id)]] %||% .adaptive_link_probe_empty_panel()
     panel <- tibble::as_tibble(panel)
     if (nrow(panel) < 1L || !all(as.integer(panel$link_epoch_id) == epoch_id)) {
-      has_realized_epoch_evidence <- nrow(realized_edges) > 0L &&
-        any(
-          as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
-            as.integer(realized_edges$link_epoch_id) == as.integer(epoch_id),
-          na.rm = TRUE
-        )
+      epoch_realized <- .adaptive_link_probe_realized_log_for_epoch(
+        state = out,
+        spoke_id = as.integer(spoke_id),
+        epoch_id = as.integer(epoch_id)
+      )
+      has_realized_epoch_evidence <- nrow(epoch_realized) > 0L
       stage_rows <- link_stage_log[
         as.integer(link_stage_log$spoke_id) == as.integer(spoke_id) &
           as.integer(link_stage_log$link_epoch_id) == as.integer(epoch_id),
@@ -1006,12 +1005,6 @@
       } else {
         NA_integer_
       }
-      epoch_realized <- realized_edges[
-        as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
-          as.integer(realized_edges$link_epoch_id) == as.integer(epoch_id),
-        ,
-        drop = FALSE
-      ]
       realized_panel_ids <- unique(as.character(epoch_realized$probe_panel_id))
       realized_panel_ids <- realized_panel_ids[!is.na(realized_panel_ids) & nzchar(realized_panel_ids)]
       has_stage_probe_evidence <- nrow(stage_rows) > 0L && any(
@@ -1072,6 +1065,7 @@
             )
             if (length(realized_idx) > 0L) {
               probe$realized_edges$probe_panel_id[realized_idx] <- built_panel_id
+              probe$realized_index_by_panel <- .adaptive_link_probe_realized_index_build(probe$realized_edges)
               out$linking$probe <- probe
               epoch_realized$probe_panel_id[] <- built_panel_id
             }

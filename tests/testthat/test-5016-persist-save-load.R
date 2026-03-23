@@ -1096,6 +1096,15 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
     pairwiseLLM:::.adaptive_link_probe_realized_count(restored, spoke_id = 2L, epoch_id = 1L),
     1L
   )
+  realized_key <- pairwiseLLM:::.adaptive_link_probe_realized_index_key(
+    spoke_id = 2L,
+    epoch_id = 1L,
+    probe_panel_id = as.character(panel_before$probe_panel_id[[1L]])
+  )
+  restored_entry <- restored$linking$probe$realized_index_by_panel[[realized_key]]
+  expect_false(is.null(restored_entry))
+  expect_identical(as.integer(restored_entry$realized_count), 1L)
+  expect_identical(as.integer(restored_entry$last_realized_step_id), 99L)
 })
 
 test_that("save/load preserves probe acceleration controller fields and canonical log columns", {
@@ -1344,6 +1353,15 @@ test_that("resume preserves probe panel identity, epoch, and realized counts acr
   expect_identical(as.integer(panel_after$link_epoch_id[[1L]]), 1L)
   expect_identical(as.integer(restored$controller$link_epoch_id_by_spoke[["2"]]), 1L)
   expect_identical(as.integer(realized_after), as.integer(realized_before))
+  restored_key <- pairwiseLLM:::.adaptive_link_probe_realized_index_key(
+    spoke_id = 2L,
+    epoch_id = 1L,
+    probe_panel_id = as.character(panel_before$probe_panel_id[[1L]])
+  )
+  expect_identical(
+    as.integer(restored$linking$probe$realized_index_by_panel[[restored_key]]$realized_count),
+    as.integer(realized_after)
+  )
 
   synced <- pairwiseLLM:::.adaptive_apply_controller_config(restored, adaptive_config = NULL)
   expect_true("probe" %in% names(synced$linking))

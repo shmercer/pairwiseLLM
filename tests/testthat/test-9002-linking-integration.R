@@ -813,6 +813,43 @@ test_that("round_log and link_stage_log canonically reconcile probe and active w
       as.integer(link_stage_log$probe_edges_realized_delta_since_last_refit) ==
       as.integer(link_stage_log$probe_edges_realized)
   ))
+  latest_probe_key_idx <- integer()
+  if (nrow(link_stage_log) > 0L) {
+    probe_keys <- vapply(
+      seq_len(nrow(link_stage_log)),
+      function(idx) {
+        panel_id <- as.character(link_stage_log$probe_panel_id[[idx]])
+        epoch_id <- as.integer(link_stage_log$link_epoch_id[[idx]])
+        spoke_id <- as.integer(link_stage_log$spoke_id[[idx]])
+        realized_count <- as.integer(link_stage_log$probe_edges_realized[[idx]])
+        if (is.na(panel_id) || !nzchar(panel_id) || !is.finite(epoch_id) ||
+          !is.finite(spoke_id) || !is.finite(realized_count) || realized_count < 1L) {
+          return(NA_character_)
+        }
+        paste(spoke_id, epoch_id, panel_id, sep = "::")
+      },
+      character(1L)
+    )
+    probe_keys_ok <- !is.na(probe_keys)
+    latest_probe_key_idx <- vapply(
+      split(seq_len(nrow(link_stage_log))[probe_keys_ok], probe_keys[probe_keys_ok]),
+      max,
+      integer(1L)
+    )
+  }
+  for (idx in sort(as.integer(latest_probe_key_idx))) {
+    entry <- pairwiseLLM:::.adaptive_link_probe_realized_index_entry_get(
+      state = out,
+      spoke_id = as.integer(link_stage_log$spoke_id[[idx]]),
+      epoch_id = as.integer(link_stage_log$link_epoch_id[[idx]]),
+      probe_panel_id = as.character(link_stage_log$probe_panel_id[[idx]])
+    )
+    expect_false(is.null(entry))
+    expect_identical(
+      as.integer(entry$realized_count),
+      as.integer(link_stage_log$probe_edges_realized[[idx]])
+    )
+  }
   expect_true(all(
     ifelse(
       as.integer(link_stage_log$probe_panel_shortfall) > 0L &

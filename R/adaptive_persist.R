@@ -657,20 +657,14 @@ read_log <- function(path) {
     )
   }
 
-  realized_since_last_refit <- .adaptive_link_probe_realized_log_for_panel(
+  realized_since_last_refit_n <- .adaptive_link_probe_realized_count_since_step(
     state = state,
     spoke_id = as.integer(spoke_id),
     epoch_id = as.integer(panel_epoch),
+    last_step_id = as.integer(last_refit_step),
     panel = panel
   )
-  if (nrow(realized_since_last_refit) > 0L) {
-    realized_since_last_refit <- realized_since_last_refit[
-      as.integer(realized_since_last_refit$step_id) > last_refit_step,
-      ,
-      drop = FALSE
-    ]
-  }
-  if (!identical(nrow(current_window_steps), nrow(realized_since_last_refit))) {
+  if (!identical(nrow(current_window_steps), realized_since_last_refit_n)) {
     .adaptive_link_probe_resume_abort(
       paste0(
         "committed holdout probe steps after the last refit do not reconcile to canonical ",
@@ -679,7 +673,7 @@ read_log <- function(path) {
         " (steps=",
         as.integer(nrow(current_window_steps)),
         ", canonical=",
-        as.integer(nrow(realized_since_last_refit)),
+        as.integer(realized_since_last_refit_n),
         ")"
       ),
       spoke_id = spoke_id
@@ -807,15 +801,11 @@ read_log <- function(path) {
     }
   }
 
-  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
-  if (nrow(realized_edges) > 0L) {
-    realized_edges <- realized_edges[
-      as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
-        as.integer(realized_edges$link_epoch_id) == as.integer(panel_epoch),
-      ,
-      drop = FALSE
-    ]
-  }
+  realized_edges <- .adaptive_link_probe_realized_log_for_epoch(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(panel_epoch)
+  )
   if (nrow(realized_edges) > 0L) {
     bad_key <- !as.character(realized_edges$pair_key) %in% as.character(panel$pair_key)
     if (any(bad_key)) {
@@ -844,20 +834,13 @@ read_log <- function(path) {
     last_row <- spoke_rows[nrow(spoke_rows), , drop = FALSE]
     row_realized <- as.integer(last_row$probe_edges_realized[[1L]] %||% NA_integer_)
     last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
-    realized_since_last_refit <- .adaptive_link_probe_realized_log_for_panel(
+    current_window_realized <- .adaptive_link_probe_realized_count_since_step(
       state = state,
       spoke_id = as.integer(spoke_id),
       epoch_id = as.integer(panel_epoch),
+      last_step_id = as.integer(last_refit_step),
       panel = panel
     )
-    if (nrow(realized_since_last_refit) > 0L) {
-      realized_since_last_refit <- realized_since_last_refit[
-        as.integer(realized_since_last_refit$step_id) > last_refit_step,
-        ,
-        drop = FALSE
-      ]
-    }
-    current_window_realized <- as.integer(nrow(realized_since_last_refit))
     delta_from_row <- as.integer(as.integer(realized_count) - row_realized)
     if (is.finite(row_realized) &&
       (delta_from_row < 0L || delta_from_row > current_window_realized)) {
@@ -887,6 +870,11 @@ read_log <- function(path) {
 
 .adaptive_validate_probe_state_for_resume <- function(state) {
   probe <- .adaptive_link_probe_state(state)
+  probe <- .adaptive_link_probe_realized_index_reconcile(
+    probe,
+    context = "resume",
+    validate_existing = TRUE
+  )
   state$linking <- state$linking %||% list()
   state$linking$probe <- probe
 
@@ -1090,6 +1078,12 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
     }
   }
 
+  state <- .adaptive_link_probe_realized_index_rebuild_state(
+    state,
+    context = "save",
+    validate_existing = FALSE
+  )
+
   metadata <- list(
     schema_version = as.character(state$meta$schema_version %||% "adaptive-session"),
     package_version = as.character(utils::packageVersion("pairwiseLLM")),
@@ -1241,6 +1235,11 @@ load_adaptive_session <- function(session_dir) {
     round_log = state$round_log
   )
   state <- .adaptive_link_refit_summary_rebuild_current(state)
+  state <- .adaptive_link_probe_realized_index_rebuild_state(
+    state,
+    context = "load",
+    validate_existing = TRUE
+  )
   state$controller <- .adaptive_controller_resolve(state)
 
   state$config$session_dir <- session_dir

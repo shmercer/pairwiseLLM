@@ -2812,6 +2812,88 @@ test_that("probe realized bookkeeping is derived from canonical realized-edge lo
   expect_identical(as.integer(realized_edges$step_id[[1L]]), 10L)
 })
 
+test_that("probe realization index keeps latest realized rows and exposes current-window counts", {
+  state <- make_linking_refit_state()
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
+  pair_a <- pairwiseLLM:::make_unordered_key("h1", "s21")
+  pair_b <- pairwiseLLM:::make_unordered_key("h2", "s22")
+  panel <- tibble::tibble(
+    probe_panel_id = "panel_a",
+    link_epoch_id = 4L,
+    spoke_id = 2L,
+    hub_item_id = c("h1", "h2"),
+    spoke_item_id = c("s21", "s22"),
+    spoke_bin = c(1L, 2L),
+    hub_bin = c(1L, 1L),
+    planned_rank = c(1L, 2L),
+    pair_key = c(pair_a, pair_b),
+    realized = c(FALSE, FALSE),
+    realized_step_id = c(NA_integer_, NA_integer_),
+    realized_pair_id = c(NA_integer_, NA_integer_),
+    realized_run_mode = c(NA_character_, NA_character_)
+  )
+  state$linking$probe$panels_by_spoke <- list(`2` = panel)
+  state$linking$probe$realized_edges <- tibble::tibble(
+    step_id = c(10L, 12L, 14L),
+    pair_id = c(10L, 12L, 14L),
+    run_mode = rep("link_probe_holdout", 3L),
+    spoke_id = rep(2L, 3L),
+    link_epoch_id = rep(4L, 3L),
+    probe_panel_id = rep("panel_a", 3L),
+    hub_item_id = c("h1", "h2", "h1"),
+    spoke_item_id = c("s21", "s22", "s21"),
+    pair_key = c(pair_a, pair_b, pair_a),
+    Y = c(1L, 0L, 0L)
+  )
+
+  entry <- pairwiseLLM:::.adaptive_link_probe_realized_index_entry_get(
+    state = state,
+    spoke_id = 2L,
+    epoch_id = 4L,
+    probe_panel_id = "panel_a"
+  )
+  expect_identical(as.integer(entry$realized_count), 2L)
+  expect_identical(as.integer(entry$last_realized_step_id), 14L)
+  expect_identical(as.integer(entry$row_ids), c(2L, 3L))
+
+  realized_log <- pairwiseLLM:::.adaptive_link_probe_realized_log_for_panel(
+    state = state,
+    spoke_id = 2L,
+    epoch_id = 4L,
+    panel = panel
+  )
+  expect_identical(as.integer(realized_log$step_id), c(12L, 14L))
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_realized_count_since_step(
+      state = state,
+      spoke_id = 2L,
+      epoch_id = 4L,
+      last_step_id = 11L,
+      panel = panel
+    ),
+    2L
+  )
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_realized_count_since_step(
+      state = state,
+      spoke_id = 2L,
+      epoch_id = 4L,
+      last_step_id = 12L,
+      panel = panel
+    ),
+    1L
+  )
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_realized_last_step_id(
+      state = state,
+      spoke_id = 2L,
+      epoch_id = 4L,
+      panel = panel
+    ),
+    14L
+  )
+})
+
 test_that("stale panel realized flags do not become canonical realized probe evidence", {
   state <- make_linking_refit_state()
   state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
