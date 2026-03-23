@@ -1336,35 +1336,34 @@ generate_stage_candidates_from_state <- function(state,
         )
       )
     }
+    local_inputs <- .adaptive_link_refit_local_inputs(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      defaults = defaults
+    )
+    hub_ids <- as.character(local_inputs$hub_ids)
+    spoke_ids <- as.character(local_inputs$spoke_ids)
+    active_items <- local_inputs$active_items %||% list()
+    active_hub_ids <- as.character(active_items$active_hub %||% character())
     routing_hub_ids <- if (identical(stage_name, "anchor_link")) hub_ids else active_hub_ids
     active_ids <- unique(c(routing_hub_ids, spoke_ids))
     if (length(active_ids) < 2L) {
       return(tibble::tibble(i = character(), j = character()))
     }
-    active_scores <- .adaptive_link_phase_b_routing_scores(
-      state = state,
-      controller = controller,
-      active_ids = active_ids,
-      hub_id = hub_id
-    )
+    active_scores <- as.double((local_inputs$routing_scores %||% numeric())[active_ids])
+    names(active_scores) <- as.character(active_ids)
     strata <- .adaptive_assign_strata(active_scores, defaults)
     rank_index <- strata$rank_index
     stratum_map <- strata$stratum_map
     ids <- names(sort(rank_index))
     # In linking Phase B, hub anchors are derived from hub-only ranks.
-    hub_anchor_ids <- .adaptive_link_phase_b_hub_anchors(
-      state = state,
-      hub_ids = hub_ids,
-      hub_scores = active_scores,
-      defaults = defaults
-    )
-    coverage <- .adaptive_link_spoke_coverage(
-      state = state,
-      controller = controller,
-      spoke_id = spoke_id,
-      spoke_ids = spoke_ids,
-      routing_scores = active_scores,
-      score_source = "linking_global_score"
+    hub_anchor_ids <- as.character(local_inputs$hub_anchor_ids %||% character())
+    coverage <- local_inputs$coverage %||% list(
+      bin_map = stats::setNames(integer(), character()),
+      bins_used = NA_integer_,
+      bins_undercovered = integer(),
+      source = NA_character_
     )
   } else if (isTRUE(is_link_mode)) {
     active_set <- as.integer(phase_ctx$active_phase_a_set %||% NA_integer_)

@@ -2749,6 +2749,119 @@ test_that("epoch resets require regime changes, not ordinary probe-panel churn",
   expect_identical(as.character(probe_stats_changed$lag_domain_reset_reason), "probe_panel_rebuild")
 })
 
+test_that("refit-local memo invalidates on refit and epoch boundaries for stage-row construction", {
+  state <- make_linking_refit_state()
+  state$warm_start_done <- TRUE
+  state$controller$current_link_spoke_id <- 2L
+  state$linking$phase_a$ready_spokes <- 2L
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 1L)
+  state$linking$probe$panels_by_spoke <- list(
+    `2` = tibble::tibble(
+      probe_panel_id = "panel_a",
+      link_epoch_id = 1L,
+      spoke_id = 2L,
+      hub_item_id = "h1",
+      spoke_item_id = "s21",
+      spoke_bin = 1L,
+      hub_bin = 1L,
+      planned_rank = 1L,
+      pair_key = pairwiseLLM:::make_unordered_key("h1", "s21"),
+      realized = FALSE,
+      realized_step_id = NA_integer_,
+      realized_pair_id = NA_integer_,
+      realized_run_mode = NA_character_
+    )
+  )
+
+  orig_routing <- pairwiseLLM:::.adaptive_link_phase_b_routing_scores
+  orig_coverage <- pairwiseLLM:::.adaptive_link_spoke_coverage
+  calls <- new.env(parent = emptyenv())
+  calls$routing <- 0L
+  calls$coverage <- 0L
+
+  rows <- testthat::with_mocked_bindings(
+    .adaptive_link_phase_b_routing_scores = function(...) {
+      calls$routing <- as.integer(calls$routing) + 1L
+      orig_routing(...)
+    },
+    .adaptive_link_spoke_coverage = function(...) {
+      calls$coverage <- as.integer(calls$coverage) + 1L
+      orig_coverage(...)
+    },
+    {
+      same_refit_1 <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+        state = state,
+        refit_id = 1L,
+        refit_context = list(last_refit_step = 0L)
+      )
+      same_refit_2 <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+        state = state,
+        refit_id = 1L,
+        refit_context = list(last_refit_step = 0L)
+      )
+
+      state_refit <- state
+      state_refit$round_log <- pairwiseLLM:::append_round_log(
+        state_refit$round_log,
+        list(refit_id = 1L, diagnostics_pass = TRUE)
+      )
+      next_refit <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+        state = state_refit,
+        refit_id = 2L,
+        refit_context = list(last_refit_step = 2L)
+      )
+
+      state_epoch <- state_refit
+      state_epoch$controller$link_epoch_id_by_spoke <- list(`2` = 2L)
+      state_epoch$linking$probe$panels_by_spoke <- list(
+        `2` = tibble::tibble(
+          probe_panel_id = "panel_b",
+          link_epoch_id = 2L,
+          spoke_id = 2L,
+          hub_item_id = "h1",
+          spoke_item_id = "s21",
+          spoke_bin = 1L,
+          hub_bin = 1L,
+          planned_rank = 1L,
+          pair_key = pairwiseLLM:::make_unordered_key("h1", "s21"),
+          realized = FALSE,
+          realized_step_id = NA_integer_,
+          realized_pair_id = NA_integer_,
+          realized_run_mode = NA_character_
+        )
+      )
+      next_epoch <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
+        state = state_epoch,
+        refit_id = 2L,
+        refit_context = list(last_refit_step = 2L)
+      )
+
+      list(
+        same_refit_1 = same_refit_1,
+        same_refit_2 = same_refit_2,
+        next_refit = next_refit,
+        next_epoch = next_epoch
+      )
+    },
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(as.integer(calls$routing), 3L)
+  expect_identical(as.integer(calls$coverage), 3L)
+  expect_identical(
+    as.integer(rows$same_refit_1$coverage_bins_used),
+    as.integer(rows$same_refit_2$coverage_bins_used)
+  )
+  expect_identical(
+    as.character(rows$same_refit_1$coverage_source),
+    as.character(rows$same_refit_2$coverage_source)
+  )
+  expect_true(nrow(rows$next_refit) >= 1L)
+  expect_true(nrow(rows$next_epoch) >= 1L)
+})
+
 test_that("probe realized bookkeeping is derived from canonical realized-edge log", {
   state <- make_linking_refit_state()
   state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)

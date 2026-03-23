@@ -742,6 +742,224 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_refit_local_memo_env <- function(state) {
+  env <- (state$refit_meta %||% list())$link_refit_local_memo_env %||% NULL
+  if (is.environment(env)) {
+    return(env)
+  }
+  NULL
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_step_id <- function(state) {
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  if (nrow(step_log) < 1L || !"step_id" %in% names(step_log)) {
+    return(0L)
+  }
+  step_ids <- as.integer(step_log$step_id)
+  step_ids <- step_ids[is.finite(step_ids) & !is.na(step_ids)]
+  if (length(step_ids) < 1L) {
+    return(0L)
+  }
+  as.integer(max(step_ids, na.rm = TRUE))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_probe_panel_id <- function(state, spoke_id, epoch_id) {
+  panel <- (.adaptive_link_probe_state(state)$panels_by_spoke %||% list())[[as.character(spoke_id)]] %||%
+    .adaptive_link_probe_empty_panel()
+  panel <- tibble::as_tibble(panel)
+  if (nrow(panel) < 1L) {
+    return(NA_character_)
+  }
+  panel <- panel[as.integer(panel$link_epoch_id) == as.integer(epoch_id), , drop = FALSE]
+  if (nrow(panel) < 1L) {
+    return(NA_character_)
+  }
+  as.character(.adaptive_link_probe_panel_identity(
+    panel_tbl = panel,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(epoch_id)
+  ))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_context <- function(state,
+                                               controller,
+                                               spoke_id,
+                                               refit_id = NULL) {
+  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
+  list(
+    refit_id = as.integer(refit_id %||% .adaptive_link_refit_window_id(state)),
+    step_id = as.integer(.adaptive_link_refit_local_step_id(state)),
+    spoke_id = as.integer(spoke_id),
+    hub_id = as.integer(controller$hub_id %||% 1L),
+    link_epoch_id = as.integer(.adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)),
+    probe_panel_id = .adaptive_link_refit_local_probe_panel_id(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      epoch_id = as.integer(.adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id))
+    ),
+    link_estimation_mode = link_estimation_mode,
+    link_transform_policy = if (identical(link_estimation_mode, "anchored_joint")) {
+      NA_character_
+    } else {
+      as.character(.adaptive_normalize_link_transform_policy(
+        controller$link_transform_policy %||% "auto"
+      ))
+    },
+    link_transform_state = if (identical(link_estimation_mode, "anchored_joint")) {
+      NA_character_
+    } else {
+      as.character(.adaptive_link_transform_state_for_spoke(controller, spoke_id = as.integer(spoke_id)))
+    },
+    link_refit_mode = if (identical(link_estimation_mode, "anchored_joint")) {
+      NA_character_
+    } else {
+      as.character(controller$link_refit_mode %||% "shift_only")
+    },
+    hub_lock_mode = if (identical(link_estimation_mode, "anchored_joint")) {
+      "hard_lock"
+    } else {
+      as.character(controller$hub_lock_mode %||% "soft_lock")
+    }
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_context_matches <- function(entry_context, current_context) {
+  entry_context <- entry_context %||% list()
+  current_context <- current_context %||% list()
+  compare <- list(
+    refit_id = as.integer,
+    step_id = as.integer,
+    spoke_id = as.integer,
+    hub_id = as.integer,
+    link_epoch_id = as.integer,
+    probe_panel_id = as.character,
+    link_estimation_mode = as.character,
+    link_transform_policy = as.character,
+    link_transform_state = as.character,
+    link_refit_mode = as.character,
+    hub_lock_mode = as.character
+  )
+  all(vapply(names(compare), function(field) {
+    coercer <- compare[[field]]
+    identical(
+      coercer(entry_context[[field]] %||% NA),
+      coercer(current_context[[field]] %||% NA)
+    )
+  }, logical(1L)))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_memo_prune <- function(env, refit_id, step_id) {
+  if (!is.environment(env)) {
+    return(invisible(NULL))
+  }
+  keys <- ls(env, all.names = TRUE)
+  if (length(keys) < 1L) {
+    return(invisible(NULL))
+  }
+  for (key in keys) {
+    entry <- env[[key]] %||% list()
+    context <- entry$context %||% list()
+    keep <- identical(as.integer(context$refit_id %||% NA_integer_), as.integer(refit_id)) &&
+      identical(as.integer(context$step_id %||% NA_integer_), as.integer(step_id))
+    if (!isTRUE(keep)) {
+      rm(list = key, envir = env)
+    }
+  }
+  invisible(NULL)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_inputs_build <- function(state,
+                                                    controller,
+                                                    spoke_id,
+                                                    defaults = NULL) {
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  hub_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
+  spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(spoke_id)])
+  defaults <- defaults %||% adaptive_defaults(max(2L, length(unique(c(hub_ids, spoke_ids)))))
+  active_items <- .adaptive_link_active_item_ids(state, spoke_id = as.integer(spoke_id), hub_id = hub_id)
+  routing_scores <- .adaptive_link_phase_b_routing_scores(
+    state = state,
+    controller = controller,
+    active_ids = unique(c(hub_ids, spoke_ids)),
+    hub_id = hub_id
+  )
+  list(
+    hub_ids = as.character(hub_ids),
+    spoke_ids = as.character(spoke_ids),
+    active_items = active_items,
+    routing_scores = routing_scores,
+    hub_anchor_ids = .adaptive_link_phase_b_hub_anchors(
+      state = state,
+      hub_ids = hub_ids,
+      hub_scores = routing_scores,
+      defaults = defaults
+    ),
+    coverage = .adaptive_link_spoke_coverage(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      spoke_ids = spoke_ids,
+      routing_scores = routing_scores,
+      score_source = "linking_global_score"
+    )
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_inputs <- function(state,
+                                              controller,
+                                              spoke_id,
+                                              defaults = NULL,
+                                              refit_id = NULL) {
+  spoke_id <- as.integer(spoke_id)
+  context <- .adaptive_link_refit_local_context(
+    state = state,
+    controller = controller,
+    spoke_id = spoke_id,
+    refit_id = refit_id
+  )
+  env <- .adaptive_link_refit_local_memo_env(state)
+  key <- as.character(spoke_id)
+  if (is.environment(env)) {
+    .adaptive_link_refit_local_memo_prune(
+      env = env,
+      refit_id = as.integer(context$refit_id),
+      step_id = as.integer(context$step_id)
+    )
+    entry <- env[[key]] %||% NULL
+    if (is.list(entry) &&
+      .adaptive_link_refit_local_context_matches(entry$context %||% list(), context)) {
+      return(entry$value %||% list())
+    }
+  }
+
+  value <- .adaptive_link_refit_local_inputs_build(
+    state = state,
+    controller = controller,
+    spoke_id = spoke_id,
+    defaults = defaults
+  )
+  if (is.environment(env)) {
+    env[[key]] <- list(context = context, value = value)
+  }
+  value
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_refit_shortfalls_map <- function(state) {
   primary <- state$refit_meta$link_stage_shortfalls_by_refit_spoke %||% NULL
   if (is.list(primary)) {

@@ -1867,6 +1867,7 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         link_stage_shortfalls_by_refit_spoke = list(),
         link_stage_exhausted_by_refit_spoke = list(),
         link_refit_summary_cache_by_refit_spoke = list(),
+        link_refit_local_memo_env = new.env(parent = emptyenv()),
         link_unique_cross_pair_keys_by_spoke = list(),
         last_completed_round_summary = list(
           round_id = NA_integer_,

@@ -719,6 +719,115 @@ test_that("coverage source propagates through selection and linking stage rows",
   expect_identical(row$coverage_source[[1L]], "phase_a_rank_mu_raw")
 })
 
+test_that("refit-local routing memo matches direct helper outputs and reuses the current state", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),
+    set_id = c(1L, 1L, 1L, 2L, 2L, 2L),
+    global_item_id = paste0("g", seq_len(6L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 321L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state$controller$current_link_spoke_id <- 2L
+  state <- mark_link_phase_b_ready(state)
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:01", tz = "UTC"),
+      pair_id = 1L,
+      i = 1L,
+      j = 4L,
+      A = 1L,
+      B = 4L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE,
+      is_drift_probe_step = FALSE,
+      link_spoke_id = 2L,
+      run_mode = "link_one_spoke",
+      link_stage = "anchor_link",
+      round_stage = "anchor_link"
+    )
+  )
+
+  controller <- state$controller
+  defaults <- adaptive_defaults(length(state$item_ids))
+  hub_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == 1L])
+  spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == 2L])
+  direct_active <- pairwiseLLM:::.adaptive_link_active_item_ids(state, spoke_id = 2L, hub_id = 1L)
+  direct_scores <- pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+    state = state,
+    controller = controller,
+    active_ids = unique(c(hub_ids, spoke_ids)),
+    hub_id = 1L
+  )
+  direct_anchors <- pairwiseLLM:::.adaptive_link_phase_b_hub_anchors(
+    state = state,
+    hub_ids = hub_ids,
+    hub_scores = direct_scores,
+    defaults = defaults
+  )
+  direct_coverage <- pairwiseLLM:::.adaptive_link_spoke_coverage(
+    state = state,
+    controller = controller,
+    spoke_id = 2L,
+    spoke_ids = spoke_ids,
+    routing_scores = direct_scores,
+    score_source = "linking_global_score"
+  )
+
+  orig_routing <- pairwiseLLM:::.adaptive_link_phase_b_routing_scores
+  orig_coverage <- pairwiseLLM:::.adaptive_link_spoke_coverage
+  calls <- new.env(parent = emptyenv())
+  calls$routing <- 0L
+  calls$coverage <- 0L
+
+  memo <- testthat::with_mocked_bindings(
+    .adaptive_link_phase_b_routing_scores = function(...) {
+      calls$routing <- as.integer(calls$routing) + 1L
+      orig_routing(...)
+    },
+    .adaptive_link_spoke_coverage = function(...) {
+      calls$coverage <- as.integer(calls$coverage) + 1L
+      orig_coverage(...)
+    },
+    {
+      first <- pairwiseLLM:::.adaptive_link_refit_local_inputs(
+        state = state,
+        controller = controller,
+        spoke_id = 2L,
+        defaults = defaults
+      )
+      second <- pairwiseLLM:::.adaptive_link_refit_local_inputs(
+        state = state,
+        controller = controller,
+        spoke_id = 2L,
+        defaults = defaults
+      )
+      list(first = first, second = second)
+    },
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(as.integer(calls$routing), 1L)
+  expect_identical(as.integer(calls$coverage), 1L)
+  expect_identical(memo$first$active_items, memo$second$active_items)
+  expect_identical(memo$first$routing_scores, memo$second$routing_scores)
+  expect_identical(memo$first$hub_anchor_ids, memo$second$hub_anchor_ids)
+  expect_identical(memo$first$coverage, memo$second$coverage)
+  expect_identical(memo$first$active_items, direct_active)
+  expect_identical(memo$first$routing_scores, direct_scores)
+  expect_identical(memo$first$hub_anchor_ids, direct_anchors)
+  expect_identical(memo$first$coverage, direct_coverage)
+})
+
 test_that("linking deterministic ordering prioritizes coverage before utility", {
   cand <- tibble::tibble(
     i = c("a", "b"),

@@ -4648,7 +4648,14 @@
       log_alpha_change <- NA_real_
     }
 
-    active <- .adaptive_link_active_item_ids(out, spoke_id = spoke_id, hub_id = hub_id)
+    local_inputs <- .adaptive_link_refit_local_inputs(
+      state = out,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      refit_id = as.integer(current_refit_id)
+    )
+    active <- local_inputs$active_items %||%
+      .adaptive_link_active_item_ids(out, spoke_id = spoke_id, hub_id = hub_id)
     reliability_stats <- .adaptive_link_global_score_stats_active(
       state = out,
       active_ids = active$active_all,
@@ -5508,23 +5515,23 @@
     }
     n_unique <- as.integer(refit_summary$n_unique_cross_pairs_seen %||% 0L)
 
-    spoke_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == spoke_id])
-
-    hub_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
-    coverage_ids <- unique(c(hub_items, spoke_items))
-    coverage_scores <- .adaptive_link_phase_b_routing_scores(
+    local_inputs <- .adaptive_link_refit_local_inputs(
       state = state,
       controller = controller,
-      active_ids = coverage_ids,
-      hub_id = hub_id
+      spoke_id = as.integer(spoke_id),
+      refit_id = as.integer(refit_id)
     )
-    coverage <- .adaptive_link_spoke_coverage(
-      state = state,
-      controller = controller,
-      spoke_id = spoke_id,
-      spoke_ids = spoke_items,
-      routing_scores = coverage_scores,
-      score_source = "linking_global_score"
+    active <- local_inputs$active_items %||%
+      .adaptive_link_active_item_ids(state, spoke_id = spoke_id, hub_id = hub_id)
+    spoke_items <- as.character(local_inputs$spoke_ids %||%
+      state$items$item_id[as.integer(state$items$set_id) == spoke_id])
+    hub_items <- as.character(local_inputs$hub_ids %||%
+      state$items$item_id[as.integer(state$items$set_id) == hub_id])
+    coverage <- local_inputs$coverage %||% list(
+      bin_map = stats::setNames(integer(), character()),
+      bins_used = NA_integer_,
+      bins_undercovered = integer(),
+      source = NA_character_
     )
 
     link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
