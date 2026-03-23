@@ -4361,6 +4361,12 @@ adaptive_rank_run_live <- function(state,
         config = refit_out$config
       )
       state$round_log <- append_round_log(state$round_log, round_row)
+      deferred_audit_payload <- metrics$round_log_deferred_audit_payload %||% NULL
+      if (is.list(deferred_audit_payload)) {
+        payloads <- state$refit_meta$round_log_deferred_audit_payloads %||% list()
+        payloads[[as.character(round_row$refit_id)]] <- deferred_audit_payload
+        state$refit_meta$round_log_deferred_audit_payloads <- payloads
+      }
       controller_post_refit <- .adaptive_controller_resolve(state)
       cache_spokes <- .adaptive_link_effective_active_spokes(
         state = state,

@@ -1864,6 +1864,7 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         phase_a_lag_domain_last_set_id = NA_integer_,
         phase_a_lag_domain_reset_refit_id_by_set = list(),
         near_stop = FALSE,
+        round_log_deferred_audit_payloads = list(),
         link_stage_shortfalls_by_refit_spoke = list(),
         link_stage_exhausted_by_refit_spoke = list(),
         link_refit_summary_cache_by_refit_spoke = list(),

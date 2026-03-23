@@ -790,6 +790,10 @@ adaptive_step_log <- function(state) {
 #' }
 #'
 #' @param state Adaptive state.
+#' @param reconstruct_deferred Logical; when \code{TRUE}, reconstruct deferred
+#'   audit-only posterior summaries from stored refit payloads when available.
+#'   By default, returns the canonical stored \code{round_log} without
+#'   reconstruction.
 #'
 #' @return A tibble with one row per completed posterior refit round.
 #'
@@ -801,11 +805,48 @@ adaptive_step_log <- function(state) {
 #'
 #' @family adaptive logs
 #' @export
-adaptive_round_log <- function(state) {
+adaptive_round_log <- function(state, reconstruct_deferred = FALSE) {
   if (is.null(state$round_log)) {
     rlang::abort("`state$round_log` is missing.")
   }
-  tibble::as_tibble(state$round_log)
+  if (!is.logical(reconstruct_deferred) ||
+    length(reconstruct_deferred) != 1L ||
+    is.na(reconstruct_deferred)) {
+    rlang::abort("`reconstruct_deferred` must be TRUE or FALSE.")
+  }
+
+  round_log <- tibble::as_tibble(state$round_log)
+  if (!isTRUE(reconstruct_deferred) || nrow(round_log) < 1L) {
+    return(round_log)
+  }
+
+  payloads <- state$refit_meta$round_log_deferred_audit_payloads %||% list()
+  if (!is.list(payloads) || length(payloads) < 1L) {
+    return(round_log)
+  }
+
+  deferred_cols <- .adaptive_round_log_deferred_audit_columns()
+  available_cols <- intersect(deferred_cols, names(round_log))
+  if (length(available_cols) < 1L) {
+    return(round_log)
+  }
+
+  out <- round_log
+  for (idx in seq_len(nrow(out))) {
+    refit_id <- as.integer(out$refit_id[[idx]] %||% idx)
+    payload <- payloads[[as.character(refit_id)]] %||% NULL
+    if (!is.list(payload)) {
+      next
+    }
+    summary_vals <- .adaptive_round_log_deferred_audit_from_payload(payload)
+    for (col in intersect(names(summary_vals), available_cols)) {
+      if (is.na(out[[col]][[idx]])) {
+        out[[col]][idx] <- summary_vals[[col]]
+      }
+    }
+  }
+
+  out
 }
 
 #' Adaptive item log accessor.

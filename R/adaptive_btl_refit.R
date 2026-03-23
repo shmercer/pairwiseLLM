@@ -6330,6 +6330,139 @@
   as.logical(eff < raw)
 }
 
+.adaptive_round_log_deferred_audit_columns <- function() {
+  c(
+    "ci95_theta_width_mean",
+    "ci95_theta_width_median",
+    "ci95_theta_width_p90",
+    "ci95_theta_width_max",
+    "near_tie_adj_frac",
+    "near_tie_adj_count",
+    "p_adj_median",
+    "cov_trace_theta",
+    "cov_logdet_diag_theta",
+    "post_sd_theta_p10",
+    "post_sd_theta_p50",
+    "post_sd_theta_p90",
+    "top20_boundary_entropy_mean",
+    "top20_boundary_entropy_p90",
+    "nn_diff_sd_mean",
+    "nn_diff_sd_p90"
+  )
+}
+
+.adaptive_round_log_deferred_audit_na_values <- function() {
+  list(
+    ci95_theta_width_mean = NA_real_,
+    ci95_theta_width_median = NA_real_,
+    ci95_theta_width_p90 = NA_real_,
+    ci95_theta_width_max = NA_real_,
+    near_tie_adj_frac = NA_real_,
+    near_tie_adj_count = NA_integer_,
+    p_adj_median = NA_real_,
+    cov_trace_theta = NA_real_,
+    cov_logdet_diag_theta = NA_real_,
+    post_sd_theta_p10 = NA_real_,
+    post_sd_theta_p50 = NA_real_,
+    post_sd_theta_p90 = NA_real_,
+    top20_boundary_entropy_mean = NA_real_,
+    top20_boundary_entropy_p90 = NA_real_,
+    nn_diff_sd_mean = NA_real_,
+    nn_diff_sd_p90 = NA_real_
+  )
+}
+
+.adaptive_round_log_deferred_audit_payload <- function(draws,
+                                                       near_tie_p_low,
+                                                       near_tie_p_high) {
+  if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 2L || ncol(draws) < 1L) {
+    return(NULL)
+  }
+  draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "round_log_deferred_audit_draws")
+  list(
+    draws = draws,
+    near_tie_p_low = as.double(near_tie_p_low),
+    near_tie_p_high = as.double(near_tie_p_high)
+  )
+}
+
+.adaptive_round_log_deferred_audit_from_payload <- function(payload) {
+  out <- .adaptive_round_log_deferred_audit_na_values()
+  if (!is.list(payload)) {
+    return(out)
+  }
+
+  draws <- payload$draws %||% NULL
+  if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 2L || ncol(draws) < 1L) {
+    return(out)
+  }
+
+  ci_bounds <- apply(
+    draws,
+    2,
+    stats::quantile,
+    probs = c(0.025, 0.975),
+    names = FALSE
+  )
+  ci_widths <- ci_bounds[2L, ] - ci_bounds[1L, ]
+  out$ci95_theta_width_mean <- mean(ci_widths)
+  out$ci95_theta_width_median <- stats::median(ci_widths)
+  out$ci95_theta_width_p90 <- stats::quantile(ci_widths, probs = 0.90, names = FALSE)
+  out$ci95_theta_width_max <- max(ci_widths)
+
+  cov_theta <- stats::cov(draws)
+  cov_diag <- diag(cov_theta)
+  out$cov_trace_theta <- sum(cov_diag)
+  out$cov_logdet_diag_theta <- sum(log(pmax(cov_diag, .Machine$double.eps)))
+  post_sd <- sqrt(pmax(cov_diag, 0))
+  out$post_sd_theta_p10 <- stats::quantile(post_sd, probs = 0.10, names = FALSE)
+  out$post_sd_theta_p50 <- stats::quantile(post_sd, probs = 0.50, names = FALSE)
+  out$post_sd_theta_p90 <- stats::quantile(post_sd, probs = 0.90, names = FALSE)
+
+  rank_draws <- t(apply(draws, 1, function(row) rank(-row, ties.method = "average")))
+  top_k <- min(20L, ncol(rank_draws))
+  if (top_k >= 1L) {
+    in_top <- rank_draws <= top_k
+    p_top <- colMeans(in_top)
+    entropy <- -(p_top * log(pmax(p_top, .Machine$double.eps)) +
+      (1 - p_top) * log(pmax(1 - p_top, .Machine$double.eps)))
+    boundary_lo <- max(1L, top_k - 2L)
+    boundary_hi <- min(length(entropy), top_k + 2L)
+    boundary_idx <- boundary_lo:boundary_hi
+    out$top20_boundary_entropy_mean <- mean(entropy[boundary_idx])
+    out$top20_boundary_entropy_p90 <- stats::quantile(
+      entropy[boundary_idx],
+      probs = 0.90,
+      names = FALSE
+    )
+  }
+
+  theta_for_draws <- as.double(colMeans(draws))
+  draw_ids <- as.character(colnames(draws) %||% seq_len(ncol(draws)))
+  if (length(theta_for_draws) >= 2L) {
+    rank_order <- order(-theta_for_draws, draw_ids)
+    p_adj <- vapply(seq_len(length(rank_order) - 1L), function(k) {
+      lhs <- rank_order[[k]]
+      rhs <- rank_order[[k + 1L]]
+      mean(draws[, lhs] > draws[, rhs])
+    }, numeric(1L))
+    near_low <- as.double(payload$near_tie_p_low %||% 0.40)
+    near_high <- as.double(payload$near_tie_p_high %||% 0.60)
+    near_tie <- p_adj >= near_low & p_adj <= near_high
+    out$near_tie_adj_frac <- mean(near_tie)
+    out$near_tie_adj_count <- as.integer(sum(near_tie))
+    out$p_adj_median <- stats::median(p_adj)
+
+    nn_diff_draws <- draws[, rank_order[-length(rank_order)], drop = FALSE] -
+      draws[, rank_order[-1L], drop = FALSE]
+    nn_diff_sd <- apply(nn_diff_draws, 2, stats::sd)
+    out$nn_diff_sd_mean <- mean(nn_diff_sd)
+    out$nn_diff_sd_p90 <- stats::quantile(nn_diff_sd, probs = 0.90, names = FALSE)
+  }
+
+  out
+}
+
 .adaptive_btl_refit_context <- function(state, last_refit_M_done, last_refit_step) {
   step_id_at_refit <- as.integer(nrow(state$step_log))
   list(
@@ -6464,22 +6597,7 @@
   ts_degree_sigma_corr <- NA_real_
   ts_btl_theta_corr <- NA_real_
   ts_btl_rank_spearman <- NA_real_
-  ci95_theta_width_mean <- NA_real_
-  ci95_theta_width_median <- NA_real_
-  ci95_theta_width_p90 <- NA_real_
-  ci95_theta_width_max <- NA_real_
-  near_tie_adj_frac <- NA_real_
-  near_tie_adj_count <- NA_integer_
-  p_adj_median <- NA_real_
-  cov_trace_theta <- NA_real_
-  cov_logdet_diag_theta <- NA_real_
-  post_sd_theta_p10 <- NA_real_
-  post_sd_theta_p50 <- NA_real_
-  post_sd_theta_p90 <- NA_real_
-  top20_boundary_entropy_mean <- NA_real_
-  top20_boundary_entropy_p90 <- NA_real_
-  nn_diff_sd_mean <- NA_real_
-  nn_diff_sd_p90 <- NA_real_
+  deferred_audit <- .adaptive_round_log_deferred_audit_na_values()
 
   trueskill_state <- state$trueskill_state %||% NULL
   defaults <- adaptive_defaults(length(ids))
@@ -6539,93 +6657,6 @@
           use = "pairwise.complete.obs"
         )
       }
-    }
-  }
-
-  draws <- fit$btl_posterior_draws %||% NULL
-  draw_ids <- character()
-  if (is.matrix(draws) && is.numeric(draws)) {
-    if (is.null(colnames(draws)) && ncol(draws) == length(ids)) {
-      colnames(draws) <- ids
-    }
-    draw_ids <- intersect(ids, as.character(colnames(draws)))
-    if (length(draw_ids) > 0L) {
-      draws <- draws[, draw_ids, drop = FALSE]
-      draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "btl_posterior_draws")
-      draw_metric_ids <- intersect(as.character(colnames(draws)), metric_ids)
-      if (length(draw_metric_ids) > 0L) {
-        draws <- draws[, draw_metric_ids, drop = FALSE]
-        draw_ids <- as.character(colnames(draws))
-      } else {
-        draws <- NULL
-      }
-    } else {
-      draws <- NULL
-    }
-  }
-
-  if (is.matrix(draws) && is.numeric(draws) && ncol(draws) > 0L) {
-    ci_bounds <- apply(
-      draws,
-      2,
-      stats::quantile,
-      probs = c(0.025, 0.975),
-      names = FALSE
-    )
-    ci_widths <- ci_bounds[2L, ] - ci_bounds[1L, ]
-    ci95_theta_width_mean <- mean(ci_widths)
-    ci95_theta_width_median <- stats::median(ci_widths)
-    ci95_theta_width_p90 <- stats::quantile(ci_widths, probs = 0.90, names = FALSE)
-    ci95_theta_width_max <- max(ci_widths)
-
-    cov_theta <- stats::cov(draws)
-    cov_diag <- diag(cov_theta)
-    cov_trace_theta <- sum(cov_diag)
-    cov_logdet_diag_theta <- sum(log(pmax(cov_diag, .Machine$double.eps)))
-    post_sd <- sqrt(pmax(cov_diag, 0))
-    post_sd_theta_p10 <- stats::quantile(post_sd, probs = 0.10, names = FALSE)
-    post_sd_theta_p50 <- stats::quantile(post_sd, probs = 0.50, names = FALSE)
-    post_sd_theta_p90 <- stats::quantile(post_sd, probs = 0.90, names = FALSE)
-
-    rank_draws <- t(apply(draws, 1, function(row) rank(-row, ties.method = "average")))
-    top_k <- min(20L, ncol(rank_draws))
-    if (top_k >= 1L) {
-      in_top <- rank_draws <= top_k
-      p_top <- colMeans(in_top)
-      entropy <- -(p_top * log(pmax(p_top, .Machine$double.eps)) +
-        (1 - p_top) * log(pmax(1 - p_top, .Machine$double.eps)))
-      boundary_lo <- max(1L, top_k - 2L)
-      boundary_hi <- min(length(entropy), top_k + 2L)
-      boundary_idx <- boundary_lo:boundary_hi
-      top20_boundary_entropy_mean <- mean(entropy[boundary_idx])
-      top20_boundary_entropy_p90 <- stats::quantile(entropy[boundary_idx], probs = 0.90, names = FALSE)
-    }
-
-    theta_for_draws <- NULL
-    if (!is.null(theta_map) && length(draw_ids) == ncol(draws) && all(draw_ids %in% names(theta_map))) {
-      theta_for_draws <- as.double(theta_map[draw_ids])
-    } else if (ncol(draws) >= 1L) {
-      theta_for_draws <- as.double(colMeans(draws))
-    }
-    if (!is.null(theta_for_draws) && length(theta_for_draws) >= 2L) {
-      rank_order <- order(-theta_for_draws, draw_ids)
-      p_adj <- vapply(seq_len(length(rank_order) - 1L), function(k) {
-        lhs <- rank_order[[k]]
-        rhs <- rank_order[[k + 1L]]
-        mean(draws[, lhs] > draws[, rhs])
-      }, numeric(1L))
-      near_low <- as.double(config$near_tie_p_low)
-      near_high <- as.double(config$near_tie_p_high)
-      near_tie <- p_adj >= near_low & p_adj <= near_high
-      near_tie_adj_frac <- mean(near_tie)
-      near_tie_adj_count <- sum(near_tie)
-      p_adj_median <- stats::median(p_adj)
-
-      nn_diff_draws <- draws[, rank_order[-length(rank_order)], drop = FALSE] -
-        draws[, rank_order[-1L], drop = FALSE]
-      nn_diff_sd <- apply(nn_diff_draws, 2, stats::sd)
-      nn_diff_sd_mean <- mean(nn_diff_sd)
-      nn_diff_sd_p90 <- stats::quantile(nn_diff_sd, probs = 0.90, names = FALSE)
     }
   }
 
@@ -6712,22 +6743,22 @@
     star_cap_reject_rate_since_last_refit = as.double(star_cap_reject_rate),
     recent_deg_median_since_last_refit = as.double(recent_deg_median),
     recent_deg_max_since_last_refit = as.integer(recent_deg_max),
-    ci95_theta_width_mean = as.double(ci95_theta_width_mean),
-    ci95_theta_width_median = as.double(ci95_theta_width_median),
-    ci95_theta_width_p90 = as.double(ci95_theta_width_p90),
-    ci95_theta_width_max = as.double(ci95_theta_width_max),
-    near_tie_adj_frac = as.double(near_tie_adj_frac),
-    near_tie_adj_count = as.integer(near_tie_adj_count),
-    p_adj_median = as.double(p_adj_median),
-    cov_trace_theta = as.double(cov_trace_theta),
-    cov_logdet_diag_theta = as.double(cov_logdet_diag_theta),
-    post_sd_theta_p10 = as.double(post_sd_theta_p10),
-    post_sd_theta_p50 = as.double(post_sd_theta_p50),
-    post_sd_theta_p90 = as.double(post_sd_theta_p90),
-    top20_boundary_entropy_mean = as.double(top20_boundary_entropy_mean),
-    top20_boundary_entropy_p90 = as.double(top20_boundary_entropy_p90),
-    nn_diff_sd_mean = as.double(nn_diff_sd_mean),
-    nn_diff_sd_p90 = as.double(nn_diff_sd_p90),
+    ci95_theta_width_mean = as.double(deferred_audit$ci95_theta_width_mean),
+    ci95_theta_width_median = as.double(deferred_audit$ci95_theta_width_median),
+    ci95_theta_width_p90 = as.double(deferred_audit$ci95_theta_width_p90),
+    ci95_theta_width_max = as.double(deferred_audit$ci95_theta_width_max),
+    near_tie_adj_frac = as.double(deferred_audit$near_tie_adj_frac),
+    near_tie_adj_count = as.integer(deferred_audit$near_tie_adj_count),
+    p_adj_median = as.double(deferred_audit$p_adj_median),
+    cov_trace_theta = as.double(deferred_audit$cov_trace_theta),
+    cov_logdet_diag_theta = as.double(deferred_audit$cov_logdet_diag_theta),
+    post_sd_theta_p10 = as.double(deferred_audit$post_sd_theta_p10),
+    post_sd_theta_p50 = as.double(deferred_audit$post_sd_theta_p50),
+    post_sd_theta_p90 = as.double(deferred_audit$post_sd_theta_p90),
+    top20_boundary_entropy_mean = as.double(deferred_audit$top20_boundary_entropy_mean),
+    top20_boundary_entropy_p90 = as.double(deferred_audit$top20_boundary_entropy_p90),
+    nn_diff_sd_mean = as.double(deferred_audit$nn_diff_sd_mean),
+    nn_diff_sd_p90 = as.double(deferred_audit$nn_diff_sd_p90),
     diagnostics_pass = as.logical(metrics$diagnostics_pass %||% NA),
     diagnostics_divergences_pass = as.logical(metrics$diagnostics_divergences_pass %||% NA),
     diagnostics_rhat_pass = as.logical(metrics$diagnostics_rhat_pass %||% NA),
@@ -7119,6 +7150,11 @@ compute_stop_metrics <- function(state, config) {
     phase_scope = as.character(scope$phase_scope %||% "global"),
     phase_scope_set_id = as.integer(scope$phase_scope_set_id %||% NA_integer_),
     phase_scope_n_items = as.integer(length(scope_ids)),
+    round_log_deferred_audit_payload = .adaptive_round_log_deferred_audit_payload(
+      draws = draws_scope,
+      near_tie_p_low = config$near_tie_p_low %||% 0.40,
+      near_tie_p_high = config$near_tie_p_high %||% 0.60
+    ),
     diagnostics_pass = diagnostics_pass,
     diagnostics_divergences_pass = diagnostics_divergences_pass,
     diagnostics_rhat_pass = diagnostics_rhat_pass,
