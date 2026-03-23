@@ -555,6 +555,9 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
   expect_true(length(stats_con) >= 2L)
   expect_true(all(vapply(stats_con, function(x) !is.null(x$concurrent_target_pairs), logical(1L))))
   expect_true(all(c(
+    "probe_acceleration_mode_used",
+    "probe_active_floor_used",
+    "probe_only_blocker_trigger",
     "probe_acceleration_used",
     "probe_effort_base_cap",
     "probe_effort_effective_cap",
@@ -580,6 +583,14 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
       as.integer(probe_audit_rows$probe_effort_base_cap)
   ))
   expect_true(all(
+    as.integer(probe_audit_rows$probe_remaining_to_min_start) >= 0L
+  ))
+  expect_true(all(
+    as.logical(probe_audit_rows$probe_acceleration_used) ==
+      (as.integer(probe_audit_rows$probe_effort_effective_cap) >
+        as.integer(probe_audit_rows$probe_effort_base_cap))
+  ))
+  expect_true(all(
     as.integer(probe_audit_rows$n_cross_edges_probe_since_last_refit) <=
       as.integer(probe_audit_rows$probe_effort_effective_cap)
   ))
@@ -593,6 +604,64 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
   is_hub_i <- committed_con$set_i == 1L
   is_hub_j <- committed_con$set_j == 1L
   expect_true(all(xor(is_hub_i, is_hub_j)))
+})
+
+test_that("live concurrent Phase B can commit accelerated holdout work without prior starvation", {
+  withr::local_seed(20260320)
+
+  items <- make_linking_items_three_set()
+  state <- adaptive_rank_start(items, seed = 19L)
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1)
+  fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.6, h2 = 0.0, h3 = 0.6,
+    s21 = -0.3, s22 = 0.2, s23 = 1.0,
+    s31 = -0.4, s32 = 0.1, s33 = 0.9
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 24L,
+    fit_fn = fit_stub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts,
+      probe_pairs_per_refit_per_spoke = 1L,
+      probe_pairs_per_refit_per_spoke_bootstrap_max = 3L,
+      probe_edges_min_for_stop = 12L,
+      probe_accel_bootstrap_target = 12L,
+      probe_active_floor_min = 1L,
+      probe_active_floor_frac = 0,
+      probe_active_floor_requires_anchor_progress = FALSE
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 4L)),
+    progress = "none"
+  )
+
+  accelerated_rows <- out$step_log[
+    out$step_log$run_mode %in% "link_probe_holdout" &
+      out$step_log$fallback_used %in% "probe_panel_acceleration",
+    ,
+    drop = FALSE
+  ]
+  expect_true(nrow(accelerated_rows) >= 1L)
+  expect_false(any(accelerated_rows$candidate_starved %in% TRUE))
+
+  later_active_rows <- out$step_log[
+    out$step_log$step_id > accelerated_rows$step_id[[1L]] &
+      out$step_log$run_mode %in% "link_multi_spoke" &
+      out$step_log$is_probe_step %in% FALSE,
+    ,
+    drop = FALSE
+  ]
+  expect_true(nrow(later_active_rows) >= 1L)
 })
 
 test_that("linking starvation paths in tiny domains are logged with fallback metadata", {

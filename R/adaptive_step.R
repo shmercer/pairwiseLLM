@@ -712,20 +712,12 @@ run_one_step <- function(state, judge, ...) {
   if (.adaptive_warm_start_active(state)) {
     selection <- .adaptive_warm_start_selection(state, step_id = step_id)
   } else {
-    state <- .adaptive_refresh_round_anchors(state)
-    selection <- select_next_pair(state, step_id = step_id)
-    if (isTRUE(selection$candidate_starved) &&
-      .adaptive_link_mode_active(controller) &&
-      identical(phase_ctx$phase, "phase_b")) {
+    maybe_replace_with_holdout <- function(selection, allow_when_active, eligible_spoke_ids) {
       probe_spoke_id <- .adaptive_link_probe_next_holdout_spoke(
         state,
         controller,
-        eligible_spoke_ids = .adaptive_link_effective_active_spokes(
-          state = state,
-          controller = controller,
-          refit_id = .adaptive_link_refit_window_id(state),
-          exclude_exhausted = TRUE
-        )
+        eligible_spoke_ids = eligible_spoke_ids,
+        allow_when_active = allow_when_active
       )
       if (!is.na(probe_spoke_id)) {
         probe_selection <- .adaptive_link_probe_select_holdout(
@@ -736,12 +728,57 @@ run_one_step <- function(state, judge, ...) {
         if (!is.null(probe_selection) && nrow(tibble::as_tibble(probe_selection)) != 0L) {
           active_fallback_path <- as.character(selection$fallback_path %||% NA_character_)
           active_fallback_path <- active_fallback_path[!is.na(active_fallback_path) & nzchar(active_fallback_path)]
-          probe_selection$fallback_used <- "probe_panel_after_active_unavailable"
+          fallback_suffix <- if (isTRUE(allow_when_active)) {
+            "probe_panel_acceleration"
+          } else {
+            "probe_panel_after_active_unavailable"
+          }
+          probe_selection$fallback_used <- fallback_suffix
           probe_selection$fallback_path <- paste(
-            c(active_fallback_path, "probe_panel_after_active_unavailable"),
+            c(active_fallback_path, fallback_suffix),
             collapse = ">"
           )
-          selection <- probe_selection
+          return(probe_selection)
+        }
+      }
+      selection
+    }
+
+    state <- .adaptive_refresh_round_anchors(state)
+    selection <- select_next_pair(state, step_id = step_id)
+    if (.adaptive_link_mode_active(controller) &&
+      identical(phase_ctx$phase, "phase_b")) {
+      if (isTRUE(selection$candidate_starved)) {
+        selection <- maybe_replace_with_holdout(
+          selection = selection,
+          allow_when_active = FALSE,
+          eligible_spoke_ids = .adaptive_link_effective_active_spokes(
+            state = state,
+            controller = controller,
+            refit_id = .adaptive_link_refit_window_id(state),
+            exclude_exhausted = TRUE
+          )
+        )
+      } else {
+        active_spoke_id <- as.integer(selection$link_spoke_id_selected %||% NA_integer_)
+        if (is.na(active_spoke_id) &&
+          !is.na(selection$i %||% NA_integer_) &&
+          !is.na(selection$j %||% NA_integer_)) {
+          set_i <- as.integer(state$items$set_id[[selection$i]])
+          set_j <- as.integer(state$items$set_id[[selection$j]])
+          hub_id <- as.integer(controller$hub_id %||% 1L)
+          if (identical(set_i, hub_id) && !identical(set_j, hub_id)) {
+            active_spoke_id <- set_j
+          } else if (identical(set_j, hub_id) && !identical(set_i, hub_id)) {
+            active_spoke_id <- set_i
+          }
+        }
+        if (!is.na(active_spoke_id)) {
+          selection <- maybe_replace_with_holdout(
+            selection = selection,
+            allow_when_active = TRUE,
+            eligible_spoke_ids = as.integer(active_spoke_id)
+          )
         }
       }
     }

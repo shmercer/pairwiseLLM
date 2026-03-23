@@ -1070,8 +1070,8 @@ test_that("low-coverage probe panel restoration, run helpers, and cost estimator
     ),
     .package = "pairwiseLLM"
   )
-  expect_true(guard$block_probes)
-  expect_identical(guard$pending_spokes, 2L)
+  expect_false(guard$block_probes)
+  expect_identical(guard$pending_spokes, integer())
   expect_identical(guard$budgeted_spokes, 2L)
 
   holdout_state <- add_link_stage_row(state, refit_id = 1L, spoke_id = 2L, link_epoch_id = 1L)
@@ -1079,7 +1079,6 @@ test_that("low-coverage probe panel restoration, run helpers, and cost estimator
   next_spoke <- testthat::with_mocked_bindings(
     .adaptive_link_phase_context = function(...) list(active_spokes = c(2L, 3L)),
     .adaptive_link_probe_holdout_total_since_last_refit = function(...) 0L,
-    .adaptive_link_probe_active_progress_guard = function(...) list(block_probes = FALSE),
     .adaptive_link_ranked_spokes = function(...) integer(),
     .adaptive_link_probe_effort_plan = function(state, controller, spoke_id) {
       if (identical(as.integer(spoke_id), 2L)) {
@@ -1088,7 +1087,8 @@ test_that("low-coverage probe panel restoration, run helpers, and cost estimator
           realized_refit = 0L,
           effective_cap = 2L,
           remaining_to_min_start = 1L,
-          acceleration_used = FALSE
+          acceleration_used = FALSE,
+          allow_when_active = TRUE
         )
       } else {
         list(
@@ -1096,7 +1096,8 @@ test_that("low-coverage probe panel restoration, run helpers, and cost estimator
           realized_refit = 0L,
           effective_cap = 2L,
           remaining_to_min_start = 2L,
-          acceleration_used = FALSE
+          acceleration_used = FALSE,
+          allow_when_active = FALSE
         )
       }
     },
@@ -1114,7 +1115,8 @@ test_that("low-coverage probe panel restoration, run helpers, and cost estimator
     pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
       holdout_state,
       controller = holdout_state$controller,
-      eligible_spoke_ids = c(2L, 3L)
+      eligible_spoke_ids = c(2L, 3L),
+      allow_when_active = TRUE
     ),
     .package = "pairwiseLLM"
   )
@@ -1122,11 +1124,11 @@ test_that("low-coverage probe panel restoration, run helpers, and cost estimator
 
   blocked_holdout <- holdout_state
   blocked_holdout$refit_meta$refit_pairs_target_current <- 1L
-  expect_true(is.na(pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
+  expect_identical(pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
     blocked_holdout,
     controller = blocked_holdout$controller,
     eligible_spoke_ids = c(2L, 3L)
-  )))
+  ), 2L)
 
   fully_realized <- state
   full_panel <- panel

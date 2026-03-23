@@ -1005,6 +1005,19 @@ summarize_adaptive <- function(state) {
   probe_panel_id <- .adaptive_print_compact_values(latest_rows$probe_panel_id)
   probe_planned <- sum(as.integer(latest_rows$probe_edges_planned %||% 0L), na.rm = TRUE)
   probe_realized <- sum(as.integer(latest_rows$probe_edges_realized %||% 0L), na.rm = TRUE)
+  probe_accel_mode <- .adaptive_print_compact_values(latest_rows$probe_acceleration_mode_used)
+  probe_floor_vals <- as.integer(latest_rows$probe_active_floor_used %||% NA_integer_)
+  probe_floor <- .adaptive_print_compact_values(probe_floor_vals[!is.na(probe_floor_vals)])
+  probe_base_cap <- as.integer(latest_rows$probe_effort_base_cap %||% NA_integer_)
+  probe_effective_cap <- as.integer(latest_rows$probe_effort_effective_cap %||% NA_integer_)
+  probe_cap_pairs <- if (length(probe_base_cap) == length(probe_effective_cap)) {
+    idx <- !is.na(probe_base_cap) & !is.na(probe_effective_cap)
+    paste0(probe_base_cap[idx], "->", probe_effective_cap[idx])
+  } else {
+    character()
+  }
+  probe_cap <- .adaptive_print_compact_values(probe_cap_pairs)
+  probe_only_blocker <- sum(latest_rows$probe_only_blocker_trigger %in% TRUE, na.rm = TRUE)
   gate_open <- sum(latest_rows$link_stop_gate_open %in% TRUE, na.rm = TRUE)
   lag_open <- sum(latest_rows$link_lag_eligible %in% TRUE, na.rm = TRUE)
   frozen <- sum(latest_rows$link_state_frozen %in% TRUE, na.rm = TRUE)
@@ -1049,6 +1062,18 @@ summarize_adaptive <- function(state) {
       )
     },
     paste0("probe_edges=", probe_realized, "/", probe_planned),
+    if (!is.na(probe_accel_mode) && nzchar(probe_accel_mode)) {
+      paste0("probe_accel=", probe_accel_mode)
+    },
+    if (!is.na(probe_floor) && nzchar(probe_floor)) {
+      paste0("probe_floor=", probe_floor)
+    },
+    if (!is.na(probe_cap) && nzchar(probe_cap)) {
+      paste0("probe_cap=", probe_cap)
+    },
+    if (probe_only_blocker > 0L) {
+      paste0("probe_only_blocker=", probe_only_blocker, "/", nrow(latest_rows))
+    },
     paste0("lag_open=", lag_open, "/", nrow(latest_rows)),
     paste0("stop_gate_open=", gate_open, "/", nrow(latest_rows)),
     if (length(phase_ctx$stopped_spokes) > 0L) {
@@ -1892,6 +1917,24 @@ print.adaptive_state <- function(x, ...) {
         probes_realized,
         "/",
         if (is.na(probes_min)) "NA" else probes_min
+      ),
+      paste0(
+        "    probe_accel=",
+        .adaptive_progress_col_value(
+          link_row,
+          "probe_acceleration_mode_used",
+          default = NA_character_
+        ),
+        "  floor=",
+        .adaptive_progress_col_value(link_row, "probe_active_floor_used", default = NA_integer_),
+        "  cap=",
+        .adaptive_progress_col_value(link_row, "probe_effort_base_cap", default = NA_integer_),
+        "->",
+        .adaptive_progress_col_value(link_row, "probe_effort_effective_cap", default = NA_integer_),
+        "  sole_blocker=",
+        .adaptive_progress_fmt_state(
+          .adaptive_progress_col_value(link_row, "probe_only_blocker_trigger", default = NA)
+        )
       ),
       paste0(
         "    stop_window=",

@@ -5709,12 +5709,119 @@
     } else {
       "insufficient_realization"
     }
+    prior_stage_row <- .adaptive_link_probe_last_stage_row(
+      state = state,
+      spoke_id = as.integer(spoke_id)
+    )
+    prior_surface_row <- if (nrow(prior_stage_row) > 0L) {
+      prior_stage_row[1L, , drop = FALSE]
+    } else {
+      NULL
+    }
+    prior_surface_source <- if (nrow(prior_stage_row) > 0L) {
+      "link_stage_log_window_start"
+    } else {
+      "none"
+    }
     probe_effort_plan <- .adaptive_link_probe_effort_plan(
       state = state,
       controller = controller,
-      spoke_id = as.integer(spoke_id)
+      spoke_id = as.integer(spoke_id),
+      surface_row = prior_surface_row,
+      surface_source = prior_surface_source
     )
     probe_effort_base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
+    probe_remaining_to_min_start_logged <- as.integer(
+      probe_effort_plan$remaining_to_min_start %||% NA_integer_
+    )
+    bootstrap_acceleration_used_logged <- FALSE
+    probe_active_floor_used_logged <- as.integer(
+      probe_effort_plan$active_floor_used %||% 0L
+    )
+    probe_only_blocker_trigger_logged <- as.logical(
+      probe_effort_plan$probe_only_blocker_trigger %||% FALSE
+    )
+    probe_effort_effective_cap_logged <- as.integer(
+      probe_effort_plan$effective_cap %||% probe_effort_base_cap
+    )
+    if (nrow(prior_stage_row) > 0L) {
+      probe_remaining_to_min_start_logged <- max(
+        0L,
+        as.integer((controller$probe_edges_min_for_stop %||% 30L) - probe_edges_realized_before_refit)
+      )
+      probe_panel_shortfall_start_logged <- max(
+        0L,
+        as.integer(probe_edges_planned - probe_edges_realized_before_refit)
+      )
+      probe_only_blocker_trigger_logged <- .adaptive_link_probe_sole_blocker_trigger(
+        surface_row = prior_surface_row,
+        surface_source = prior_surface_source,
+        controller = controller,
+        spoke_id = as.integer(spoke_id),
+        realized_before_refit = as.integer(probe_edges_realized_before_refit),
+        realized_min = as.integer(controller$probe_edges_min_for_stop %||% 30L),
+        panel_shortfall_start = as.integer(probe_panel_shortfall_start_logged)
+      )
+      bootstrap_active_floor_logged <- if (isTRUE(controller$probe_active_floor_enabled) &&
+        !isTRUE(retired_spoke) &&
+        is.finite(as.integer(budget_info$B_spoke_refit_budget %||% NA_integer_)) &&
+        as.integer(budget_info$B_spoke_refit_budget %||% 0L) > 0L) {
+        max(
+          as.integer(controller$probe_active_floor_min %||% 20L),
+          as.integer(ceiling(
+            as.double(controller$probe_active_floor_frac %||% 0.5) *
+              as.integer(budget_info$B_spoke_refit_budget %||% 0L)
+          ))
+        )
+      } else {
+        0L
+      }
+      probe_active_floor_used_logged <- if (isTRUE(probe_only_blocker_trigger_logged) &&
+        as.integer(budget_info$B_spoke_refit_budget %||% 0L) > 0L) {
+        min(
+          as.integer(budget_info$B_spoke_refit_budget %||% 0L),
+          as.integer(controller$probe_sole_blocker_active_floor_min %||% 10L)
+        )
+      } else {
+        as.integer(bootstrap_active_floor_logged)
+      }
+      bootstrap_acceleration_logged <- !isTRUE(probe_only_blocker_trigger_logged) &&
+        isTRUE(controller$probe_active_floor_enabled) &&
+        !isTRUE(retired_spoke) &&
+        as.integer(budget_info$B_spoke_refit_budget %||% 0L) > 0L &&
+        as.integer(probe_edges_realized_before_refit) <
+          as.integer(controller$probe_accel_bootstrap_target %||% 12L) &&
+        as.integer(probe_edges_realized_before_refit) <
+          as.integer(controller$probe_edges_min_for_stop %||% 30L) &&
+        as.integer(n_pairs_since_active) >= as.integer(probe_active_floor_used_logged) &&
+        isTRUE(probe_effort_plan$anchor_progress_met %||% TRUE)
+      bootstrap_acceleration_used_logged <- isTRUE(bootstrap_acceleration_logged) &&
+        any(as.character(since_last_probe$fallback_used %||% character()) %in%
+          "probe_panel_acceleration")
+      probe_effort_effective_cap_logged <- if (isTRUE(probe_only_blocker_trigger_logged)) {
+        min(
+          as.integer(controller$probe_pairs_per_refit_per_spoke_sole_blocker_max %||%
+            probe_effort_base_cap),
+          as.integer(probe_remaining_to_min_start_logged)
+        )
+      } else if (isTRUE(bootstrap_acceleration_used_logged)) {
+        min(
+          as.integer(controller$probe_pairs_per_refit_per_spoke_bootstrap_max %||%
+            probe_effort_base_cap),
+          as.integer(probe_remaining_to_min_start_logged)
+        )
+      } else {
+        as.integer(probe_effort_base_cap)
+      }
+    }
+    probe_acceleration_used_logged <- as.logical(
+      (isTRUE(probe_only_blocker_trigger_logged) ||
+        isTRUE(bootstrap_acceleration_used_logged) ||
+        as.integer(probe_effort_effective_cap_logged) > as.integer(probe_effort_base_cap)) %||%
+        probe_effort_plan$acceleration_used %||%
+        (as.integer(probe_effort_effective_cap_logged) >
+          as.integer(probe_effort_base_cap))
+    )
     probe_panel_reallocation_used <- .adaptive_link_probe_panel_reallocation_used(probe_panel)
     probe_cache <- tibble::as_tibble(.adaptive_link_probe_state(state)$prediction_cache)
     probe_pred_cache_used <- nrow(probe_cache[
@@ -6035,14 +6142,17 @@
       probe_edges_realized_delta_since_last_refit = as.integer(probe_edges_realized_delta_since_last_refit),
       probe_panel_shortfall = as.integer(probe_panel_shortfall),
       probe_shortfall_reason = as.character(probe_shortfall_reason),
-      probe_acceleration_used = as.logical(probe_effort_plan$acceleration_used %||% FALSE),
+      probe_acceleration_mode_used = as.character(
+        probe_effort_plan$acceleration_mode_used %||%
+          controller$probe_acceleration_mode %||%
+          "active_floor_plus_sole_blocker"
+      ),
+      probe_active_floor_used = as.integer(probe_active_floor_used_logged),
+      probe_only_blocker_trigger = as.logical(probe_only_blocker_trigger_logged),
+      probe_acceleration_used = as.logical(probe_acceleration_used_logged),
       probe_effort_base_cap = as.integer(probe_effort_plan$base_cap %||% probe_effort_base_cap),
-      probe_effort_effective_cap = as.integer(
-        probe_effort_plan$effective_cap %||% probe_effort_base_cap
-      ),
-      probe_remaining_to_min_start = as.integer(
-        probe_effort_plan$remaining_to_min_start %||% NA_integer_
-      ),
+      probe_effort_effective_cap = as.integer(probe_effort_effective_cap_logged),
+      probe_remaining_to_min_start = as.integer(probe_remaining_to_min_start_logged),
       probe_panel_reallocation_used = as.logical(probe_panel_reallocation_used),
       probe_pred_cache_used = as.logical(probe_pred_cache_used),
       probe_brier = as.double(stats_row$probe_brier %||% NA_real_),
@@ -6294,6 +6404,18 @@
   controller <- .adaptive_controller_resolve(state)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   phase_b_linking <- .adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")
+  round_stop_decision <- if (isTRUE(phase_b_linking)) {
+    FALSE
+  } else {
+    as.logical(stop_decision)
+  }
+  round_stop_reason <- if (isTRUE(phase_b_linking)) {
+    NA_character_
+  } else if (isTRUE(stop_decision)) {
+    as.character(stop_reason)
+  } else {
+    NA_character_
+  }
   if (!"pair_id" %in% names(step_subset)) {
     step_subset$pair_id <- NA_integer_
   }
@@ -6680,8 +6802,8 @@
     mcmc_cores_detected_logical = as.integer(mcmc_config_used$cores_detected_logical %||% NA_integer_),
     mcmc_threads_per_chain = as.integer(mcmc_config_used$threads_per_chain %||% NA_integer_),
     mcmc_cmdstanr_version = as.character(mcmc_config_used$cmdstanr_version %||% NA_character_),
-    stop_decision = as.logical(stop_decision),
-    stop_reason = if (isTRUE(stop_decision)) as.character(stop_reason) else NA_character_,
+    stop_decision = as.logical(round_stop_decision),
+    stop_reason = as.character(round_stop_reason),
     max_pairs_after_stop = as.integer(max_pairs_after_stop),
     pairs_committed_after_stop = as.integer(pairs_committed_after_stop)
   )

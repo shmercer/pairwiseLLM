@@ -161,6 +161,12 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_probe_acceleration_mode_levels <- function() {
+  "active_floor_plus_sole_blocker"
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_hub_lock_mode_levels <- function() {
   c("hard_lock", "soft_lock", "free")
 }
@@ -267,6 +273,24 @@
   out$link_estimation_mode <- .adaptive_normalize_link_estimation_mode(
     out$link_estimation_mode %||% defaults$link_estimation_mode
   )
+  out$probe_acceleration_mode <- out$probe_acceleration_mode %||% defaults$probe_acceleration_mode
+  if (!is.null(out$probe_acceleration_mode)) {
+    if (!is.character(out$probe_acceleration_mode) ||
+      length(out$probe_acceleration_mode) != 1L ||
+      is.na(out$probe_acceleration_mode) ||
+      out$probe_acceleration_mode == "") {
+      rlang::abort("Probe acceleration mode must be a single non-empty string.")
+    }
+    if (!out$probe_acceleration_mode %in% .adaptive_probe_acceleration_mode_levels()) {
+      rlang::abort(
+        paste0(
+          "Probe acceleration mode must be one of: ",
+          paste(.adaptive_probe_acceleration_mode_levels(), collapse = ", "),
+          "."
+        )
+      )
+    }
+  }
 
   if (identical(out$link_estimation_mode, "anchored_joint")) {
     out$link_transform_policy <- NA_character_
@@ -483,6 +507,17 @@
     link_transform_escalation_is_one_way = TRUE,
     max_pairs_after_stop = 0L,
     probe_pairs_per_refit_per_spoke = 2L,
+    probe_acceleration_mode = "active_floor_plus_sole_blocker",
+    probe_active_floor_enabled = TRUE,
+    probe_sole_blocker_acceleration_enabled = TRUE,
+    probe_pairs_per_refit_per_spoke_bootstrap_max = 6L,
+    probe_pairs_per_refit_per_spoke_sole_blocker_max = 12L,
+    probe_accel_bootstrap_target = 12L,
+    probe_active_floor_frac = 0.50,
+    probe_active_floor_min = 20L,
+    probe_active_floor_requires_anchor_progress = TRUE,
+    probe_sole_blocker_min_realized = 20L,
+    probe_sole_blocker_active_floor_min = 10L,
     probe_panel_edges = NA_integer_,
     probe_edges_min_for_stop = 30L,
     probe_brier_delta_min = 0.005,
@@ -603,6 +638,17 @@
     "link_transform_escalation_is_one_way",
     "max_pairs_after_stop",
     "probe_pairs_per_refit_per_spoke",
+    "probe_acceleration_mode",
+    "probe_active_floor_enabled",
+    "probe_sole_blocker_acceleration_enabled",
+    "probe_pairs_per_refit_per_spoke_bootstrap_max",
+    "probe_pairs_per_refit_per_spoke_sole_blocker_max",
+    "probe_accel_bootstrap_target",
+    "probe_active_floor_frac",
+    "probe_active_floor_min",
+    "probe_active_floor_requires_anchor_progress",
+    "probe_sole_blocker_min_realized",
+    "probe_sole_blocker_active_floor_min",
     "probe_panel_edges",
     "probe_edges_min_for_stop",
     "probe_brier_delta_min",
@@ -835,6 +881,36 @@
   out$link_transform_escalation_is_one_way <- read_logical("link_transform_escalation_is_one_way")
   out$max_pairs_after_stop <- read_integer("max_pairs_after_stop", 0L, Inf)
   out$probe_pairs_per_refit_per_spoke <- read_integer("probe_pairs_per_refit_per_spoke", 0L, Inf)
+  out$probe_acceleration_mode <- read_choice(
+    "probe_acceleration_mode",
+    .adaptive_probe_acceleration_mode_levels()
+  )
+  out$probe_active_floor_enabled <- read_logical("probe_active_floor_enabled")
+  out$probe_sole_blocker_acceleration_enabled <- read_logical(
+    "probe_sole_blocker_acceleration_enabled"
+  )
+  out$probe_pairs_per_refit_per_spoke_bootstrap_max <- read_integer(
+    "probe_pairs_per_refit_per_spoke_bootstrap_max",
+    0L,
+    Inf
+  )
+  out$probe_pairs_per_refit_per_spoke_sole_blocker_max <- read_integer(
+    "probe_pairs_per_refit_per_spoke_sole_blocker_max",
+    0L,
+    Inf
+  )
+  out$probe_accel_bootstrap_target <- read_integer("probe_accel_bootstrap_target", 0L, Inf)
+  out$probe_active_floor_frac <- read_double("probe_active_floor_frac", 0, 1)
+  out$probe_active_floor_min <- read_integer("probe_active_floor_min", 0L, Inf)
+  out$probe_active_floor_requires_anchor_progress <- read_logical(
+    "probe_active_floor_requires_anchor_progress"
+  )
+  out$probe_sole_blocker_min_realized <- read_integer("probe_sole_blocker_min_realized", 0L, Inf)
+  out$probe_sole_blocker_active_floor_min <- read_integer(
+    "probe_sole_blocker_active_floor_min",
+    0L,
+    Inf
+  )
   out$probe_panel_edges <- read_integer("probe_panel_edges", 1L, Inf)
   out$probe_edges_min_for_stop <- read_integer("probe_edges_min_for_stop", 1L, Inf)
   out$probe_brier_delta_min <- read_double("probe_brier_delta_min", 0, 1)
@@ -1025,6 +1101,24 @@
   if (resolved$stability_passes_required > resolved$stability_window_refits) {
     rlang::abort(
       "`adaptive_config$stability_passes_required` must be <= `adaptive_config$stability_window_refits`."
+    )
+  }
+  if (resolved$probe_pairs_per_refit_per_spoke_bootstrap_max <
+    resolved$probe_pairs_per_refit_per_spoke) {
+    rlang::abort(
+      paste0(
+        "`adaptive_config$probe_pairs_per_refit_per_spoke_bootstrap_max` must be >= ",
+        "`adaptive_config$probe_pairs_per_refit_per_spoke`."
+      )
+    )
+  }
+  if (resolved$probe_pairs_per_refit_per_spoke_sole_blocker_max <
+    resolved$probe_pairs_per_refit_per_spoke) {
+    rlang::abort(
+      paste0(
+        "`adaptive_config$probe_pairs_per_refit_per_spoke_sole_blocker_max` must be >= ",
+        "`adaptive_config$probe_pairs_per_refit_per_spoke`."
+      )
     )
   }
   if (resolved$link_transform_escalation_passes_required >

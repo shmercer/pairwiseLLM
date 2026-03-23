@@ -227,3 +227,161 @@ test_link_btl_config <- function(x = list()) {
     x %||% list()
   )
 }
+
+make_linking_score_judge_fixture <- function(scores) {
+  score_names <- names(scores)
+  scores <- as.double(scores)
+  names(scores) <- score_names
+
+  default_score <- function(item_id) {
+    item_id <- as.character(item_id)
+    if (grepl("^h\\d+$", item_id)) {
+      rank <- as.integer(sub("^h", "", item_id))
+      return(-1.0 + (0.16 * rank))
+    }
+    if (grepl("^s\\d\\d+$", item_id)) {
+      set_id <- as.integer(substr(item_id, 2L, 2L))
+      rank <- as.integer(sub("^s\\d", "", item_id))
+      return((0.1 * set_id) + (0.22 * rank))
+    }
+    0
+  }
+
+  function(A, B, state, ...) {
+    a <- as.character(A$item_id[[1L]])
+    b <- as.character(B$item_id[[1L]])
+    a_score <- scores[a]
+    b_score <- scores[b]
+    a_score <- if (!is.na(a_score)) as.double(a_score) else default_score(a)
+    b_score <- if (!is.na(b_score)) as.double(b_score) else default_score(b)
+    list(is_valid = TRUE, Y = as.integer(a_score >= b_score), invalid_reason = NA_character_)
+  }
+}
+
+make_positive_probe_acceleration_runtime_state <- function() {
+  withr::with_seed(20260320, {
+    items <- tibble::tibble(
+      item_id = c(
+        paste0("h", seq_len(10L)),
+        paste0("s2", seq_len(6L)),
+        paste0("s3", seq_len(6L))
+      ),
+      set_id = c(rep(1L, 10L), rep(2L, 6L), rep(3L, 6L)),
+      global_item_id = c(
+        paste0("gh", seq_len(10L)),
+        paste0("gs2", seq_len(6L)),
+        paste0("gs3", seq_len(6L))
+      )
+    )
+    state <- adaptive_rank_start(items, seed = 19L)
+    state$warm_start_done <- TRUE
+    state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+
+    ids <- as.character(state$item_ids)
+    draws <- matrix(seq_along(ids), nrow = 4L, ncol = length(ids), byrow = TRUE)
+    colnames(draws) <- ids
+    state$btl_fit <- make_test_btl_fit(ids, draws = draws, model_variant = "btl_e_b")
+
+    artifacts <- lapply(sort(unique(as.integer(state$items$set_id))), function(set_id) {
+      artifact <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = as.integer(set_id))
+      if (!identical(as.integer(set_id), 1L)) {
+        artifact$items$theta_raw_mean <- as.double(artifact$items$theta_raw_mean - 1)
+      }
+      artifact$quality_gate_accepted <- TRUE
+      artifact
+    })
+    names(artifacts) <- as.character(sort(unique(as.integer(state$items$set_id))))
+
+    fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+    judge <- make_linking_score_judge_fixture(c(
+      h1 = -0.6, h2 = 0.0, h3 = 0.6,
+      s21 = -0.3, s22 = 0.2, s23 = 1.0,
+      s31 = -0.4, s32 = 0.1, s33 = 0.9
+    ))
+
+    adaptive_config <- list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts,
+      probe_pairs_per_refit_per_spoke = 1L,
+      probe_pairs_per_refit_per_spoke_bootstrap_max = 3L,
+      probe_edges_min_for_stop = 12L,
+      probe_accel_bootstrap_target = 12L,
+      probe_active_floor_min = 1L,
+      probe_active_floor_frac = 0,
+      probe_active_floor_requires_anchor_progress = FALSE
+    )
+    btl_config <- test_link_btl_config(list(refit_pairs_target = 4L))
+
+    out <- adaptive_rank_run_live(
+      state = state,
+      judge = judge,
+      n_steps = 24L,
+      fit_fn = fit_stub$fit_fn,
+      adaptive_config = adaptive_config,
+      btl_config = btl_config,
+      progress = "none"
+    )
+
+    accelerated_rows <- out$step_log[
+      out$step_log$run_mode %in% "link_probe_holdout" &
+        out$step_log$fallback_used %in% "probe_panel_acceleration",
+      ,
+      drop = FALSE
+    ]
+    if (nrow(accelerated_rows) < 1L) {
+      rlang::abort(
+        "Positive probe acceleration fixture failed to commit live accelerated holdout work."
+      )
+    }
+
+    later_active_rows <- out$step_log[
+      out$step_log$step_id > accelerated_rows$step_id[[1L]] &
+        out$step_log$run_mode %in% "link_multi_spoke" &
+        out$step_log$is_probe_step %in% FALSE,
+      ,
+      drop = FALSE
+    ]
+    if (nrow(later_active_rows) < 1L) {
+      rlang::abort(
+        "Positive probe acceleration fixture regressed into a probe-first regime after acceleration."
+      )
+    }
+
+    accelerated_refits <- out$link_stage_log[
+      out$link_stage_log$probe_acceleration_used %in% TRUE,
+      ,
+      drop = FALSE
+    ]
+    extra_chunks <- 0L
+    while (nrow(accelerated_refits) < 1L &&
+      extra_chunks < 4L &&
+      !isTRUE(out$meta$stop_decision %||% FALSE)) {
+      out <- adaptive_rank_run_live(
+        state = out,
+        judge = judge,
+        n_steps = 8L,
+        fit_fn = fit_stub$fit_fn,
+        adaptive_config = adaptive_config,
+        btl_config = btl_config,
+        progress = "none"
+      )
+      accelerated_refits <- out$link_stage_log[
+        out$link_stage_log$probe_acceleration_used %in% TRUE,
+        ,
+        drop = FALSE
+      ]
+      extra_chunks <- extra_chunks + 1L
+    }
+    if (nrow(accelerated_refits) < 1L) {
+      rlang::abort(
+        "Positive probe acceleration fixture failed to emit canonical accelerated link-stage rows."
+      )
+    }
+
+    out
+  })
+}

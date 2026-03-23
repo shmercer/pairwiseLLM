@@ -133,6 +133,7 @@ test_that("canonical log schemas follow the expected column order", {
     "probe_edges_realized_before_refit", "probe_edges_realized",
     "probe_edges_realized_delta_since_last_refit", "probe_panel_shortfall",
     "probe_shortfall_reason",
+    "probe_acceleration_mode_used", "probe_active_floor_used", "probe_only_blocker_trigger",
     "probe_acceleration_used", "probe_effort_base_cap", "probe_effort_effective_cap",
     "probe_remaining_to_min_start", "probe_panel_reallocation_used", "probe_pred_cache_used",
     "probe_brier", "probe_brier_max_used", "probe_brier_pass",

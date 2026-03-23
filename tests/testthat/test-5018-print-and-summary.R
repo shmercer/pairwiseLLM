@@ -64,6 +64,11 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
       link_uncertainty_approximation = "cmdstan_posterior_draws",
       probe_edges_planned = 30L,
       probe_edges_realized = 18L,
+      probe_acceleration_mode_used = "active_floor_plus_sole_blocker",
+      probe_active_floor_used = 10L,
+      probe_only_blocker_trigger = TRUE,
+      probe_effort_base_cap = 2L,
+      probe_effort_effective_cap = 6L,
       link_lag_eligible = TRUE,
       link_stop_gate_open = FALSE,
       link_state_frozen = TRUE,
@@ -81,8 +86,38 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
   expect_true(any(grepl("fit_method=cmdstan_hmc", output)))
   expect_true(any(grepl("probe_panel_id=panel-epoch-3", output)))
   expect_true(any(grepl("probe_edges=18/30", output)))
+  expect_true(any(grepl("probe_accel=active_floor_plus_sole_blocker", output)))
+  expect_true(any(grepl("probe_floor=10", output)))
+  expect_true(any(grepl("probe_cap=2->6", output)))
+  expect_true(any(grepl("probe_only_blocker=1/1", output)))
   expect_true(any(grepl("mode=transform", output)))
   expect_true(any(grepl("stop_blockers=probe_pred_rmse_lagged,theta_global_rmse_lagged", output)))
+})
+
+test_that("print.adaptive_state reads acceleration details from live accelerated runtime rows", {
+  state <- make_positive_probe_acceleration_runtime_state()
+  latest_rows <- pairwiseLLM:::.adaptive_latest_link_stage_rows(state)
+  expect_true(any(latest_rows$probe_acceleration_used %in% TRUE))
+
+  probe_mode <- pairwiseLLM:::.adaptive_print_compact_values(
+    latest_rows$probe_acceleration_mode_used
+  )
+  probe_floor <- pairwiseLLM:::.adaptive_print_compact_values(
+    as.integer(latest_rows$probe_active_floor_used[latest_rows$probe_acceleration_used %in% TRUE])
+  )
+  probe_caps <- paste0(
+    as.integer(latest_rows$probe_effort_base_cap[latest_rows$probe_acceleration_used %in% TRUE]),
+    "->",
+    as.integer(latest_rows$probe_effort_effective_cap[latest_rows$probe_acceleration_used %in% TRUE])
+  )
+  probe_cap <- pairwiseLLM:::.adaptive_print_compact_values(probe_caps)
+
+  output <- capture.output(print(state))
+
+  expect_true(any(grepl("^link review: ", output)))
+  expect_true(any(grepl(paste0("probe_accel=", probe_mode), output, fixed = TRUE)))
+  expect_true(any(grepl(paste0("probe_floor=", probe_floor), output, fixed = TRUE)))
+  expect_true(any(grepl(paste0("probe_cap=", probe_cap), output, fixed = TRUE)))
 })
 
 test_that("print.adaptive_state names anchored-joint mode without transform-only fields", {

@@ -980,6 +980,210 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
   )
 })
 
+test_that("save/load preserves probe acceleration controller fields and canonical log columns", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 61L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      probe_acceleration_mode = "active_floor_plus_sole_blocker",
+      probe_active_floor_enabled = TRUE,
+      probe_sole_blocker_acceleration_enabled = TRUE,
+      probe_pairs_per_refit_per_spoke_bootstrap_max = 6L,
+      probe_pairs_per_refit_per_spoke_sole_blocker_max = 12L,
+      probe_accel_bootstrap_target = 12L,
+      probe_active_floor_frac = 0.5,
+      probe_active_floor_min = 20L,
+      probe_active_floor_requires_anchor_progress = TRUE,
+      probe_sole_blocker_min_realized = 20L,
+      probe_sole_blocker_active_floor_min = 10L
+    )
+  )
+  state$controller$link_refit_stats_by_spoke <- list(
+    `2` = list(
+      link_epoch_id = 4L,
+      link_lag_eligible = TRUE,
+      link_min_refit_eligible = TRUE,
+      link_diagnostics_pass = TRUE,
+      reliability_stop_pass = TRUE,
+      probe_brier_pass = TRUE,
+      probe_pred_rmse_pass = TRUE,
+      theta_global_rmse_pass = TRUE,
+      stop_blocker_codes = "probe_edges_min_for_stop"
+    )
+  )
+  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+    pairwiseLLM:::new_link_stage_log(),
+    list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      hub_id = 1L,
+      link_transform_policy = "auto",
+      link_transform_state = "shift_only",
+      link_stop_pass = FALSE,
+      link_state_frozen = FALSE,
+      probe_acceleration_mode_used = "active_floor_plus_sole_blocker",
+      probe_active_floor_used = 10L,
+      probe_only_blocker_trigger = TRUE,
+      probe_acceleration_used = TRUE,
+      probe_effort_base_cap = 2L,
+      probe_effort_effective_cap = 7L,
+      probe_remaining_to_min_start = 9L
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  restored <- load_adaptive_session(session_dir)
+
+  expect_identical(
+    restored$controller$probe_acceleration_mode,
+    "active_floor_plus_sole_blocker"
+  )
+  expect_true(isTRUE(restored$controller$probe_active_floor_enabled))
+  expect_true(isTRUE(restored$controller$probe_sole_blocker_acceleration_enabled))
+  expect_identical(restored$controller$probe_pairs_per_refit_per_spoke_bootstrap_max, 6L)
+  expect_identical(restored$controller$probe_pairs_per_refit_per_spoke_sole_blocker_max, 12L)
+  expect_identical(restored$controller$probe_accel_bootstrap_target, 12L)
+  expect_identical(restored$controller$probe_active_floor_frac, 0.5)
+  expect_identical(restored$controller$probe_active_floor_min, 20L)
+  expect_true(isTRUE(restored$controller$probe_active_floor_requires_anchor_progress))
+  expect_identical(restored$controller$probe_sole_blocker_min_realized, 20L)
+  expect_identical(restored$controller$probe_sole_blocker_active_floor_min, 10L)
+  expect_true(all(c(
+    "probe_acceleration_mode_used",
+    "probe_active_floor_used",
+    "probe_only_blocker_trigger",
+    "probe_acceleration_used",
+    "probe_effort_base_cap",
+    "probe_effort_effective_cap",
+    "probe_remaining_to_min_start"
+  ) %in% names(restored$link_stage_log)))
+  expect_identical(
+    as.character(restored$link_stage_log$probe_acceleration_mode_used[[1L]]),
+    "active_floor_plus_sole_blocker"
+  )
+  expect_identical(as.integer(restored$link_stage_log$probe_active_floor_used[[1L]]), 10L)
+  expect_true(isTRUE(restored$link_stage_log$probe_only_blocker_trigger[[1L]]))
+  expect_true(isTRUE(restored$link_stage_log$probe_acceleration_used[[1L]]))
+  expect_identical(as.integer(restored$link_stage_log$probe_effort_base_cap[[1L]]), 2L)
+  expect_identical(as.integer(restored$link_stage_log$probe_effort_effective_cap[[1L]]), 7L)
+  expect_identical(as.integer(restored$link_stage_log$probe_remaining_to_min_start[[1L]]), 9L)
+  expect_identical(
+    as.character(restored$controller$link_refit_stats_by_spoke$`2`$stop_blocker_codes),
+    "probe_edges_min_for_stop"
+  )
+})
+
+test_that("save/load and resume preserve genuinely accelerated probe runtime state", {
+  state <- make_positive_probe_acceleration_runtime_state()
+  accelerated_before <- state$link_stage_log[
+    state$link_stage_log$probe_acceleration_used %in% TRUE,
+    ,
+    drop = FALSE
+  ]
+  expect_gte(nrow(accelerated_before), 1L)
+
+  spoke_id <- as.integer(accelerated_before$spoke_id[[1L]])
+  epoch_id <- as.integer(
+    state$controller$link_epoch_id_by_spoke[[as.character(spoke_id)]] %||% NA_integer_
+  )
+  expect_true(is.finite(epoch_id))
+
+  panel_before <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(
+    state,
+    spoke_id = spoke_id,
+    epoch_id = epoch_id
+  )
+  realized_before <- pairwiseLLM:::.adaptive_link_probe_realized_count(
+    state,
+    spoke_id = spoke_id,
+    epoch_id = epoch_id
+  )
+  expect_gte(realized_before, 1L)
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  restored <- load_adaptive_session(session_dir)
+
+  accelerated_cols <- c(
+    "probe_acceleration_mode_used",
+    "probe_active_floor_used",
+    "probe_only_blocker_trigger",
+    "probe_acceleration_used",
+    "probe_effort_base_cap",
+    "probe_effort_effective_cap",
+    "probe_remaining_to_min_start",
+    "n_cross_edges_probe_since_last_refit"
+  )
+  restored_accelerated <- restored$link_stage_log[
+    restored$link_stage_log$probe_acceleration_used %in% TRUE,
+    accelerated_cols,
+    drop = FALSE
+  ]
+  expect_equal(
+    restored_accelerated,
+    accelerated_before[, accelerated_cols, drop = FALSE]
+  )
+
+  restored_panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(
+    restored,
+    spoke_id = spoke_id,
+    epoch_id = epoch_id
+  )
+  expect_identical(
+    unique(as.character(restored_panel$probe_panel_id)),
+    unique(as.character(panel_before$probe_panel_id))
+  )
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_realized_count(
+      restored,
+      spoke_id = spoke_id,
+      epoch_id = epoch_id
+    ),
+    realized_before
+  )
+
+  resumed <- pairwiseLLM:::.adaptive_link_sync_warm_start(restored)
+  resumed <- pairwiseLLM:::.adaptive_round_activate_if_ready(resumed)
+  resumed_judge <- make_linking_score_judge_fixture(c(
+    h1 = -0.6, h2 = 0.0, h3 = 0.6,
+    s21 = -0.3, s22 = 0.2, s23 = 1.0,
+    s31 = -0.4, s32 = 0.1, s33 = 0.9
+  ))
+  for (idx in seq_len(4L)) {
+    resumed <- pairwiseLLM:::run_one_step(resumed, resumed_judge)
+    step_row <- tibble::as_tibble(resumed$step_log)[nrow(resumed$step_log), , drop = FALSE]
+    if (isTRUE(step_row$status[[1L]] == "ok")) {
+      resumed <- pairwiseLLM:::.adaptive_round_commit(resumed, step_row)
+    }
+  }
+
+  resumed_panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(
+    resumed,
+    spoke_id = spoke_id,
+    epoch_id = epoch_id
+  )
+  expect_identical(
+    unique(as.character(resumed_panel$probe_panel_id)),
+    unique(as.character(panel_before$probe_panel_id))
+  )
+  expect_gte(
+    pairwiseLLM:::.adaptive_link_probe_realized_count(
+      resumed,
+      spoke_id = spoke_id,
+      epoch_id = epoch_id
+    ),
+    realized_before
+  )
+})
+
 test_that("resume preserves probe panel identity, epoch, and realized counts across a chunk boundary", {
   state <- make_probe_resume_state()
   state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
