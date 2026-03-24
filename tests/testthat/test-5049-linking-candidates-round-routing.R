@@ -26,6 +26,145 @@ mark_link_phase_b_ready <- function(state, source = "import", probe_edges_min_fo
   state
 }
 
+reference_phase_b_stage_candidates <- function(state,
+                                               stage_name,
+                                               fallback_name,
+                                               local_inputs,
+                                               rank_index,
+                                               stratum_map,
+                                               spoke_id,
+                                               C_max,
+                                               seed,
+                                               reserved_keys = character()) {
+  fallback <- function(x, default) {
+    if (is.null(x)) default else x
+  }
+
+  defaults <- pairwiseLLM:::adaptive_defaults(length(state$item_ids))
+  bounds <- pairwiseLLM:::.adaptive_stage_distance_bounds(stage_name, fallback_name, defaults)
+  hub_ids <- as.character(local_inputs$hub_ids)
+  spoke_ids <- as.character(local_inputs$spoke_ids)
+  active_items <- fallback(local_inputs$active_items, list())
+  active_hub_ids <- as.character(fallback(active_items$active_hub, character()))
+  routing_hub_ids <- if (identical(stage_name, "anchor_link")) hub_ids else active_hub_ids
+  active_ids <- unique(c(routing_hub_ids, spoke_ids))
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  coverage <- fallback(local_inputs$coverage, list(
+    bin_map = stats::setNames(integer(), character()),
+    bins_used = NA_integer_,
+    bins_undercovered = integer(),
+    source = NA_character_
+  ))
+  hub_anchor_ids <- as.character(fallback(local_inputs$hub_anchor_ids, character()))
+  ids <- names(sort(rank_index[active_ids]))
+
+  n_after_route_filters <- 0L
+  n_after_active_domain <- 0L
+  i_vals <- character()
+  j_vals <- character()
+  dist_vals <- integer()
+  coverage_priority <- integer()
+  coverage_bin <- integer()
+
+  if (length(ids) >= 2L) {
+    for (a in seq_len(length(ids) - 1L)) {
+      i_id <- ids[[a]]
+      for (b in (a + 1L):length(ids)) {
+        j_id <- ids[[b]]
+        i_set <- as.integer(fallback(set_map[[i_id]], NA_integer_))
+        j_set <- as.integer(fallback(set_map[[j_id]], NA_integer_))
+        if (is.na(i_set) || is.na(j_set) || i_set == j_set) {
+          next
+        }
+        i_hub <- i_id %in% hub_ids
+        j_hub <- j_id %in% hub_ids
+        if (!isTRUE(xor(i_hub, j_hub))) {
+          next
+        }
+        n_after_route_filters <- as.integer(n_after_route_filters + 1L)
+
+        keep <- FALSE
+        dist <- abs(as.integer(stratum_map[[i_id]]) - as.integer(stratum_map[[j_id]]))
+        if (identical(stage_name, "anchor_link")) {
+          n_after_active_domain <- as.integer(n_after_active_domain + 1L)
+          keep <- xor(i_id %in% hub_anchor_ids, j_id %in% hub_anchor_ids)
+        } else {
+          hub_item_id <- if (isTRUE(i_hub)) i_id else j_id
+          if (!hub_item_id %in% active_hub_ids) {
+            next
+          }
+          n_after_active_domain <- as.integer(n_after_active_domain + 1L)
+          keep <- dist >= bounds$min && dist <= bounds$max
+        }
+
+        if (isTRUE(keep)) {
+          spoke_item_id <- if (identical(i_set, as.integer(spoke_id))) i_id else j_id
+          spoke_bin <- as.integer(fallback(coverage$bin_map[[spoke_item_id]], NA_integer_))
+          i_vals <- c(i_vals, i_id)
+          j_vals <- c(j_vals, j_id)
+          dist_vals <- c(dist_vals, as.integer(dist))
+          coverage_bin <- c(coverage_bin, spoke_bin)
+          coverage_priority <- c(
+            coverage_priority,
+            as.integer(!is.na(spoke_bin) && spoke_bin %in% as.integer(coverage$bins_undercovered))
+          )
+        }
+      }
+    }
+  }
+
+  pair_cols <- list(
+    i = character(),
+    j = character(),
+    dist_stratum_global = integer(),
+    coverage_priority = integer(),
+    coverage_bin_spoke = integer(),
+    link_spoke_id = integer(),
+    coverage_bins_used = integer(),
+    coverage_source = character()
+  )
+
+  if (length(i_vals) > 0L) {
+    cand <- tibble::tibble(
+      i = as.character(i_vals),
+      j = as.character(j_vals),
+      dist_stratum_global = as.integer(dist_vals),
+      coverage_priority = as.integer(coverage_priority),
+      coverage_bin_spoke = as.integer(coverage_bin),
+      link_spoke_id = as.integer(spoke_id),
+      coverage_bins_used = as.integer(coverage$bins_used),
+      coverage_source = as.character(coverage$source)
+    )
+    if (length(reserved_keys) > 0L) {
+      pair_keys <- vapply(seq_len(nrow(cand)), function(idx) {
+        pairwiseLLM:::make_unordered_key(cand$i[[idx]], cand$j[[idx]])
+      }, character(1L))
+      cand <- cand[!pair_keys %in% reserved_keys, , drop = FALSE]
+    }
+  } else {
+    cand <- tibble::as_tibble(pair_cols)
+  }
+
+  if (nrow(cand) > 0L) {
+    cand <- pairwiseLLM:::.adaptive_uniform_subsample_pairs(
+      cand,
+      C_max = as.integer(C_max),
+      seed = as.integer(seed)
+    )
+  }
+
+  counts <- list(
+    n_candidates_after_route_filters = as.integer(n_after_route_filters),
+    n_candidates_after_active_domain = as.integer(n_after_active_domain),
+    n_candidates_after_stage_filters = as.integer(nrow(cand))
+  )
+
+  list(
+    candidates = pairwiseLLM:::.adaptive_set_candidate_filter_counts(cand, counts),
+    counts = counts
+  )
+}
+
 test_that("linking candidates are hub-spoke only by default", {
   items <- tibble::tibble(
     item_id = as.character(1:9),
@@ -2076,6 +2215,282 @@ test_that("planned holdout probe edges are excluded from active linking candidat
     pairwiseLLM:::make_unordered_key(cand$i[[idx]], cand$j[[idx]])
   }, character(1L))
   expect_false(any(cand_keys %in% reserved))
+})
+
+test_that("direct Phase B builders match reference stage domains and pooled backfill pools", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "h4", "s21", "s22", "s23", "s24"),
+    set_id = c(rep(1L, 4L), rep(2L, 4L)),
+    global_item_id = paste0("g", seq_len(8L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 170L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+
+  local_inputs <- list(
+    hub_ids = c("h1", "h2", "h3", "h4"),
+    spoke_ids = c("s21", "s22", "s23", "s24"),
+    active_items = list(active_hub = c("h1", "h2", "h3")),
+    routing_scores = stats::setNames(
+      c(9, 6, 4, 1, 8, 5, 2, -1),
+      c("h1", "h2", "h3", "h4", "s21", "s22", "s23", "s24")
+    ),
+    hub_anchor_ids = c("h1", "h4"),
+    coverage = list(
+      bin_map = stats::setNames(c(1L, 2L, 3L, 3L), c("s21", "s22", "s23", "s24")),
+      bins_used = 3L,
+      bins_undercovered = 2L,
+      source = "linking_global_score"
+    )
+  )
+  strata_template <- stats::setNames(
+    c(1L, 4L, 6L, 8L, 2L, 3L, 5L, 7L),
+    c("h1", "h2", "h3", "h4", "s21", "s22", "s23", "s24")
+  )
+  custom_strata <- function(scores, defaults) {
+    ids <- as.character(names(scores))
+    rank_index <- stats::setNames(as.integer(strata_template[ids]), ids)
+    list(
+      rank_index = rank_index,
+      stratum_id = as.integer(rank_index[ids]),
+      stratum_map = rank_index,
+      top_band_ids = character()
+    )
+  }
+  reserved_keys <- c(
+    pairwiseLLM:::make_unordered_key("h1", "s23"),
+    pairwiseLLM:::make_unordered_key("h2", "s21"),
+    pairwiseLLM:::make_unordered_key("h4", "s24")
+  )
+  stage_order <- pairwiseLLM:::.adaptive_stage_order()
+  reference_stage <- function(stage_name, seed_offset = 0L) {
+    reference_phase_b_stage_candidates(
+      state = state,
+      stage_name = stage_name,
+      fallback_name = "base",
+      local_inputs = local_inputs,
+      rank_index = strata_template,
+      stratum_map = strata_template,
+      spoke_id = 2L,
+      C_max = 10000L,
+      seed = 40L + as.integer(seed_offset),
+      reserved_keys = reserved_keys
+    )
+  }
+
+  actual_by_stage <- testthat::with_mocked_bindings(
+    .adaptive_link_refit_local_inputs = function(state, controller, spoke_id, defaults = NULL, refit_id = NULL) {
+      local_inputs
+    },
+    .adaptive_assign_strata = custom_strata,
+    .adaptive_link_probe_reserved_keys = function(state, spoke_id, epoch_id = NULL) {
+      reserved_keys
+    },
+    lapply(seq_along(stage_order), function(idx) {
+      stage_name <- stage_order[[idx]]
+      pairwiseLLM:::generate_stage_candidates_from_state(
+        state = state,
+        stage_name = stage_name,
+        fallback_name = "base",
+        C_max = 10000L,
+        seed = 40L + idx,
+        link_spoke_id = 2L
+      )
+    }),
+    .package = "pairwiseLLM"
+  )
+  names(actual_by_stage) <- stage_order
+
+  reference_by_stage <- lapply(seq_along(stage_order), function(idx) {
+    reference_stage(stage_order[[idx]], seed_offset = idx)
+  })
+  names(reference_by_stage) <- stage_order
+
+  for (stage_name in stage_order) {
+    actual <- actual_by_stage[[stage_name]]
+    reference <- reference_by_stage[[stage_name]]$candidates
+    expect_true(nrow(reference) > 0L)
+    expect_identical(attr(actual, "candidate_filter_counts"), attr(reference, "candidate_filter_counts"))
+    expect_identical(actual, reference)
+  }
+
+  actual_pool <- testthat::with_mocked_bindings(
+    .adaptive_link_refit_local_inputs = function(state, controller, spoke_id, defaults = NULL, refit_id = NULL) {
+      local_inputs
+    },
+    .adaptive_assign_strata = custom_strata,
+    .adaptive_link_probe_reserved_keys = function(state, spoke_id, epoch_id = NULL) {
+      reserved_keys
+    },
+    pairwiseLLM:::.adaptive_link_candidate_pool(
+      state = state,
+      controller = state$controller,
+      spoke_id = 2L,
+      include_utility = FALSE,
+      C_max = 10000L,
+      seed = 60L
+    ),
+    .package = "pairwiseLLM"
+  )
+  reference_pool <- dplyr::bind_rows(lapply(seq_along(stage_order), function(idx) {
+    cand <- reference_phase_b_stage_candidates(
+      state = state,
+      stage_name = stage_order[[idx]],
+      fallback_name = "base",
+      local_inputs = local_inputs,
+      rank_index = strata_template,
+      stratum_map = strata_template,
+      spoke_id = 2L,
+      C_max = 10000L,
+      seed = 60L + idx,
+      reserved_keys = reserved_keys
+    )$candidates
+    if (nrow(cand) < 1L) {
+      return(NULL)
+    }
+    cand$link_stage <- stage_order[[idx]]
+    cand
+  }))
+
+  expect_identical(actual_pool, reference_pool)
+  actual_pool_keys <- vapply(seq_len(nrow(actual_pool)), function(idx) {
+    pairwiseLLM:::make_unordered_key(actual_pool$i[[idx]], actual_pool$j[[idx]])
+  }, character(1L))
+  expect_false(any(actual_pool_keys %in% reserved_keys))
+})
+
+test_that("concurrent selector uses the direct Phase B candidate domain for the active spoke", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "h4", "s21", "s22", "s23", "s24", "s31", "s32", "s33", "s34"),
+    set_id = c(rep(1L, 4L), rep(2L, 4L), rep(3L, 4L)),
+    global_item_id = paste0("g", seq_len(12L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 171L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent"
+    )
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$round$staged_active <- TRUE
+
+  strata_template <- stats::setNames(
+    c(1L, 4L, 6L, 8L, 2L, 3L, 5L, 7L, 2L, 5L, 7L, 9L),
+    c("h1", "h2", "h3", "h4", "s21", "s22", "s23", "s24", "s31", "s32", "s33", "s34")
+  )
+  custom_strata <- function(scores, defaults) {
+    ids <- as.character(names(scores))
+    rank_index <- stats::setNames(as.integer(strata_template[ids]), ids)
+    list(
+      rank_index = rank_index,
+      stratum_id = as.integer(rank_index[ids]),
+      stratum_map = rank_index,
+      top_band_ids = character()
+    )
+  }
+  local_inputs_by_spoke <- list(
+    `2` = list(
+      hub_ids = c("h1", "h2", "h3", "h4"),
+      spoke_ids = c("s21", "s22", "s23", "s24"),
+      active_items = list(active_hub = c("h1", "h2", "h3")),
+      routing_scores = stats::setNames(
+        c(9, 6, 4, 1, 8, 5, 2, -1),
+        c("h1", "h2", "h3", "h4", "s21", "s22", "s23", "s24")
+      ),
+      hub_anchor_ids = c("h1"),
+      coverage = list(
+        bin_map = stats::setNames(c(1L, 2L, 3L, 3L), c("s21", "s22", "s23", "s24")),
+        bins_used = 3L,
+        bins_undercovered = integer(),
+        source = "linking_global_score"
+      )
+    ),
+    `3` = list(
+      hub_ids = c("h1", "h2", "h3", "h4"),
+      spoke_ids = c("s31", "s32", "s33", "s34"),
+      active_items = list(active_hub = c("h2", "h4")),
+      routing_scores = stats::setNames(
+        c(9, 6, 4, 1, 7, 3, 0, -2),
+        c("h1", "h2", "h3", "h4", "s31", "s32", "s33", "s34")
+      ),
+      hub_anchor_ids = c("h4"),
+      coverage = list(
+        bin_map = stats::setNames(c(1L, 2L, 3L, 3L), c("s31", "s32", "s33", "s34")),
+        bins_used = 3L,
+        bins_undercovered = integer(),
+        source = "linking_global_score"
+      )
+    )
+  )
+  ref_stage_2 <- reference_phase_b_stage_candidates(
+    state = state,
+    stage_name = "mid_link",
+    fallback_name = "base",
+    local_inputs = local_inputs_by_spoke[["2"]],
+    rank_index = strata_template,
+    stratum_map = strata_template,
+    spoke_id = 2L,
+    C_max = 10000L,
+    seed = 211L,
+    reserved_keys = character()
+  )$candidates
+  ref_keys_2 <- vapply(seq_len(nrow(ref_stage_2)), function(idx) {
+    pairwiseLLM:::make_unordered_key(ref_stage_2$i[[idx]], ref_stage_2$j[[idx]])
+  }, character(1L))
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_ranked_spokes = function(state, controller, eligible_spoke_ids = NULL) c(2L, 3L),
+    .adaptive_link_budget_map_for_refit = function(state, controller, eligible_spoke_ids = NULL) {
+      list(
+        `2` = list(B_spoke_refit_budget = 2L, B_spoke_refit_budget_source = "concurrent_allocator"),
+        `3` = list(B_spoke_refit_budget = 1L, B_spoke_refit_budget_source = "concurrent_allocator")
+      )
+    },
+    .adaptive_link_stage_progress = function(state, spoke_id, stage_quotas, stage_order, refit_id) {
+      list(
+        active_stage = "mid_link",
+        backfill_active = FALSE,
+        stage_quotas = as.list(stats::setNames(c(1L, 0L, 2L, 0L), pairwiseLLM:::.adaptive_stage_order())),
+        stage_committed = as.list(stats::setNames(rep.int(0L, 4L), pairwiseLLM:::.adaptive_stage_order())),
+        stage_realized = as.list(stats::setNames(rep.int(0L, 4L), pairwiseLLM:::.adaptive_stage_order())),
+        budget_remaining_actual = 2L
+      )
+    },
+    .adaptive_link_refit_local_inputs = function(state, controller, spoke_id, defaults = NULL, refit_id = NULL) {
+      local_inputs_by_spoke[[as.character(spoke_id)]]
+    },
+    .adaptive_assign_strata = custom_strata,
+    .adaptive_link_probe_reserved_keys = function(state, spoke_id, epoch_id = NULL) character(),
+    .adaptive_link_attach_predictive_utility = function(candidates, state, controller, spoke_id) {
+      candidates <- tibble::as_tibble(candidates)
+      candidates$link_d_opt_gain <- rev(seq_len(nrow(candidates)))
+      candidates$link_p <- rep(0.6, nrow(candidates))
+      candidates$link_u <- rep(0.24, nrow(candidates))
+      candidates
+    },
+    pairwiseLLM:::select_next_pair(state, step_id = 1L),
+    .package = "pairwiseLLM"
+  )
+
+  selected_key <- pairwiseLLM:::make_unordered_key(
+    as.character(state$item_ids[[out$i]]),
+    as.character(state$item_ids[[out$j]])
+  )
+  selected_ids <- c(as.character(state$item_ids[[out$i]]), as.character(state$item_ids[[out$j]]))
+  selected_sets <- as.integer(stats::setNames(state$items$set_id, state$items$item_id)[selected_ids])
+
+  expect_identical(as.integer(out$link_spoke_id_selected), 2L)
+  expect_true(selected_key %in% ref_keys_2)
+  expect_true(all(sort(unique(selected_sets)) == c(1L, 2L)))
+  expect_true(any(selected_ids %in% local_inputs_by_spoke[["2"]]$active_items$active_hub))
 })
 
 test_that("linking predictive utility applies signed position bias by (A,B) orientation", {
