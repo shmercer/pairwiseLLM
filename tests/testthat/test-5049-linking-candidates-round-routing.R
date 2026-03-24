@@ -1069,6 +1069,60 @@ test_that("D-opt helper guards cover non-finite and malformed inputs", {
   expect_true(is.finite(st$it_logdet_start))
 })
 
+test_that("vectorized predictive helpers match scalar helper outputs exactly", {
+  theta_a <- c(0.8, -0.3, NA_real_, 0.1)
+  theta_b <- c(-0.4, 0.2, 0.5, NA_real_)
+
+  prob_vec <- pairwiseLLM:::.adaptive_link_model_d_prob_vec(
+    theta_a = theta_a,
+    theta_b = theta_b,
+    beta = 0.2,
+    epsilon = 0.1
+  )
+  prob_ref <- vapply(seq_along(theta_a), function(idx) {
+    pairwiseLLM:::.adaptive_link_model_d_prob(
+      theta_a = theta_a[[idx]],
+      theta_b = theta_b[[idx]],
+      beta = 0.2,
+      epsilon = 0.1
+    )
+  }, numeric(1L))
+  expect_equal(prob_vec, prob_ref, tolerance = 0)
+
+  pbar_vec <- pairwiseLLM:::.adaptive_link_model_d_pbar_vec(
+    theta_h = theta_a,
+    theta_x = theta_b,
+    beta = 0.2,
+    epsilon = 0.1
+  )
+  pbar_ref <- vapply(seq_along(theta_a), function(idx) {
+    pairwiseLLM:::.adaptive_link_model_d_pbar(
+      theta_h = theta_a[[idx]],
+      theta_x = theta_b[[idx]],
+      beta = 0.2,
+      epsilon = 0.1
+    )
+  }, numeric(1L))
+  expect_equal(pbar_vec, pbar_ref, tolerance = 0)
+})
+
+test_that("cached-start D-opt helper matches the uncached helper exactly", {
+  it <- matrix(c(1.3, 0.2, 0.2, 0.9), nrow = 2L)
+  ipair <- matrix(c(0.4, 0.1, 0.1, 0.3), nrow = 2L)
+  logdet_start <- pairwiseLLM:::.adaptive_link_logdet_spd(it, ridge = 1e-6)
+
+  expect_equal(
+    pairwiseLLM:::.adaptive_link_d_opt_gain_logdet_from_start(
+      it = it,
+      ipair = ipair,
+      logdet_start = logdet_start,
+      ridge = 1e-6
+    ),
+    pairwiseLLM:::.adaptive_link_d_opt_gain_logdet(it = it, ipair = ipair, ridge = 1e-6),
+    tolerance = 0
+  )
+})
+
 test_that("selection utility helpers cover additional fallback branches", {
   expect_identical(
     pairwiseLLM:::.adaptive_selection_utility_mode(
