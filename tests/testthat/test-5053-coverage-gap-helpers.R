@@ -2303,3 +2303,281 @@ test_that("remaining BTL builders cover input-contract edge branches", {
   )
   expect_identical(shared$judge_param_mode, "global_shared")
 })
+
+test_that("cached budget and ranked-spoke helpers match canonical refit reconstruction", {
+  append_active_link_step <- function(state, step_id, A_id, B_id, spoke_id, stage_name) {
+    out <- append_cross_probe_step(
+      state = state,
+      step_id = step_id,
+      A_id = A_id,
+      B_id = B_id,
+      Y = 1L,
+      spoke_id = spoke_id,
+      is_probe_step = FALSE,
+      run_mode = "link_multi_spoke"
+    )
+    idx <- nrow(out$step_log)
+    out$step_log$round_stage[[idx]] <- as.character(stage_name)
+    out$step_log$link_stage[[idx]] <- as.character(stage_name)
+    out
+  }
+
+  state <- make_link_probe_state()
+  state$linking$phase_a$ready_spokes <- c(2L, 3L)
+  state$linking$phase_a$active_spokes <- c(2L, 3L)
+  state$controller$multi_spoke_mode <- "concurrent"
+  state$controller$min_cross_set_pairs_per_spoke_per_refit <- 2L
+
+  state <- append_active_link_step(state, 1L, "h1", "s21", 2L, "anchor_link")
+  state <- append_cross_probe_step(
+    state = state,
+    step_id = 2L,
+    A_id = "h2",
+    B_id = "s22",
+    Y = 0L,
+    spoke_id = 2L,
+    is_probe_step = TRUE,
+    run_mode = "link_probe_holdout"
+  )
+  state <- append_active_link_step(state, 3L, "h1", "s31", 3L, "anchor_link")
+  state <- append_active_link_step(state, 4L, "h2", "s32", 3L, "long_link")
+  state$refit_meta$last_refit_step <- 0L
+  state <- pairwiseLLM:::.adaptive_link_refit_summary_rebuild_current(
+    state,
+    current_refit_id = 1L,
+    spoke_ids = c(2L, 3L)
+  )
+
+  raw2 <- pairwiseLLM:::.adaptive_link_refit_summary_from_step_log(
+    state = state,
+    refit_id = 1L,
+    spoke_id = 2L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  raw3 <- pairwiseLLM:::.adaptive_link_refit_summary_from_step_log(
+    state = state,
+    refit_id = 1L,
+    spoke_id = 3L,
+    refit_context = list(last_refit_step = 0L)
+  )
+
+  cached_only <- state
+  cached_only$step_log$step_id[] <- 0L
+  budget_map <- pairwiseLLM:::.adaptive_link_budget_map_for_refit(
+    state = cached_only,
+    controller = cached_only$controller,
+    eligible_spoke_ids = c(2L, 3L)
+  )
+  ranked_spokes <- pairwiseLLM:::.adaptive_link_ranked_spokes(
+    state = cached_only,
+    controller = cached_only$controller,
+    eligible_spoke_ids = c(2L, 3L)
+  )
+
+  expect_identical(
+    budget_map[["2"]]$concurrent_floor_met,
+    raw2$n_cross_edges_total_since_last_refit >= budget_map[["2"]]$concurrent_floor_pairs
+  )
+  expect_identical(
+    budget_map[["2"]]$concurrent_target_met,
+    raw2$n_cross_edges_total_since_last_refit >= budget_map[["2"]]$concurrent_target_pairs
+  )
+  expect_identical(
+    budget_map[["3"]]$concurrent_floor_met,
+    raw3$n_cross_edges_total_since_last_refit >= budget_map[["3"]]$concurrent_floor_pairs
+  )
+  expect_identical(
+    budget_map[["3"]]$concurrent_target_met,
+    raw3$n_cross_edges_total_since_last_refit >= budget_map[["3"]]$concurrent_target_pairs
+  )
+  expect_identical(as.integer(ranked_spokes[[1L]]), 2L)
+})
+
+test_that("feasibility snapshot and holdout ordering match history-state rebuilds", {
+  state <- make_link_probe_state()
+  state$linking$phase_a$ready_spokes <- c(2L, 3L)
+  state$linking$phase_a$active_spokes <- c(2L, 3L)
+  state$history_pairs <- tibble::tibble(
+    A_id = c("h1", "s21"),
+    B_id = c("s21", "h1")
+  )
+  state$history_state <- pairwiseLLM:::.adaptive_history_state_rebuild(
+    state$history_pairs,
+    state$item_ids
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+      pair_id = 1L,
+      i = match("h1", state$item_ids),
+      j = match("s21", state$item_ids),
+      A = match("h1", state$item_ids),
+      B = match("s21", state$item_ids),
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_multi_spoke",
+      round_stage = "anchor_link",
+      link_stage = "anchor_link",
+      is_probe_step = FALSE
+    )
+  )
+
+  snapshot_cached <- pairwiseLLM:::.adaptive_link_stage_feasibility_snapshot(
+    state = state,
+    controller = state$controller,
+    spoke_id = 2L,
+    stage_order = pairwiseLLM:::.adaptive_stage_order()
+  )
+  rebuilt_state <- state
+  rebuilt_state$history_state <- NULL
+  snapshot_rebuilt <- pairwiseLLM:::.adaptive_link_stage_feasibility_snapshot(
+    state = rebuilt_state,
+    controller = rebuilt_state$controller,
+    spoke_id = 2L,
+    stage_order = pairwiseLLM:::.adaptive_stage_order()
+  )
+
+  expect_identical(snapshot_cached$feasible_counts, snapshot_rebuilt$feasible_counts)
+  expect_equal(snapshot_cached$feasible_utility_mass, snapshot_rebuilt$feasible_utility_mass)
+
+  state$linking$probe$panels_by_spoke <- list(
+    `2` = tibble::tibble(
+      probe_panel_id = "panel_holdout",
+      link_epoch_id = 3L,
+      spoke_id = 2L,
+      hub_item_id = "h1",
+      spoke_item_id = "s21",
+      spoke_bin = 1L,
+      hub_bin = 1L,
+      planned_rank = 1L,
+      pair_key = pairwiseLLM:::make_unordered_key("h1", "s21"),
+      realized = FALSE,
+      realized_step_id = NA_integer_,
+      realized_pair_id = NA_integer_,
+      realized_run_mode = NA_character_
+    )
+  )
+
+  holdout_cached <- pairwiseLLM:::.adaptive_link_probe_select_holdout(
+    state,
+    step_id = 2L,
+    spoke_id = 2L
+  )
+  rebuilt_holdout_state <- state
+  rebuilt_holdout_state$history_state <- NULL
+  holdout_rebuilt <- pairwiseLLM:::.adaptive_link_probe_select_holdout(
+    rebuilt_holdout_state,
+    step_id = 2L,
+    spoke_id = 2L
+  )
+
+  expect_identical(holdout_cached$A, holdout_rebuilt$A)
+  expect_identical(holdout_cached$B, holdout_rebuilt$B)
+  expect_identical(holdout_cached$deg_i, holdout_rebuilt$deg_i)
+  expect_identical(holdout_cached$deg_j, holdout_rebuilt$deg_j)
+  expect_identical(holdout_cached$recent_deg_i, holdout_rebuilt$recent_deg_i)
+  expect_identical(holdout_cached$recent_deg_j, holdout_rebuilt$recent_deg_j)
+})
+
+test_that("round log row cache-backed summaries match canonical reconstruction", {
+  append_active_link_step <- function(state, step_id, A_id, B_id, spoke_id, stage_name) {
+    out <- append_cross_probe_step(
+      state = state,
+      step_id = step_id,
+      A_id = A_id,
+      B_id = B_id,
+      Y = 1L,
+      spoke_id = spoke_id,
+      is_probe_step = FALSE,
+      run_mode = "link_multi_spoke"
+    )
+    idx <- nrow(out$step_log)
+    out$step_log$round_stage[[idx]] <- as.character(stage_name)
+    out$step_log$link_stage[[idx]] <- as.character(stage_name)
+    out
+  }
+
+  state <- make_link_probe_state()
+  state$linking$phase_a$ready_spokes <- c(2L, 3L)
+  state$linking$phase_a$active_spokes <- c(2L, 3L)
+  state$history_pairs <- tibble::tibble(
+    A_id = c("h1", "h1", "h2"),
+    B_id = c("s21", "s31", "s32")
+  )
+  state$history_state <- pairwiseLLM:::.adaptive_history_state_rebuild(
+    state$history_pairs,
+    state$item_ids
+  )
+  state <- append_active_link_step(state, 1L, "h1", "s21", 2L, "anchor_link")
+  state <- append_cross_probe_step(
+    state = state,
+    step_id = 2L,
+    A_id = "h2",
+    B_id = "s22",
+    Y = 0L,
+    spoke_id = 2L,
+    is_probe_step = TRUE,
+    run_mode = "link_probe_holdout"
+  )
+  state <- append_active_link_step(state, 3L, "h1", "s31", 3L, "anchor_link")
+  state <- append_active_link_step(state, 4L, "h2", "s32", 3L, "long_link")
+  state$refit_meta$last_refit_step <- 0L
+  state <- pairwiseLLM:::.adaptive_link_refit_summary_rebuild_current(
+    state,
+    current_refit_id = 1L,
+    spoke_ids = c(2L, 3L)
+  )
+
+  refit_context <- list(
+    step_id_at_refit = 4L,
+    timestamp = as.POSIXct("2026-01-01 00:04:00", tz = "UTC"),
+    last_refit_M_done = 0L,
+    last_refit_step = 0L
+  )
+  row_cached <- suppressWarnings(
+    pairwiseLLM:::.adaptive_round_log_row(
+      state = state,
+      metrics = list(diagnostics_pass = TRUE),
+      stop_decision = FALSE,
+      stop_reason = NA_character_,
+      refit_context = refit_context,
+      config = state$config$btl_config
+    )
+  )
+
+  uncached_state <- state
+  uncached_state$history_state <- NULL
+  uncached_state$refit_meta$link_refit_summary_cache_by_refit_spoke <- list()
+  uncached_state$refit_meta$link_unique_cross_pair_keys_by_spoke <- list()
+  row_rebuilt <- suppressWarnings(
+    pairwiseLLM:::.adaptive_round_log_row(
+      state = uncached_state,
+      metrics = list(diagnostics_pass = TRUE),
+      stop_decision = FALSE,
+      stop_reason = NA_character_,
+      refit_context = refit_context,
+      config = uncached_state$config$btl_config
+    )
+  )
+
+  compare_cols <- c(
+    "mean_degree",
+    "min_degree",
+    "mean_degree_scope",
+    "min_degree_scope",
+    "pos_balance_sd",
+    "n_unique_pairs_seen",
+    "new_pairs_since_last_refit",
+    "new_active_pairs_since_last_refit",
+    "new_probe_pairs_since_last_refit",
+    "new_total_cross_pairs_since_last_refit",
+    "recent_deg_median_since_last_refit",
+    "recent_deg_max_since_last_refit"
+  )
+  expect_identical(row_cached[compare_cols], row_rebuilt[compare_cols])
+})

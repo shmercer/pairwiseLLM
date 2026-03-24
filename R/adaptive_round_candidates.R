@@ -282,6 +282,21 @@
   spoke_ids <- as.integer(sort(spoke_ids))
   concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
   if (!isTRUE(concurrent_mode)) {
+    refit_id <- .adaptive_link_refit_window_id(state)
+    refit_context <- list(last_refit_step = as.integer(state$refit_meta$last_refit_step %||% 0L))
+    counts <- stats::setNames(vapply(
+      spoke_ids,
+      function(spoke_id) {
+        summary <- .adaptive_link_refit_summary_current(
+          state = state,
+          refit_id = refit_id,
+          spoke_id = as.integer(spoke_id),
+          refit_context = refit_context
+        )
+        as.integer(summary$n_cross_edges_active_since_last_refit %||% 0L)
+      },
+      integer(1L)
+    ), as.character(spoke_ids))
     cached_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
     current_refit_id <- as.integer(.adaptive_link_refit_window_id(state))
     cached_map <- controller$link_budget_map %||% list()
@@ -298,15 +313,10 @@
         return(as.integer(c(cached_active[[1L]], tail_ids)))
       }
     }
-  }
-  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  required <- c("pair_id", "step_id", "is_cross_set", "link_spoke_id")
-  step_subset <- tibble::tibble()
-  if (nrow(step_log) > 0L && all(required %in% names(step_log))) {
-    eligible <- !is.na(step_log$pair_id) &
-      step_log$is_cross_set %in% TRUE &
-      as.integer(step_log$link_spoke_id) %in% spoke_ids
-    step_subset <- step_log[eligible, , drop = FALSE]
+    if (any(counts > 0L)) {
+      ord_counts <- order(as.integer(counts), as.integer(names(counts)))
+      return(as.integer(names(counts)[ord_counts]))
+    }
   }
 
   if (isTRUE(concurrent_mode)) {
@@ -318,26 +328,21 @@
       numeric(1L)
     )
     names(blocker_totals) <- as.character(spoke_ids)
-    if (nrow(step_subset) > 0L) {
-      last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
-      step_subset <- step_subset[as.integer(step_subset$step_id) > last_refit_step, , drop = FALSE]
-      if (nrow(step_subset) > 0L) {
-        step_subset <- step_subset[
-          !.adaptive_link_is_holdout_probe_rows(step_subset),
-          ,
-          drop = FALSE
-        ]
-      }
-    }
-    counts <- rep.int(0L, length(spoke_ids))
-    names(counts) <- as.character(spoke_ids)
-    if (nrow(step_subset) > 0L) {
-      tab <- table(factor(
-        as.integer(step_subset$link_spoke_id),
-        levels = spoke_ids
-      ))
-      counts[names(tab)] <- as.integer(tab)
-    }
+    refit_id <- .adaptive_link_refit_window_id(state)
+    refit_context <- list(last_refit_step = as.integer(state$refit_meta$last_refit_step %||% 0L))
+    counts <- stats::setNames(vapply(
+      spoke_ids,
+      function(spoke_id) {
+        summary <- .adaptive_link_refit_summary_current(
+          state = state,
+          refit_id = refit_id,
+          spoke_id = as.integer(spoke_id),
+          refit_context = refit_context
+        )
+        as.integer(summary$n_cross_edges_active_since_last_refit %||% 0L)
+      },
+      integer(1L)
+    ), as.character(spoke_ids))
 
     budget_map <- .adaptive_link_budget_map_for_refit(
       state = state,
@@ -387,15 +392,6 @@
     }
 
     return(integer())
-  }
-
-  if (nrow(step_subset) > 0L) {
-    counts <- table(factor(
-      as.integer(step_subset$link_spoke_id),
-      levels = spoke_ids
-    ))
-    ord_counts <- order(as.integer(counts), as.integer(names(counts)))
-    return(as.integer(names(counts)[ord_counts]))
   }
 
   current <- as.integer(controller$current_link_spoke_id %||% NA_integer_)

@@ -3971,6 +3971,16 @@
   }
   controller <- controller %||% .adaptive_controller_resolve(state)
   refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+  refit_context <- list(last_refit_step = as.integer(state$refit_meta$last_refit_step %||% 0L))
+  current_window_cross_total <- function(spoke_id) {
+    summary <- .adaptive_link_refit_summary_current(
+      state = state,
+      refit_id = refit_id,
+      spoke_id = as.integer(spoke_id),
+      refit_context = refit_context
+    )
+    as.integer(summary$n_cross_edges_total_since_last_refit %||% 0L)
+  }
   cached_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
   cached_map <- controller$link_budget_map %||% list()
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
@@ -3982,8 +3992,6 @@
   run_mode <- as.character(controller$run_mode %||% "within_set")
   concurrent_mode <- identical(run_mode, "link_multi_spoke") &&
     identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
-  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
   if (!is.na(cached_refit_id) &&
     identical(cached_refit_id, refit_id) &&
     length(cached_map) > 0L) {
@@ -4009,17 +4017,7 @@
     if (all(as.character(spoke_ids) %in% names(cached_map))) {
       cached_map <- lapply(as.character(spoke_ids), function(key) {
         entry <- cached_map[[key]] %||% list()
-        obs <- 0L
-        if (nrow(step_log) > 0L &&
-          all(c("pair_id", "is_cross_set", "link_spoke_id", "step_id") %in% names(step_log))) {
-          obs <- as.integer(sum(
-            !is.na(step_log$pair_id) &
-              step_log$is_cross_set %in% TRUE &
-              as.integer(step_log$link_spoke_id) == as.integer(key) &
-              as.integer(step_log$step_id) > last_refit_step,
-            na.rm = TRUE
-          ))
-        }
+        obs <- current_window_cross_total(as.integer(key))
         target_pairs <- as.integer(entry$concurrent_target_pairs %||% entry$B_spoke_refit_budget %||% 0L)
         floor_pairs <- as.integer(entry$concurrent_floor_pairs %||% 0L)
         entry$concurrent_target_met <- as.logical(obs >= target_pairs)
@@ -4098,17 +4096,7 @@
   out <- lapply(as.character(spoke_ids), function(key) {
     stat <- spoke_stats[[key]] %||% list()
     target_pairs <- as.integer(targets[[key]] %||% 0L)
-    obs <- 0L
-    if (nrow(step_log) > 0L &&
-      all(c("pair_id", "is_cross_set", "link_spoke_id", "step_id") %in% names(step_log))) {
-      obs <- as.integer(sum(
-        !is.na(step_log$pair_id) &
-          step_log$is_cross_set %in% TRUE &
-          as.integer(step_log$link_spoke_id) == as.integer(key) &
-          as.integer(step_log$step_id) > last_refit_step,
-        na.rm = TRUE
-      ))
-    }
+    obs <- current_window_cross_total(as.integer(key))
     entry <- list(
       B_spoke_refit_budget = as.integer(target_pairs),
       B_spoke_refit_budget_source = "concurrent_allocator",
@@ -6481,8 +6469,8 @@
   if (length(metric_ids) < 1L) {
     metric_ids <- ids
   }
-  history <- .adaptive_history_tbl(state)
-  counts <- .adaptive_pair_counts(history, ids)
+  history_state <- .adaptive_history_state_resolve(state, ids = ids)
+  counts <- .adaptive_history_state_counts(history_state, ids)
 
   deg_vals <- as.double(counts$deg[ids])
   mean_degree <- if (length(deg_vals) > 0L) mean(deg_vals) else NA_real_
@@ -6530,32 +6518,60 @@
     step_subset$is_probe_step <- FALSE
   }
   committed_subset <- step_subset[!is.na(step_subset$pair_id), , drop = FALSE]
-  new_pairs_since_last_refit <- nrow(committed_subset)
-  cross_subset <- committed_subset[committed_subset$is_cross_set %in% TRUE, , drop = FALSE]
-  probe_subset <- cross_subset[
-    as.character(cross_subset$run_mode) %in% c("link_probe_holdout", "link_probe") |
-      cross_subset$is_probe_step %in% TRUE,
-    ,
-    drop = FALSE
-  ]
-  active_subset <- cross_subset[
-    !(as.character(cross_subset$run_mode) %in% c("link_probe_holdout", "link_probe") |
-      cross_subset$is_probe_step %in% TRUE),
-    ,
-    drop = FALSE
-  ]
+  new_pairs_since_last_refit <- max(
+    0L,
+    as.integer(total_pairs_done - as.integer(refit_context$last_refit_M_done %||% 0L))
+  )
+  refit_id <- as.integer(nrow(state$round_log %||% tibble::tibble()) + 1L)
+  summary_cache <- .adaptive_link_refit_summary_cache(state)
+  cache_spokes <- vapply(
+    summary_cache,
+    function(entry) {
+      entry_refit_id <- as.integer(entry$refit_id %||% NA_integer_)
+      if (!identical(entry_refit_id, refit_id)) {
+        return(NA_integer_)
+      }
+      as.integer(entry$spoke_id %||% NA_integer_)
+    },
+    integer(1L)
+  )
+  summary_spokes <- sort(unique(c(
+    as.integer(phase_ctx$active_spokes %||% integer()),
+    cache_spokes[is.finite(cache_spokes) & !is.na(cache_spokes)]
+  )))
+  summary_spokes <- summary_spokes[is.finite(summary_spokes) & !is.na(summary_spokes)]
+  refit_summaries <- lapply(summary_spokes, function(spoke_id) {
+    .adaptive_link_refit_summary_current(
+      state = state,
+      refit_id = refit_id,
+      spoke_id = as.integer(spoke_id),
+      refit_context = refit_context
+    )
+  })
   new_active_pairs_since_last_refit <- if (isTRUE(phase_b_linking)) {
-    as.integer(nrow(active_subset))
+    as.integer(sum(vapply(
+      refit_summaries,
+      function(summary) as.integer(summary$n_cross_edges_active_since_last_refit %||% 0L),
+      integer(1L)
+    )))
   } else {
     NA_integer_
   }
   new_probe_pairs_since_last_refit <- if (isTRUE(phase_b_linking)) {
-    as.integer(nrow(probe_subset))
+    as.integer(sum(vapply(
+      refit_summaries,
+      function(summary) as.integer(summary$n_cross_edges_probe_since_last_refit %||% 0L),
+      integer(1L)
+    )))
   } else {
     NA_integer_
   }
   new_total_cross_pairs_since_last_refit <- if (isTRUE(phase_b_linking)) {
-    as.integer(nrow(cross_subset))
+    as.integer(sum(vapply(
+      refit_summaries,
+      function(summary) as.integer(summary$n_cross_edges_total_since_last_refit %||% 0L),
+      integer(1L)
+    )))
   } else {
     NA_integer_
   }
@@ -6601,7 +6617,7 @@
 
   trueskill_state <- state$trueskill_state %||% NULL
   defaults <- adaptive_defaults(length(ids))
-  recent_deg_summary <- .adaptive_recent_deg(history, ids, defaults$W_cap)
+  recent_deg_summary <- .adaptive_history_state_recent_deg(history_state, ids, defaults$W_cap)
   recent_deg_vals <- as.double(recent_deg_summary[ids])
   recent_deg_median <- if (length(recent_deg_vals) > 0L) {
     stats::median(recent_deg_vals)

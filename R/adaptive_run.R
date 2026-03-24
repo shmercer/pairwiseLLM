@@ -3019,9 +3019,10 @@
 .adaptive_link_stage_feasibility_snapshot <- function(state, controller, spoke_id, stage_order) {
   round <- state$round %||% list()
   defaults <- adaptive_defaults(as.integer(state$n_items))
-  history <- .adaptive_history_tbl(state)
-  counts <- .adaptive_pair_counts(history, as.character(state$item_ids))
-  recent_deg <- .adaptive_recent_deg(history, as.character(state$item_ids), defaults$W_cap)
+  ids <- as.character(state$item_ids)
+  history_state <- .adaptive_history_state_resolve(state, ids = ids)
+  counts <- .adaptive_history_state_counts(history_state, ids)
+  recent_deg <- .adaptive_history_state_recent_deg(history_state, ids, defaults$W_cap)
   link_controller <- controller
   link_controller$current_link_spoke_id <- as.integer(spoke_id)
   refit_id <- as.integer(.adaptive_link_refit_window_id(state))
