@@ -499,3 +499,672 @@ test_that("adaptive round candidate helpers cover fallback, refresh, and phase-a
     c(s1 = 1L, s2 = 1L, s3 = 2L)
   )
 })
+
+test_that("adaptive run summary cache helpers cover remaining invariant branches", {
+  expect_identical(
+    .adaptive_link_refit_summary_cache(list(refit_meta = list(
+      link_refit_summary_cache_by_refit_spoke = "bad"
+    ))),
+    list()
+  )
+  expect_identical(
+    .adaptive_link_unique_cross_pair_keys(list(refit_meta = list(
+      link_unique_cross_pair_keys_by_spoke = "bad"
+    ))),
+    list()
+  )
+
+  entry <- .adaptive_link_refit_summary_empty(refit_id = 1L, spoke_id = 2L)
+
+  bad_count <- entry
+  bad_count$n_pairs_cross_set_done <- NA_integer_
+  expect_error(
+    .adaptive_link_refit_summary_validate(bad_count, context = "test"),
+    "must be a non-negative integer"
+  )
+
+  bad_stage_realized <- entry
+  bad_stage_realized$stage_realized <- list(anchor_link = -1L)
+  expect_error(
+    .adaptive_link_refit_summary_validate(bad_stage_realized, context = "test"),
+    "must contain non-negative integer counts"
+  )
+
+  bad_window_total <- entry
+  bad_window_total$n_pairs_cross_set_done <- 1L
+  bad_window_total$n_pairs_cross_set_active_done <- 1L
+  bad_window_total$n_unique_cross_pairs_seen <- 1L
+  bad_window_total$n_cross_edges_active_since_last_refit <- 1L
+  expect_error(
+    .adaptive_link_refit_summary_validate(bad_window_total, context = "test"),
+    "current-window total cross-edge count must equal current-window active plus probe counts"
+  )
+
+  expect_null(.adaptive_link_refit_summary_latest_for_spoke(list(), spoke_id = 2L))
+  expect_null(.adaptive_link_refit_summary_latest_for_spoke(
+    list(refit_meta = list(link_refit_summary_cache_by_refit_spoke = list(NULL))),
+    spoke_id = 2L
+  ))
+  expect_null(.adaptive_link_refit_summary_latest_for_spoke(
+    list(refit_meta = list(
+      link_refit_summary_cache_by_refit_spoke = list(
+        "1::3" = .adaptive_link_refit_summary_empty(refit_id = 1L, spoke_id = 3L)
+      )
+    )),
+    spoke_id = 2L
+  ))
+  expect_null(.adaptive_link_refit_summary_latest_for_spoke(
+    list(refit_meta = list(
+      link_refit_summary_cache_by_refit_spoke = list(
+        "2::2" = .adaptive_link_refit_summary_empty(refit_id = 2L, spoke_id = 2L)
+      )
+    )),
+    spoke_id = 2L,
+    refit_id = 1L
+  ))
+  expect_identical(
+    .adaptive_link_refit_summary_seed_for_refit(list(), refit_id = 2L, spoke_id = 2L),
+    .adaptive_link_refit_summary_empty(refit_id = 2L, spoke_id = 2L)
+  )
+
+  canonical <- .adaptive_link_refit_summary_empty(refit_id = 1L, spoke_id = 2L)
+  cached_flag <- canonical
+  cached_flag$probe_panel_acceleration_used_since_last_refit <- TRUE
+  expect_error(
+    .adaptive_link_refit_summary_compare(cached_flag, canonical, refit_id = 1L, spoke_id = 2L),
+    "cached probe-acceleration flag does not match canonical"
+  )
+
+  canonical_stage <- canonical
+  canonical_stage$n_cross_edges_active_since_last_refit <- 1L
+  canonical_stage$n_cross_edges_total_since_last_refit <- 1L
+
+  cached_stage <- canonical_stage
+  cached_stage$stage_realized <- list(anchor_link = 1L)
+  expect_error(
+    .adaptive_link_refit_summary_compare(cached_stage, canonical_stage, refit_id = 1L, spoke_id = 2L),
+    "cached stage-realized counts do not match canonical"
+  )
+
+  step_state <- list(
+    item_ids = c("h1", "s1"),
+    step_log = tibble::tibble(
+      pair_id = c(11L, 12L),
+      is_cross_set = c(TRUE, TRUE),
+      link_spoke_id = c(2L, 2L),
+      step_id = c(1L, 2L),
+      A = c(1L, 1L),
+      B = c(2L, 2L),
+      run_mode = c("link_one_spoke", "link_probe_holdout"),
+      fallback_used = c(NA_character_, "probe_panel_acceleration"),
+      round_stage = c("anchor_link", "local_link")
+    )
+  )
+  from_round_stage <- .adaptive_link_refit_summary_from_step_log(
+    state = step_state,
+    refit_id = 1L,
+    spoke_id = 2L,
+    refit_context = list(last_refit_step = 0L)
+  )
+  expect_identical(from_round_stage$n_pairs_cross_set_done, 2L)
+  expect_identical(from_round_stage$n_pairs_cross_set_probe_done, 1L)
+  expect_true(from_round_stage$probe_panel_acceleration_used_since_last_refit)
+  expect_identical(from_round_stage$stage_realized[["anchor_link"]], 1L)
+
+  expect_identical(
+    .adaptive_link_refit_summary_ensure_current_entries(step_state, spoke_ids = integer()),
+    step_state
+  )
+
+  mismatch_state <- list(
+    item_ids = c("h1", "s1"),
+    step_log = tibble::tibble(
+      pair_id = 21L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      A = 1L,
+      B = 2L
+    ),
+    refit_meta = list(
+      link_unique_cross_pair_keys_by_spoke = list(`2` = "wrong|pair")
+    )
+  )
+  expect_error(
+    .adaptive_link_refit_summary_rebuild_current(
+      mismatch_state,
+      current_refit_id = 1L,
+      spoke_ids = 2L
+    ),
+    "persisted cumulative unique cross-pair keys do not match canonical"
+  )
+})
+
+test_that("adaptive run probe realization helpers cover mismatch and memo branches", {
+  panel <- tibble::tibble(
+    probe_panel_id = "panel-a",
+    link_epoch_id = 1L,
+    pair_key = make_unordered_key("h1", "s1"),
+    realized = FALSE,
+    realized_step_id = NA_integer_,
+    realized_pair_id = NA_integer_,
+    realized_run_mode = NA_character_
+  )
+  realized <- dplyr::bind_rows(
+    .adaptive_link_probe_empty_realized_log(),
+    tibble::tibble(
+      step_id = 3L,
+      pair_id = 41L,
+      run_mode = "link_probe_holdout",
+      spoke_id = 2L,
+      link_epoch_id = 1L,
+      probe_panel_id = "panel-a",
+      hub_item_id = "h1",
+      spoke_item_id = "s1",
+      pair_key = make_unordered_key("h1", "s1"),
+      Y = 1L
+    )
+  )
+  index <- .adaptive_link_probe_realized_index_build(realized)
+  entry <- index[[1L]]
+  state <- list(
+    linking = list(
+      probe = list(
+        panels_by_spoke = list(`2` = panel),
+        realized_edges = realized,
+        realized_index_by_panel = index
+      )
+    )
+  )
+
+  bad_field <- index
+  bad_field[[1L]]$probe_panel_id <- "panel-b"
+  expect_error(
+    .adaptive_link_probe_realized_index_compare(bad_field, index, context = "test"),
+    "indexed `probe_panel_id` does not match canonical"
+  )
+
+  bad_rows <- entry
+  bad_rows$spoke_id <- 99L
+  expect_error(
+    .adaptive_link_probe_realized_rows_from_entry(state, bad_rows),
+    "stored `spoke_id`"
+  )
+
+  bad_last <- entry
+  bad_last$last_realized_step_id <- 99L
+  expect_error(
+    .adaptive_link_probe_realized_rows_from_entry(state, bad_last),
+    "last_realized_step_id"
+  )
+
+  out_of_range_state <- list(
+    linking = list(
+      probe = list(
+        realized_edges = realized,
+        realized_index_by_panel = list(
+          broken = list(
+            spoke_id = 2L,
+            link_epoch_id = 1L,
+            probe_panel_id = "panel-a",
+            row_ids = 99L,
+            realized_count = 1L,
+            last_realized_step_id = 3L
+          )
+        )
+      )
+    )
+  )
+  expect_error(
+    .adaptive_link_probe_realized_log_for_epoch(out_of_range_state, spoke_id = 2L, epoch_id = 1L),
+    "epoch row ids are out of range"
+  )
+
+  expect_error(
+    .adaptive_link_probe_panel_size(n_spoke_items = 4L, probe_panel_edges = 0L),
+    "must be >= 1"
+  )
+  expect_error(
+    .adaptive_link_probe_panel_size(n_spoke_items = 4L, probe_panel_edges = c(1L, 2L)),
+    "single integer"
+  )
+
+  incompatible_state <- state
+  incompatible_state$linking$probe$realized_edges$pair_key[[1L]] <- make_unordered_key("h2", "s2")
+  incompatible_state$linking$probe$realized_index_by_panel <-
+    .adaptive_link_probe_realized_index_build(incompatible_state$linking$probe$realized_edges)
+  expect_error(
+    .adaptive_link_probe_panel_for_spoke(incompatible_state, spoke_id = 2L, epoch_id = 1L),
+    "canonical realized probe edges are not contained"
+  )
+
+  cache_state <- list(
+    refit_meta = list(
+      link_refit_summary_cache_by_refit_spoke = list(
+        "1::2" = c(
+          .adaptive_link_refit_summary_empty(refit_id = 1L, spoke_id = 2L),
+          list(
+            n_pairs_cross_set_done = 3L,
+            n_pairs_cross_set_probe_done = 3L,
+            n_unique_cross_pairs_seen = 3L,
+            n_cross_edges_probe_since_last_refit = 3L,
+            n_cross_edges_total_since_last_refit = 3L
+          )
+        )
+      )
+    ),
+    step_log = tibble::tibble()
+  )
+  expect_identical(testthat::with_mocked_bindings(
+    .adaptive_link_refit_summary_current = function(...) {
+      list(n_cross_edges_probe_since_last_refit = 3L)
+    },
+    .adaptive_link_probe_holdout_total_since_last_refit(cache_state),
+    .package = "pairwiseLLM"
+  ), 3L)
+
+  expect_null(.adaptive_link_refit_local_memo_env(list(refit_meta = list(
+    link_refit_local_memo_env = list()
+  ))))
+  expect_identical(.adaptive_link_refit_local_step_id(list(step_log = tibble::tibble(x = 1L))), 0L)
+  expect_true(is.na(.adaptive_link_refit_local_probe_panel_id(state, spoke_id = 2L, epoch_id = 9L)))
+
+  memo <- new.env(parent = emptyenv())
+  memo$keep <- list(context = list(refit_id = 1L, step_id = 2L))
+  memo$drop <- list(context = list(refit_id = 1L, step_id = 1L))
+  .adaptive_link_refit_local_memo_prune(memo, refit_id = 1L, step_id = 2L)
+  expect_identical(ls(memo), "keep")
+})
+
+test_that("adaptive run blocker and stop helpers cover remaining fallback branches", {
+  expect_identical(.adaptive_link_probe_parse_blocker_codes(NA_character_), character())
+
+  blocker_surface <- list(
+    stop_blocker_codes = "probe_edges_min_for_stop",
+    link_diagnostics_pass = TRUE,
+    link_lag_eligible = TRUE,
+    link_min_refit_eligible = TRUE,
+    reliability_link_global = 0.9,
+    link_stop_reliability_min_used = 0.8,
+    probe_brier = 0.1,
+    probe_brier_max_used = 0.2,
+    probe_pred_rmse_lagged = 0.1,
+    probe_pred_rmse_max_used = 0.2,
+    theta_global_rmse_lagged = 0.1,
+    theta_global_rmse_max_used = 0.2,
+    hub_anchored = TRUE,
+    probe_edges_min_for_stop_used = 99L
+  )
+  expect_error(
+    .adaptive_link_probe_validate_blocker_surface(
+      surface_row = blocker_surface,
+      realized_before_refit = 5L,
+      realized_min = 30L,
+      spoke_id = 2L,
+      source = "controller_stats"
+    ),
+    "does not match the current controller threshold"
+  )
+
+  expect_identical(testthat::with_mocked_bindings(
+    .adaptive_runtime_controller_resolve = function(...) list(),
+    .adaptive_link_probe_budget_info_for_spoke(list(), controller = list(), spoke_id = NA_integer_),
+    .package = "pairwiseLLM"
+  ),
+    list(
+      B_spoke_refit_budget = 0L,
+      B_spoke_refit_budget_source = "single_spoke_default"
+    )
+  )
+  expect_identical(
+    .adaptive_link_probe_released_cap_when_active(list(
+      allow_when_active = TRUE,
+      effective_cap = 0L,
+      active_nonprobe_since_refit = 3L,
+      active_floor_used = 2L
+    )),
+    0L
+  )
+
+  expect_false(testthat::with_mocked_bindings(
+    .adaptive_controller_resolve = function(...) list(),
+    .adaptive_link_mode_active = function(...) TRUE,
+    .adaptive_link_phase_context = function(...) list(phase = "phase_b", active_spokes = integer()),
+    .adaptive_link_all_spokes_stopped(list()),
+    .package = "pairwiseLLM"
+  ))
+  expect_identical(testthat::with_mocked_bindings(
+    .adaptive_runtime_controller_resolve = function(...) list(run_mode = "within_set"),
+    .adaptive_link_probe_active_progress_guard(list(), controller = list()),
+    .package = "pairwiseLLM"
+  )$block_probes, FALSE)
+  expect_false(testthat::with_mocked_bindings(
+    .adaptive_controller_resolve = function(...) list(),
+    .adaptive_link_mode_active = function(...) TRUE,
+    .adaptive_link_phase_context = function(...) list(phase = "phase_b", pending_run_sets = 2L),
+    .adaptive_global_stop_allowed(list()),
+    .package = "pairwiseLLM"
+  ))
+
+  bootstrapped <- .adaptive_stop_boundary_bootstrap(list(
+    meta = list(
+      stop_boundary_step_id = 4L,
+      pairs_committed_after_stop = -1L
+    ),
+    step_log = tibble::tibble(step_id = c(3L, 5L), pair_id = c(NA_integer_, 11L))
+  ))
+  expect_identical(bootstrapped$meta$pairs_committed_after_stop, 1L)
+
+  budget_status <- .adaptive_stop_boundary_budget_status(
+    state = list(meta = list(stop_boundary_step_id = 4L, pairs_committed_after_stop = -2L)),
+    controller = list(max_pairs_after_stop = -1L)
+  )
+  expect_true(budget_status$active)
+  expect_true(budget_status$exhausted)
+  expect_identical(budget_status$max_pairs_after_stop, 0L)
+  expect_identical(budget_status$pairs_after_stop, 0L)
+})
+
+test_that("adaptive round candidate domain and ordering helpers cover remaining branches", {
+  fill_defaults <- adaptive_defaults(5L)
+  fill_defaults$anchor_frac_total <- 0.8
+  fill_defaults$anchor_top_weight <- 0
+  fill_defaults$anchor_mid_weight <- 3
+  fill_defaults$anchor_bottom_weight <- 0
+  expect_length(
+    .adaptive_select_rolling_anchors(
+      scores = c(a = 5, b = 4, c = 3, d = 2, e = 1),
+      defaults = fill_defaults
+    ),
+    4L
+  )
+
+  trim_defaults <- adaptive_defaults(5L)
+  trim_defaults$anchor_frac_total <- 0.4
+  trim_defaults$anchor_top_weight <- 2
+  trim_defaults$anchor_mid_weight <- 3
+  trim_defaults$anchor_bottom_weight <- 2
+  expect_length(
+    .adaptive_select_rolling_anchors(
+      scores = c(a = 5, b = 4, c = 3, d = 2, e = 1),
+      defaults = trim_defaults
+    ),
+    2L
+  )
+
+  all_top <- adaptive_defaults(3L)
+  all_top$top_band_pct <- 1
+  strata <- .adaptive_assign_strata(c(a = 3, b = 2, c = 1), all_top)
+  expect_identical(length(strata$top_band_ids), 3L)
+
+  expect_error(
+    .adaptive_link_assert_active_domain_count(
+      stage_name = "local_link",
+      n_candidates_after_active_domain = 3L,
+      active_hub_ids = "h1",
+      spoke_ids = c("s1", "s2"),
+      spoke_id = 2L
+    ),
+    "exceeds the maximum possible active-domain cross-set pairs"
+  )
+
+  set_map <- c(h1 = 1L, h2 = 1L, s1 = 2L, s2 = 2L)
+  expect_error(
+    .adaptive_link_assert_non_anchor_candidate_domain(
+      candidates = tibble::tibble(i = c("h1", "s1"), j = c("s1", "s2")),
+      stage_name = "local_link",
+      spoke_id = 2L,
+      hub_id = 1L,
+      active_hub_ids = "h1",
+      set_map = set_map
+    ),
+    "fell outside active_link_items"
+  )
+  expect_error(
+    .adaptive_link_assert_non_anchor_candidate_domain(
+      candidates = tibble::tibble(i = "h1", j = "s1"),
+      stage_name = "local_link",
+      spoke_id = 2L,
+      hub_id = 1L,
+      active_hub_ids = "h1",
+      reserved_keys = make_unordered_key("h1", "s1"),
+      set_map = set_map
+    ),
+    "reserved"
+  )
+
+  expect_error(
+    .adaptive_link_direct_cross_pairs(
+      hub_item_ids = "h1",
+      spoke_ids = "s1",
+      rank_index = c(h1 = NA_integer_, s1 = 2L),
+      stratum_map = c(h1 = 1L, s1 = 1L)
+    ),
+    "finite routing ranks"
+  )
+  expect_error(
+    .adaptive_link_direct_cross_pairs(
+      hub_item_ids = "h1",
+      spoke_ids = "s1",
+      rank_index = c(h1 = 1L, s1 = 2L),
+      stratum_map = c(h1 = NA_integer_, s1 = 1L)
+    ),
+    "finite routing strata"
+  )
+
+  expect_error(
+    .adaptive_link_backfill_order(
+      candidates = tibble::tibble(i = "h1", j = "s1"),
+      hub_id = 1L,
+      set_map = set_map,
+      spoke_id = 2L
+    ),
+    "link_d_opt_gain"
+  )
+  expect_error(
+    .adaptive_link_backfill_order(
+      candidates = tibble::tibble(i = "h1", j = "s1", link_d_opt_gain = NA_real_),
+      hub_id = 1L,
+      set_map = set_map,
+      spoke_id = 2L
+    ),
+    "all `link_d_opt_gain` values were non-finite"
+  )
+})
+
+test_that("adaptive select posterior and predictive helpers cover remaining edge branches", {
+  expect_identical(
+    .adaptive_recent_deg(
+      history = tibble::tibble(
+        A_id = c("a", "a", "x"),
+        B_id = c("a", "b", "b")
+      ),
+      ids = c("a", "b"),
+      W_cap = 3L
+    ),
+    c(a = 1L, b = 1L)
+  )
+
+  ids <- c("a", "b")
+  cache <- .adaptive_history_state_empty(ids)
+
+  bad_pos <- cache
+  bad_pos$posA <- stats::setNames(as.integer(c(0L, -1L)), ids)
+  expect_error(
+    .adaptive_history_state_validate(bad_pos, ids, context = "test"),
+    "must be non-missing and non-negative"
+  )
+
+  bad_pair_count_type <- cache
+  bad_pair_count_type$pair_count <- c("a|b" = 1)
+  expect_error(
+    .adaptive_history_state_validate(bad_pair_count_type, ids, context = "test"),
+    "pair_count` must be an integer vector"
+  )
+
+  bad_pair_count_neg <- cache
+  bad_pair_count_neg$pair_count <- stats::setNames(as.integer(-1L), "a|b")
+  expect_error(
+    .adaptive_history_state_validate(bad_pair_count_neg, ids, context = "test"),
+    "pair_count` must be non-missing and non-negative"
+  )
+
+  bad_last_list <- cache
+  bad_last_list$pair_last_order <- 1L
+  expect_error(
+    .adaptive_history_state_validate(bad_last_list, ids, context = "test"),
+    "pair_last_order` must be a list"
+  )
+
+  bad_last_names <- cache
+  bad_last_names$pair_last_order <- stats::setNames(list(c("a", "b")), "")
+  expect_error(
+    .adaptive_history_state_validate(bad_last_names, ids, context = "test"),
+    "must use non-empty pair-key names"
+  )
+
+  expect_false(testthat::with_mocked_bindings(
+    .adaptive_controller_resolve = function(...) list(run_mode = "link_one_spoke"),
+    .adaptive_link_phase_context = function(...) list(phase = "phase_a", active_phase_a_set = 2L),
+    .adaptive_long_link_gate_has_posterior(list(
+      btl_fit = list(btl_posterior_draws = matrix(c(1, 0), nrow = 1L)),
+      round_log = tibble::tibble(
+        diagnostics_pass = TRUE,
+        phase_scope = "phase_a_set",
+        phase_scope_set_id = 99L
+      )
+    )),
+    .package = "pairwiseLLM"
+  ))
+
+  expect_true(is.na(.adaptive_long_link_gate_posterior_prob(
+    state = list(
+      item_ids = c("a", "b", "c"),
+      btl_fit = list(btl_posterior_draws = matrix(1:4, ncol = 2))
+    ),
+    i_id = "a",
+    j_id = "b"
+  )))
+
+  prob <- .adaptive_long_link_gate_posterior_prob(
+    state = list(
+      item_ids = c("a", "b"),
+      btl_fit = list(
+        btl_posterior_draws = matrix(c(0.2, -0.2), ncol = 2),
+        beta_draws = Inf,
+        epsilon_draws = c(Inf, -Inf),
+        beta_mean = 0.1,
+        epsilon_mean = 0.25
+      )
+    ),
+    i_id = "a",
+    j_id = "b"
+  )
+  expect_true(is.finite(prob))
+
+  theta_map <- testthat::with_mocked_bindings(
+    .adaptive_link_phase_a_theta_map = function(...) c(h1 = 0.3),
+    .adaptive_anchored_joint_artifact_copy_init = function(...) {
+      list(theta_spoke_global_mean = c(s1 = 0.1))
+    },
+    .adaptive_link_theta_global_map_for_items(
+      state = list(
+        items = tibble::tibble(item_id = c("h1", "s1"), set_id = c(1L, 2L)),
+        linking = list(anchored_joint = list())
+      ),
+      controller = list(link_estimation_mode = "anchored_joint", hub_id = 1L),
+      item_ids = c("h1", "s1")
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_identical(theta_map, c(h1 = 0.3, s1 = 0.1))
+
+  expect_identical(
+    .adaptive_link_model_d_prob_vec(
+      theta_a = c(NA_real_, 0.1),
+      theta_b = c(0.2, 0.2),
+      beta = Inf,
+      epsilon = Inf
+    ),
+    c(NA_real_, stats::plogis(-0.1))
+  )
+  expect_true(all(is.na(.adaptive_link_model_d_pbar_vec(
+    theta_h = NA_real_,
+    theta_x = 0.1,
+    beta = 0,
+    epsilon = 0
+  ))))
+  expect_true(is.na(.adaptive_link_d_opt_gain_logdet_from_start(
+    it = matrix(0, nrow = 1L, ncol = 1L),
+    ipair = matrix(-1, nrow = 1L, ncol = 1L),
+    logdet_start = NA_real_,
+    ridge = 0
+  )))
+  expect_error(
+    .adaptive_link_d_opt_matrix_dim(
+      transform_mode = "shift_only",
+      link_estimation_mode = "anchored_joint",
+      free_block_dim = 0L
+    ),
+    "positive `free_block_dim`"
+  )
+
+  cand <- tibble::tibble(i = "h1", j = "s1")
+  missing_theta <- testthat::with_mocked_bindings(
+    .adaptive_link_theta_global_map_for_items = function(...) c(h1 = 0.2),
+    .adaptive_link_attach_predictive_utility(
+      candidates = cand,
+      state = list(items = tibble::tibble(item_id = c("h1", "s1"), set_id = c(1L, 2L))),
+      controller = list(),
+      spoke_id = 2L
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_true(all(is.na(missing_theta$link_u)))
+
+  predictive <- testthat::with_mocked_bindings(
+    .adaptive_link_theta_global_map_for_items = function(...) c(h1 = 0.2, s1 = 0.1),
+    .adaptive_link_phase_b_startup_gap_for_spoke = function(...) FALSE,
+    .adaptive_link_judge_params = function(...) list(epsilon = Inf, beta = -Inf),
+    .adaptive_link_transform_state_for_spoke = function(...) "shift_only",
+    .adaptive_link_d_opt_state_get = function(...) list(it = matrix(1, nrow = 1L, ncol = 1L)),
+    .adaptive_link_safe_theta_map = function(...) c(h1 = 0.2, s1 = 0.1),
+    .adaptive_link_refit_window_id = function(...) 1L,
+    .adaptive_link_attach_predictive_utility(
+      candidates = cand,
+      state = list(items = tibble::tibble(item_id = c("h1", "s1"), set_id = c(1L, 2L))),
+      controller = list(
+        hub_id = 1L,
+        link_refit_stats_by_spoke = list(`2` = list(delta_spoke_mean = Inf))
+      ),
+      spoke_id = 2L
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_true(is.finite(predictive$link_p[[1L]]))
+  expect_true(is.finite(predictive$link_d_opt_gain[[1L]]))
+
+  expect_true(is.na(testthat::with_mocked_bindings(
+    .adaptive_link_theta_global_map_for_items = function(...) c(h1 = 0.1),
+    .adaptive_link_predictive_prob_oriented(
+      state = list(),
+      controller = list(),
+      spoke_id = 2L,
+      A_id = "h1",
+      B_id = "s1"
+    ),
+    .package = "pairwiseLLM"
+  )))
+  expect_true(is.na(testthat::with_mocked_bindings(
+    .adaptive_link_theta_global_map_for_items = function(...) c(h1 = NA_real_, s1 = 0.1),
+    .adaptive_link_phase_b_startup_gap_for_spoke = function(...) FALSE,
+    .adaptive_link_judge_params = function(...) list(epsilon = Inf, beta = Inf),
+    .adaptive_link_predictive_prob_oriented(
+      state = list(),
+      controller = list(),
+      spoke_id = 2L,
+      A_id = "h1",
+      B_id = "s1"
+    ),
+    .package = "pairwiseLLM"
+  )))
+})
