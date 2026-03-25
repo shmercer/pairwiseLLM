@@ -968,7 +968,7 @@ test_that("low-coverage CmdStan, concurrent allocation, selector, and print help
     controller = pairwiseLLM:::.adaptive_controller_resolve(selector_state),
     generation_stage = "long_link",
     round = selector_state$round,
-    history = pairwiseLLM:::.adaptive_history_tbl(selector_state),
+    history_state = pairwiseLLM:::.adaptive_history_state_resolve(selector_state),
     counts = pairwiseLLM:::.adaptive_pair_counts(
       pairwiseLLM:::.adaptive_history_tbl(selector_state),
       selector_state$item_ids
@@ -1040,9 +1040,9 @@ test_that("low-coverage probe panel restoration, run helpers, and cost estimator
   dup_panel$probe_panel_id <- c("p-one", "p-two")
   dup_panel$pair_key <- c("k-one", "k-two")
   panel_state$linking$probe$panels_by_spoke <- list(`2` = dup_panel)
-  expect_identical(
-    nrow(pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(panel_state, spoke_id = 2L, epoch_id = 1L)),
-    2L
+  expect_error(
+    pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(panel_state, spoke_id = 2L, epoch_id = 1L),
+    "multiple `probe_panel_id`"
   )
 
   guard_state <- state
@@ -1478,7 +1478,7 @@ test_that("low-coverage holdout commit, selector fallback, CmdStan wrapper, and 
       ),
       generation_stage = "long_link",
       round = selector_state$round,
-      history = pairwiseLLM:::.adaptive_history_tbl(selector_state),
+      history_state = pairwiseLLM:::.adaptive_history_state_resolve(selector_state),
       counts = pairwiseLLM:::.adaptive_pair_counts(
         pairwiseLLM:::.adaptive_history_tbl(selector_state),
         selector_state$item_ids

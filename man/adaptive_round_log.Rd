@@ -4,10 +4,15 @@
 \alias{adaptive_round_log}
 \title{Adaptive round log accessor.}
 \usage{
-adaptive_round_log(state)
+adaptive_round_log(state, reconstruct_deferred = FALSE)
 }
 \arguments{
 \item{state}{Adaptive state.}
+
+\item{reconstruct_deferred}{Logical; when \code{TRUE}, reconstruct deferred
+audit-only posterior summaries from stored refit payloads when available.
+By default, returns the canonical stored \code{round_log} without
+reconstruction.}
 }
 \value{
 A tibble with one row per completed posterior refit round.

@@ -3971,6 +3971,16 @@
   }
   controller <- controller %||% .adaptive_controller_resolve(state)
   refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+  refit_context <- list(last_refit_step = as.integer(state$refit_meta$last_refit_step %||% 0L))
+  current_window_cross_total <- function(spoke_id) {
+    summary <- .adaptive_link_refit_summary_current(
+      state = state,
+      refit_id = refit_id,
+      spoke_id = as.integer(spoke_id),
+      refit_context = refit_context
+    )
+    as.integer(summary$n_cross_edges_total_since_last_refit %||% 0L)
+  }
   cached_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
   cached_map <- controller$link_budget_map %||% list()
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
@@ -3982,8 +3992,6 @@
   run_mode <- as.character(controller$run_mode %||% "within_set")
   concurrent_mode <- identical(run_mode, "link_multi_spoke") &&
     identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
-  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
   if (!is.na(cached_refit_id) &&
     identical(cached_refit_id, refit_id) &&
     length(cached_map) > 0L) {
@@ -4009,17 +4017,7 @@
     if (all(as.character(spoke_ids) %in% names(cached_map))) {
       cached_map <- lapply(as.character(spoke_ids), function(key) {
         entry <- cached_map[[key]] %||% list()
-        obs <- 0L
-        if (nrow(step_log) > 0L &&
-          all(c("pair_id", "is_cross_set", "link_spoke_id", "step_id") %in% names(step_log))) {
-          obs <- as.integer(sum(
-            !is.na(step_log$pair_id) &
-              step_log$is_cross_set %in% TRUE &
-              as.integer(step_log$link_spoke_id) == as.integer(key) &
-              as.integer(step_log$step_id) > last_refit_step,
-            na.rm = TRUE
-          ))
-        }
+        obs <- current_window_cross_total(as.integer(key))
         target_pairs <- as.integer(entry$concurrent_target_pairs %||% entry$B_spoke_refit_budget %||% 0L)
         floor_pairs <- as.integer(entry$concurrent_floor_pairs %||% 0L)
         entry$concurrent_target_met <- as.logical(obs >= target_pairs)
@@ -4098,17 +4096,7 @@
   out <- lapply(as.character(spoke_ids), function(key) {
     stat <- spoke_stats[[key]] %||% list()
     target_pairs <- as.integer(targets[[key]] %||% 0L)
-    obs <- 0L
-    if (nrow(step_log) > 0L &&
-      all(c("pair_id", "is_cross_set", "link_spoke_id", "step_id") %in% names(step_log))) {
-      obs <- as.integer(sum(
-        !is.na(step_log$pair_id) &
-          step_log$is_cross_set %in% TRUE &
-          as.integer(step_log$link_spoke_id) == as.integer(key) &
-          as.integer(step_log$step_id) > last_refit_step,
-        na.rm = TRUE
-      ))
-    }
+    obs <- current_window_cross_total(as.integer(key))
     entry <- list(
       B_spoke_refit_budget = as.integer(target_pairs),
       B_spoke_refit_budget_source = "concurrent_allocator",
@@ -4648,7 +4636,14 @@
       log_alpha_change <- NA_real_
     }
 
-    active <- .adaptive_link_active_item_ids(out, spoke_id = spoke_id, hub_id = hub_id)
+    local_inputs <- .adaptive_link_refit_local_inputs(
+      state = out,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      refit_id = as.integer(current_refit_id)
+    )
+    active <- local_inputs$active_items %||%
+      .adaptive_link_active_item_ids(out, spoke_id = spoke_id, hub_id = hub_id)
     reliability_stats <- .adaptive_link_global_score_stats_active(
       state = out,
       active_ids = active$active_all,
@@ -5329,41 +5324,16 @@
       FALSE
     }
 
-    is_cross <- rep(FALSE, nrow(step_log))
-    if (nrow(step_log) > 0L && all(c("pair_id", "is_cross_set", "link_spoke_id") %in% names(step_log))) {
-      link_spoke <- as.integer(step_log$link_spoke_id)
-      is_cross <- !is.na(step_log$pair_id) &
-        step_log$is_cross_set %in% TRUE &
-        !is.na(link_spoke) &
-        link_spoke == spoke_id
-    }
-    cumulative <- step_log[is_cross, , drop = FALSE]
-    since_last <- cumulative
-    if (nrow(cumulative) > 0L && "step_id" %in% names(cumulative)) {
-      since_last <- cumulative[cumulative$step_id > as.integer(refit_context$last_refit_step %||% 0L), , drop = FALSE]
-    }
-    if (!"run_mode" %in% names(since_last)) {
-      since_last$run_mode <- NA_character_
-    }
-    if (!"is_probe_step" %in% names(since_last)) {
-      since_last$is_probe_step <- NA
-    }
-
-    n_pairs_done <- as.integer(nrow(cumulative))
-    since_last_probe_flag <- .adaptive_link_is_holdout_probe_rows(since_last)
-    since_last_probe <- since_last[
-      since_last_probe_flag,
-      ,
-      drop = FALSE
-    ]
-    since_last_active <- since_last[
-      !since_last_probe_flag,
-      ,
-      drop = FALSE
-    ]
-    n_pairs_since_probe <- as.integer(nrow(since_last_probe))
-    n_pairs_since_active <- as.integer(nrow(since_last_active))
-    n_pairs_since_total <- as.integer(nrow(since_last))
+    refit_summary <- .adaptive_link_refit_summary_current(
+      state = state,
+      refit_id = as.integer(refit_id),
+      spoke_id = as.integer(spoke_id),
+      refit_context = refit_context
+    )
+    n_pairs_done <- as.integer(refit_summary$n_pairs_cross_set_done %||% 0L)
+    n_pairs_since_probe <- as.integer(refit_summary$n_cross_edges_probe_since_last_refit %||% 0L)
+    n_pairs_since_active <- as.integer(refit_summary$n_cross_edges_active_since_last_refit %||% 0L)
+    n_pairs_since_total <- as.integer(refit_summary$n_cross_edges_total_since_last_refit %||% 0L)
     retired_spoke <- isTRUE(stopped_map[[key]]) || isTRUE(frozen_map[[key]])
     budget_info <- budget_map[[key]] %||% if (isTRUE(retired_spoke)) {
       list(
@@ -5407,7 +5377,16 @@
     }
     quota_taper_spoke_id <- as.integer(quota_meta$link_spoke_id %||% spoke_id)
     stage_order <- .adaptive_stage_order()
-    committed_stage <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
+    committed_stage <- stats::setNames(
+      vapply(
+        stage_order,
+        function(stage_name) {
+          as.integer((refit_summary$stage_realized %||% list())[[stage_name]] %||% 0L)
+        },
+        integer(1L)
+      ),
+      stage_order
+    )
     refit_spoke_key <- .adaptive_link_refit_spoke_key(
       refit_id = as.integer(refit_id),
       spoke_id = as.integer(spoke_id)
@@ -5419,24 +5398,6 @@
       0L
     }
     refit_step_start <- as.integer(refit_context$last_refit_step %||% 0L)
-    if (nrow(step_log) > 0L && all(c("pair_id", "step_id", "link_spoke_id", "is_cross_set") %in%
-      names(step_log))) {
-      stage_col <- if ("link_stage" %in% names(step_log)) "link_stage" else "round_stage"
-      stage_rows <- step_log[
-        !is.na(step_log$pair_id) &
-          step_log$is_cross_set %in% TRUE &
-          as.integer(step_log$step_id) > refit_step_start &
-          as.integer(step_log$step_id) <= refit_step_end &
-          as.integer(step_log$link_spoke_id) == as.integer(spoke_id) &
-          as.character(step_log[[stage_col]]) %in% stage_order,
-        ,
-        drop = FALSE
-      ]
-      if (nrow(stage_rows) > 0L) {
-        tab_stage <- table(factor(as.character(stage_rows[[stage_col]]), levels = stage_order))
-        committed_stage[names(tab_stage)] <- as.integer(tab_stage)
-      }
-    }
     stage_quotas <- stats::setNames(
       vapply(
         stage_order,
@@ -5540,31 +5501,25 @@
         )
       )
     }
-    n_unique <- 0L
-    if (nrow(cumulative) > 0L && all(c("A", "B") %in% names(cumulative))) {
-      ids <- as.character(state$item_ids)
-      a_id <- ids[as.integer(cumulative$A)]
-      b_id <- ids[as.integer(cumulative$B)]
-      n_unique <- as.integer(length(unique(make_unordered_key(a_id, b_id))))
-    }
+    n_unique <- as.integer(refit_summary$n_unique_cross_pairs_seen %||% 0L)
 
-    spoke_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == spoke_id])
-
-    hub_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
-    coverage_ids <- unique(c(hub_items, spoke_items))
-    coverage_scores <- .adaptive_link_phase_b_routing_scores(
+    local_inputs <- .adaptive_link_refit_local_inputs(
       state = state,
       controller = controller,
-      active_ids = coverage_ids,
-      hub_id = hub_id
+      spoke_id = as.integer(spoke_id),
+      refit_id = as.integer(refit_id)
     )
-    coverage <- .adaptive_link_spoke_coverage(
-      state = state,
-      controller = controller,
-      spoke_id = spoke_id,
-      spoke_ids = spoke_items,
-      routing_scores = coverage_scores,
-      score_source = "linking_global_score"
+    active <- local_inputs$active_items %||%
+      .adaptive_link_active_item_ids(state, spoke_id = spoke_id, hub_id = hub_id)
+    spoke_items <- as.character(local_inputs$spoke_ids %||%
+      state$items$item_id[as.integer(state$items$set_id) == spoke_id])
+    hub_items <- as.character(local_inputs$hub_ids %||%
+      state$items$item_id[as.integer(state$items$set_id) == hub_id])
+    coverage <- local_inputs$coverage %||% list(
+      bin_map = stats::setNames(integer(), character()),
+      bins_used = NA_integer_,
+      bins_undercovered = integer(),
+      source = NA_character_
     )
 
     link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
@@ -5651,15 +5606,16 @@
       epoch_id = as.integer(stats_epoch_id),
       panel = probe_panel
     )
-    realized_probe_log_current_window <- realized_probe_log[
-      as.integer(realized_probe_log$step_id) > refit_step_start &
-        as.integer(realized_probe_log$step_id) <= refit_step_end,
-      ,
-      drop = FALSE
-    ]
     canonical_probe_edges_realized <- as.integer(nrow(realized_probe_log))
+    current_window_realized_probe_count <- .adaptive_link_probe_realized_count_since_step(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      epoch_id = as.integer(stats_epoch_id),
+      last_step_id = as.integer(refit_step_start),
+      panel = probe_panel
+    )
     probe_edges_realized_before_refit <- as.integer(
-      max(0L, canonical_probe_edges_realized - nrow(realized_probe_log_current_window))
+      max(0L, canonical_probe_edges_realized - current_window_realized_probe_count)
     )
     prior_probe_edges_realized_max <- .adaptive_link_probe_prior_realized_max(
       link_stage_log = state$link_stage_log,
@@ -5680,21 +5636,21 @@
         )
       )
     }
-    if (nrow(since_last_probe) > 0L &&
-      !identical(as.integer(nrow(since_last_probe)), as.integer(nrow(realized_probe_log_current_window)))) {
+    if (n_pairs_since_probe > 0L &&
+      !identical(as.integer(n_pairs_since_probe), as.integer(current_window_realized_probe_count))) {
       rlang::abort(
         paste0(
           "Phase B probe accounting invariant failed: `n_probe_pairs_since_last_refit` from committed ",
           "probe steps does not match canonical realized probe rows for spoke_id=",
           as.integer(spoke_id),
           " at refit_id=", as.integer(refit_id),
-          ". steps=", as.integer(nrow(since_last_probe)),
-          ", canonical=", as.integer(nrow(realized_probe_log_current_window)),
+          ". steps=", as.integer(n_pairs_since_probe),
+          ", canonical=", as.integer(current_window_realized_probe_count),
           "."
         )
       )
     }
-    n_pairs_since_probe <- as.integer(nrow(realized_probe_log_current_window))
+    n_pairs_since_probe <- as.integer(current_window_realized_probe_count)
     probe_edges_realized <- canonical_probe_edges_realized
     probe_edges_realized_delta_since_last_refit <- as.integer(n_pairs_since_probe)
     probe_panel_shortfall <- as.integer(
@@ -5796,8 +5752,7 @@
         as.integer(n_pairs_since_active) >= as.integer(probe_active_floor_used_logged) &&
         isTRUE(probe_effort_plan$anchor_progress_met %||% TRUE)
       bootstrap_acceleration_used_logged <- isTRUE(bootstrap_acceleration_logged) &&
-        any(as.character(since_last_probe$fallback_used %||% character()) %in%
-          "probe_panel_acceleration")
+        isTRUE(refit_summary$probe_panel_acceleration_used_since_last_refit %||% FALSE)
       probe_effort_effective_cap_logged <- if (isTRUE(probe_only_blocker_trigger_logged)) {
         min(
           as.integer(controller$probe_pairs_per_refit_per_spoke_sole_blocker_max %||%
@@ -5870,8 +5825,9 @@
       } else {
         NA_integer_
       }
-      cumulative_probe_flag <- .adaptive_link_is_holdout_probe_rows(cumulative)
-      anchored_phase_b_active_edges <- as.integer(sum(!cumulative_probe_flag, na.rm = TRUE))
+      anchored_phase_b_active_edges <- as.integer(
+        refit_summary$n_pairs_cross_set_active_done %||% 0L
+      )
       anchored_fit_contract <- stats_row$fit_contract %||% list()
       anchored_priors <- anchored_fit_contract$priors %||% list()
       anchored_joint_contract <- anchored_fit_contract$anchored_joint %||% list()
@@ -6362,6 +6318,139 @@
   as.logical(eff < raw)
 }
 
+.adaptive_round_log_deferred_audit_columns <- function() {
+  c(
+    "ci95_theta_width_mean",
+    "ci95_theta_width_median",
+    "ci95_theta_width_p90",
+    "ci95_theta_width_max",
+    "near_tie_adj_frac",
+    "near_tie_adj_count",
+    "p_adj_median",
+    "cov_trace_theta",
+    "cov_logdet_diag_theta",
+    "post_sd_theta_p10",
+    "post_sd_theta_p50",
+    "post_sd_theta_p90",
+    "top20_boundary_entropy_mean",
+    "top20_boundary_entropy_p90",
+    "nn_diff_sd_mean",
+    "nn_diff_sd_p90"
+  )
+}
+
+.adaptive_round_log_deferred_audit_na_values <- function() {
+  list(
+    ci95_theta_width_mean = NA_real_,
+    ci95_theta_width_median = NA_real_,
+    ci95_theta_width_p90 = NA_real_,
+    ci95_theta_width_max = NA_real_,
+    near_tie_adj_frac = NA_real_,
+    near_tie_adj_count = NA_integer_,
+    p_adj_median = NA_real_,
+    cov_trace_theta = NA_real_,
+    cov_logdet_diag_theta = NA_real_,
+    post_sd_theta_p10 = NA_real_,
+    post_sd_theta_p50 = NA_real_,
+    post_sd_theta_p90 = NA_real_,
+    top20_boundary_entropy_mean = NA_real_,
+    top20_boundary_entropy_p90 = NA_real_,
+    nn_diff_sd_mean = NA_real_,
+    nn_diff_sd_p90 = NA_real_
+  )
+}
+
+.adaptive_round_log_deferred_audit_payload <- function(draws,
+                                                       near_tie_p_low,
+                                                       near_tie_p_high) {
+  if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 2L || ncol(draws) < 1L) {
+    return(NULL)
+  }
+  draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "round_log_deferred_audit_draws")
+  list(
+    draws = draws,
+    near_tie_p_low = as.double(near_tie_p_low),
+    near_tie_p_high = as.double(near_tie_p_high)
+  )
+}
+
+.adaptive_round_log_deferred_audit_from_payload <- function(payload) {
+  out <- .adaptive_round_log_deferred_audit_na_values()
+  if (!is.list(payload)) {
+    return(out)
+  }
+
+  draws <- payload$draws %||% NULL
+  if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 2L || ncol(draws) < 1L) {
+    return(out)
+  }
+
+  ci_bounds <- apply(
+    draws,
+    2,
+    stats::quantile,
+    probs = c(0.025, 0.975),
+    names = FALSE
+  )
+  ci_widths <- ci_bounds[2L, ] - ci_bounds[1L, ]
+  out$ci95_theta_width_mean <- mean(ci_widths)
+  out$ci95_theta_width_median <- stats::median(ci_widths)
+  out$ci95_theta_width_p90 <- stats::quantile(ci_widths, probs = 0.90, names = FALSE)
+  out$ci95_theta_width_max <- max(ci_widths)
+
+  cov_theta <- stats::cov(draws)
+  cov_diag <- diag(cov_theta)
+  out$cov_trace_theta <- sum(cov_diag)
+  out$cov_logdet_diag_theta <- sum(log(pmax(cov_diag, .Machine$double.eps)))
+  post_sd <- sqrt(pmax(cov_diag, 0))
+  out$post_sd_theta_p10 <- stats::quantile(post_sd, probs = 0.10, names = FALSE)
+  out$post_sd_theta_p50 <- stats::quantile(post_sd, probs = 0.50, names = FALSE)
+  out$post_sd_theta_p90 <- stats::quantile(post_sd, probs = 0.90, names = FALSE)
+
+  rank_draws <- t(apply(draws, 1, function(row) rank(-row, ties.method = "average")))
+  top_k <- min(20L, ncol(rank_draws))
+  if (top_k >= 1L) {
+    in_top <- rank_draws <= top_k
+    p_top <- colMeans(in_top)
+    entropy <- -(p_top * log(pmax(p_top, .Machine$double.eps)) +
+      (1 - p_top) * log(pmax(1 - p_top, .Machine$double.eps)))
+    boundary_lo <- max(1L, top_k - 2L)
+    boundary_hi <- min(length(entropy), top_k + 2L)
+    boundary_idx <- boundary_lo:boundary_hi
+    out$top20_boundary_entropy_mean <- mean(entropy[boundary_idx])
+    out$top20_boundary_entropy_p90 <- stats::quantile(
+      entropy[boundary_idx],
+      probs = 0.90,
+      names = FALSE
+    )
+  }
+
+  theta_for_draws <- as.double(colMeans(draws))
+  draw_ids <- as.character(colnames(draws) %||% seq_len(ncol(draws)))
+  if (length(theta_for_draws) >= 2L) {
+    rank_order <- order(-theta_for_draws, draw_ids)
+    p_adj <- vapply(seq_len(length(rank_order) - 1L), function(k) {
+      lhs <- rank_order[[k]]
+      rhs <- rank_order[[k + 1L]]
+      mean(draws[, lhs] > draws[, rhs])
+    }, numeric(1L))
+    near_low <- as.double(payload$near_tie_p_low %||% 0.40)
+    near_high <- as.double(payload$near_tie_p_high %||% 0.60)
+    near_tie <- p_adj >= near_low & p_adj <= near_high
+    out$near_tie_adj_frac <- mean(near_tie)
+    out$near_tie_adj_count <- as.integer(sum(near_tie))
+    out$p_adj_median <- stats::median(p_adj)
+
+    nn_diff_draws <- draws[, rank_order[-length(rank_order)], drop = FALSE] -
+      draws[, rank_order[-1L], drop = FALSE]
+    nn_diff_sd <- apply(nn_diff_draws, 2, stats::sd)
+    out$nn_diff_sd_mean <- mean(nn_diff_sd)
+    out$nn_diff_sd_p90 <- stats::quantile(nn_diff_sd, probs = 0.90, names = FALSE)
+  }
+
+  out
+}
+
 .adaptive_btl_refit_context <- function(state, last_refit_M_done, last_refit_step) {
   step_id_at_refit <- as.integer(nrow(state$step_log))
   list(
@@ -6380,8 +6469,8 @@
   if (length(metric_ids) < 1L) {
     metric_ids <- ids
   }
-  history <- .adaptive_history_tbl(state)
-  counts <- .adaptive_pair_counts(history, ids)
+  history_state <- .adaptive_history_state_resolve(state, ids = ids)
+  counts <- .adaptive_history_state_counts(history_state, ids)
 
   deg_vals <- as.double(counts$deg[ids])
   mean_degree <- if (length(deg_vals) > 0L) mean(deg_vals) else NA_real_
@@ -6429,32 +6518,60 @@
     step_subset$is_probe_step <- FALSE
   }
   committed_subset <- step_subset[!is.na(step_subset$pair_id), , drop = FALSE]
-  new_pairs_since_last_refit <- nrow(committed_subset)
-  cross_subset <- committed_subset[committed_subset$is_cross_set %in% TRUE, , drop = FALSE]
-  probe_subset <- cross_subset[
-    as.character(cross_subset$run_mode) %in% c("link_probe_holdout", "link_probe") |
-      cross_subset$is_probe_step %in% TRUE,
-    ,
-    drop = FALSE
-  ]
-  active_subset <- cross_subset[
-    !(as.character(cross_subset$run_mode) %in% c("link_probe_holdout", "link_probe") |
-      cross_subset$is_probe_step %in% TRUE),
-    ,
-    drop = FALSE
-  ]
+  new_pairs_since_last_refit <- max(
+    0L,
+    as.integer(total_pairs_done - as.integer(refit_context$last_refit_M_done %||% 0L))
+  )
+  refit_id <- as.integer(nrow(state$round_log %||% tibble::tibble()) + 1L)
+  summary_cache <- .adaptive_link_refit_summary_cache(state)
+  cache_spokes <- vapply(
+    summary_cache,
+    function(entry) {
+      entry_refit_id <- as.integer(entry$refit_id %||% NA_integer_)
+      if (!identical(entry_refit_id, refit_id)) {
+        return(NA_integer_)
+      }
+      as.integer(entry$spoke_id %||% NA_integer_)
+    },
+    integer(1L)
+  )
+  summary_spokes <- sort(unique(c(
+    as.integer(phase_ctx$active_spokes %||% integer()),
+    cache_spokes[is.finite(cache_spokes) & !is.na(cache_spokes)]
+  )))
+  summary_spokes <- summary_spokes[is.finite(summary_spokes) & !is.na(summary_spokes)]
+  refit_summaries <- lapply(summary_spokes, function(spoke_id) {
+    .adaptive_link_refit_summary_current(
+      state = state,
+      refit_id = refit_id,
+      spoke_id = as.integer(spoke_id),
+      refit_context = refit_context
+    )
+  })
   new_active_pairs_since_last_refit <- if (isTRUE(phase_b_linking)) {
-    as.integer(nrow(active_subset))
+    as.integer(sum(vapply(
+      refit_summaries,
+      function(summary) as.integer(summary$n_cross_edges_active_since_last_refit %||% 0L),
+      integer(1L)
+    )))
   } else {
     NA_integer_
   }
   new_probe_pairs_since_last_refit <- if (isTRUE(phase_b_linking)) {
-    as.integer(nrow(probe_subset))
+    as.integer(sum(vapply(
+      refit_summaries,
+      function(summary) as.integer(summary$n_cross_edges_probe_since_last_refit %||% 0L),
+      integer(1L)
+    )))
   } else {
     NA_integer_
   }
   new_total_cross_pairs_since_last_refit <- if (isTRUE(phase_b_linking)) {
-    as.integer(nrow(cross_subset))
+    as.integer(sum(vapply(
+      refit_summaries,
+      function(summary) as.integer(summary$n_cross_edges_total_since_last_refit %||% 0L),
+      integer(1L)
+    )))
   } else {
     NA_integer_
   }
@@ -6496,26 +6613,11 @@
   ts_degree_sigma_corr <- NA_real_
   ts_btl_theta_corr <- NA_real_
   ts_btl_rank_spearman <- NA_real_
-  ci95_theta_width_mean <- NA_real_
-  ci95_theta_width_median <- NA_real_
-  ci95_theta_width_p90 <- NA_real_
-  ci95_theta_width_max <- NA_real_
-  near_tie_adj_frac <- NA_real_
-  near_tie_adj_count <- NA_integer_
-  p_adj_median <- NA_real_
-  cov_trace_theta <- NA_real_
-  cov_logdet_diag_theta <- NA_real_
-  post_sd_theta_p10 <- NA_real_
-  post_sd_theta_p50 <- NA_real_
-  post_sd_theta_p90 <- NA_real_
-  top20_boundary_entropy_mean <- NA_real_
-  top20_boundary_entropy_p90 <- NA_real_
-  nn_diff_sd_mean <- NA_real_
-  nn_diff_sd_p90 <- NA_real_
+  deferred_audit <- .adaptive_round_log_deferred_audit_na_values()
 
   trueskill_state <- state$trueskill_state %||% NULL
   defaults <- adaptive_defaults(length(ids))
-  recent_deg_summary <- .adaptive_recent_deg(history, ids, defaults$W_cap)
+  recent_deg_summary <- .adaptive_history_state_recent_deg(history_state, ids, defaults$W_cap)
   recent_deg_vals <- as.double(recent_deg_summary[ids])
   recent_deg_median <- if (length(recent_deg_vals) > 0L) {
     stats::median(recent_deg_vals)
@@ -6571,93 +6673,6 @@
           use = "pairwise.complete.obs"
         )
       }
-    }
-  }
-
-  draws <- fit$btl_posterior_draws %||% NULL
-  draw_ids <- character()
-  if (is.matrix(draws) && is.numeric(draws)) {
-    if (is.null(colnames(draws)) && ncol(draws) == length(ids)) {
-      colnames(draws) <- ids
-    }
-    draw_ids <- intersect(ids, as.character(colnames(draws)))
-    if (length(draw_ids) > 0L) {
-      draws <- draws[, draw_ids, drop = FALSE]
-      draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "btl_posterior_draws")
-      draw_metric_ids <- intersect(as.character(colnames(draws)), metric_ids)
-      if (length(draw_metric_ids) > 0L) {
-        draws <- draws[, draw_metric_ids, drop = FALSE]
-        draw_ids <- as.character(colnames(draws))
-      } else {
-        draws <- NULL
-      }
-    } else {
-      draws <- NULL
-    }
-  }
-
-  if (is.matrix(draws) && is.numeric(draws) && ncol(draws) > 0L) {
-    ci_bounds <- apply(
-      draws,
-      2,
-      stats::quantile,
-      probs = c(0.025, 0.975),
-      names = FALSE
-    )
-    ci_widths <- ci_bounds[2L, ] - ci_bounds[1L, ]
-    ci95_theta_width_mean <- mean(ci_widths)
-    ci95_theta_width_median <- stats::median(ci_widths)
-    ci95_theta_width_p90 <- stats::quantile(ci_widths, probs = 0.90, names = FALSE)
-    ci95_theta_width_max <- max(ci_widths)
-
-    cov_theta <- stats::cov(draws)
-    cov_diag <- diag(cov_theta)
-    cov_trace_theta <- sum(cov_diag)
-    cov_logdet_diag_theta <- sum(log(pmax(cov_diag, .Machine$double.eps)))
-    post_sd <- sqrt(pmax(cov_diag, 0))
-    post_sd_theta_p10 <- stats::quantile(post_sd, probs = 0.10, names = FALSE)
-    post_sd_theta_p50 <- stats::quantile(post_sd, probs = 0.50, names = FALSE)
-    post_sd_theta_p90 <- stats::quantile(post_sd, probs = 0.90, names = FALSE)
-
-    rank_draws <- t(apply(draws, 1, function(row) rank(-row, ties.method = "average")))
-    top_k <- min(20L, ncol(rank_draws))
-    if (top_k >= 1L) {
-      in_top <- rank_draws <= top_k
-      p_top <- colMeans(in_top)
-      entropy <- -(p_top * log(pmax(p_top, .Machine$double.eps)) +
-        (1 - p_top) * log(pmax(1 - p_top, .Machine$double.eps)))
-      boundary_lo <- max(1L, top_k - 2L)
-      boundary_hi <- min(length(entropy), top_k + 2L)
-      boundary_idx <- boundary_lo:boundary_hi
-      top20_boundary_entropy_mean <- mean(entropy[boundary_idx])
-      top20_boundary_entropy_p90 <- stats::quantile(entropy[boundary_idx], probs = 0.90, names = FALSE)
-    }
-
-    theta_for_draws <- NULL
-    if (!is.null(theta_map) && length(draw_ids) == ncol(draws) && all(draw_ids %in% names(theta_map))) {
-      theta_for_draws <- as.double(theta_map[draw_ids])
-    } else if (ncol(draws) >= 1L) {
-      theta_for_draws <- as.double(colMeans(draws))
-    }
-    if (!is.null(theta_for_draws) && length(theta_for_draws) >= 2L) {
-      rank_order <- order(-theta_for_draws, draw_ids)
-      p_adj <- vapply(seq_len(length(rank_order) - 1L), function(k) {
-        lhs <- rank_order[[k]]
-        rhs <- rank_order[[k + 1L]]
-        mean(draws[, lhs] > draws[, rhs])
-      }, numeric(1L))
-      near_low <- as.double(config$near_tie_p_low)
-      near_high <- as.double(config$near_tie_p_high)
-      near_tie <- p_adj >= near_low & p_adj <= near_high
-      near_tie_adj_frac <- mean(near_tie)
-      near_tie_adj_count <- sum(near_tie)
-      p_adj_median <- stats::median(p_adj)
-
-      nn_diff_draws <- draws[, rank_order[-length(rank_order)], drop = FALSE] -
-        draws[, rank_order[-1L], drop = FALSE]
-      nn_diff_sd <- apply(nn_diff_draws, 2, stats::sd)
-      nn_diff_sd_mean <- mean(nn_diff_sd)
-      nn_diff_sd_p90 <- stats::quantile(nn_diff_sd, probs = 0.90, names = FALSE)
     }
   }
 
@@ -6744,22 +6759,22 @@
     star_cap_reject_rate_since_last_refit = as.double(star_cap_reject_rate),
     recent_deg_median_since_last_refit = as.double(recent_deg_median),
     recent_deg_max_since_last_refit = as.integer(recent_deg_max),
-    ci95_theta_width_mean = as.double(ci95_theta_width_mean),
-    ci95_theta_width_median = as.double(ci95_theta_width_median),
-    ci95_theta_width_p90 = as.double(ci95_theta_width_p90),
-    ci95_theta_width_max = as.double(ci95_theta_width_max),
-    near_tie_adj_frac = as.double(near_tie_adj_frac),
-    near_tie_adj_count = as.integer(near_tie_adj_count),
-    p_adj_median = as.double(p_adj_median),
-    cov_trace_theta = as.double(cov_trace_theta),
-    cov_logdet_diag_theta = as.double(cov_logdet_diag_theta),
-    post_sd_theta_p10 = as.double(post_sd_theta_p10),
-    post_sd_theta_p50 = as.double(post_sd_theta_p50),
-    post_sd_theta_p90 = as.double(post_sd_theta_p90),
-    top20_boundary_entropy_mean = as.double(top20_boundary_entropy_mean),
-    top20_boundary_entropy_p90 = as.double(top20_boundary_entropy_p90),
-    nn_diff_sd_mean = as.double(nn_diff_sd_mean),
-    nn_diff_sd_p90 = as.double(nn_diff_sd_p90),
+    ci95_theta_width_mean = as.double(deferred_audit$ci95_theta_width_mean),
+    ci95_theta_width_median = as.double(deferred_audit$ci95_theta_width_median),
+    ci95_theta_width_p90 = as.double(deferred_audit$ci95_theta_width_p90),
+    ci95_theta_width_max = as.double(deferred_audit$ci95_theta_width_max),
+    near_tie_adj_frac = as.double(deferred_audit$near_tie_adj_frac),
+    near_tie_adj_count = as.integer(deferred_audit$near_tie_adj_count),
+    p_adj_median = as.double(deferred_audit$p_adj_median),
+    cov_trace_theta = as.double(deferred_audit$cov_trace_theta),
+    cov_logdet_diag_theta = as.double(deferred_audit$cov_logdet_diag_theta),
+    post_sd_theta_p10 = as.double(deferred_audit$post_sd_theta_p10),
+    post_sd_theta_p50 = as.double(deferred_audit$post_sd_theta_p50),
+    post_sd_theta_p90 = as.double(deferred_audit$post_sd_theta_p90),
+    top20_boundary_entropy_mean = as.double(deferred_audit$top20_boundary_entropy_mean),
+    top20_boundary_entropy_p90 = as.double(deferred_audit$top20_boundary_entropy_p90),
+    nn_diff_sd_mean = as.double(deferred_audit$nn_diff_sd_mean),
+    nn_diff_sd_p90 = as.double(deferred_audit$nn_diff_sd_p90),
     diagnostics_pass = as.logical(metrics$diagnostics_pass %||% NA),
     diagnostics_divergences_pass = as.logical(metrics$diagnostics_divergences_pass %||% NA),
     diagnostics_rhat_pass = as.logical(metrics$diagnostics_rhat_pass %||% NA),
@@ -7151,6 +7166,11 @@ compute_stop_metrics <- function(state, config) {
     phase_scope = as.character(scope$phase_scope %||% "global"),
     phase_scope_set_id = as.integer(scope$phase_scope_set_id %||% NA_integer_),
     phase_scope_n_items = as.integer(length(scope_ids)),
+    round_log_deferred_audit_payload = .adaptive_round_log_deferred_audit_payload(
+      draws = draws_scope,
+      near_tie_p_low = config$near_tie_p_low %||% 0.40,
+      near_tie_p_high = config$near_tie_p_high %||% 0.60
+    ),
     diagnostics_pass = diagnostics_pass,
     diagnostics_divergences_pass = diagnostics_divergences_pass,
     diagnostics_rhat_pass = diagnostics_rhat_pass,

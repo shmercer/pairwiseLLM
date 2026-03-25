@@ -165,6 +165,426 @@ adaptive_defaults <- function(N) {
   recent
 }
 
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_recent_window_max <- function() {
+  2000L
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_empty <- function(ids) {
+  ids <- as.character(ids)
+  zero <- stats::setNames(rep.int(0L, length(ids)), ids)
+  list(
+    n_pairs = 0L,
+    deg = zero,
+    posA = zero,
+    posB = zero,
+    pair_count = stats::setNames(integer(), character()),
+    pair_last_order = list(),
+    recent_pairs = tibble::tibble(
+      A_id = character(),
+      B_id = character()
+    )
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_validate <- function(cache, ids, context = "runtime") {
+  ids <- as.character(ids)
+  required <- c("n_pairs", "deg", "posA", "posB", "pair_count", "pair_last_order", "recent_pairs")
+  if (!is.list(cache)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state` must be a list."
+      )
+    )
+  }
+  missing <- setdiff(required, names(cache))
+  if (length(missing) > 0L) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state` is missing required fields: ",
+        paste(missing, collapse = ", "),
+        "."
+      )
+    )
+  }
+  n_pairs <- as.integer(cache$n_pairs %||% NA_integer_)
+  if (length(n_pairs) != 1L || is.na(n_pairs) || n_pairs < 0L) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$n_pairs` must be a single non-negative integer."
+      )
+    )
+  }
+
+  .validate_named_counts <- function(x, field) {
+    if (!is.integer(x)) {
+      rlang::abort(
+        paste0(
+          "Adaptive history-state invariant failed during ",
+          context,
+          ": `history_state$",
+          field,
+          "` must be an integer vector."
+        )
+      )
+    }
+    if (is.null(names(x)) || !identical(names(x), ids)) {
+      rlang::abort(
+        paste0(
+          "Adaptive history-state invariant failed during ",
+          context,
+          ": `history_state$",
+          field,
+          "` names must exactly match `state$item_ids`."
+        )
+      )
+    }
+    if (any(is.na(x)) || any(x < 0L)) {
+      rlang::abort(
+        paste0(
+          "Adaptive history-state invariant failed during ",
+          context,
+          ": `history_state$",
+          field,
+          "` must be non-missing and non-negative."
+        )
+      )
+    }
+  }
+
+  .validate_named_counts(cache$deg, "deg")
+  .validate_named_counts(cache$posA, "posA")
+  .validate_named_counts(cache$posB, "posB")
+
+  pair_count <- cache$pair_count %||% integer()
+  if (!is.integer(pair_count)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_count` must be an integer vector."
+      )
+    )
+  }
+  if (length(pair_count) > 0L && is.null(names(pair_count))) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_count` must be named when non-empty."
+      )
+    )
+  }
+  if (any(is.na(pair_count)) || any(pair_count < 0L)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_count` must be non-missing and non-negative."
+      )
+    )
+  }
+
+  pair_last_order <- cache$pair_last_order %||% list()
+  if (!is.list(pair_last_order)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_last_order` must be a list."
+      )
+    )
+  }
+  pair_last_names <- names(pair_last_order) %||% character()
+  if (length(pair_last_order) > 0L &&
+    (length(pair_last_names) != length(pair_last_order) || anyNA(pair_last_names) || any(pair_last_names == ""))) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_last_order` must use non-empty pair-key names."
+      )
+    )
+  }
+  invalid_last_order <- vapply(
+    pair_last_order,
+    function(value) {
+      !is.character(value) || length(value) != 2L || any(is.na(value)) || identical(value[[1L]], value[[2L]])
+    },
+    logical(1L)
+  )
+  if (any(invalid_last_order)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_last_order` values must be length-2 non-self character vectors."
+      )
+    )
+  }
+
+  recent_pairs <- tibble::as_tibble(cache$recent_pairs %||% tibble::tibble())
+  if (!all(c("A_id", "B_id") %in% names(recent_pairs))) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$recent_pairs` must contain `A_id` and `B_id`."
+      )
+    )
+  }
+  recent_pairs <- recent_pairs[, c("A_id", "B_id"), drop = FALSE]
+  recent_pairs$A_id <- as.character(recent_pairs$A_id)
+  recent_pairs$B_id <- as.character(recent_pairs$B_id)
+  max_recent <- .adaptive_history_state_recent_window_max()
+  expected_recent_n <- min(n_pairs, max_recent)
+  if (!identical(nrow(recent_pairs), expected_recent_n)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$recent_pairs` must contain exactly min(n_pairs, ",
+        max_recent,
+        ") rows."
+      )
+    )
+  }
+
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_pair_count_normalize <- function(pair_count) {
+  pair_count_raw <- pair_count %||% integer()
+  pair_count <- as.integer(pair_count_raw)
+  names(pair_count) <- names(pair_count_raw)
+  if (length(pair_count) < 1L) {
+    return(stats::setNames(integer(), character()))
+  }
+  pair_count[order(names(pair_count))]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_pair_last_order_normalize <- function(pair_last_order) {
+  pair_last_order <- pair_last_order %||% list()
+  pair_last_names <- names(pair_last_order) %||% character()
+  if (length(pair_last_order) < 1L) {
+    return(list())
+  }
+  ord <- order(pair_last_names)
+  out <- pair_last_order[ord]
+  names(out) <- pair_last_names[ord]
+  lapply(out, as.character)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_equivalent <- function(cache, rebuilt) {
+  identical(as.integer(cache$n_pairs), as.integer(rebuilt$n_pairs)) &&
+    identical(cache$deg, rebuilt$deg) &&
+    identical(cache$posA, rebuilt$posA) &&
+    identical(cache$posB, rebuilt$posB) &&
+    identical(
+      .adaptive_history_state_pair_count_normalize(cache$pair_count),
+      .adaptive_history_state_pair_count_normalize(rebuilt$pair_count)
+    ) &&
+    identical(
+      .adaptive_history_state_pair_last_order_normalize(cache$pair_last_order),
+      .adaptive_history_state_pair_last_order_normalize(rebuilt$pair_last_order)
+    ) &&
+    identical(
+      tibble::as_tibble(cache$recent_pairs)[, c("A_id", "B_id"), drop = FALSE],
+      tibble::as_tibble(rebuilt$recent_pairs)[, c("A_id", "B_id"), drop = FALSE]
+    )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_rebuild <- function(history, ids) {
+  ids <- as.character(ids)
+  history <- .adaptive_history_tbl(list(history_pairs = history))
+  counts <- .adaptive_pair_counts(history, ids)
+  deg <- as.integer(counts$deg)
+  names(deg) <- names(counts$deg)
+  posA <- as.integer(counts$posA)
+  names(posA) <- names(counts$posA)
+  posB <- as.integer(counts$posB)
+  names(posB) <- names(counts$posB)
+  pair_count <- as.integer(counts$pair_count)
+  names(pair_count) <- names(counts$pair_count)
+  max_recent <- .adaptive_history_state_recent_window_max()
+  recent_pairs <- if (nrow(history) > 0L) {
+    recent <- utils::tail(history, n = min(nrow(history), max_recent))
+    tibble::tibble(
+      A_id = as.character(recent$A_id),
+      B_id = as.character(recent$B_id)
+    )
+  } else {
+    tibble::tibble(A_id = character(), B_id = character())
+  }
+  list(
+    n_pairs = as.integer(nrow(history)),
+    deg = deg,
+    posA = posA,
+    posB = posB,
+    pair_count = pair_count,
+    pair_last_order = counts$pair_last_order,
+    recent_pairs = recent_pairs
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_reconcile <- function(cache, history, ids, context = "runtime") {
+  ids <- as.character(ids)
+  .adaptive_history_state_validate(cache, ids, context = context)
+  rebuilt <- .adaptive_history_state_rebuild(history, ids)
+  if (!isTRUE(.adaptive_history_state_equivalent(cache, rebuilt))) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": persisted cache diverged from canonical committed non-probe history."
+      )
+    )
+  }
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_resolve <- function(state, ids = NULL, validate_existing = FALSE, context = "runtime") {
+  ids <- as.character(ids %||% state$item_ids %||% character())
+  history <- .adaptive_history_tbl(state)
+  cache <- state$history_state %||% NULL
+  if (is.null(cache)) {
+    return(.adaptive_history_state_rebuild(history, ids))
+  }
+
+  cache_ok <- tryCatch(
+    {
+      .adaptive_history_state_validate(cache, ids, context = context)
+      TRUE
+    },
+    error = function(e) {
+      if (isTRUE(validate_existing)) {
+        stop(e)
+      }
+      FALSE
+    }
+  )
+  if (!isTRUE(cache_ok)) {
+    return(.adaptive_history_state_rebuild(history, ids))
+  }
+  if (!identical(as.integer(cache$n_pairs %||% NA_integer_), as.integer(nrow(history)))) {
+    return(.adaptive_history_state_rebuild(history, ids))
+  }
+  if (isTRUE(validate_existing)) {
+    .adaptive_history_state_reconcile(cache, history, ids, context = context)
+  }
+  cache
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_counts <- function(cache, ids) {
+  ids <- as.character(ids)
+  list(
+    deg = cache$deg[ids],
+    posA = cache$posA[ids],
+    posB = cache$posB[ids],
+    pair_count = cache$pair_count,
+    pair_last_order = cache$pair_last_order
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_recent_deg <- function(cache, ids, W_cap) {
+  ids <- as.character(ids)
+  recent <- stats::setNames(rep.int(0L, length(ids)), ids)
+  W_cap <- max(0L, as.integer(W_cap %||% 0L))
+  if (W_cap < 1L || nrow(cache$recent_pairs) < 1L) {
+    return(recent)
+  }
+  window <- utils::tail(cache$recent_pairs, n = min(nrow(cache$recent_pairs), W_cap))
+  A_id <- as.character(window$A_id)
+  B_id <- as.character(window$B_id)
+  for (idx in seq_len(nrow(window))) {
+    A <- A_id[[idx]]
+    B <- B_id[[idx]]
+    if (!A %in% ids || !B %in% ids || identical(A, B)) {
+      next
+    }
+    recent[[A]] <- recent[[A]] + 1L
+    recent[[B]] <- recent[[B]] + 1L
+  }
+  recent
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_update <- function(cache, A_id, B_id) {
+  ids <- names(cache$deg %||% integer())
+  .adaptive_history_state_validate(cache, ids, context = "commit update")
+  A_id <- as.character(A_id %||% NA_character_)
+  B_id <- as.character(B_id %||% NA_character_)
+  if (!A_id %in% ids || !B_id %in% ids || identical(A_id, B_id)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during commit update: invalid committed pair `",
+        A_id,
+        "` vs `",
+        B_id,
+        "`."
+      )
+    )
+  }
+
+  out <- cache
+  out$n_pairs <- as.integer(out$n_pairs) + 1L
+  out$posA[[A_id]] <- out$posA[[A_id]] + 1L
+  out$posB[[B_id]] <- out$posB[[B_id]] + 1L
+  out$deg[[A_id]] <- out$deg[[A_id]] + 1L
+  out$deg[[B_id]] <- out$deg[[B_id]] + 1L
+
+  key <- make_unordered_key(A_id, B_id)
+  pair_count <- out$pair_count %||% stats::setNames(integer(), character())
+  current_count <- as.integer(pair_count[key] %||% 0L)
+  current_count[is.na(current_count)] <- 0L
+  pair_count[key] <- current_count[[1L]] + 1L
+  out$pair_count <- pair_count
+
+  pair_last_order <- out$pair_last_order %||% list()
+  pair_last_order[[key]] <- c(A_id, B_id)
+  out$pair_last_order <- pair_last_order
+
+  recent_pairs <- tibble::as_tibble(out$recent_pairs %||% tibble::tibble())
+  recent_pairs <- dplyr::bind_rows(
+    recent_pairs,
+    tibble::tibble(A_id = A_id, B_id = B_id)
+  )
+  max_recent <- .adaptive_history_state_recent_window_max()
+  if (nrow(recent_pairs) > max_recent) {
+    recent_pairs <- utils::tail(recent_pairs, n = max_recent)
+  }
+  out$recent_pairs <- recent_pairs
+  out
+}
+
 .adaptive_low_degree_set <- function(deg) {
   .adaptive_underrep_set(deg)
 }
@@ -674,6 +1094,28 @@ adaptive_defaults <- function(N) {
   as.double((1 - epsilon) * p_base + epsilon * 0.5)
 }
 
+.adaptive_link_model_d_prob_vec <- function(theta_a, theta_b, beta, epsilon) {
+  theta_a <- as.double(theta_a)
+  theta_b <- as.double(theta_b)
+  beta <- as.double(beta)
+  epsilon <- as.double(epsilon)
+  if (!is.finite(beta)) {
+    beta <- 0
+  }
+  if (!is.finite(epsilon)) {
+    epsilon <- 0
+  }
+  epsilon <- max(0, min(1, epsilon))
+  out <- rep_len(NA_real_, length(theta_a))
+  valid <- is.finite(theta_a) & is.finite(theta_b)
+  if (!any(valid)) {
+    return(out)
+  }
+  p_base <- stats::plogis(theta_a[valid] - theta_b[valid] + beta)
+  out[valid] <- as.double((1 - epsilon) * p_base + epsilon * 0.5)
+  out
+}
+
 .adaptive_link_model_d_pbar <- function(theta_h, theta_x, beta, epsilon) {
   p_hx <- .adaptive_link_model_d_prob(theta_a = theta_h, theta_b = theta_x, beta = beta, epsilon = epsilon)
   p_xh <- .adaptive_link_model_d_prob(theta_a = theta_x, theta_b = theta_h, beta = beta, epsilon = epsilon)
@@ -681,6 +1123,18 @@ adaptive_defaults <- function(N) {
     return(NA_real_)
   }
   as.double(0.5 * p_hx + 0.5 * p_xh)
+}
+
+.adaptive_link_model_d_pbar_vec <- function(theta_h, theta_x, beta, epsilon) {
+  p_hx <- .adaptive_link_model_d_prob_vec(theta_a = theta_h, theta_b = theta_x, beta = beta, epsilon = epsilon)
+  p_xh <- .adaptive_link_model_d_prob_vec(theta_a = theta_x, theta_b = theta_h, beta = beta, epsilon = epsilon)
+  out <- rep_len(NA_real_, length(theta_h))
+  valid <- is.finite(p_hx) & is.finite(p_xh)
+  if (!any(valid)) {
+    return(out)
+  }
+  out[valid] <- as.double(0.5 * p_hx[valid] + 0.5 * p_xh[valid])
+  out
 }
 
 .adaptive_link_info_gradient <- function(transform_mode, alpha, theta_raw_x) {
@@ -697,6 +1151,33 @@ adaptive_defaults <- function(N) {
     return(matrix(c(1, alpha * theta_raw_x), nrow = 2L, ncol = 1L))
   }
   matrix(1, nrow = 1L, ncol = 1L)
+}
+
+.adaptive_link_candidate_endpoint_roles <- function(candidates, set_map, hub_id, spoke_id) {
+  cand <- tibble::as_tibble(candidates)
+  i_id <- as.character(cand$i)
+  j_id <- as.character(cand$j)
+  i_set <- unname(as.integer(set_map[i_id]))
+  j_set <- unname(as.integer(set_map[j_id]))
+  hub_item <- ifelse(
+    !is.na(i_set) & i_set == as.integer(hub_id),
+    i_id,
+    ifelse(!is.na(j_set) & j_set == as.integer(hub_id), j_id, NA_character_)
+  )
+  spoke_item <- ifelse(
+    !is.na(i_set) & i_set == as.integer(spoke_id),
+    i_id,
+    ifelse(!is.na(j_set) & j_set == as.integer(spoke_id), j_id, NA_character_)
+  )
+
+  list(
+    i_id = i_id,
+    j_id = j_id,
+    i_set = i_set,
+    j_set = j_set,
+    hub_item = as.character(hub_item),
+    spoke_item = as.character(spoke_item)
+  )
 }
 
 .adaptive_link_logdet_spd <- function(mat, ridge = 1e-6) {
@@ -720,18 +1201,33 @@ adaptive_defaults <- function(N) {
   as.double(sum(log(vals)))
 }
 
-.adaptive_link_d_opt_gain_logdet <- function(it, ipair, ridge = 1e-6) {
+.adaptive_link_d_opt_gain_logdet_from_start <- function(it,
+                                                        ipair,
+                                                        logdet_start = NA_real_,
+                                                        ridge = 1e-6) {
   it <- as.matrix(it)
   ipair <- as.matrix(ipair)
   if (nrow(it) != ncol(it) || nrow(ipair) != ncol(ipair) || nrow(it) != nrow(ipair)) {
     return(NA_real_)
   }
-  logdet_start <- .adaptive_link_logdet_spd(it, ridge = ridge)
+  logdet_start <- as.double(logdet_start %||% NA_real_)
+  if (!is.finite(logdet_start)) {
+    logdet_start <- .adaptive_link_logdet_spd(it, ridge = ridge)
+  }
   logdet_end <- .adaptive_link_logdet_spd(it + ipair, ridge = ridge)
   if (!is.finite(logdet_start) || !is.finite(logdet_end)) {
     return(NA_real_)
   }
   as.double(logdet_end - logdet_start)
+}
+
+.adaptive_link_d_opt_gain_logdet <- function(it, ipair, ridge = 1e-6) {
+  .adaptive_link_d_opt_gain_logdet_from_start(
+    it = it,
+    ipair = ipair,
+    logdet_start = NA_real_,
+    ridge = ridge
+  )
 }
 
 .adaptive_link_d_opt_matrix_dim <- function(transform_mode,
@@ -795,18 +1291,26 @@ adaptive_defaults <- function(N) {
   if (nrow(cand) < 1L || is.na(spoke_id)) {
     return(cand)
   }
+  n_cand <- nrow(cand)
+  i_id <- as.character(cand$i)
+  j_id <- as.character(cand$j)
   link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
   theta_global <- .adaptive_link_theta_global_map_for_items(
     state = state,
     controller = controller,
-    item_ids = c(as.character(cand$i), as.character(cand$j))
+    item_ids = c(i_id, j_id)
   )
   if (length(theta_global) < 2L) {
     cand$link_p <- NA_real_
     cand$link_u <- NA_real_
     return(cand)
   }
+  missing_theta_ids <- unique(c(i_id, j_id)[!(c(i_id, j_id) %in% names(theta_global))])
+  if (length(missing_theta_ids) > 0L) {
+    theta_global[[missing_theta_ids[[1L]]]]
+  }
 
+  accepted_state <- NULL
   if (identical(link_estimation_mode, "anchored_joint")) {
     accepted_state <- .adaptive_link_anchored_joint_resolve_state(
       state = state,
@@ -839,27 +1343,26 @@ adaptive_defaults <- function(N) {
   }
   epsilon <- max(0, min(1, epsilon))
 
-  p_link <- vapply(seq_len(nrow(cand)), function(idx) {
-    i_id <- as.character(cand$i[[idx]])
-    j_id <- as.character(cand$j[[idx]])
-    theta_i <- as.double(theta_global[[i_id]] %||% NA_real_)
-    theta_j <- as.double(theta_global[[j_id]] %||% NA_real_)
-    if (!is.finite(theta_i) || !is.finite(theta_j)) {
-      return(NA_real_)
-    }
-    .adaptive_link_model_d_prob(theta_a = theta_i, theta_b = theta_j, beta = beta, epsilon = epsilon)
-  }, numeric(1L))
+  theta_i <- unname(as.double(theta_global[i_id]))
+  theta_j <- unname(as.double(theta_global[j_id]))
+  p_link <- .adaptive_link_model_d_prob_vec(
+    theta_a = theta_i,
+    theta_b = theta_j,
+    beta = beta,
+    epsilon = epsilon
+  )
   cand$link_p <- as.double(p_link)
   cand$link_u <- as.double(p_link * (1 - p_link))
   refit_id <- .adaptive_link_refit_window_id(state)
   set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
   hub_id <- as.integer(controller$hub_id %||% 1L)
+  endpoint_roles <- .adaptive_link_candidate_endpoint_roles(
+    candidates = cand,
+    set_map = set_map,
+    hub_id = hub_id,
+    spoke_id = as.integer(spoke_id)
+  )
   if (identical(link_estimation_mode, "anchored_joint")) {
-    accepted_state <- .adaptive_link_anchored_joint_resolve_state(
-      state = state,
-      spoke_id = as.integer(spoke_id),
-      controller = controller
-    )
     spoke_items <- as.character(names(accepted_state$theta_spoke_global_mean))
     free_block_dim <- length(spoke_items)
     it_state <- .adaptive_link_d_opt_state_get(
@@ -870,39 +1373,33 @@ adaptive_defaults <- function(N) {
       link_estimation_mode = "anchored_joint",
       free_block_dim = free_block_dim
     )
-    cand$link_d_opt_gain <- vapply(seq_len(nrow(cand)), function(idx) {
-      i_id <- as.character(cand$i[[idx]])
-      j_id <- as.character(cand$j[[idx]])
-      i_set <- as.integer(set_map[[i_id]] %||% NA_integer_)
-      j_set <- as.integer(set_map[[j_id]] %||% NA_integer_)
-      hub_item <- if (identical(i_set, hub_id)) i_id else if (identical(j_set, hub_id)) j_id else NA_character_
-      spoke_item <- if (identical(i_set, as.integer(spoke_id))) {
-        i_id
-      } else if (identical(j_set, as.integer(spoke_id))) {
-        j_id
-      } else {
-        NA_character_
-      }
-      theta_h <- as.double(accepted_state$theta_hub_fixed[[hub_item]] %||% NA_real_)
-      theta_x <- as.double(accepted_state$theta_spoke_global_mean[[spoke_item]] %||% NA_real_)
-      spoke_idx <- as.integer(match(spoke_item, spoke_items))
-      if (!is.finite(theta_h) || !is.finite(theta_x) || is.na(spoke_idx)) {
-        return(NA_real_)
-      }
-      pbar <- .adaptive_link_model_d_pbar(
-        theta_h = theta_h,
-        theta_x = theta_x,
+    logdet_current <- .adaptive_link_logdet_spd(it_state$it, ridge = 1e-6)
+    theta_h <- unname(as.double(accepted_state$theta_hub_fixed[endpoint_roles$hub_item]))
+    theta_x <- unname(as.double(accepted_state$theta_spoke_global_mean[endpoint_roles$spoke_item]))
+    spoke_idx <- unname(as.integer(match(endpoint_roles$spoke_item, spoke_items)))
+    valid_gain <- is.finite(theta_h) & is.finite(theta_x) & !is.na(spoke_idx)
+    link_d_opt_gain <- rep_len(NA_real_, n_cand)
+    if (any(valid_gain)) {
+      pbar <- .adaptive_link_model_d_pbar_vec(
+        theta_h = theta_h[valid_gain],
+        theta_x = theta_x[valid_gain],
         beta = beta,
         epsilon = epsilon
       )
-      if (!is.finite(pbar)) {
-        return(NA_real_)
+      info_scale <- as.double(pbar * (1 - pbar))
+      valid_idx <- which(valid_gain)
+      for (idx in seq_along(valid_idx)) {
+        ipair <- matrix(0, nrow = free_block_dim, ncol = free_block_dim)
+        ipair[spoke_idx[valid_gain][[idx]], spoke_idx[valid_gain][[idx]]] <- info_scale[[idx]]
+        link_d_opt_gain[[valid_idx[[idx]]]] <- .adaptive_link_d_opt_gain_logdet_from_start(
+          it = it_state$it,
+          ipair = ipair,
+          logdet_start = logdet_current,
+          ridge = 1e-6
+        )
       }
-      g <- matrix(0, nrow = free_block_dim, ncol = 1L)
-      g[spoke_idx, 1L] <- 1
-      ipair <- as.matrix(as.double(pbar * (1 - pbar)) * (g %*% t(g)))
-      .adaptive_link_d_opt_gain_logdet(it = it_state$it, ipair = ipair, ridge = 1e-6)
-    }, numeric(1L))
+    }
+    cand$link_d_opt_gain <- link_d_opt_gain
     return(cand)
   }
 
@@ -930,46 +1427,38 @@ adaptive_defaults <- function(N) {
     set_id = as.integer(spoke_id),
     prefer_current = identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
   )
-  cand$link_d_opt_gain <- vapply(seq_len(nrow(cand)), function(idx) {
-    i_id <- as.character(cand$i[[idx]])
-    j_id <- as.character(cand$j[[idx]])
-    i_set <- as.integer(set_map[[i_id]] %||% NA_integer_)
-    j_set <- as.integer(set_map[[j_id]] %||% NA_integer_)
-    hub_item <- if (identical(i_set, hub_id)) i_id else if (identical(j_set, hub_id)) j_id else NA_character_
-    spoke_item <- if (identical(i_set, as.integer(spoke_id))) {
-      i_id
-    } else if (identical(j_set, as.integer(spoke_id))) {
-      j_id
-    } else {
-      NA_character_
-    }
-    theta_h <- as.double(theta_hub_map[[hub_item]] %||% NA_real_)
-    theta_raw_x <- as.double(theta_spoke_raw_map[[spoke_item]] %||% NA_real_)
-    if (!is.finite(theta_h) || !is.finite(theta_raw_x)) {
-      return(NA_real_)
-    }
-    theta_x <- as.double(delta + alpha * theta_raw_x)
-    pbar <- .adaptive_link_model_d_pbar(
-      theta_h = theta_h,
+  logdet_current <- .adaptive_link_logdet_spd(it_state$it, ridge = 1e-6)
+  theta_h <- unname(as.double(theta_hub_map[endpoint_roles$hub_item]))
+  theta_raw_x <- unname(as.double(theta_spoke_raw_map[endpoint_roles$spoke_item]))
+  valid_gain <- is.finite(theta_h) & is.finite(theta_raw_x)
+  link_d_opt_gain <- rep_len(NA_real_, n_cand)
+  if (any(valid_gain)) {
+    theta_raw_x_valid <- theta_raw_x[valid_gain]
+    theta_x <- as.double(delta + alpha * theta_raw_x_valid)
+    pbar <- .adaptive_link_model_d_pbar_vec(
+      theta_h = theta_h[valid_gain],
       theta_x = theta_x,
       beta = beta,
       epsilon = epsilon
     )
-    if (!is.finite(pbar)) {
-      return(NA_real_)
-    }
-    g <- .adaptive_link_info_gradient(
-      transform_mode = transform_mode,
-      alpha = alpha,
-      theta_raw_x = theta_raw_x
-    )
     info_scale <- as.double(pbar * (1 - pbar))
-    if (!is.finite(info_scale)) {
-      return(NA_real_)
+    valid_idx <- which(valid_gain)
+    for (idx in seq_along(valid_idx)) {
+      g <- .adaptive_link_info_gradient(
+        transform_mode = transform_mode,
+        alpha = alpha,
+        theta_raw_x = theta_raw_x_valid[[idx]]
+      )
+      ipair <- as.matrix(info_scale[[idx]] * (g %*% t(g)))
+      link_d_opt_gain[[valid_idx[[idx]]]] <- .adaptive_link_d_opt_gain_logdet_from_start(
+        it = it_state$it,
+        ipair = ipair,
+        logdet_start = logdet_current,
+        ridge = 1e-6
+      )
     }
-    ipair <- as.matrix(info_scale * (g %*% t(g)))
-    .adaptive_link_d_opt_gain_logdet(it = it_state$it, ipair = ipair, ridge = 1e-6)
-  }, numeric(1L))
+  }
+  cand$link_d_opt_gain <- link_d_opt_gain
   cand
 }
 
@@ -1055,7 +1544,7 @@ adaptive_defaults <- function(N) {
   controller = NULL,
   generation_stage = NULL,
   round,
-  history,
+  history_state,
   counts,
   step_id,
   seed_base,
@@ -1153,7 +1642,7 @@ adaptive_defaults <- function(N) {
   n_after_hard <- nrow(candidates)
 
   cap_count <- ceiling(config$cap_frac * config$W_cap)
-  recent_deg <- .adaptive_recent_deg(history, ids, config$W_cap)
+  recent_deg <- .adaptive_history_state_recent_deg(history_state, ids, config$W_cap)
   allow_repeats <- identical(stage$dup_policy, "relaxed")
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   link_phase_b <- .adaptive_link_mode_active(controller) &&
@@ -1412,8 +1901,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   # Use the full controller for linking predictive utility paths, which need
   # transform and judge-mode fields not carried by the reduced selector view.
   link_controller <- controller_full
-  history <- .adaptive_history_tbl(state)
-  counts <- .adaptive_pair_counts(history, ids)
+  history_state <- .adaptive_history_state_resolve(state, ids = ids)
+  counts <- .adaptive_history_state_counts(history_state, ids)
   step_id <- as.integer(step_id %||% (nrow(state$step_log) + 1L))
   if (length(step_id) != 1L || is.na(step_id) || step_id < 1L) {
     rlang::abort("`step_id` must be a positive integer.")
@@ -1594,7 +2083,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   selected_stage_quota <- as.integer(stage_quota)
   selected_stage_committed_so_far <- as.integer(stage_committed_so_far)
   phase_b_budget_depleted <- FALSE
-  recent_deg <- .adaptive_recent_deg(history, ids, defaults$W_cap)
+  recent_deg <- .adaptive_history_state_recent_deg(history_state, ids, defaults$W_cap)
   .starvation_reason_from_counts <- function(counts) {
     generated <- as.integer(counts$n_candidates_generated %||% 0L)
     after_route <- as.integer(counts$n_candidates_after_route_filters %||% NA_integer_)
@@ -1835,7 +2324,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         controller = controller,
         generation_stage = attempt_generation_stage,
         round = round,
-        history = history,
+        history_state = history_state,
         counts = counts,
         step_id = step_id,
         seed_base = seed_base,

@@ -50,3 +50,29 @@ test_that("selector helper edge branches are covered", {
   )
   expect_identical(nrow(out_empty), 0L)
 })
+
+test_that("history-state cache rebuild matches canonical history and preserves selector output", {
+  items <- make_test_items(6)
+  trueskill_state <- make_test_trueskill_state(items)
+  history <- tibble::tibble(
+    A_id = c("1", "2", "3", "2", "4"),
+    B_id = c("4", "5", "6", "4", "6")
+  )
+  state_cached <- make_test_state(items, trueskill_state, history = history)
+  expect_history_state_matches_history(state_cached)
+
+  state_uncached <- state_cached
+  state_uncached$history_state <- NULL
+
+  out_cached <- pairwiseLLM:::select_next_pair(state_cached, step_id = 7L)
+  out_uncached <- pairwiseLLM:::select_next_pair(state_uncached, step_id = 7L)
+
+  expect_identical(out_uncached$i, out_cached$i)
+  expect_identical(out_uncached$j, out_cached$j)
+  expect_identical(out_uncached$A, out_cached$A)
+  expect_identical(out_uncached$B, out_cached$B)
+  expect_identical(out_uncached$deg_i, out_cached$deg_i)
+  expect_identical(out_uncached$deg_j, out_cached$deg_j)
+  expect_identical(out_uncached$recent_deg_i, out_cached$recent_deg_i)
+  expect_identical(out_uncached$recent_deg_j, out_cached$recent_deg_j)
+})

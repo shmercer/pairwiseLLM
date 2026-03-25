@@ -177,6 +177,789 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_refit_summary_cache <- function(state) {
+  refit_meta <- state$refit_meta %||% list()
+  cache <- refit_meta$link_refit_summary_cache_by_refit_spoke %||% list()
+  if (!is.list(cache)) {
+    cache <- list()
+  }
+  cache
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_unique_cross_pair_keys <- function(state) {
+  refit_meta <- state$refit_meta %||% list()
+  key_map <- refit_meta$link_unique_cross_pair_keys_by_spoke %||% list()
+  if (!is.list(key_map)) {
+    key_map <- list()
+  }
+  key_map
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_summary_empty <- function(refit_id, spoke_id) {
+  stage_order <- .adaptive_stage_order()
+  list(
+    refit_id = as.integer(refit_id),
+    spoke_id = as.integer(spoke_id),
+    n_pairs_cross_set_done = 0L,
+    n_pairs_cross_set_active_done = 0L,
+    n_pairs_cross_set_probe_done = 0L,
+    n_unique_cross_pairs_seen = 0L,
+    n_cross_edges_active_since_last_refit = 0L,
+    n_cross_edges_probe_since_last_refit = 0L,
+    n_cross_edges_total_since_last_refit = 0L,
+    probe_panel_acceleration_used_since_last_refit = FALSE,
+    stage_realized = stats::setNames(rep.int(0L, length(stage_order)), stage_order)
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_summary_validate <- function(entry,
+                                                  refit_id = NULL,
+                                                  spoke_id = NULL,
+                                                  context = "cache") {
+  entry <- entry %||% list()
+  refit_id <- as.integer(refit_id %||% entry$refit_id %||% NA_integer_)
+  spoke_id <- as.integer(spoke_id %||% entry$spoke_id %||% NA_integer_)
+  counts <- c(
+    "n_pairs_cross_set_done",
+    "n_pairs_cross_set_active_done",
+    "n_pairs_cross_set_probe_done",
+    "n_unique_cross_pairs_seen",
+    "n_cross_edges_active_since_last_refit",
+    "n_cross_edges_probe_since_last_refit",
+    "n_cross_edges_total_since_last_refit"
+  )
+  for (field in counts) {
+    value <- as.integer(entry[[field]] %||% NA_integer_)
+    if (!is.finite(value) || is.na(value) || value < 0L) {
+      rlang::abort(
+        paste0(
+          "Phase B refit summary ", context, " invariant failed for refit_id=",
+          as.integer(refit_id),
+          ", spoke_id=",
+          as.integer(spoke_id),
+          ": `",
+          field,
+          "` must be a non-negative integer."
+        )
+      )
+    }
+    entry[[field]] <- value
+  }
+
+  stage_order <- .adaptive_stage_order()
+  stage_realized <- entry$stage_realized %||% stats::setNames(integer(), character())
+  stage_realized <- stats::setNames(
+    vapply(
+      stage_order,
+      function(stage_name) {
+        as.integer(stage_realized[[stage_name]] %||% 0L)
+      },
+      integer(1L)
+    ),
+    stage_order
+  )
+  if (any(!is.finite(stage_realized) | is.na(stage_realized) | stage_realized < 0L)) {
+    rlang::abort(
+      paste0(
+        "Phase B refit summary ", context, " invariant failed for refit_id=",
+        as.integer(refit_id),
+        ", spoke_id=",
+        as.integer(spoke_id),
+        ": `stage_realized` must contain non-negative integer counts."
+      )
+    )
+  }
+  entry$stage_realized <- stage_realized
+  probe_accel_used <- as.logical(entry$probe_panel_acceleration_used_since_last_refit %||% FALSE)
+  if (length(probe_accel_used) != 1L || is.na(probe_accel_used)) {
+    rlang::abort(
+      paste0(
+        "Phase B refit summary ", context, " invariant failed for refit_id=",
+        as.integer(refit_id),
+        ", spoke_id=",
+        as.integer(spoke_id),
+        ": `probe_panel_acceleration_used_since_last_refit` must be TRUE or FALSE."
+      )
+    )
+  }
+  entry$probe_panel_acceleration_used_since_last_refit <- probe_accel_used
+
+  if (!identical(
+    as.integer(entry$n_pairs_cross_set_done),
+    as.integer(entry$n_pairs_cross_set_active_done + entry$n_pairs_cross_set_probe_done)
+  )) {
+    rlang::abort(
+      paste0(
+        "Phase B refit summary ", context, " invariant failed for refit_id=",
+        as.integer(refit_id),
+        ", spoke_id=",
+        as.integer(spoke_id),
+        ": cumulative total cross-edge count must equal cumulative active plus probe counts."
+      )
+    )
+  }
+  if (!identical(
+    as.integer(entry$n_cross_edges_total_since_last_refit),
+    as.integer(entry$n_cross_edges_active_since_last_refit + entry$n_cross_edges_probe_since_last_refit)
+  )) {
+    rlang::abort(
+      paste0(
+        "Phase B refit summary ", context, " invariant failed for refit_id=",
+        as.integer(refit_id),
+        ", spoke_id=",
+        as.integer(spoke_id),
+        ": current-window total cross-edge count must equal current-window active plus probe counts."
+      )
+    )
+  }
+  if (sum(stage_realized, na.rm = TRUE) > as.integer(entry$n_cross_edges_active_since_last_refit)) {
+    rlang::abort(
+      paste0(
+        "Phase B refit summary ", context, " invariant failed for refit_id=",
+        as.integer(refit_id),
+        ", spoke_id=",
+        as.integer(spoke_id),
+        ": stage-realized counts exceed current-window active cross-edge count."
+      )
+    )
+  }
+  if (as.integer(entry$n_unique_cross_pairs_seen) > as.integer(entry$n_pairs_cross_set_done)) {
+    rlang::abort(
+      paste0(
+        "Phase B refit summary ", context, " invariant failed for refit_id=",
+        as.integer(refit_id),
+        ", spoke_id=",
+        as.integer(spoke_id),
+        ": unique cross-pair count exceeds cumulative committed cross-edge count."
+      )
+    )
+  }
+
+  entry$refit_id <- as.integer(refit_id)
+  entry$spoke_id <- as.integer(spoke_id)
+  entry
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_summary_latest_for_spoke <- function(state, spoke_id, refit_id = NULL) {
+  cache <- .adaptive_link_refit_summary_cache(state)
+  if (length(cache) < 1L) {
+    return(NULL)
+  }
+  refit_id <- as.integer(refit_id %||% NA_integer_)
+  entries <- cache[!vapply(cache, is.null, logical(1L))]
+  if (length(entries) < 1L) {
+    return(NULL)
+  }
+  entries <- entries[vapply(
+    entries,
+    function(x) identical(as.integer(x$spoke_id %||% NA_integer_), as.integer(spoke_id)),
+    logical(1L)
+  )]
+  if (length(entries) < 1L) {
+    return(NULL)
+  }
+  entry_refit_ids <- vapply(entries, function(x) as.integer(x$refit_id %||% NA_integer_), integer(1L))
+  if (is.finite(refit_id)) {
+    keep <- entry_refit_ids <= refit_id
+    entries <- entries[keep]
+    entry_refit_ids <- entry_refit_ids[keep]
+  }
+  if (length(entries) < 1L) {
+    return(NULL)
+  }
+  idx <- which.max(entry_refit_ids)
+  .adaptive_link_refit_summary_validate(
+    entry = entries[[idx]],
+    refit_id = entry_refit_ids[[idx]],
+    spoke_id = spoke_id,
+    context = "cache"
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_summary_seed_for_refit <- function(state, refit_id, spoke_id) {
+  latest <- .adaptive_link_refit_summary_latest_for_spoke(
+    state = state,
+    spoke_id = spoke_id,
+    refit_id = as.integer(refit_id) - 1L
+  )
+  out <- .adaptive_link_refit_summary_empty(refit_id = refit_id, spoke_id = spoke_id)
+  if (is.null(latest)) {
+    return(out)
+  }
+  out$n_pairs_cross_set_done <- as.integer(latest$n_pairs_cross_set_done %||% 0L)
+  out$n_pairs_cross_set_active_done <- as.integer(latest$n_pairs_cross_set_active_done %||% 0L)
+  out$n_pairs_cross_set_probe_done <- as.integer(latest$n_pairs_cross_set_probe_done %||% 0L)
+  out$n_unique_cross_pairs_seen <- as.integer(latest$n_unique_cross_pairs_seen %||% 0L)
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_summary_store <- function(state, entry) {
+  entry <- .adaptive_link_refit_summary_validate(
+    entry = entry,
+    refit_id = entry$refit_id %||% NA_integer_,
+    spoke_id = entry$spoke_id %||% NA_integer_,
+    context = "cache"
+  )
+  cache <- .adaptive_link_refit_summary_cache(state)
+  key <- .adaptive_link_refit_spoke_key(
+    refit_id = as.integer(entry$refit_id),
+    spoke_id = as.integer(entry$spoke_id)
+  )
+  cache[[key]] <- entry
+  state$refit_meta <- state$refit_meta %||% list()
+  state$refit_meta$link_refit_summary_cache_by_refit_spoke <- cache
+  state
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_summary_compare <- function(cached, canonical, refit_id, spoke_id) {
+  cached <- .adaptive_link_refit_summary_validate(
+    entry = cached,
+    refit_id = refit_id,
+    spoke_id = spoke_id,
+    context = "cache"
+  )
+  canonical <- .adaptive_link_refit_summary_validate(
+    entry = canonical,
+    refit_id = refit_id,
+    spoke_id = spoke_id,
+    context = "canonical"
+  )
+  scalar_fields <- c(
+    "n_pairs_cross_set_done",
+    "n_pairs_cross_set_active_done",
+    "n_pairs_cross_set_probe_done",
+    "n_unique_cross_pairs_seen",
+    "n_cross_edges_active_since_last_refit",
+    "n_cross_edges_probe_since_last_refit",
+    "n_cross_edges_total_since_last_refit"
+  )
+  for (field in scalar_fields) {
+    cached_value <- as.integer(cached[[field]] %||% NA_integer_)
+    canonical_value <- as.integer(canonical[[field]] %||% NA_integer_)
+    if (!identical(cached_value, canonical_value)) {
+      rlang::abort(
+        paste0(
+          "Phase B refit summary cache invariant failed for refit_id=",
+          as.integer(refit_id),
+          ", spoke_id=",
+          as.integer(spoke_id),
+          ": cached `",
+          field,
+          "`=",
+          as.integer(cached_value),
+          " does not match canonical step-log reconstruction ",
+          as.integer(canonical_value),
+          "."
+        )
+      )
+    }
+  }
+  if (!identical(
+    isTRUE(cached$probe_panel_acceleration_used_since_last_refit),
+    isTRUE(canonical$probe_panel_acceleration_used_since_last_refit)
+  )) {
+    rlang::abort(
+      paste0(
+        "Phase B refit summary cache invariant failed for refit_id=",
+        as.integer(refit_id),
+        ", spoke_id=",
+        as.integer(spoke_id),
+        ": cached probe-acceleration flag does not match canonical step-log reconstruction."
+      )
+    )
+  }
+  if (!identical(as.integer(cached$stage_realized), as.integer(canonical$stage_realized))) {
+    rlang::abort(
+      paste0(
+        "Phase B refit summary cache invariant failed for refit_id=",
+        as.integer(refit_id),
+        ", spoke_id=",
+        as.integer(spoke_id),
+        ": cached stage-realized counts do not match canonical step-log reconstruction."
+      )
+    )
+  }
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_summary_from_step_log <- function(state, refit_id, spoke_id, refit_context) {
+  out <- .adaptive_link_refit_summary_empty(refit_id = refit_id, spoke_id = spoke_id)
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  required <- c("pair_id", "is_cross_set", "link_spoke_id", "step_id")
+  if (nrow(step_log) < 1L || !all(required %in% names(step_log))) {
+    return(out)
+  }
+
+  cross <- step_log[
+    !is.na(step_log$pair_id) &
+      step_log$is_cross_set %in% TRUE &
+      as.integer(step_log$link_spoke_id) == as.integer(spoke_id),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(cross) < 1L) {
+    return(out)
+  }
+
+  probe_flag <- .adaptive_link_is_holdout_probe_rows(cross)
+  out$n_pairs_cross_set_done <- as.integer(nrow(cross))
+  out$n_pairs_cross_set_probe_done <- as.integer(sum(probe_flag, na.rm = TRUE))
+  out$n_pairs_cross_set_active_done <- as.integer(sum(!probe_flag, na.rm = TRUE))
+
+  if (all(c("A", "B") %in% names(cross))) {
+    ids <- as.character(state$item_ids %||% character())
+    a_idx <- as.integer(cross$A)
+    b_idx <- as.integer(cross$B)
+    valid_items <- !is.na(a_idx) & !is.na(b_idx) &
+      a_idx >= 1L & a_idx <= length(ids) &
+      b_idx >= 1L & b_idx <= length(ids)
+    if (any(valid_items)) {
+      pair_keys <- make_unordered_key(ids[a_idx[valid_items]], ids[b_idx[valid_items]])
+      out$n_unique_cross_pairs_seen <- as.integer(length(unique(pair_keys)))
+    }
+  }
+
+  last_refit_step <- as.integer(refit_context$last_refit_step %||% 0L)
+  since_last <- cross[as.integer(cross$step_id) > last_refit_step, , drop = FALSE]
+  if (nrow(since_last) < 1L) {
+    return(.adaptive_link_refit_summary_validate(out, refit_id, spoke_id, context = "canonical"))
+  }
+
+  since_probe_flag <- .adaptive_link_is_holdout_probe_rows(since_last)
+  out$n_cross_edges_probe_since_last_refit <- as.integer(sum(since_probe_flag, na.rm = TRUE))
+  out$n_cross_edges_active_since_last_refit <- as.integer(sum(!since_probe_flag, na.rm = TRUE))
+  out$n_cross_edges_total_since_last_refit <- as.integer(nrow(since_last))
+  probe_rows <- since_last[since_probe_flag, , drop = FALSE]
+  out$probe_panel_acceleration_used_since_last_refit <- if ("fallback_used" %in% names(probe_rows)) {
+    any(as.character(probe_rows$fallback_used) %in% "probe_panel_acceleration")
+  } else {
+    FALSE
+  }
+
+  stage_order <- .adaptive_stage_order()
+  stage_col <- if ("link_stage" %in% names(since_last)) {
+    "link_stage"
+  } else if ("round_stage" %in% names(since_last)) {
+    "round_stage"
+  } else {
+    NA_character_
+  }
+  if (!is.na(stage_col)) {
+    active_rows <- since_last[!since_probe_flag, , drop = FALSE]
+    active_rows <- active_rows[
+      as.character(active_rows[[stage_col]]) %in% stage_order,
+      ,
+      drop = FALSE
+    ]
+    if (nrow(active_rows) > 0L) {
+      tab <- table(factor(as.character(active_rows[[stage_col]]), levels = stage_order))
+      out$stage_realized[names(tab)] <- as.integer(tab)
+    }
+  }
+
+  .adaptive_link_refit_summary_validate(out, refit_id, spoke_id, context = "canonical")
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_summary_current <- function(state,
+                                                 refit_id,
+                                                 spoke_id,
+                                                 refit_context = NULL,
+                                                 reconcile = FALSE) {
+  refit_id <- as.integer(refit_id)
+  spoke_id <- as.integer(spoke_id)
+  refit_context <- refit_context %||% list(
+    last_refit_step = as.integer(state$refit_meta$last_refit_step %||% 0L)
+  )
+  cache <- .adaptive_link_refit_summary_cache(state)
+  key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = spoke_id)
+  cached <- cache[[key]] %||% NULL
+  if (!is.null(cached)) {
+    cached <- .adaptive_link_refit_summary_validate(
+      entry = cached,
+      refit_id = refit_id,
+      spoke_id = spoke_id,
+      context = "cache"
+    )
+  }
+  if (!isTRUE(reconcile) && !is.null(cached)) {
+    return(cached)
+  }
+  canonical <- .adaptive_link_refit_summary_from_step_log(
+    state = state,
+    refit_id = refit_id,
+    spoke_id = spoke_id,
+    refit_context = refit_context
+  )
+  if (is.null(cached)) {
+    return(canonical)
+  }
+  .adaptive_link_refit_summary_compare(
+    cached = cached,
+    canonical = canonical,
+    refit_id = refit_id,
+    spoke_id = spoke_id
+  )
+  cached
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_summary_ensure_current_entries <- function(state, spoke_ids = integer(), refit_id = NULL) {
+  spoke_ids <- sort(unique(as.integer(spoke_ids)))
+  spoke_ids <- spoke_ids[is.finite(spoke_ids) & !is.na(spoke_ids)]
+  if (length(spoke_ids) < 1L) {
+    return(state)
+  }
+  refit_id <- as.integer(refit_id %||% .adaptive_link_refit_window_id(state))
+  for (spoke_id in spoke_ids) {
+    key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = spoke_id)
+    if (!is.null(.adaptive_link_refit_summary_cache(state)[[key]])) {
+      next
+    }
+    state <- .adaptive_link_refit_summary_store(
+      state,
+      .adaptive_link_refit_summary_current(
+        state = state,
+        refit_id = refit_id,
+        spoke_id = spoke_id,
+        refit_context = list(last_refit_step = as.integer(state$refit_meta$last_refit_step %||% 0L))
+      )
+    )
+  }
+  state
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_summary_rebuild_current <- function(state, current_refit_id = NULL, spoke_ids = NULL) {
+  current_refit_id <- as.integer(current_refit_id %||% .adaptive_link_refit_window_id(state))
+  cache <- .adaptive_link_refit_summary_cache(state)
+  key_map <- .adaptive_link_unique_cross_pair_keys(state)
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  required <- c("pair_id", "is_cross_set", "link_spoke_id", "A", "B")
+  if (nrow(step_log) > 0L && all(required %in% names(step_log))) {
+    cross <- step_log[
+      !is.na(step_log$pair_id) &
+        step_log$is_cross_set %in% TRUE &
+        !is.na(as.integer(step_log$link_spoke_id)),
+      ,
+      drop = FALSE
+    ]
+  } else {
+    cross <- tibble::tibble()
+  }
+
+  ids <- as.character(state$item_ids %||% character())
+  key_map_new <- list()
+  if (nrow(cross) > 0L) {
+    cross_spokes <- sort(unique(as.integer(cross$link_spoke_id)))
+    for (spoke_id in cross_spokes) {
+      spoke_rows <- cross[as.integer(cross$link_spoke_id) == as.integer(spoke_id), , drop = FALSE]
+      a_idx <- as.integer(spoke_rows$A)
+      b_idx <- as.integer(spoke_rows$B)
+      valid_items <- !is.na(a_idx) & !is.na(b_idx) &
+        a_idx >= 1L & a_idx <= length(ids) &
+        b_idx >= 1L & b_idx <= length(ids)
+      pair_keys <- if (any(valid_items)) {
+        sort(unique(make_unordered_key(ids[a_idx[valid_items]], ids[b_idx[valid_items]])))
+      } else {
+        character()
+      }
+      key_map_new[[as.character(spoke_id)]] <- as.character(pair_keys)
+    }
+  }
+
+  if (is.null(spoke_ids)) {
+    spoke_ids <- c(
+      suppressWarnings(as.integer(names(key_map_new))),
+      suppressWarnings(as.integer(names(key_map))),
+      as.integer((state$link_stage_log %||% tibble::tibble())$spoke_id %||% integer())
+    )
+  }
+  spoke_ids <- sort(unique(as.integer(spoke_ids)))
+  spoke_ids <- spoke_ids[is.finite(spoke_ids) & !is.na(spoke_ids)]
+
+  refit_context <- list(last_refit_step = as.integer(state$refit_meta$last_refit_step %||% 0L))
+  for (spoke_id in spoke_ids) {
+    current_key <- .adaptive_link_refit_spoke_key(
+      refit_id = current_refit_id,
+      spoke_id = as.integer(spoke_id)
+    )
+    existing <- cache[[current_key]] %||% NULL
+    canonical <- .adaptive_link_refit_summary_from_step_log(
+      state = state,
+      refit_id = current_refit_id,
+      spoke_id = as.integer(spoke_id),
+      refit_context = refit_context
+    )
+    if (!is.null(existing)) {
+      .adaptive_link_refit_summary_compare(
+        cached = existing,
+        canonical = canonical,
+        refit_id = current_refit_id,
+        spoke_id = as.integer(spoke_id)
+      )
+    }
+    cache[[current_key]] <- canonical
+
+    existing_keys <- sort(unique(as.character(key_map[[as.character(spoke_id)]] %||% character())))
+    canonical_keys <- sort(unique(as.character(key_map_new[[as.character(spoke_id)]] %||% character())))
+    if (length(existing_keys) > 0L && !identical(existing_keys, canonical_keys)) {
+      rlang::abort(
+        paste0(
+          "Phase B refit summary cache invariant failed for spoke_id=",
+          as.integer(spoke_id),
+          ": persisted cumulative unique cross-pair keys do not match canonical step-log reconstruction."
+        )
+      )
+    }
+    key_map_new[[as.character(spoke_id)]] <- canonical_keys
+  }
+
+  state$refit_meta <- state$refit_meta %||% list()
+  state$refit_meta$link_refit_summary_cache_by_refit_spoke <- cache
+  state$refit_meta$link_unique_cross_pair_keys_by_spoke <- key_map_new
+  state
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_memo_env <- function(state) {
+  env <- (state$refit_meta %||% list())$link_refit_local_memo_env %||% NULL
+  if (is.environment(env)) {
+    return(env)
+  }
+  NULL
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_step_id <- function(state) {
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  if (nrow(step_log) < 1L || !"step_id" %in% names(step_log)) {
+    return(0L)
+  }
+  step_ids <- as.integer(step_log$step_id)
+  step_ids <- step_ids[is.finite(step_ids) & !is.na(step_ids)]
+  if (length(step_ids) < 1L) {
+    return(0L)
+  }
+  as.integer(max(step_ids, na.rm = TRUE))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_probe_panel_id <- function(state, spoke_id, epoch_id) {
+  panel <- (.adaptive_link_probe_state(state)$panels_by_spoke %||% list())[[as.character(spoke_id)]] %||%
+    .adaptive_link_probe_empty_panel()
+  panel <- tibble::as_tibble(panel)
+  if (nrow(panel) < 1L) {
+    return(NA_character_)
+  }
+  panel <- panel[as.integer(panel$link_epoch_id) == as.integer(epoch_id), , drop = FALSE]
+  if (nrow(panel) < 1L) {
+    return(NA_character_)
+  }
+  as.character(.adaptive_link_probe_panel_identity(
+    panel_tbl = panel,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(epoch_id)
+  ))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_context <- function(state,
+                                               controller,
+                                               spoke_id,
+                                               refit_id = NULL) {
+  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
+  list(
+    refit_id = as.integer(refit_id %||% .adaptive_link_refit_window_id(state)),
+    step_id = as.integer(.adaptive_link_refit_local_step_id(state)),
+    spoke_id = as.integer(spoke_id),
+    hub_id = as.integer(controller$hub_id %||% 1L),
+    link_epoch_id = as.integer(.adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)),
+    probe_panel_id = .adaptive_link_refit_local_probe_panel_id(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      epoch_id = as.integer(.adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id))
+    ),
+    link_estimation_mode = link_estimation_mode,
+    link_transform_policy = if (identical(link_estimation_mode, "anchored_joint")) {
+      NA_character_
+    } else {
+      as.character(.adaptive_normalize_link_transform_policy(
+        controller$link_transform_policy %||% "auto"
+      ))
+    },
+    link_transform_state = if (identical(link_estimation_mode, "anchored_joint")) {
+      NA_character_
+    } else {
+      as.character(.adaptive_link_transform_state_for_spoke(controller, spoke_id = as.integer(spoke_id)))
+    },
+    link_refit_mode = if (identical(link_estimation_mode, "anchored_joint")) {
+      NA_character_
+    } else {
+      as.character(controller$link_refit_mode %||% "shift_only")
+    },
+    hub_lock_mode = if (identical(link_estimation_mode, "anchored_joint")) {
+      "hard_lock"
+    } else {
+      as.character(controller$hub_lock_mode %||% "soft_lock")
+    }
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_context_matches <- function(entry_context, current_context) {
+  entry_context <- entry_context %||% list()
+  current_context <- current_context %||% list()
+  compare <- list(
+    refit_id = as.integer,
+    step_id = as.integer,
+    spoke_id = as.integer,
+    hub_id = as.integer,
+    link_epoch_id = as.integer,
+    probe_panel_id = as.character,
+    link_estimation_mode = as.character,
+    link_transform_policy = as.character,
+    link_transform_state = as.character,
+    link_refit_mode = as.character,
+    hub_lock_mode = as.character
+  )
+  all(vapply(names(compare), function(field) {
+    coercer <- compare[[field]]
+    identical(
+      coercer(entry_context[[field]] %||% NA),
+      coercer(current_context[[field]] %||% NA)
+    )
+  }, logical(1L)))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_memo_prune <- function(env, refit_id, step_id) {
+  if (!is.environment(env)) {
+    return(invisible(NULL))
+  }
+  keys <- ls(env, all.names = TRUE)
+  if (length(keys) < 1L) {
+    return(invisible(NULL))
+  }
+  for (key in keys) {
+    entry <- env[[key]] %||% list()
+    context <- entry$context %||% list()
+    keep <- identical(as.integer(context$refit_id %||% NA_integer_), as.integer(refit_id)) &&
+      identical(as.integer(context$step_id %||% NA_integer_), as.integer(step_id))
+    if (!isTRUE(keep)) {
+      rm(list = key, envir = env)
+    }
+  }
+  invisible(NULL)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_inputs_build <- function(state,
+                                                    controller,
+                                                    spoke_id,
+                                                    defaults = NULL) {
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  hub_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
+  spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(spoke_id)])
+  defaults <- defaults %||% adaptive_defaults(max(2L, length(unique(c(hub_ids, spoke_ids)))))
+  active_items <- .adaptive_link_active_item_ids(state, spoke_id = as.integer(spoke_id), hub_id = hub_id)
+  routing_scores <- .adaptive_link_phase_b_routing_scores(
+    state = state,
+    controller = controller,
+    active_ids = unique(c(hub_ids, spoke_ids)),
+    hub_id = hub_id
+  )
+  list(
+    hub_ids = as.character(hub_ids),
+    spoke_ids = as.character(spoke_ids),
+    active_items = active_items,
+    routing_scores = routing_scores,
+    hub_anchor_ids = .adaptive_link_phase_b_hub_anchors(
+      state = state,
+      hub_ids = hub_ids,
+      hub_scores = routing_scores,
+      defaults = defaults
+    ),
+    coverage = .adaptive_link_spoke_coverage(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      spoke_ids = spoke_ids,
+      routing_scores = routing_scores,
+      score_source = "linking_global_score"
+    )
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_local_inputs <- function(state,
+                                              controller,
+                                              spoke_id,
+                                              defaults = NULL,
+                                              refit_id = NULL) {
+  spoke_id <- as.integer(spoke_id)
+  context <- .adaptive_link_refit_local_context(
+    state = state,
+    controller = controller,
+    spoke_id = spoke_id,
+    refit_id = refit_id
+  )
+  env <- .adaptive_link_refit_local_memo_env(state)
+  key <- as.character(spoke_id)
+  if (is.environment(env)) {
+    .adaptive_link_refit_local_memo_prune(
+      env = env,
+      refit_id = as.integer(context$refit_id),
+      step_id = as.integer(context$step_id)
+    )
+    entry <- env[[key]] %||% NULL
+    if (is.list(entry) &&
+      .adaptive_link_refit_local_context_matches(entry$context %||% list(), context)) {
+      return(entry$value %||% list())
+    }
+  }
+
+  value <- .adaptive_link_refit_local_inputs_build(
+    state = state,
+    controller = controller,
+    spoke_id = spoke_id,
+    defaults = defaults
+  )
+  if (is.environment(env)) {
+    env[[key]] <- list(context = context, value = value)
+  }
+  value
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_refit_shortfalls_map <- function(state) {
   primary <- state$refit_meta$link_stage_shortfalls_by_refit_spoke %||% NULL
   if (is.list(primary)) {
@@ -217,8 +1000,299 @@
   probe$realized_edges <- tibble::as_tibble(
     probe$realized_edges %||% .adaptive_link_probe_empty_realized_log()
   )
+  probe$realized_index_by_panel <- probe$realized_index_by_panel %||%
+    .adaptive_link_probe_empty_realized_index()
+  if (!is.list(probe$realized_index_by_panel)) {
+    probe$realized_index_by_panel <- .adaptive_link_probe_empty_realized_index()
+  }
   probe$collect_holdout_now_by_spoke <- probe$collect_holdout_now_by_spoke %||% list()
   probe
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_key <- function(spoke_id, epoch_id, probe_panel_id) {
+  panel_id <- as.character(probe_panel_id %||% NA_character_)
+  if (length(panel_id) != 1L) {
+    panel_id <- panel_id[[1L]] %||% NA_character_
+  }
+  panel_id <- if (is.na(panel_id)) "<NA>" else panel_id
+  paste0(
+    as.integer(spoke_id %||% NA_integer_),
+    "::",
+    as.integer(epoch_id %||% NA_integer_),
+    "::",
+    panel_id
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_entry <- function(spoke_id,
+                                                      epoch_id,
+                                                      probe_panel_id,
+                                                      row_ids = integer(),
+                                                      last_realized_step_id = NA_integer_) {
+  row_ids <- as.integer(row_ids %||% integer())
+  list(
+    spoke_id = as.integer(spoke_id %||% NA_integer_),
+    link_epoch_id = as.integer(epoch_id %||% NA_integer_),
+    probe_panel_id = as.character(probe_panel_id %||% NA_character_),
+    row_ids = as.integer(row_ids),
+    realized_count = as.integer(length(row_ids)),
+    last_realized_step_id = as.integer(last_realized_step_id %||% NA_integer_)
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_build <- function(realized_edges) {
+  realized_edges <- tibble::as_tibble(realized_edges %||% .adaptive_link_probe_empty_realized_log())
+  if (nrow(realized_edges) < 1L) {
+    return(.adaptive_link_probe_empty_realized_index())
+  }
+
+  key_vec <- vapply(
+    seq_len(nrow(realized_edges)),
+    function(idx) {
+      .adaptive_link_probe_realized_index_key(
+        spoke_id = realized_edges$spoke_id[[idx]] %||% NA_integer_,
+        epoch_id = realized_edges$link_epoch_id[[idx]] %||% NA_integer_,
+        probe_panel_id = realized_edges$probe_panel_id[[idx]] %||% NA_character_
+      )
+    },
+    character(1L)
+  )
+  row_ids_by_key <- split(seq_len(nrow(realized_edges)), key_vec)
+  out <- vector("list", length(row_ids_by_key))
+  names(out) <- names(row_ids_by_key)
+  for (key in names(row_ids_by_key)) {
+    group_row_ids <- as.integer(row_ids_by_key[[key]])
+    group_edges <- realized_edges[group_row_ids, , drop = FALSE]
+    latest_idx <- !duplicated(as.character(group_edges$pair_key), fromLast = TRUE)
+    row_ids <- as.integer(group_row_ids[latest_idx])
+    step_ids <- as.integer(realized_edges$step_id[row_ids] %||% integer())
+    last_realized_step_id <- if (length(step_ids) > 0L && any(is.finite(step_ids), na.rm = TRUE)) {
+      suppressWarnings(max(step_ids, na.rm = TRUE))
+    } else {
+      NA_integer_
+    }
+    out[[key]] <- .adaptive_link_probe_realized_index_entry(
+      spoke_id = group_edges$spoke_id[[1L]] %||% NA_integer_,
+      epoch_id = group_edges$link_epoch_id[[1L]] %||% NA_integer_,
+      probe_panel_id = group_edges$probe_panel_id[[1L]] %||% NA_character_,
+      row_ids = row_ids,
+      last_realized_step_id = last_realized_step_id
+    )
+  }
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_compare <- function(index,
+                                                        canonical,
+                                                        context = "runtime") {
+  index <- index %||% .adaptive_link_probe_empty_realized_index()
+  canonical <- canonical %||% .adaptive_link_probe_empty_realized_index()
+  index_keys <- sort(names(index))
+  canonical_keys <- sort(names(canonical))
+  if (!identical(index_keys, canonical_keys)) {
+    rlang::abort(
+      paste0(
+        "Phase B probe realization index invariant failed in ",
+        context,
+        ": indexed panel keys do not match canonical realized-edge reconstruction."
+      )
+    )
+  }
+  for (key in canonical_keys) {
+    indexed_entry <- index[[key]] %||% list()
+    canonical_entry <- canonical[[key]] %||% list()
+    scalar_fields <- c("spoke_id", "link_epoch_id", "probe_panel_id", "realized_count", "last_realized_step_id")
+    for (field in scalar_fields) {
+      indexed_value <- indexed_entry[[field]] %||% NULL
+      canonical_value <- canonical_entry[[field]] %||% NULL
+      if (!identical(indexed_value, canonical_value)) {
+        rlang::abort(
+          paste0(
+            "Phase B probe realization index invariant failed in ",
+            context,
+            ": indexed `",
+            field,
+            "` does not match canonical realized-edge reconstruction for key `",
+            key,
+            "`."
+          )
+        )
+      }
+    }
+    if (!identical(
+      as.integer(indexed_entry$row_ids %||% integer()),
+      as.integer(canonical_entry$row_ids %||% integer())
+    )) {
+      rlang::abort(
+        paste0(
+          "Phase B probe realization index invariant failed in ",
+          context,
+          ": indexed row ids do not match canonical realized-edge reconstruction for key `",
+          key,
+          "`."
+        )
+      )
+    }
+  }
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_reconcile <- function(probe,
+                                                          context = "runtime",
+                                                          validate_existing = FALSE) {
+  probe <- probe %||% .adaptive_link_probe_empty_state()
+  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
+  existing <- probe$realized_index_by_panel %||% .adaptive_link_probe_empty_realized_index()
+  if (!is.list(existing)) {
+    existing <- .adaptive_link_probe_empty_realized_index()
+  }
+  canonical <- .adaptive_link_probe_realized_index_build(realized_edges)
+  if (isTRUE(validate_existing) && length(existing) > 0L) {
+    .adaptive_link_probe_realized_index_compare(existing, canonical, context = context)
+  }
+  probe$realized_edges <- realized_edges
+  probe$realized_index_by_panel <- canonical
+  probe
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_rebuild_state <- function(state,
+                                                              context = "runtime",
+                                                              validate_existing = FALSE) {
+  out <- state
+  out$linking <- out$linking %||% list()
+  probe <- .adaptive_link_probe_state(out)
+  probe <- .adaptive_link_probe_realized_index_reconcile(
+    probe,
+    context = context,
+    validate_existing = validate_existing
+  )
+  out$linking$probe <- probe
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_index_entry_get <- function(state,
+                                                          spoke_id,
+                                                          epoch_id,
+                                                          probe_panel_id) {
+  probe <- .adaptive_link_probe_state(state)
+  key <- .adaptive_link_probe_realized_index_key(
+    spoke_id = spoke_id,
+    epoch_id = epoch_id,
+    probe_panel_id = probe_panel_id
+  )
+  entry <- probe$realized_index_by_panel[[key]] %||% NULL
+  if (!is.null(entry)) {
+    return(entry)
+  }
+  canonical <- .adaptive_link_probe_realized_index_build(probe$realized_edges)
+  canonical[[key]] %||% NULL
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_rows_from_entry <- function(state, entry) {
+  entry <- entry %||% list()
+  row_ids <- as.integer(entry$row_ids %||% integer())
+  probe <- .adaptive_link_probe_state(state)
+  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
+  if (length(row_ids) < 1L || nrow(realized_edges) < 1L) {
+    return(.adaptive_link_probe_empty_realized_log())
+  }
+  if (any(!is.finite(row_ids) | is.na(row_ids) | row_ids < 1L | row_ids > nrow(realized_edges))) {
+    rlang::abort(
+      paste(
+        "Phase B probe realization index invariant failed:",
+        "indexed row ids are out of range for canonical realized-edge log."
+      )
+    )
+  }
+  rows <- realized_edges[row_ids, , drop = FALSE]
+  if (!all(as.integer(rows$spoke_id) == as.integer(entry$spoke_id %||% NA_integer_))) {
+    rlang::abort(
+      "Phase B probe realization index invariant failed: indexed rows do not match stored `spoke_id`."
+    )
+  }
+  if (!all(as.integer(rows$link_epoch_id) == as.integer(entry$link_epoch_id %||% NA_integer_))) {
+    rlang::abort(
+      "Phase B probe realization index invariant failed: indexed rows do not match stored `link_epoch_id`."
+    )
+  }
+  entry_panel_id <- as.character(entry$probe_panel_id %||% NA_character_)
+  if (!all(as.character(rows$probe_panel_id) == entry_panel_id)) {
+    rlang::abort(
+      "Phase B probe realization index invariant failed: indexed rows do not match stored `probe_panel_id`."
+    )
+  }
+  if (!identical(as.integer(nrow(rows)), as.integer(entry$realized_count %||% NA_integer_))) {
+    rlang::abort(
+      "Phase B probe realization index invariant failed: indexed realized count does not match stored row count."
+    )
+  }
+  last_step_id <- if (nrow(rows) > 0L && any(is.finite(as.integer(rows$step_id)), na.rm = TRUE)) {
+    suppressWarnings(max(as.integer(rows$step_id), na.rm = TRUE))
+  } else {
+    NA_integer_
+  }
+  if (!identical(as.integer(last_step_id), as.integer(entry$last_realized_step_id %||% NA_integer_))) {
+    rlang::abort(
+      paste(
+        "Phase B probe realization index invariant failed:",
+        "indexed `last_realized_step_id` does not match canonical realized-edge log."
+      )
+    )
+  }
+  rows
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_log_for_epoch <- function(state, spoke_id, epoch_id) {
+  probe <- .adaptive_link_probe_state(state)
+  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
+  entries <- probe$realized_index_by_panel %||% .adaptive_link_probe_empty_realized_index()
+  if (length(entries) < 1L) {
+    entries <- .adaptive_link_probe_realized_index_build(realized_edges)
+  }
+  hits <- Filter(
+    f = function(entry) {
+      identical(as.integer(entry$spoke_id %||% NA_integer_), as.integer(spoke_id)) &&
+        identical(as.integer(entry$link_epoch_id %||% NA_integer_), as.integer(epoch_id))
+    },
+    x = entries
+  )
+  if (length(hits) < 1L) {
+    return(.adaptive_link_probe_empty_realized_log())
+  }
+  row_ids <- sort(unique(unlist(
+    lapply(hits, function(entry) as.integer(entry$row_ids %||% integer())),
+    use.names = FALSE
+  )))
+  if (length(row_ids) < 1L) {
+    return(.adaptive_link_probe_empty_realized_log())
+  }
+  if (any(!is.finite(row_ids) | is.na(row_ids) | row_ids < 1L | row_ids > nrow(realized_edges))) {
+    rlang::abort(
+      paste(
+        "Phase B probe realization index invariant failed:",
+        "epoch row ids are out of range for canonical realized-edge log."
+      )
+    )
+  }
+  realized_edges[row_ids, , drop = FALSE]
 }
 
 #' @keywords internal
@@ -322,6 +1396,30 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_panel_identity <- function(panel_tbl,
+                                                spoke_id = NA_integer_,
+                                                epoch_id = NA_integer_) {
+  panel_tbl <- tibble::as_tibble(panel_tbl)
+  panel_ids <- unique(as.character(panel_tbl$probe_panel_id %||% character()))
+  panel_ids <- panel_ids[!is.na(panel_ids) & nzchar(panel_ids)]
+  if (length(panel_ids) > 1L) {
+    rlang::abort(
+      paste0(
+        "Phase B probe-panel invariant failed: current panel has multiple `probe_panel_id` values ",
+        "for spoke_id=", as.integer(spoke_id),
+        " in link_epoch_id=", as.integer(epoch_id),
+        "."
+      )
+    )
+  }
+  if (length(panel_ids) < 1L) {
+    return(NA_character_)
+  }
+  as.character(panel_ids[[1L]])
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_is_holdout_probe_rows <- function(step_tbl) {
   step_tbl <- tibble::as_tibble(step_tbl)
   if (nrow(step_tbl) < 1L) {
@@ -355,29 +1453,20 @@
   if (nrow(panel) < 1L) {
     return(panel)
   }
-  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
-  if (nrow(realized_edges) < 1L) {
+  panel_id <- .adaptive_link_probe_panel_identity(
+    panel_tbl = panel,
+    spoke_id = spoke_id,
+    epoch_id = panel$link_epoch_id[[1L]] %||% NA_integer_
+  )
+  epoch_realized <- .adaptive_link_probe_realized_log_for_epoch(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(panel$link_epoch_id[[1L]] %||% NA_integer_)
+  )
+  if (nrow(epoch_realized) < 1L) {
     return(panel)
   }
-  realized_edges <- realized_edges[
-    as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
-      as.integer(realized_edges$link_epoch_id) == as.integer(panel$link_epoch_id[[1L]] %||% NA_integer_),
-    ,
-    drop = FALSE
-  ]
-  panel_ids <- unique(as.character(panel$probe_panel_id))
-  panel_ids <- panel_ids[!is.na(panel_ids) & nzchar(panel_ids)]
-  if (length(panel_ids) > 1L) {
-    rlang::abort(
-      paste0(
-        "Phase B probe-panel invariant failed: current panel has multiple `probe_panel_id` values ",
-        "for spoke_id=", as.integer(spoke_id),
-        " in link_epoch_id=", as.integer(panel$link_epoch_id[[1L]] %||% NA_integer_),
-        "."
-      )
-    )
-  }
-  panel_id <- if (length(panel_ids) == 1L) panel_ids[[1L]] else NA_character_
+  realized_edges <- epoch_realized
   if (nrow(realized_edges) > 0L) {
     realized_panel_ids <- unique(as.character(realized_edges$probe_panel_id))
     realized_panel_ids <- realized_panel_ids[!is.na(realized_panel_ids) & nzchar(realized_panel_ids)]
@@ -403,14 +1492,6 @@
       )
     }
   }
-  if (nrow(realized_edges) < 1L) {
-    return(panel)
-  }
-  realized_edges <- realized_edges[
-    !duplicated(as.character(realized_edges$pair_key), fromLast = TRUE),
-    ,
-    drop = FALSE
-  ]
   realized_idx <- match(as.character(panel$pair_key), as.character(realized_edges$pair_key))
   hit <- !is.na(realized_idx)
   if (!any(hit)) {
@@ -437,52 +1518,120 @@
   if (nrow(panel) < 1L) {
     return(0L)
   }
+  panel_id <- .adaptive_link_probe_panel_identity(
+    panel_tbl = panel,
+    spoke_id = spoke_id,
+    epoch_id = panel$link_epoch_id[[1L]] %||% epoch_id %||% NA_integer_
+  )
+  entry <- .adaptive_link_probe_realized_index_entry_get(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(panel$link_epoch_id[[1L]] %||% epoch_id %||% NA_integer_),
+    probe_panel_id = panel_id
+  )
+  if (is.null(entry)) {
+    return(0L)
+  }
+  as.integer(entry$realized_count %||% 0L)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_last_step_id <- function(state, spoke_id, epoch_id = NULL, panel = NULL) {
+  panel <- tibble::as_tibble(panel %||% .adaptive_link_probe_panel_for_spoke(
+    state,
+    spoke_id = spoke_id,
+    epoch_id = epoch_id
+  ))
+  if (nrow(panel) < 1L) {
+    return(NA_integer_)
+  }
+  panel_id <- .adaptive_link_probe_panel_identity(
+    panel_tbl = panel,
+    spoke_id = spoke_id,
+    epoch_id = panel$link_epoch_id[[1L]] %||% epoch_id %||% NA_integer_
+  )
+  entry <- .adaptive_link_probe_realized_index_entry_get(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(panel$link_epoch_id[[1L]] %||% epoch_id %||% NA_integer_),
+    probe_panel_id = panel_id
+  )
+  as.integer(entry$last_realized_step_id %||% NA_integer_)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_realized_count_since_step <- function(state,
+                                                           spoke_id,
+                                                           epoch_id = NULL,
+                                                           last_step_id = 0L,
+                                                           panel = NULL) {
+  panel <- tibble::as_tibble(panel %||% .adaptive_link_probe_panel_for_spoke(
+    state,
+    spoke_id = spoke_id,
+    epoch_id = epoch_id
+  ))
+  if (nrow(panel) < 1L) {
+    return(0L)
+  }
   realized_edges <- .adaptive_link_probe_realized_log_for_panel(
     state = state,
     spoke_id = as.integer(spoke_id),
     epoch_id = as.integer(panel$link_epoch_id[[1L]] %||% epoch_id %||% NA_integer_),
     panel = panel
   )
-  as.integer(nrow(realized_edges))
+  if (nrow(realized_edges) < 1L) {
+    return(0L)
+  }
+  as.integer(sum(as.integer(realized_edges$step_id) > as.integer(last_step_id %||% 0L), na.rm = TRUE))
 }
 
 #' @keywords internal
 #' @noRd
 .adaptive_link_probe_holdout_since_last_refit <- function(state, spoke_id) {
-  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  if (
-    nrow(step_log) < 1L ||
-      !all(c("pair_id", "step_id", "link_spoke_id", "run_mode") %in% names(step_log))
-  ) {
-    return(0L)
-  }
-  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
-  as.integer(sum(
-    !is.na(step_log$pair_id) &
-      as.integer(step_log$step_id) > last_refit_step &
-      as.integer(step_log$link_spoke_id) == as.integer(spoke_id) &
-      as.character(step_log$run_mode) == "link_probe_holdout",
-    na.rm = TRUE
-  ))
+  refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+  summary <- .adaptive_link_refit_summary_current(
+    state = state,
+    refit_id = refit_id,
+    spoke_id = as.integer(spoke_id)
+  )
+  as.integer(summary$n_cross_edges_probe_since_last_refit %||% 0L)
 }
 
 #' @keywords internal
 #' @noRd
 .adaptive_link_probe_holdout_total_since_last_refit <- function(state) {
+  refit_id <- as.integer(.adaptive_link_refit_window_id(state))
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  if (
-    nrow(step_log) < 1L ||
-      !all(c("pair_id", "step_id", "run_mode") %in% names(step_log))
-  ) {
+  spoke_ids <- integer()
+  if (nrow(step_log) > 0L && "link_spoke_id" %in% names(step_log)) {
+    spoke_ids <- as.integer(step_log$link_spoke_id)
+    spoke_ids <- spoke_ids[is.finite(spoke_ids) & !is.na(spoke_ids)]
+  }
+  cache <- .adaptive_link_refit_summary_cache(state)
+  if (length(cache) > 0L) {
+    cache_spokes <- vapply(cache, function(x) as.integer(x$spoke_id %||% NA_integer_), integer(1L))
+    cache_refits <- vapply(cache, function(x) as.integer(x$refit_id %||% NA_integer_), integer(1L))
+    spoke_ids <- c(spoke_ids, cache_spokes[cache_refits == refit_id])
+  }
+  spoke_ids <- sort(unique(spoke_ids))
+  spoke_ids <- spoke_ids[is.finite(spoke_ids) & !is.na(spoke_ids)]
+  if (length(spoke_ids) < 1L) {
     return(0L)
   }
-  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
-  as.integer(sum(
-    !is.na(step_log$pair_id) &
-      as.integer(step_log$step_id) > last_refit_step &
-      as.character(step_log$run_mode) == "link_probe_holdout",
-    na.rm = TRUE
-  ))
+  as.integer(sum(vapply(
+    spoke_ids,
+    function(spoke_id) {
+      summary <- .adaptive_link_refit_summary_current(
+        state = state,
+        refit_id = refit_id,
+        spoke_id = as.integer(spoke_id)
+      )
+      as.integer(summary$n_cross_edges_probe_since_last_refit %||% 0L)
+    },
+    integer(1L)
+  )))
 }
 
 #' @keywords internal
@@ -782,48 +1931,15 @@
 #' @keywords internal
 #' @noRd
 .adaptive_link_probe_window_progress <- function(state, spoke_id) {
-  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  required <- c("pair_id", "step_id", "is_cross_set", "link_spoke_id")
-  if (nrow(step_log) < 1L || !all(required %in% names(step_log))) {
-    return(list(active_nonprobe = 0L, anchor_active = 0L))
-  }
-
-  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
-  rows <- step_log[
-    !is.na(step_log$pair_id) &
-      as.integer(step_log$step_id) > last_refit_step &
-      step_log$is_cross_set %in% TRUE &
-      as.integer(step_log$link_spoke_id) == as.integer(spoke_id),
-    ,
-    drop = FALSE
-  ]
-  if (nrow(rows) < 1L) {
-    return(list(active_nonprobe = 0L, anchor_active = 0L))
-  }
-
-  is_probe <- if ("is_probe_step" %in% names(rows)) {
-    as.logical(rows$is_probe_step %||% FALSE)
-  } else {
-    rep(FALSE, nrow(rows))
-  }
-  stage_col <- if ("link_stage" %in% names(rows)) {
-    "link_stage"
-  } else if ("round_stage" %in% names(rows)) {
-    "round_stage"
-  } else {
-    NA_character_
-  }
-  anchor_active <- 0L
-  if (!is.na(stage_col)) {
-    anchor_active <- as.integer(sum(
-      !is_probe & as.character(rows[[stage_col]]) == "anchor_link",
-      na.rm = TRUE
-    ))
-  }
-
+  refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+  summary <- .adaptive_link_refit_summary_current(
+    state = state,
+    refit_id = refit_id,
+    spoke_id = as.integer(spoke_id)
+  )
   list(
-    active_nonprobe = as.integer(sum(!is_probe, na.rm = TRUE)),
-    anchor_active = as.integer(anchor_active)
+    active_nonprobe = as.integer(summary$n_cross_edges_active_since_last_refit %||% 0L),
+    anchor_active = as.integer((summary$stage_realized %||% list())[["anchor_link"]] %||% 0L)
   )
 }
 
@@ -1254,9 +2370,13 @@
 
   i_id <- as.character(probe_row$hub_item_id[[1L]])
   j_id <- as.character(probe_row$spoke_item_id[[1L]])
-  history <- .adaptive_history_tbl(state)
-  counts <- .adaptive_pair_counts(history, state$item_ids)
-  recent_deg <- .adaptive_recent_deg(history, state$item_ids, adaptive_defaults(length(state$item_ids))$W_cap)
+  history_state <- .adaptive_history_state_resolve(state, ids = state$item_ids)
+  counts <- .adaptive_history_state_counts(history_state, state$item_ids)
+  recent_deg <- .adaptive_history_state_recent_deg(
+    history_state,
+    state$item_ids,
+    adaptive_defaults(length(state$item_ids))$W_cap
+  )
   order_vals <- .adaptive_assign_order(
     tibble::tibble(i = i_id, j = j_id),
     counts$posA,
@@ -1422,6 +2542,7 @@
       Y = "integer"
     )
   )
+  probe$realized_index_by_panel <- .adaptive_link_probe_realized_index_build(probe$realized_edges)
   out$linking$probe <- probe
   out
 }
@@ -1501,25 +2622,33 @@
     realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
     return(realized_edges[0, , drop = FALSE])
   }
-  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
-  if (nrow(realized_edges) < 1L) {
+  panel_id <- .adaptive_link_probe_panel_identity(
+    panel_tbl = panel,
+    spoke_id = spoke_id,
+    epoch_id = epoch_id
+  )
+  entry <- .adaptive_link_probe_realized_index_entry_get(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    epoch_id = as.integer(epoch_id),
+    probe_panel_id = panel_id
+  )
+  if (is.null(entry)) {
     return(.adaptive_link_probe_empty_realized_log())
   }
+  realized_edges <- .adaptive_link_probe_realized_rows_from_entry(
+    state = state,
+    entry = entry
+  )
   realized_edges <- realized_edges[
-    as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
-      as.integer(realized_edges$link_epoch_id) == as.integer(epoch_id) &
-      as.character(realized_edges$pair_key) %in% as.character(panel$pair_key),
+    as.character(realized_edges$pair_key) %in% as.character(panel$pair_key),
     ,
     drop = FALSE
   ]
   if (nrow(realized_edges) < 1L) {
     return(.adaptive_link_probe_empty_realized_log())
   }
-  realized_edges[
-    !duplicated(as.character(realized_edges$pair_key), fromLast = TRUE),
-    ,
-    drop = FALSE
-  ]
+  realized_edges
 }
 
 #' @keywords internal
@@ -1890,9 +3019,10 @@
 .adaptive_link_stage_feasibility_snapshot <- function(state, controller, spoke_id, stage_order) {
   round <- state$round %||% list()
   defaults <- adaptive_defaults(as.integer(state$n_items))
-  history <- .adaptive_history_tbl(state)
-  counts <- .adaptive_pair_counts(history, as.character(state$item_ids))
-  recent_deg <- .adaptive_recent_deg(history, as.character(state$item_ids), defaults$W_cap)
+  ids <- as.character(state$item_ids)
+  history_state <- .adaptive_history_state_resolve(state, ids = ids)
+  counts <- .adaptive_history_state_counts(history_state, ids)
+  recent_deg <- .adaptive_history_state_recent_deg(history_state, ids, defaults$W_cap)
   link_controller <- controller
   link_controller$current_link_spoke_id <- as.integer(spoke_id)
   refit_id <- as.integer(.adaptive_link_refit_window_id(state))
@@ -2114,7 +3244,6 @@
                                          stage_order,
                                          refit_id = NULL,
                                          adjust_for_feasibility = TRUE) {
-  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   controller <- .adaptive_controller_resolve(state)
   stage_order <- as.character(stage_order %||% .adaptive_stage_order())
   quota_meta <- attr(stage_quotas, "quota_meta") %||% list()
@@ -2133,24 +3262,21 @@
   }
   committed_actual <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
   refit_id <- as.integer(refit_id %||% .adaptive_link_refit_window_id(state))
-  last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
-  if (nrow(step_log) > 0L &&
-    all(c("pair_id", "is_cross_set", "link_spoke_id", "step_id") %in% names(step_log))) {
-    stage_col <- if ("link_stage" %in% names(step_log)) "link_stage" else "round_stage"
-    rows <- step_log[
-      !is.na(step_log$pair_id) &
-        step_log$is_cross_set %in% TRUE &
-        as.integer(step_log$link_spoke_id) == as.integer(spoke_id) &
-        as.integer(step_log$step_id) > last_refit_step &
-        as.character(step_log[[stage_col]]) %in% stage_order,
-      ,
-      drop = FALSE
-    ]
-    if (nrow(rows) > 0L) {
-      tab <- table(factor(as.character(rows[[stage_col]]), levels = stage_order))
-      committed_actual[names(tab)] <- as.integer(tab)
-    }
-  }
+  summary <- .adaptive_link_refit_summary_current(
+    state = state,
+    refit_id = refit_id,
+    spoke_id = as.integer(spoke_id)
+  )
+  committed_actual <- stats::setNames(
+    vapply(
+      stage_order,
+      function(stage_name) {
+        as.integer((summary$stage_realized %||% list())[[stage_name]] %||% 0L)
+      },
+      integer(1L)
+    ),
+    stage_order
+  )
 
   committed <- committed_actual
   exhausted_map <- .adaptive_link_refit_exhausted_map(state)
@@ -3240,6 +4366,12 @@ adaptive_rank_run_live <- function(state,
         config = refit_out$config
       )
       state$round_log <- append_round_log(state$round_log, round_row)
+      deferred_audit_payload <- metrics$round_log_deferred_audit_payload %||% NULL
+      if (is.list(deferred_audit_payload)) {
+        payloads <- state$refit_meta$round_log_deferred_audit_payloads %||% list()
+        payloads[[as.character(round_row$refit_id)]] <- deferred_audit_payload
+        state$refit_meta$round_log_deferred_audit_payloads <- payloads
+      }
       controller_post_refit <- .adaptive_controller_resolve(state)
       cache_spokes <- .adaptive_link_effective_active_spokes(
         state = state,

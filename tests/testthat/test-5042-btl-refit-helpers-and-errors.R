@@ -352,6 +352,10 @@ test_that("round_log_row handles prior-round attribution and quota source select
   expect_identical(row$long_quota_removed, 4L)
   expect_true(is.na(row$ts_btl_theta_corr))
   expect_true(is.na(row$ts_btl_rank_spearman))
+  expect_true(is.na(row$ci95_theta_width_mean))
+  expect_true(is.na(row$cov_trace_theta))
+  expect_true(is.na(row$top20_boundary_entropy_mean))
+  expect_true(is.na(row$nn_diff_sd_mean))
 })
 
 test_that("round_log_row suppresses global stop reasons during phase_b linking", {

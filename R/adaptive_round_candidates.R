@@ -282,6 +282,21 @@
   spoke_ids <- as.integer(sort(spoke_ids))
   concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
   if (!isTRUE(concurrent_mode)) {
+    refit_id <- .adaptive_link_refit_window_id(state)
+    refit_context <- list(last_refit_step = as.integer(state$refit_meta$last_refit_step %||% 0L))
+    counts <- stats::setNames(vapply(
+      spoke_ids,
+      function(spoke_id) {
+        summary <- .adaptive_link_refit_summary_current(
+          state = state,
+          refit_id = refit_id,
+          spoke_id = as.integer(spoke_id),
+          refit_context = refit_context
+        )
+        as.integer(summary$n_cross_edges_active_since_last_refit %||% 0L)
+      },
+      integer(1L)
+    ), as.character(spoke_ids))
     cached_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
     current_refit_id <- as.integer(.adaptive_link_refit_window_id(state))
     cached_map <- controller$link_budget_map %||% list()
@@ -298,15 +313,10 @@
         return(as.integer(c(cached_active[[1L]], tail_ids)))
       }
     }
-  }
-  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  required <- c("pair_id", "step_id", "is_cross_set", "link_spoke_id")
-  step_subset <- tibble::tibble()
-  if (nrow(step_log) > 0L && all(required %in% names(step_log))) {
-    eligible <- !is.na(step_log$pair_id) &
-      step_log$is_cross_set %in% TRUE &
-      as.integer(step_log$link_spoke_id) %in% spoke_ids
-    step_subset <- step_log[eligible, , drop = FALSE]
+    if (any(counts > 0L)) {
+      ord_counts <- order(as.integer(counts), as.integer(names(counts)))
+      return(as.integer(names(counts)[ord_counts]))
+    }
   }
 
   if (isTRUE(concurrent_mode)) {
@@ -318,26 +328,21 @@
       numeric(1L)
     )
     names(blocker_totals) <- as.character(spoke_ids)
-    if (nrow(step_subset) > 0L) {
-      last_refit_step <- as.integer(state$refit_meta$last_refit_step %||% 0L)
-      step_subset <- step_subset[as.integer(step_subset$step_id) > last_refit_step, , drop = FALSE]
-      if (nrow(step_subset) > 0L) {
-        step_subset <- step_subset[
-          !.adaptive_link_is_holdout_probe_rows(step_subset),
-          ,
-          drop = FALSE
-        ]
-      }
-    }
-    counts <- rep.int(0L, length(spoke_ids))
-    names(counts) <- as.character(spoke_ids)
-    if (nrow(step_subset) > 0L) {
-      tab <- table(factor(
-        as.integer(step_subset$link_spoke_id),
-        levels = spoke_ids
-      ))
-      counts[names(tab)] <- as.integer(tab)
-    }
+    refit_id <- .adaptive_link_refit_window_id(state)
+    refit_context <- list(last_refit_step = as.integer(state$refit_meta$last_refit_step %||% 0L))
+    counts <- stats::setNames(vapply(
+      spoke_ids,
+      function(spoke_id) {
+        summary <- .adaptive_link_refit_summary_current(
+          state = state,
+          refit_id = refit_id,
+          spoke_id = as.integer(spoke_id),
+          refit_context = refit_context
+        )
+        as.integer(summary$n_cross_edges_active_since_last_refit %||% 0L)
+      },
+      integer(1L)
+    ), as.character(spoke_ids))
 
     budget_map <- .adaptive_link_budget_map_for_refit(
       state = state,
@@ -387,15 +392,6 @@
     }
 
     return(integer())
-  }
-
-  if (nrow(step_subset) > 0L) {
-    counts <- table(factor(
-      as.integer(step_subset$link_spoke_id),
-      levels = spoke_ids
-    ))
-    ord_counts <- order(as.integer(counts), as.integer(names(counts)))
-    return(as.integer(names(counts)[ord_counts]))
   }
 
   current <- as.integer(controller$current_link_spoke_id %||% NA_integer_)
@@ -975,19 +971,18 @@
   }
   out$linking <- out$linking %||% list()
   probe <- .adaptive_link_probe_state(out)
-  realized_edges <- tibble::as_tibble(probe$realized_edges %||% .adaptive_link_probe_empty_realized_log())
   link_stage_log <- tibble::as_tibble(out$link_stage_log %||% new_link_stage_log())
   for (spoke_id in unique(spoke_ids)) {
     epoch_id <- .adaptive_link_probe_epoch_for_spoke(out, spoke_id = spoke_id)
     panel <- probe$panels_by_spoke[[as.character(spoke_id)]] %||% .adaptive_link_probe_empty_panel()
     panel <- tibble::as_tibble(panel)
     if (nrow(panel) < 1L || !all(as.integer(panel$link_epoch_id) == epoch_id)) {
-      has_realized_epoch_evidence <- nrow(realized_edges) > 0L &&
-        any(
-          as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
-            as.integer(realized_edges$link_epoch_id) == as.integer(epoch_id),
-          na.rm = TRUE
-        )
+      epoch_realized <- .adaptive_link_probe_realized_log_for_epoch(
+        state = out,
+        spoke_id = as.integer(spoke_id),
+        epoch_id = as.integer(epoch_id)
+      )
+      has_realized_epoch_evidence <- nrow(epoch_realized) > 0L
       stage_rows <- link_stage_log[
         as.integer(link_stage_log$spoke_id) == as.integer(spoke_id) &
           as.integer(link_stage_log$link_epoch_id) == as.integer(epoch_id),
@@ -1006,12 +1001,6 @@
       } else {
         NA_integer_
       }
-      epoch_realized <- realized_edges[
-        as.integer(realized_edges$spoke_id) == as.integer(spoke_id) &
-          as.integer(realized_edges$link_epoch_id) == as.integer(epoch_id),
-        ,
-        drop = FALSE
-      ]
       realized_panel_ids <- unique(as.character(epoch_realized$probe_panel_id))
       realized_panel_ids <- realized_panel_ids[!is.na(realized_panel_ids) & nzchar(realized_panel_ids)]
       has_stage_probe_evidence <- nrow(stage_rows) > 0L && any(
@@ -1072,6 +1061,7 @@
             )
             if (length(realized_idx) > 0L) {
               probe$realized_edges$probe_panel_id[realized_idx] <- built_panel_id
+              probe$realized_index_by_panel <- .adaptive_link_probe_realized_index_build(probe$realized_edges)
               out$linking$probe <- probe
               epoch_realized$probe_panel_id[] <- built_panel_id
             }
@@ -1250,6 +1240,72 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_direct_cross_pairs <- function(hub_item_ids,
+                                              spoke_ids,
+                                              rank_index,
+                                              stratum_map) {
+  hub_item_ids <- unique(as.character(hub_item_ids))
+  spoke_ids <- unique(as.character(spoke_ids))
+  if (length(hub_item_ids) < 1L || length(spoke_ids) < 1L) {
+    return(tibble::tibble(
+      hub_item_id = character(),
+      spoke_item_id = character(),
+      i = character(),
+      j = character(),
+      pair_key = character(),
+      dist_stratum_global = integer()
+    ))
+  }
+
+  hub_rank <- as.integer(rank_index[hub_item_ids])
+  spoke_rank <- as.integer(rank_index[spoke_ids])
+  names(hub_rank) <- hub_item_ids
+  names(spoke_rank) <- spoke_ids
+  if (any(!is.finite(hub_rank)) || any(!is.finite(spoke_rank))) {
+    rlang::abort(
+      "Phase B candidate construction invariant failed: ranked hub/spoke items must have finite routing ranks."
+    )
+  }
+
+  hub_strata <- as.integer(stratum_map[hub_item_ids])
+  spoke_strata <- as.integer(stratum_map[spoke_ids])
+  names(hub_strata) <- hub_item_ids
+  names(spoke_strata) <- spoke_ids
+  if (any(!is.finite(hub_strata)) || any(!is.finite(spoke_strata))) {
+    rlang::abort(
+      "Phase B candidate construction invariant failed: ranked hub/spoke items must have finite routing strata."
+    )
+  }
+
+  n_hub <- length(hub_item_ids)
+  n_spoke <- length(spoke_ids)
+  hub_item_id <- rep(hub_item_ids, each = n_spoke)
+  spoke_item_id <- rep(spoke_ids, times = n_hub)
+  hub_rank_vec <- rep(hub_rank, each = n_spoke)
+  spoke_rank_vec <- rep(spoke_rank, times = n_hub)
+  hub_strata_vec <- rep(hub_strata, each = n_spoke)
+  spoke_strata_vec <- rep(spoke_strata, times = n_hub)
+  pair_key_vec <- make_unordered_key(hub_item_id, spoke_item_id)
+
+  i_vals <- ifelse(hub_rank_vec < spoke_rank_vec, hub_item_id, spoke_item_id)
+  j_vals <- ifelse(hub_rank_vec < spoke_rank_vec, spoke_item_id, hub_item_id)
+  order_idx <- order(
+    pmin(hub_rank_vec, spoke_rank_vec),
+    pmax(hub_rank_vec, spoke_rank_vec)
+  )
+
+  tibble::tibble(
+    hub_item_id = as.character(hub_item_id[order_idx]),
+    spoke_item_id = as.character(spoke_item_id[order_idx]),
+    i = as.character(i_vals[order_idx]),
+    j = as.character(j_vals[order_idx]),
+    pair_key = as.character(pair_key_vec[order_idx]),
+    dist_stratum_global = as.integer(abs(hub_strata_vec[order_idx] - spoke_strata_vec[order_idx]))
+  )
+}
+
+#' @keywords internal
+#' @noRd
 generate_stage_candidates_from_state <- function(state,
                                                  stage_name,
                                                  fallback_name,
@@ -1342,35 +1398,33 @@ generate_stage_candidates_from_state <- function(state,
         )
       )
     }
+    local_inputs <- .adaptive_link_refit_local_inputs(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      defaults = defaults
+    )
+    hub_ids <- as.character(local_inputs$hub_ids)
+    spoke_ids <- as.character(local_inputs$spoke_ids)
+    active_items <- local_inputs$active_items %||% list()
+    active_hub_ids <- as.character(active_items$active_hub %||% character())
     routing_hub_ids <- if (identical(stage_name, "anchor_link")) hub_ids else active_hub_ids
     active_ids <- unique(c(routing_hub_ids, spoke_ids))
     if (length(active_ids) < 2L) {
       return(tibble::tibble(i = character(), j = character()))
     }
-    active_scores <- .adaptive_link_phase_b_routing_scores(
-      state = state,
-      controller = controller,
-      active_ids = active_ids,
-      hub_id = hub_id
-    )
+    active_scores <- as.double((local_inputs$routing_scores %||% numeric())[active_ids])
+    names(active_scores) <- as.character(active_ids)
     strata <- .adaptive_assign_strata(active_scores, defaults)
     rank_index <- strata$rank_index
     stratum_map <- strata$stratum_map
-    ids <- names(sort(rank_index))
     # In linking Phase B, hub anchors are derived from hub-only ranks.
-    hub_anchor_ids <- .adaptive_link_phase_b_hub_anchors(
-      state = state,
-      hub_ids = hub_ids,
-      hub_scores = active_scores,
-      defaults = defaults
-    )
-    coverage <- .adaptive_link_spoke_coverage(
-      state = state,
-      controller = controller,
-      spoke_id = spoke_id,
-      spoke_ids = spoke_ids,
-      routing_scores = active_scores,
-      score_source = "linking_global_score"
+    hub_anchor_ids <- as.character(local_inputs$hub_anchor_ids %||% character())
+    coverage <- local_inputs$coverage %||% list(
+      bin_map = stats::setNames(integer(), character()),
+      bins_used = NA_integer_,
+      bins_undercovered = integer(),
+      source = NA_character_
     )
   } else if (isTRUE(is_link_mode)) {
     active_set <- as.integer(phase_ctx$active_phase_a_set %||% NA_integer_)
@@ -1402,11 +1456,6 @@ generate_stage_candidates_from_state <- function(state,
   i_vals <- character()
   j_vals <- character()
   dist_vals <- integer()
-  coverage_priority <- integer()
-  coverage_bin <- integer()
-  link_spoke_id <- integer()
-  coverage_bins_used <- integer()
-  coverage_source <- character()
   n_after_route_filters <- NA_integer_
   n_after_active_domain <- NA_integer_
   n_after_stage_filters <- NA_integer_
@@ -1418,93 +1467,147 @@ generate_stage_candidates_from_state <- function(state,
     n_after_stage_filters <- 0L
   }
 
+  if (isTRUE(link_phase_b_active)) {
+    routed_pairs <- .adaptive_link_direct_cross_pairs(
+      hub_item_ids = routing_hub_ids,
+      spoke_ids = spoke_ids,
+      rank_index = rank_index,
+      stratum_map = stratum_map
+    )
+    n_after_route_filters <- as.integer(nrow(routed_pairs))
+    active_domain_pairs <- if (identical(stage_name, "anchor_link")) {
+      routed_pairs
+    } else {
+      routed_pairs[as.character(routed_pairs$hub_item_id) %in% active_hub_ids, , drop = FALSE]
+    }
+    n_after_active_domain <- as.integer(nrow(active_domain_pairs))
+    .adaptive_link_assert_active_domain_count(
+      stage_name = stage_name,
+      n_candidates_after_active_domain = n_after_active_domain,
+      active_hub_ids = active_hub_ids,
+      spoke_ids = spoke_ids,
+      spoke_id = spoke_id
+    )
+
+    if (nrow(active_domain_pairs) < 1L) {
+      return(.adaptive_set_candidate_filter_counts(
+        tibble::tibble(i = character(), j = character()),
+        list(
+          n_candidates_after_route_filters = as.integer(n_after_route_filters %||% NA_integer_),
+          n_candidates_after_active_domain = as.integer(n_after_active_domain %||% NA_integer_),
+          n_candidates_after_stage_filters = 0L
+        )
+      ))
+    }
+
+    stage_keep <- if (identical(stage_name, "anchor_link")) {
+      as.character(active_domain_pairs$hub_item_id) %in% hub_anchor_ids
+    } else {
+      as.integer(active_domain_pairs$dist_stratum_global) >= bounds$min &
+        as.integer(active_domain_pairs$dist_stratum_global) <= bounds$max
+    }
+    cand <- active_domain_pairs[stage_keep, , drop = FALSE]
+
+    if (nrow(cand) > 0L) {
+      spoke_bin <- as.integer(coverage$bin_map[as.character(cand$spoke_item_id)])
+      bins_undercovered <- as.integer(coverage$bins_undercovered %||% integer())
+      cand$coverage_priority <- as.integer(!is.na(spoke_bin) & spoke_bin %in% bins_undercovered)
+      cand$coverage_bin_spoke <- spoke_bin
+      cand$link_spoke_id <- as.integer(spoke_id)
+      cand$coverage_bins_used <- as.integer(coverage$bins_used)
+      cand$coverage_source <- as.character(coverage$source)
+    }
+
+    reserved_keys <- character()
+    if (!isTRUE(.adaptive_link_spoke_is_frozen(controller, spoke_id))) {
+      current_epoch_id <- .adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)
+      reserved_keys <- .adaptive_link_probe_reserved_keys(
+        state,
+        spoke_id = spoke_id,
+        epoch_id = current_epoch_id
+      )
+      if (length(reserved_keys) < 1L) {
+        fallback_panel <- .adaptive_link_probe_panel_for_spoke(
+          state,
+          spoke_id = spoke_id,
+          epoch_id = NULL
+        )
+        reserved_keys <- unique(as.character(fallback_panel$pair_key))
+      }
+      if (length(reserved_keys) > 0L && nrow(cand) > 0L) {
+        cand <- cand[!as.character(cand$pair_key) %in% reserved_keys, , drop = FALSE]
+      }
+    }
+
+    if (nrow(cand) > 0L) {
+      cand <- cand[, c(
+        "i", "j", "dist_stratum_global", "coverage_priority", "coverage_bin_spoke",
+        "link_spoke_id", "coverage_bins_used", "coverage_source"
+      )]
+    } else {
+      cand <- tibble::tibble(i = character(), j = character())
+    }
+
+    .adaptive_link_assert_non_anchor_candidate_domain(
+      candidates = cand,
+      stage_name = stage_name,
+      spoke_id = spoke_id,
+      hub_id = hub_id,
+      active_hub_ids = active_hub_ids,
+      reserved_keys = reserved_keys,
+      set_map = set_map
+    )
+
+    if (nrow(cand) < 1L) {
+      return(.adaptive_set_candidate_filter_counts(
+        tibble::tibble(i = character(), j = character()),
+        list(
+          n_candidates_after_route_filters = as.integer(n_after_route_filters %||% NA_integer_),
+          n_candidates_after_active_domain = as.integer(n_after_active_domain %||% NA_integer_),
+          n_candidates_after_stage_filters = 0L
+        )
+      ))
+    }
+
+    cand <- .adaptive_uniform_subsample_pairs(cand, C_max = as.integer(C_max), seed = as.integer(seed))
+    return(.adaptive_set_candidate_filter_counts(
+      cand,
+      list(
+        n_candidates_after_route_filters = as.integer(n_after_route_filters %||% NA_integer_),
+        n_candidates_after_active_domain = as.integer(n_after_active_domain %||% NA_integer_),
+        n_candidates_after_stage_filters = as.integer(nrow(cand))
+      )
+    ))
+  }
+
   for (a in seq_len(length(ids) - 1L)) {
     i_id <- ids[[a]]
     for (b in (a + 1L):length(ids)) {
       j_id <- ids[[b]]
       keep <- FALSE
       dist <- abs(as.integer(stratum_map[[i_id]]) - as.integer(stratum_map[[j_id]]))
-
-      if (isTRUE(link_phase_b_active)) {
-        i_set <- as.integer(set_map[[i_id]] %||% NA_integer_)
-        j_set <- as.integer(set_map[[j_id]] %||% NA_integer_)
-        if (is.na(i_set) || is.na(j_set) || i_set == j_set) {
-          next
-        }
-        i_hub <- i_id %in% hub_ids
-        j_hub <- j_id %in% hub_ids
-        if (!isTRUE(xor(i_hub, j_hub))) {
-          next
-        }
-        n_after_route_filters <- as.integer(n_after_route_filters + 1L)
-        i_anchor <- i_id %in% hub_anchor_ids
-        j_anchor <- j_id %in% hub_anchor_ids
-        if (identical(stage_name, "anchor_link")) {
-          n_after_active_domain <- as.integer(n_after_active_domain + 1L)
-          keep <- xor(i_anchor, j_anchor)
-        } else {
-          if (!i_hub && !j_hub) {
-            next
-          }
-          hub_item_id <- if (isTRUE(i_hub)) i_id else j_id
-          if (!hub_item_id %in% active_hub_ids) {
-            next
-          }
-          n_after_active_domain <- as.integer(n_after_active_domain + 1L)
-          keep <- dist >= bounds$min && dist <= bounds$max
-        }
+      i_anchor <- i_id %in% anchor_ids
+      j_anchor <- j_id %in% anchor_ids
+      if (identical(stage_name, "anchor_link")) {
+        keep <- xor(i_anchor, j_anchor)
       } else {
-        i_anchor <- i_id %in% anchor_ids
-        j_anchor <- j_id %in% anchor_ids
-        if (identical(stage_name, "anchor_link")) {
-          keep <- xor(i_anchor, j_anchor)
-        } else {
-          if (identical(stage_name, "long_link") || identical(stage_name, "mid_link")) {
-            if (i_anchor || j_anchor) {
-              next
-            }
+        if (identical(stage_name, "long_link") || identical(stage_name, "mid_link")) {
+          if (i_anchor || j_anchor) {
+            next
           }
-          keep <- dist >= bounds$min && dist <= bounds$max
         }
+        keep <- dist >= bounds$min && dist <= bounds$max
       }
 
       if (isTRUE(keep)) {
-        if (isTRUE(link_phase_b_active)) {
-          n_after_stage_filters <- as.integer(n_after_stage_filters + 1L)
-        }
         i_vals <- c(i_vals, i_id)
         j_vals <- c(j_vals, j_id)
         dist_vals <- c(dist_vals, as.integer(dist))
-        if (isTRUE(link_phase_b_active)) {
-          spoke_item <- if (as.integer(set_map[[i_id]] %||% NA_integer_) == spoke_id) {
-            i_id
-          } else if (as.integer(set_map[[j_id]] %||% NA_integer_) == spoke_id) {
-            j_id
-          } else {
-            NA_character_
-          }
-          spoke_bin <- as.integer(coverage$bin_map[[spoke_item]] %||% NA_integer_)
-          priority <- as.integer(!is.na(spoke_bin) && spoke_bin %in% coverage$bins_undercovered)
-          coverage_priority <- c(coverage_priority, priority)
-          coverage_bin <- c(coverage_bin, spoke_bin)
-          link_spoke_id <- c(link_spoke_id, as.integer(spoke_id))
-          coverage_bins_used <- c(coverage_bins_used, as.integer(coverage$bins_used))
-          coverage_source <- c(coverage_source, as.character(coverage$source))
-        }
       }
     }
   }
 
   if (length(i_vals) == 0L) {
-    if (isTRUE(link_phase_b_active)) {
-      .adaptive_link_assert_active_domain_count(
-        stage_name = stage_name,
-        n_candidates_after_active_domain = n_after_active_domain,
-        active_hub_ids = active_hub_ids,
-        spoke_ids = spoke_ids,
-        spoke_id = spoke_id
-      )
-    }
     return(.adaptive_set_candidate_filter_counts(
       tibble::tibble(i = character(), j = character()),
       list(
@@ -1517,43 +1620,6 @@ generate_stage_candidates_from_state <- function(state,
 
   cand <- tibble::tibble(i = as.character(i_vals), j = as.character(j_vals))
   cand$dist_stratum_global <- as.integer(dist_vals)
-  if (isTRUE(link_phase_b_active)) {
-    cand$coverage_priority <- as.integer(coverage_priority)
-    cand$coverage_bin_spoke <- as.integer(coverage_bin)
-    cand$link_spoke_id <- as.integer(link_spoke_id)
-    cand$coverage_bins_used <- as.integer(coverage_bins_used)
-    cand$coverage_source <- as.character(coverage_source)
-    .adaptive_link_assert_active_domain_count(
-      stage_name = stage_name,
-      n_candidates_after_active_domain = n_after_active_domain,
-      active_hub_ids = active_hub_ids,
-      spoke_ids = spoke_ids,
-      spoke_id = spoke_id
-    )
-    reserved_keys <- character()
-    if (!isTRUE(.adaptive_link_spoke_is_frozen(controller, spoke_id))) {
-      reserved_keys <- .adaptive_link_probe_reserved_keys(
-        state,
-        spoke_id = spoke_id,
-        epoch_id = .adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)
-      )
-      if (length(reserved_keys) > 0L) {
-        cand_pair_keys <- vapply(seq_len(nrow(cand)), function(idx) {
-          make_unordered_key(cand$i[[idx]], cand$j[[idx]])
-        }, character(1L))
-        cand <- cand[!cand_pair_keys %in% reserved_keys, , drop = FALSE]
-      }
-    }
-    .adaptive_link_assert_non_anchor_candidate_domain(
-      candidates = cand,
-      stage_name = stage_name,
-      spoke_id = spoke_id,
-      hub_id = hub_id,
-      active_hub_ids = active_hub_ids,
-      reserved_keys = reserved_keys,
-      set_map = set_map
-    )
-  }
   if (nrow(cand) < 1L) {
     return(.adaptive_set_candidate_filter_counts(
       tibble::tibble(i = character(), j = character()),

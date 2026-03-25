@@ -26,4 +26,5 @@ test_that("adaptive_rank_resume restores state and run_live can continue", {
   expect_equal(nrow(resumed$step_log), nrow(state$step_log) + 2L)
   history <- adaptive_results_history(resumed, committed_only = TRUE)
   expect_equal(nrow(history), sum(!is.na(resumed$step_log$pair_id)))
+  expect_history_state_matches_history(resumed)
 })

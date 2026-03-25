@@ -29,7 +29,7 @@ test_that("selector stage scores before hard-filter feasibility checks", {
       state = state,
       config = config,
       round = state$round,
-      history = tibble::tibble(A_id = character(), B_id = character()),
+      history_state = pairwiseLLM:::.adaptive_history_state_empty(ids),
       counts = counts,
       step_id = 1L,
       seed_base = 1L,
@@ -76,7 +76,7 @@ test_that("hard-filter count includes round exposure filtering", {
       state = state,
       config = config,
       round = state$round,
-      history = tibble::tibble(A_id = character(), B_id = character()),
+      history_state = pairwiseLLM:::.adaptive_history_state_empty(ids),
       counts = counts,
       step_id = 1L,
       seed_base = 1L,
@@ -123,7 +123,7 @@ test_that("selection paths pass canonical seed_base into adaptive_assign_order",
 
   captured_seed <- NA_integer_
   out <- testthat::with_mocked_bindings(
-    .adaptive_select_stage = function(stage, state, config, controller, generation_stage, round, history, counts,
+    .adaptive_select_stage = function(stage, state, config, controller, generation_stage, round, history_state, counts,
                                       step_id, seed_base, candidates = NULL) {
       list(
         selected = tibble::tibble(i = "1", j = "2", u0 = 0.25, p = 0.5),

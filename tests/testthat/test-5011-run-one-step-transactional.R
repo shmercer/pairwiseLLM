@@ -41,6 +41,83 @@ test_that("run_one_step logs invalid results without mutating state", {
   expect_equal(snapshot, snapshot_state_core(out))
 })
 
+test_that("held-out probe commits do not mutate the shared history-state cache", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21"),
+    set_id = c(1L, 1L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21")
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 19L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$history_pairs <- tibble::tibble(A_id = "h1", B_id = "h2")
+  state$history_state <- pairwiseLLM:::.adaptive_history_state_rebuild(
+    state$history_pairs,
+    state$item_ids
+  )
+  state$linking$probe <- list(
+    panels_by_spoke = list(
+      `2` = tibble::tibble(
+        probe_panel_id = "panel-2",
+        link_epoch_id = 1L,
+        spoke_id = 2L,
+        hub_item_id = "h1",
+        spoke_item_id = "s21",
+        planned_rank = 1L,
+        pair_key = pairwiseLLM:::make_unordered_key("h1", "s21"),
+        realized = FALSE,
+        realized_step_id = NA_integer_,
+        realized_pair_id = NA_integer_,
+        realized_run_mode = NA_character_
+      )
+    ),
+    prediction_cache = pairwiseLLM:::.adaptive_link_probe_empty_cache(),
+    realized_edges = pairwiseLLM:::.adaptive_link_probe_empty_realized_log(),
+    realized_index_by_panel = pairwiseLLM:::.adaptive_link_probe_empty_realized_index(),
+    collect_holdout_now_by_spoke = list()
+  )
+
+  before_history <- state$history_pairs
+  before_cache <- state$history_state
+  out <- testthat::with_mocked_bindings(
+    .adaptive_link_refit_summary_update_after_commit = function(state_before, state_after, step_row) {
+      state_after
+    },
+    pairwiseLLM:::apply_step_update(
+      state,
+      list(
+        row = list(
+          step_id = 2L,
+          timestamp = as.POSIXct("2026-01-03 00:00:00", tz = "UTC"),
+          pair_id = 2L,
+          status = "ok",
+          A = 1L,
+          B = 3L,
+          Y = 1L,
+          set_i = 1L,
+          set_j = 2L,
+          is_cross_set = TRUE,
+          is_probe_step = TRUE,
+          run_mode = "link_probe_holdout",
+          link_spoke_id = 2L
+        ),
+        is_valid = TRUE,
+        A_id = "h1",
+        B_id = "s21",
+        Y = 1L
+      )
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(out$history_pairs, before_history)
+  expect_identical(out$history_state, before_cache)
+  expect_identical(nrow(out$linking$probe$realized_edges), 1L)
+  expect_history_state_matches_history(out)
+})
+
 test_that("run_one_step enforces canonical judge contract", {
   items <- make_test_items(3)
   trueskill_state <- make_test_trueskill_state(items)

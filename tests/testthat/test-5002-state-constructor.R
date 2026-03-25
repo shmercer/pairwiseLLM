@@ -12,6 +12,7 @@ test_that("new_adaptive_state builds a stable adaptive scaffold", {
   expect_equal(state$items$global_item_id, as.character(items$item_id))
   expect_equal(state$n_items, 3L)
   expect_true(tibble::is_tibble(state$history_pairs))
+  expect_identical(as.integer(state$history_state$n_pairs), 0L)
   expect_true(inherits(state$trueskill_state, "trueskill_state"))
   expect_true(tibble::is_tibble(state$step_log))
   expect_true(tibble::is_tibble(state$round_log))

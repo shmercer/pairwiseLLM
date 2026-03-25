@@ -384,6 +384,7 @@ test_that("load_adaptive_session reconciles refit boundaries and committed histo
     nrow(restored$history_pairs),
     as.integer(sum(!is.na(step_log$pair_id)))
   )
+  expect_history_state_matches_history(restored)
 })
 
 test_that("load_adaptive_session aborts when canonical round totals do not reconcile to committed steps", {
@@ -495,6 +496,147 @@ test_that("load_adaptive_session accepts canonical round totals with held-out pr
   expect_identical(nrow(restored$history_pairs), 1L)
   expect_identical(as.character(restored$history_pairs$A_id[[1L]]), "h1")
   expect_identical(as.character(restored$history_pairs$B_id[[1L]]), "s21")
+  expect_history_state_matches_history(restored)
+})
+
+test_that("load_adaptive_session aborts on persisted history-state divergence", {
+  items <- make_test_items(4)
+  state <- adaptive_rank_start(items, seed = 34L)
+  judge <- make_deterministic_judge("i_wins")
+
+  withr::local_seed(1)
+  state <- adaptive_rank_run_live(state, judge, n_steps = 2L, progress = "none")
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  state_path <- file.path(session_dir, "state.rds")
+  persisted_state <- readRDS(state_path)
+  persisted_state$history_state$deg[[1L]] <- persisted_state$history_state$deg[[1L]] + 1L
+  saveRDS(persisted_state, state_path)
+
+  expect_error(
+    load_adaptive_session(session_dir),
+    "history-state invariant failed during resume"
+  )
+})
+
+test_that("load_adaptive_session rebuilds current refit summary cache from canonical logs", {
+  state <- make_probe_resume_state()
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+      pair_id = 1L,
+      status = "ok",
+      A = 1L,
+      B = 4L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_one_spoke",
+      round_stage = "anchor_link",
+      link_stage = "anchor_link",
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE
+    )
+  )
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 2L,
+      timestamp = as.POSIXct("2026-01-01 00:01:00", tz = "UTC"),
+      pair_id = 2L,
+      status = "ok",
+      A = 2L,
+      B = 5L,
+      Y = 0L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_probe_holdout",
+      round_stage = "probe_panel",
+      link_stage = "probe_panel",
+      fallback_used = "probe_panel_acceleration",
+      is_probe_step = TRUE,
+      is_holdout_probe_step = TRUE
+    )
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  restored <- load_adaptive_session(session_dir)
+  summary <- pairwiseLLM:::.adaptive_link_refit_summary_current(
+    state = restored,
+    refit_id = 1L,
+    spoke_id = 2L,
+    refit_context = list(last_refit_step = 0L),
+    reconcile = TRUE
+  )
+
+  expect_identical(summary$n_pairs_cross_set_done, 2L)
+  expect_identical(summary$n_pairs_cross_set_active_done, 1L)
+  expect_identical(summary$n_pairs_cross_set_probe_done, 1L)
+  expect_identical(summary$n_unique_cross_pairs_seen, 2L)
+  expect_identical(summary$n_cross_edges_active_since_last_refit, 1L)
+  expect_identical(summary$n_cross_edges_probe_since_last_refit, 1L)
+  expect_identical(summary$n_cross_edges_total_since_last_refit, 2L)
+  expect_true(isTRUE(summary$probe_panel_acceleration_used_since_last_refit))
+  expect_identical(summary$stage_realized[["anchor_link"]], 1L)
+})
+
+test_that("load_adaptive_session aborts on refit summary cache drift from canonical logs", {
+  state <- make_probe_resume_state()
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 1L,
+      timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+      pair_id = 1L,
+      status = "ok",
+      A = 1L,
+      B = 4L,
+      Y = 1L,
+      set_i = 1L,
+      set_j = 2L,
+      is_cross_set = TRUE,
+      link_spoke_id = 2L,
+      run_mode = "link_one_spoke",
+      round_stage = "anchor_link",
+      link_stage = "anchor_link",
+      is_probe_step = FALSE,
+      is_holdout_probe_step = FALSE
+    )
+  )
+  state$refit_meta$link_refit_summary_cache_by_refit_spoke <- list(
+    `1::2` = list(
+      refit_id = 1L,
+      spoke_id = 2L,
+      n_pairs_cross_set_done = 999L,
+      n_pairs_cross_set_active_done = 999L,
+      n_pairs_cross_set_probe_done = 0L,
+      n_unique_cross_pairs_seen = 1L,
+      n_cross_edges_active_since_last_refit = 999L,
+      n_cross_edges_probe_since_last_refit = 0L,
+      n_cross_edges_total_since_last_refit = 999L,
+      probe_panel_acceleration_used_since_last_refit = FALSE,
+      stage_realized = c(anchor_link = 999L, long_link = 0L, mid_link = 0L, local_link = 0L)
+    )
+  )
+  state$refit_meta$link_unique_cross_pair_keys_by_spoke <- list(`2` = c("h1::s21"))
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  expect_error(
+    load_adaptive_session(session_dir),
+    "refit summary cache invariant failed"
+  )
 })
 
 test_that("load_adaptive_session accepts legacy round totals that exclude held-out probes", {
@@ -978,6 +1120,15 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
     pairwiseLLM:::.adaptive_link_probe_realized_count(restored, spoke_id = 2L, epoch_id = 1L),
     1L
   )
+  realized_key <- pairwiseLLM:::.adaptive_link_probe_realized_index_key(
+    spoke_id = 2L,
+    epoch_id = 1L,
+    probe_panel_id = as.character(panel_before$probe_panel_id[[1L]])
+  )
+  restored_entry <- restored$linking$probe$realized_index_by_panel[[realized_key]]
+  expect_false(is.null(restored_entry))
+  expect_identical(as.integer(restored_entry$realized_count), 1L)
+  expect_identical(as.integer(restored_entry$last_realized_step_id), 99L)
 })
 
 test_that("save/load preserves probe acceleration controller fields and canonical log columns", {
@@ -1226,6 +1377,15 @@ test_that("resume preserves probe panel identity, epoch, and realized counts acr
   expect_identical(as.integer(panel_after$link_epoch_id[[1L]]), 1L)
   expect_identical(as.integer(restored$controller$link_epoch_id_by_spoke[["2"]]), 1L)
   expect_identical(as.integer(realized_after), as.integer(realized_before))
+  restored_key <- pairwiseLLM:::.adaptive_link_probe_realized_index_key(
+    spoke_id = 2L,
+    epoch_id = 1L,
+    probe_panel_id = as.character(panel_before$probe_panel_id[[1L]])
+  )
+  expect_identical(
+    as.integer(restored$linking$probe$realized_index_by_panel[[restored_key]]$realized_count),
+    as.integer(realized_after)
+  )
 
   synced <- pairwiseLLM:::.adaptive_apply_controller_config(restored, adaptive_config = NULL)
   expect_true("probe" %in% names(synced$linking))

@@ -162,6 +162,38 @@ test_that("round_log stop decisions and committed counts are reconstructable fro
   ))
 })
 
+test_that("round_log defers heavy audit-only summaries unless reconstruction is requested", {
+  items <- make_test_items(4)
+  state <- adaptive_rank_start(items)
+  judge <- make_deterministic_judge("i_wins")
+  stub <- make_deterministic_fit_fn(state$item_ids)
+
+  withr::local_seed(4)
+  out <- adaptive_rank_run_live(
+    state,
+    judge,
+    n_steps = 4L,
+    fit_fn = stub$fit_fn,
+    btl_config = list(refit_pairs_target = 2L, stability_lag = 1L),
+    progress = "none"
+  )
+
+  round_log_live <- adaptive_round_log(out)
+  round_log_reconstructed <- adaptive_round_log(out, reconstruct_deferred = TRUE)
+  deferred_cols <- pairwiseLLM:::.adaptive_round_log_deferred_audit_columns()
+
+  expect_true(all(vapply(
+    deferred_cols,
+    function(col) all(is.na(round_log_live[[col]])),
+    logical(1)
+  )))
+  expect_true(all(is.finite(round_log_reconstructed$cov_trace_theta)))
+  expect_true(all(is.finite(round_log_reconstructed$ci95_theta_width_mean)))
+  expect_true(all(is.finite(round_log_reconstructed$top20_boundary_entropy_mean)))
+  expect_true(all(is.finite(round_log_reconstructed$nn_diff_sd_mean)))
+  expect_false(identical(round_log_live, round_log_reconstructed))
+})
+
 test_that("step_log stage counters and quotas are reconstructable from logs", {
   items <- make_test_items(5)
   state <- adaptive_rank_start(items)

@@ -784,6 +784,24 @@ test_that("round_log and link_stage_log canonically reconcile probe and active w
       as.integer(phase_b_rounds$new_total_cross_pairs_since_last_refit[[idx]]),
       as.integer(sum(link_rows$n_cross_edges_total_since_last_refit, na.rm = TRUE))
     )
+    active_window <- committed_window[
+      !(committed_window$is_probe_step %in% TRUE),
+      ,
+      drop = FALSE
+    ]
+    stage_col <- if ("link_stage" %in% names(active_window)) {
+      "link_stage"
+    } else {
+      "round_stage"
+    }
+    for (stage_name in pairwiseLLM:::.adaptive_stage_order()) {
+      raw_stage_count <- as.integer(sum(as.character(active_window[[stage_col]]) == stage_name, na.rm = TRUE))
+      realized_col <- paste0("stage_realized_", stage_name)
+      expect_identical(
+        as.integer(sum(link_rows[[realized_col]], na.rm = TRUE)),
+        raw_stage_count
+      )
+    }
     expect_identical(
       as.integer(phase_b_rounds$total_pairs_done[[idx]]),
       as.integer(sum(!is.na(step_log$pair_id[seq_len(step_hi)])))
@@ -795,6 +813,43 @@ test_that("round_log and link_stage_log canonically reconcile probe and active w
       as.integer(link_stage_log$probe_edges_realized_delta_since_last_refit) ==
       as.integer(link_stage_log$probe_edges_realized)
   ))
+  latest_probe_key_idx <- integer()
+  if (nrow(link_stage_log) > 0L) {
+    probe_keys <- vapply(
+      seq_len(nrow(link_stage_log)),
+      function(idx) {
+        panel_id <- as.character(link_stage_log$probe_panel_id[[idx]])
+        epoch_id <- as.integer(link_stage_log$link_epoch_id[[idx]])
+        spoke_id <- as.integer(link_stage_log$spoke_id[[idx]])
+        realized_count <- as.integer(link_stage_log$probe_edges_realized[[idx]])
+        if (is.na(panel_id) || !nzchar(panel_id) || !is.finite(epoch_id) ||
+          !is.finite(spoke_id) || !is.finite(realized_count) || realized_count < 1L) {
+          return(NA_character_)
+        }
+        paste(spoke_id, epoch_id, panel_id, sep = "::")
+      },
+      character(1L)
+    )
+    probe_keys_ok <- !is.na(probe_keys)
+    latest_probe_key_idx <- vapply(
+      split(seq_len(nrow(link_stage_log))[probe_keys_ok], probe_keys[probe_keys_ok]),
+      max,
+      integer(1L)
+    )
+  }
+  for (idx in sort(as.integer(latest_probe_key_idx))) {
+    entry <- pairwiseLLM:::.adaptive_link_probe_realized_index_entry_get(
+      state = out,
+      spoke_id = as.integer(link_stage_log$spoke_id[[idx]]),
+      epoch_id = as.integer(link_stage_log$link_epoch_id[[idx]]),
+      probe_panel_id = as.character(link_stage_log$probe_panel_id[[idx]])
+    )
+    expect_false(is.null(entry))
+    expect_identical(
+      as.integer(entry$realized_count),
+      as.integer(link_stage_log$probe_edges_realized[[idx]])
+    )
+  }
   expect_true(all(
     ifelse(
       as.integer(link_stage_log$probe_panel_shortfall) > 0L &

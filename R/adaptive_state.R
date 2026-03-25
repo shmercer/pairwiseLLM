@@ -117,11 +117,18 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_empty_realized_index <- function() {
+  list()
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_probe_empty_state <- function() {
   list(
     panels_by_spoke = list(),
     prediction_cache = .adaptive_link_probe_empty_cache(),
     realized_edges = .adaptive_link_probe_empty_realized_log(),
+    realized_index_by_panel = .adaptive_link_probe_empty_realized_index(),
     collect_holdout_now_by_spoke = list()
   )
 }
@@ -1817,6 +1824,7 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
     A_id = character(),
     B_id = character()
   )
+  history_state <- .adaptive_history_state_empty(item_ids)
 
   state <- structure(
     list(
@@ -1827,6 +1835,7 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
       n_items = as.integer(length(item_ids)),
       items = items,
       history_pairs = history_pairs,
+      history_state = history_state,
       step_log = new_step_log(now_fn = now_fn),
       round_log = new_round_log(),
       item_log = list(),
@@ -1857,8 +1866,12 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         phase_a_lag_domain_last_set_id = NA_integer_,
         phase_a_lag_domain_reset_refit_id_by_set = list(),
         near_stop = FALSE,
+        round_log_deferred_audit_payloads = list(),
         link_stage_shortfalls_by_refit_spoke = list(),
         link_stage_exhausted_by_refit_spoke = list(),
+        link_refit_summary_cache_by_refit_spoke = list(),
+        link_refit_local_memo_env = new.env(parent = emptyenv()),
+        link_unique_cross_pair_keys_by_spoke = list(),
         last_completed_round_summary = list(
           round_id = NA_integer_,
           global_identified = NA,
