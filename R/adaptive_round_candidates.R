@@ -1240,6 +1240,201 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_within_set_same_group_pairs <- function(item_ids, rank_index, dist_stratum_global = 0L) {
+  item_ids <- unique(as.character(item_ids))
+  if (length(item_ids) < 2L) {
+    return(tibble::tibble(
+      i = character(),
+      j = character(),
+      dist_stratum_global = integer()
+    ))
+  }
+
+  item_rank <- as.integer(rank_index[item_ids])
+  if (any(!is.finite(item_rank))) {
+    rlang::abort(
+      "Within-set candidate construction invariant failed: ranked items must have finite ranks."
+    )
+  }
+  order_rank <- order(item_rank)
+  item_ids <- item_ids[order_rank]
+
+  pair_idx <- utils::combn(seq_along(item_ids), 2L)
+  tibble::tibble(
+    i = as.character(item_ids[pair_idx[1L, ]]),
+    j = as.character(item_ids[pair_idx[2L, ]]),
+    dist_stratum_global = rep.int(as.integer(dist_stratum_global), ncol(pair_idx))
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_within_set_cross_group_pairs <- function(left_ids,
+                                                   right_ids,
+                                                   rank_index,
+                                                   stratum_map) {
+  left_ids <- unique(as.character(left_ids))
+  right_ids <- unique(as.character(right_ids))
+  if (length(left_ids) < 1L || length(right_ids) < 1L) {
+    return(tibble::tibble(
+      i = character(),
+      j = character(),
+      dist_stratum_global = integer()
+    ))
+  }
+
+  left_rank <- as.integer(rank_index[left_ids])
+  right_rank <- as.integer(rank_index[right_ids])
+  left_strata <- as.integer(stratum_map[left_ids])
+  right_strata <- as.integer(stratum_map[right_ids])
+  if (any(!is.finite(left_rank)) || any(!is.finite(right_rank))) {
+    rlang::abort(
+      "Within-set candidate construction invariant failed: ranked items must have finite ranks."
+    )
+  }
+  if (any(!is.finite(left_strata)) || any(!is.finite(right_strata))) {
+    rlang::abort(
+      "Within-set candidate construction invariant failed: ranked items must have finite strata."
+    )
+  }
+
+  left_order <- order(left_rank)
+  right_order <- order(right_rank)
+  left_ids <- left_ids[left_order]
+  right_ids <- right_ids[right_order]
+  left_rank <- left_rank[left_order]
+  right_rank <- right_rank[right_order]
+  left_strata <- left_strata[left_order]
+  right_strata <- right_strata[right_order]
+
+  n_left <- length(left_ids)
+  n_right <- length(right_ids)
+  left_vec <- rep(left_ids, each = n_right)
+  right_vec <- rep(right_ids, times = n_left)
+  left_rank_vec <- rep(left_rank, each = n_right)
+  right_rank_vec <- rep(right_rank, times = n_left)
+  left_strata_vec <- rep(left_strata, each = n_right)
+  right_strata_vec <- rep(right_strata, times = n_left)
+
+  i_vals <- ifelse(left_rank_vec < right_rank_vec, left_vec, right_vec)
+  j_vals <- ifelse(left_rank_vec < right_rank_vec, right_vec, left_vec)
+  i_rank <- pmin(left_rank_vec, right_rank_vec)
+  j_rank <- pmax(left_rank_vec, right_rank_vec)
+  order_idx <- order(i_rank, j_rank)
+
+  tibble::tibble(
+    i = as.character(i_vals[order_idx]),
+    j = as.character(j_vals[order_idx]),
+    dist_stratum_global = as.integer(abs(left_strata_vec[order_idx] - right_strata_vec[order_idx]))
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_within_set_direct_pairs <- function(ids,
+                                              anchor_ids,
+                                              rank_index,
+                                              stratum_map,
+                                              stage_name,
+                                              bounds) {
+  ids <- unique(as.character(ids))
+  if (length(ids) < 2L) {
+    return(tibble::tibble(
+      i = character(),
+      j = character(),
+      dist_stratum_global = integer()
+    ))
+  }
+
+  anchor_ids <- intersect(unique(as.character(anchor_ids)), ids)
+  if (identical(stage_name, "anchor_link")) {
+    return(.adaptive_within_set_cross_group_pairs(
+      left_ids = anchor_ids,
+      right_ids = setdiff(ids, anchor_ids),
+      rank_index = rank_index,
+      stratum_map = stratum_map
+    ))
+  }
+
+  candidate_ids <- if (stage_name %in% c("long_link", "mid_link")) {
+    setdiff(ids, anchor_ids)
+  } else {
+    ids
+  }
+  if (length(candidate_ids) < 2L) {
+    return(tibble::tibble(
+      i = character(),
+      j = character(),
+      dist_stratum_global = integer()
+    ))
+  }
+
+  candidate_strata <- as.integer(stratum_map[candidate_ids])
+  if (any(!is.finite(candidate_strata))) {
+    rlang::abort(
+      "Within-set candidate construction invariant failed: ranked items must have finite strata."
+    )
+  }
+  strata_groups <- split(candidate_ids, candidate_strata)
+  strata_values <- as.integer(names(strata_groups))
+  pair_grid <- expand.grid(
+    left_stratum = strata_values,
+    right_stratum = strata_values,
+    KEEP.OUT.ATTRS = FALSE,
+    stringsAsFactors = FALSE
+  )
+  pair_grid <- pair_grid[as.integer(pair_grid$left_stratum) <= as.integer(pair_grid$right_stratum), , drop = FALSE]
+  pair_grid$dist_stratum_global <-
+    as.integer(pair_grid$right_stratum) - as.integer(pair_grid$left_stratum)
+  pair_grid <- pair_grid[
+    as.integer(pair_grid$dist_stratum_global) >= as.integer(bounds$min) &
+      as.integer(pair_grid$dist_stratum_global) <= as.integer(bounds$max),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(pair_grid) < 1L) {
+    return(tibble::tibble(
+      i = character(),
+      j = character(),
+      dist_stratum_global = integer()
+    ))
+  }
+
+  chunks <- vector("list", nrow(pair_grid))
+  for (idx in seq_len(nrow(pair_grid))) {
+    left_stratum <- as.character(pair_grid$left_stratum[[idx]])
+    right_stratum <- as.character(pair_grid$right_stratum[[idx]])
+    dist_stratum_global <- as.integer(pair_grid$dist_stratum_global[[idx]])
+    left_ids <- as.character(strata_groups[[left_stratum]])
+    right_ids <- as.character(strata_groups[[right_stratum]])
+    chunks[[idx]] <- if (identical(left_stratum, right_stratum)) {
+      .adaptive_within_set_same_group_pairs(
+        item_ids = left_ids,
+        rank_index = rank_index,
+        dist_stratum_global = dist_stratum_global
+      )
+    } else {
+      .adaptive_within_set_cross_group_pairs(
+        left_ids = left_ids,
+        right_ids = right_ids,
+        rank_index = rank_index,
+        stratum_map = stratum_map
+      )
+    }
+  }
+
+  cand <- dplyr::bind_rows(chunks)
+  if (nrow(cand) < 1L) {
+    return(cand)
+  }
+
+  i_rank <- as.integer(rank_index[as.character(cand$i)])
+  j_rank <- as.integer(rank_index[as.character(cand$j)])
+  cand[order(i_rank, j_rank), , drop = FALSE]
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_direct_cross_pairs <- function(hub_item_ids,
                                               spoke_ids,
                                               rank_index,
@@ -1453,9 +1648,6 @@ generate_stage_candidates_from_state <- function(state,
   }
 
   bounds <- .adaptive_stage_distance_bounds(stage_name, fallback_name, defaults)
-  i_vals <- character()
-  j_vals <- character()
-  dist_vals <- integer()
   n_after_route_filters <- NA_integer_
   n_after_active_domain <- NA_integer_
   n_after_stage_filters <- NA_integer_
@@ -1580,34 +1772,15 @@ generate_stage_candidates_from_state <- function(state,
     ))
   }
 
-  for (a in seq_len(length(ids) - 1L)) {
-    i_id <- ids[[a]]
-    for (b in (a + 1L):length(ids)) {
-      j_id <- ids[[b]]
-      keep <- FALSE
-      dist <- abs(as.integer(stratum_map[[i_id]]) - as.integer(stratum_map[[j_id]]))
-      i_anchor <- i_id %in% anchor_ids
-      j_anchor <- j_id %in% anchor_ids
-      if (identical(stage_name, "anchor_link")) {
-        keep <- xor(i_anchor, j_anchor)
-      } else {
-        if (identical(stage_name, "long_link") || identical(stage_name, "mid_link")) {
-          if (i_anchor || j_anchor) {
-            next
-          }
-        }
-        keep <- dist >= bounds$min && dist <= bounds$max
-      }
-
-      if (isTRUE(keep)) {
-        i_vals <- c(i_vals, i_id)
-        j_vals <- c(j_vals, j_id)
-        dist_vals <- c(dist_vals, as.integer(dist))
-      }
-    }
-  }
-
-  if (length(i_vals) == 0L) {
+  cand <- .adaptive_within_set_direct_pairs(
+    ids = ids,
+    anchor_ids = anchor_ids,
+    rank_index = rank_index,
+    stratum_map = stratum_map,
+    stage_name = stage_name,
+    bounds = bounds
+  )
+  if (nrow(cand) < 1L) {
     return(.adaptive_set_candidate_filter_counts(
       tibble::tibble(i = character(), j = character()),
       list(
@@ -1618,18 +1791,6 @@ generate_stage_candidates_from_state <- function(state,
     ))
   }
 
-  cand <- tibble::tibble(i = as.character(i_vals), j = as.character(j_vals))
-  cand$dist_stratum_global <- as.integer(dist_vals)
-  if (nrow(cand) < 1L) {
-    return(.adaptive_set_candidate_filter_counts(
-      tibble::tibble(i = character(), j = character()),
-      list(
-        n_candidates_after_route_filters = as.integer(n_after_route_filters %||% NA_integer_),
-        n_candidates_after_active_domain = as.integer(n_after_active_domain %||% NA_integer_),
-        n_candidates_after_stage_filters = 0L
-      )
-    ))
-  }
   cand <- .adaptive_uniform_subsample_pairs(cand, C_max = as.integer(C_max), seed = as.integer(seed))
   .adaptive_set_candidate_filter_counts(
     cand,
