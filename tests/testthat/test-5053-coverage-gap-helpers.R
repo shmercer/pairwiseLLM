@@ -2677,3 +2677,425 @@ test_that("round log row cache-backed summaries match canonical reconstruction",
   )
   expect_identical(row_cached[compare_cols], row_rebuilt[compare_cols])
 })
+
+test_that("routing, probe-panel, and candidate helper guards cover remaining branches", {
+  state <- make_link_probe_state()
+
+  controller_aj <- utils::modifyList(
+    state$controller,
+    list(link_estimation_mode = "anchored_joint")
+  )
+  expect_error(
+    testthat::with_mocked_bindings(
+      .adaptive_anchored_joint_artifact_copy_init = function(...) {
+        list(theta_spoke_global_mean = c(s21 = NA_real_, s22 = -0.2))
+      },
+      pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+        state = state,
+        controller = controller_aj,
+        active_ids = c("s21", "s22"),
+        hub_id = 1L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "accepted spoke scores missing/non-finite"
+  )
+
+  expect_error(
+    testthat::with_mocked_bindings(
+      .adaptive_link_phase_a_theta_map = function(state, set_id, field) {
+        c(h1 = 0.2, h2 = 0.1, h3 = 0)
+      },
+      pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
+        state = state,
+        controller = state$controller,
+        active_ids = c("h1", "missing_item"),
+        hub_id = 1L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "Phase A theta_raw_mean missing/non-finite for set_id=1"
+  )
+
+  empty_hub_anchors <- testthat::with_mocked_bindings(
+    .adaptive_select_rolling_anchors = function(scores, defaults) character(),
+    pairwiseLLM:::.adaptive_link_phase_b_hub_anchors(
+      state = state,
+      hub_ids = c("h1", "h2"),
+      hub_scores = c(h1 = 2, h2 = 1),
+      defaults = pairwiseLLM:::adaptive_defaults(4L)
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_identical(empty_hub_anchors, character())
+
+  state$round$per_round_item_uses <- c(h1 = 1L, h2 = 1L)
+  saturated_hub_anchors <- testthat::with_mocked_bindings(
+    .adaptive_select_rolling_anchors = function(scores, defaults) "h1",
+    .adaptive_rank_index_from_scores = function(scores) c(h1 = 1L, h2 = 2L),
+    pairwiseLLM:::.adaptive_link_phase_b_hub_anchors(
+      state = state,
+      hub_ids = c("h1", "h2"),
+      hub_scores = c(h1 = 2, h2 = 1),
+      defaults = pairwiseLLM:::adaptive_defaults(4L)
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_identical(saturated_hub_anchors, "h1")
+
+  expect_error(
+    pairwiseLLM:::.adaptive_link_spoke_coverage(
+      state = list(step_log = tibble::tibble(), refit_meta = list()),
+      controller = list(
+        spoke_quantile_coverage_bins = 2L,
+        spoke_quantile_coverage_min_per_bin_per_refit = 1L
+      ),
+      spoke_id = 2L,
+      spoke_ids = c("s1", "s2"),
+      routing_scores = c(s1 = 0.2, s2 = NA_real_)
+    ),
+    "routing scores must be finite"
+  )
+
+  expect_error(
+    testthat::with_mocked_bindings(
+      .adaptive_link_phase_b_hub_anchors = function(...) character(),
+      pairwiseLLM:::.adaptive_link_probe_construct_panel(
+        state = state,
+        controller = state$controller,
+        spoke_id = 2L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "HubEligible` anchor pool is empty"
+  )
+
+  expect_error(
+    testthat::with_mocked_bindings(
+      .adaptive_link_probe_panel_size = function(...) 0L,
+      pairwiseLLM:::.adaptive_link_probe_construct_panel(
+        state = state,
+        controller = state$controller,
+        spoke_id = 2L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "legal held-out probe candidates exist"
+  )
+
+  state_no_legal <- make_link_probe_state()
+  state_no_legal$controller$hub_anchor_required_phase_b <- FALSE
+  all_pairs <- expand.grid(
+    hub = c("h1", "h2", "h3"),
+    spoke = c("s21", "s22"),
+    stringsAsFactors = FALSE
+  )
+  for (idx in seq_len(nrow(all_pairs))) {
+    state_no_legal <- append_cross_probe_step(
+      state = state_no_legal,
+      step_id = idx,
+      A_id = all_pairs$hub[[idx]],
+      B_id = all_pairs$spoke[[idx]],
+      Y = 1L,
+      spoke_id = 2L,
+      is_probe_step = FALSE,
+      run_mode = "link_multi_spoke"
+    )
+  }
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_construct_panel(
+      state = state_no_legal,
+      controller = state_no_legal$controller,
+      spoke_id = 2L
+    ),
+    pairwiseLLM:::.adaptive_link_probe_empty_panel()
+  )
+
+  state_not_link <- make_link_probe_state()
+  state_not_link$controller$run_mode <- "within_set"
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_ensure_panels(
+      state_not_link,
+      controller = state_not_link$controller,
+      spoke_ids = 2L
+    ),
+    state_not_link
+  )
+
+  expect_identical(
+    pairwiseLLM:::.adaptive_link_probe_ensure_panels(
+      state,
+      controller = state$controller,
+      spoke_ids = integer()
+    ),
+    state
+  )
+
+  make_resume_panel <- function(panel_id = "panel-built",
+                                planned_edges = 1L,
+                                pair_key = "pair-built") {
+    tibble::tibble(
+      probe_panel_id = panel_id,
+      link_epoch_id = 3L,
+      spoke_id = 2L,
+      hub_item_id = "h1",
+      spoke_item_id = "s21",
+      spoke_bin = 1L,
+      hub_bin = 1L,
+      probe_edges_planned = as.integer(planned_edges),
+      probe_panel_reallocation_used = FALSE,
+      planned_rank = 1L,
+      pair_key = pair_key,
+      realized = FALSE,
+      realized_step_id = NA_integer_,
+      realized_pair_id = NA_integer_,
+      realized_run_mode = NA_character_
+    )
+  }
+
+  make_resume_state <- function(stage_panel_id = "panel-built",
+                                stage_planned_edges = 1L,
+                                realized_panel_id = NULL,
+                                realized_pair_key = "pair-built") {
+    out <- make_link_probe_state()
+    out$meta$resumed_from_session <- TRUE
+    out$linking$probe <- pairwiseLLM:::.adaptive_link_probe_empty_state()
+    out$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+      pairwiseLLM:::new_link_stage_log(),
+      list(
+        refit_id = 1L,
+        spoke_id = 2L,
+        hub_id = 1L,
+        link_transform_policy = "auto",
+        link_transform_state = "shift_only",
+        link_stop_pass = FALSE,
+        link_state_frozen = FALSE,
+        link_epoch_id = 3L,
+        probe_panel_id = as.character(stage_panel_id),
+        probe_edges_planned = as.integer(stage_planned_edges),
+        probe_edges_realized = if (is.null(realized_panel_id)) 0L else 1L
+      )
+    )
+    if (!is.null(realized_panel_id)) {
+      out$linking$probe$realized_edges <- dplyr::bind_rows(
+        pairwiseLLM:::.adaptive_link_probe_empty_realized_log(),
+        tibble::tibble(
+          step_id = 1L,
+          pair_id = 1L,
+          run_mode = "link_probe_holdout",
+          spoke_id = 2L,
+          link_epoch_id = 3L,
+          probe_panel_id = as.character(realized_panel_id),
+          hub_item_id = "h1",
+          spoke_item_id = "s21",
+          pair_key = as.character(realized_pair_key),
+          Y = 1L
+        )
+      )
+      out$linking$probe$realized_index_by_panel <-
+        pairwiseLLM:::.adaptive_link_probe_realized_index_build(
+          out$linking$probe$realized_edges
+        )
+    }
+    out
+  }
+
+  built_panel <- make_resume_panel()
+
+  empty_resume <- make_resume_state(stage_panel_id = "panel-built", stage_planned_edges = 1L)
+  expect_error(
+    testthat::with_mocked_bindings(
+      .adaptive_link_probe_construct_panel = function(...) tibble::tibble(),
+      pairwiseLLM:::.adaptive_link_probe_ensure_panels(
+        empty_resume,
+        controller = empty_resume$controller,
+        spoke_ids = 2L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "deterministic reconstruction also failed"
+  )
+
+  realized_id_mismatch <- make_resume_state(
+    stage_panel_id = "panel-built",
+    stage_planned_edges = 2L,
+    realized_panel_id = "legacy-panel",
+    realized_pair_key = "pair-built"
+  )
+  expect_error(
+    testthat::with_mocked_bindings(
+      .adaptive_link_probe_construct_panel = function(...) built_panel,
+      pairwiseLLM:::.adaptive_link_probe_ensure_panels(
+        realized_id_mismatch,
+        controller = realized_id_mismatch$controller,
+        spoke_ids = 2L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "realized_edges\\$probe_panel_id"
+  )
+
+  realized_pair_mismatch <- make_resume_state(
+    stage_panel_id = "panel-built",
+    stage_planned_edges = 1L,
+    realized_panel_id = "panel-built",
+    realized_pair_key = "pair-other"
+  )
+  expect_error(
+    testthat::with_mocked_bindings(
+      .adaptive_link_probe_construct_panel = function(...) built_panel,
+      pairwiseLLM:::.adaptive_link_probe_ensure_panels(
+        realized_pair_mismatch,
+        controller = realized_pair_mismatch$controller,
+        spoke_ids = 2L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "does not contain all canonical realized probe edges"
+  )
+
+  planned_size_mismatch <- make_resume_state(
+    stage_panel_id = "panel-built",
+    stage_planned_edges = 2L,
+    realized_panel_id = "panel-built",
+    realized_pair_key = "pair-built"
+  )
+  expect_error(
+    testthat::with_mocked_bindings(
+      .adaptive_link_probe_construct_panel = function(...) built_panel,
+      pairwiseLLM:::.adaptive_link_probe_ensure_panels(
+        planned_size_mismatch,
+        controller = planned_size_mismatch$controller,
+        spoke_ids = 2L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "probe_edges_planned"
+  )
+
+  ranked <- testthat::with_mocked_bindings(
+    .adaptive_link_effective_active_spokes = function(...) c(2L, 3L),
+    .adaptive_link_refit_summary_current = function(state, refit_id, spoke_id, refit_context) {
+      list(
+        n_cross_edges_active_since_last_refit =
+          if (as.integer(spoke_id) == 2L) 4L else 1L
+      )
+    },
+    pairwiseLLM:::.adaptive_link_ranked_spokes(
+      state = make_link_probe_state(),
+      controller = make_link_probe_state()$controller,
+      eligible_spoke_ids = c(2L, 3L)
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_identical(ranked, c(3L, 2L))
+
+  phase_b_abort <- adaptive_rank_start(
+    tibble::tibble(
+      item_id = c("h1", "h2", "s1", "s2"),
+      set_id = c(1L, 1L, 2L, 2L),
+      global_item_id = c("gh1", "gh2", "gs1", "gs2")
+    ),
+    seed = 801L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  expect_error(
+    testthat::with_mocked_bindings(
+      .adaptive_link_phase_context = function(state, controller = NULL) {
+        list(phase = "phase_b", active_spokes = integer(), hub_id = 1L)
+      },
+      pairwiseLLM:::generate_stage_candidates_from_state(
+        state = phase_b_abort,
+        stage_name = "anchor_link",
+        fallback_name = "base",
+        C_max = 10L,
+        seed = 1L
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "no ready spokes are eligible"
+  )
+
+  phase_b_empty <- testthat::with_mocked_bindings(
+    .adaptive_link_phase_context = function(state, controller = NULL) {
+      list(phase = "phase_b", active_spokes = 2L, hub_id = 1L)
+    },
+    .adaptive_link_active_spoke = function(...) NA_integer_,
+    pairwiseLLM:::generate_stage_candidates_from_state(
+      state = phase_b_abort,
+      stage_name = "anchor_link",
+      fallback_name = "base",
+      C_max = 10L,
+      seed = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_identical(phase_b_empty, tibble::tibble(i = character(), j = character()))
+
+  phase_a_missing <- testthat::with_mocked_bindings(
+    .adaptive_link_phase_context = function(state, controller = NULL) {
+      list(phase = "phase_a", active_phase_a_set = NA_integer_, hub_id = 1L)
+    },
+    pairwiseLLM:::generate_stage_candidates_from_state(
+      state = phase_b_abort,
+      stage_name = "local_link",
+      fallback_name = "base",
+      C_max = 10L,
+      seed = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_identical(phase_a_missing, tibble::tibble(i = character(), j = character()))
+
+  phase_a_small <- adaptive_rank_start(
+    tibble::tibble(
+      item_id = c("h1", "h2", "s1"),
+      set_id = c(1L, 1L, 2L),
+      global_item_id = c("gh1", "gh2", "gs1")
+    ),
+    seed = 802L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  phase_a_empty <- testthat::with_mocked_bindings(
+    .adaptive_link_phase_context = function(state, controller = NULL) {
+      list(phase = "phase_a", active_phase_a_set = 2L, hub_id = 1L)
+    },
+    pairwiseLLM:::generate_stage_candidates_from_state(
+      state = phase_a_small,
+      stage_name = "local_link",
+      fallback_name = "base",
+      C_max = 10L,
+      seed = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_identical(phase_a_empty, tibble::tibble(i = character(), j = character()))
+
+  within_state <- adaptive_rank_start(
+    tibble::tibble(
+      item_id = c("a", "b", "c"),
+      set_id = c(1L, 1L, 1L),
+      global_item_id = c("ga", "gb", "gc")
+    ),
+    seed = 803L
+  )
+  within_state$round$anchor_ids <- character()
+  tracker <- new.env(parent = emptyenv())
+  tracker$calls <- 0L
+  fallback_candidates <- testthat::with_mocked_bindings(
+    .adaptive_select_rolling_anchors = function(scores, defaults) {
+      tracker$calls <- tracker$calls + 1L
+      "a"
+    },
+    pairwiseLLM:::generate_stage_candidates_from_state(
+      state = within_state,
+      stage_name = "anchor_link",
+      fallback_name = "base",
+      C_max = 10L,
+      seed = 1L
+    ),
+    .package = "pairwiseLLM"
+  )
+  expect_identical(tracker$calls, 1L)
+  expect_true(nrow(fallback_candidates) > 0L)
+})

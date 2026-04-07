@@ -1215,3 +1215,113 @@ test_that("adaptive select posterior and predictive helpers cover remaining edge
     .package = "pairwiseLLM"
   )))
 })
+
+test_that("adaptive round candidate helper guards cover remaining empty and invalid branches", {
+  empty_pairs <- tibble::tibble(
+    i = character(),
+    j = character(),
+    dist_stratum_global = integer()
+  )
+
+  expect_no_error(
+    .adaptive_link_assert_active_domain_count(
+      stage_name = "local_link",
+      n_candidates_after_active_domain = NA_integer_,
+      active_hub_ids = "h1",
+      spoke_ids = c("s1", "s2"),
+      spoke_id = 2L
+    )
+  )
+
+  expect_error(
+    .adaptive_within_set_same_group_pairs(
+      item_ids = c("a", "b"),
+      rank_index = c(a = 1L, b = NA_integer_),
+      dist_stratum_global = 0L
+    ),
+    "finite ranks"
+  )
+
+  expect_identical(
+    .adaptive_within_set_cross_group_pairs(
+      left_ids = character(),
+      right_ids = "b",
+      rank_index = c(a = 1L, b = 2L),
+      stratum_map = c(a = 1L, b = 2L)
+    ),
+    empty_pairs
+  )
+  expect_error(
+    .adaptive_within_set_cross_group_pairs(
+      left_ids = "a",
+      right_ids = "b",
+      rank_index = c(a = 1L, b = NA_integer_),
+      stratum_map = c(a = 1L, b = 2L)
+    ),
+    "finite ranks"
+  )
+  expect_error(
+    .adaptive_within_set_cross_group_pairs(
+      left_ids = "a",
+      right_ids = "b",
+      rank_index = c(a = 1L, b = 2L),
+      stratum_map = c(a = 1L, b = NA_integer_)
+    ),
+    "finite strata"
+  )
+
+  expect_identical(
+    .adaptive_within_set_direct_pairs(
+      ids = "a",
+      anchor_ids = character(),
+      rank_index = c(a = 1L),
+      stratum_map = c(a = 1L),
+      stage_name = "local_link",
+      bounds = list(min = 0L, max = 0L)
+    ),
+    empty_pairs
+  )
+  expect_error(
+    .adaptive_within_set_direct_pairs(
+      ids = c("a", "b"),
+      anchor_ids = character(),
+      rank_index = c(a = 1L, b = 2L),
+      stratum_map = c(a = 1L, b = NA_integer_),
+      stage_name = "local_link",
+      bounds = list(min = 0L, max = 1L)
+    ),
+    "finite strata"
+  )
+  expect_identical(
+    .adaptive_within_set_direct_pairs(
+      ids = c("a", "b"),
+      anchor_ids = character(),
+      rank_index = c(a = 1L, b = 2L),
+      stratum_map = c(a = 1L, b = 2L),
+      stage_name = "local_link",
+      bounds = list(min = 3L, max = 4L)
+    ),
+    empty_pairs
+  )
+  expect_identical(
+    .adaptive_within_set_direct_pairs(
+      ids = c("a", "b"),
+      anchor_ids = character(),
+      rank_index = c(a = 1L, b = 2L),
+      stratum_map = c(a = 1L, b = 2L),
+      stage_name = "local_link",
+      bounds = list(min = 0L, max = 0L)
+    ),
+    empty_pairs
+  )
+
+  expect_identical(
+    .adaptive_link_backfill_order(
+      candidates = tibble::tibble(),
+      hub_id = 1L,
+      set_map = integer(),
+      spoke_id = 2L
+    ),
+    integer()
+  )
+})
