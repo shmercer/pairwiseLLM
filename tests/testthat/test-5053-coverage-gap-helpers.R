@@ -2441,9 +2441,31 @@ test_that("feasibility snapshot and holdout ordering match history-state rebuild
     spoke_id = 2L,
     stage_order = pairwiseLLM:::.adaptive_stage_order()
   )
+  mass_cached <- pairwiseLLM:::.adaptive_link_spoke_utility_mass(
+    state = state,
+    controller = state$controller,
+    spoke_id = 2L,
+    top_k = 3L,
+    seed = 11L
+  )
+  mass_rebuilt <- pairwiseLLM:::.adaptive_link_spoke_utility_mass(
+    state = rebuilt_state,
+    controller = rebuilt_state$controller,
+    spoke_id = 2L,
+    top_k = 3L,
+    seed = 11L
+  )
 
   expect_identical(snapshot_cached$feasible_counts, snapshot_rebuilt$feasible_counts)
   expect_equal(snapshot_cached$feasible_utility_mass, snapshot_rebuilt$feasible_utility_mass)
+  expect_identical(snapshot_cached$candidate_count, snapshot_rebuilt$candidate_count)
+  expect_equal(
+    unlist(snapshot_cached$utility_values_by_stage, use.names = FALSE),
+    unlist(snapshot_rebuilt$utility_values_by_stage, use.names = FALSE)
+  )
+  expect_equal(mass_cached$utility_mass, mass_rebuilt$utility_mass)
+  expect_identical(mass_cached$top_k_used, mass_rebuilt$top_k_used)
+  expect_identical(mass_cached$candidate_count, mass_rebuilt$candidate_count)
 
   state$linking$probe$panels_by_spoke <- list(
     `2` = tibble::tibble(
@@ -2482,6 +2504,80 @@ test_that("feasibility snapshot and holdout ordering match history-state rebuild
   expect_identical(holdout_cached$deg_j, holdout_rebuilt$deg_j)
   expect_identical(holdout_cached$recent_deg_i, holdout_rebuilt$recent_deg_i)
   expect_identical(holdout_cached$recent_deg_j, holdout_rebuilt$recent_deg_j)
+})
+
+test_that("feasibility-capacity summary is memoized and reused by utility-mass ranking", {
+  state <- make_link_probe_state()
+  state$linking$phase_a$ready_spokes <- c(2L, 3L)
+  state$linking$phase_a$active_spokes <- c(2L, 3L)
+  state$history_pairs <- tibble::tibble(A_id = character(), B_id = character())
+  state$history_state <- pairwiseLLM:::.adaptive_history_state_rebuild(
+    state$history_pairs,
+    state$item_ids
+  )
+
+  calls <- new.env(parent = emptyenv())
+  calls$generate <- 0L
+  calls$attach <- 0L
+
+  summary_and_mass <- testthat::with_mocked_bindings(
+    generate_stage_candidates_from_state = function(state, stage_name, fallback_name, C_max, seed,
+                                                    link_spoke_id = NA_integer_) {
+      calls$generate <- as.integer(calls$generate) + 1L
+      n <- switch(stage_name,
+        anchor_link = 1L,
+        long_link = 2L,
+        mid_link = 3L,
+        local_link = 4L
+      )
+      tibble::tibble(
+        i = rep("h1", n),
+        j = paste0("s", stage_name, seq_len(n))
+      )
+    },
+    .adaptive_link_attach_predictive_utility = function(candidates, state, controller, spoke_id) {
+      calls$attach <- as.integer(calls$attach) + 1L
+      cand <- tibble::as_tibble(candidates)
+      base <- seq(from = nrow(cand), to = 1, by = -1)
+      cand$link_d_opt_gain <- as.double(base)
+      cand$link_u <- as.double(base)
+      cand
+    },
+    {
+      first <- pairwiseLLM:::.adaptive_link_stage_feasibility_snapshot(
+        state = state,
+        controller = state$controller,
+        spoke_id = 2L,
+        stage_order = pairwiseLLM:::.adaptive_stage_order(),
+        seed_base = 11L,
+        seed_stride = 1L
+      )
+      second <- pairwiseLLM:::.adaptive_link_stage_feasibility_snapshot(
+        state = state,
+        controller = state$controller,
+        spoke_id = 2L,
+        stage_order = pairwiseLLM:::.adaptive_stage_order(),
+        seed_base = 11L,
+        seed_stride = 1L
+      )
+      mass <- pairwiseLLM:::.adaptive_link_spoke_utility_mass(
+        state = state,
+        controller = state$controller,
+        spoke_id = 2L,
+        top_k = 3L,
+        seed = 11L
+      )
+      list(first = first, second = second, mass = mass)
+    },
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(as.integer(calls$generate), 4L)
+  expect_identical(as.integer(calls$attach), 4L)
+  expect_identical(summary_and_mass$first$feasible_counts, summary_and_mass$second$feasible_counts)
+  expect_identical(summary_and_mass$mass$candidate_count, 10L)
+  expect_identical(summary_and_mass$mass$top_k_used, 3L)
+  expect_equal(summary_and_mass$mass$utility_mass, 10)
 })
 
 test_that("round log row cache-backed summaries match canonical reconstruction", {

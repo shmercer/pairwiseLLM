@@ -1908,33 +1908,37 @@ generate_stage_candidates_from_state <- function(state,
                                               seed = 1L) {
   controller <- controller %||% .adaptive_controller_resolve(state)
   top_k <- as.integer(top_k %||% controller$multi_spoke_budget_top_k %||% 10L)
-  pool <- tryCatch(
-    .adaptive_link_candidate_pool(
+  stage_order <- .adaptive_stage_order()
+  defaults <- adaptive_defaults(as.integer(state$n_items))
+  snapshot <- tryCatch(
+    .adaptive_link_stage_feasibility_snapshot(
       state = state,
       controller = controller,
       spoke_id = as.integer(spoke_id),
-      include_utility = TRUE,
-      C_max = C_max,
-      seed = seed
+      stage_order = stage_order,
+      C_max = as.integer(C_max %||% defaults$C_max),
+      seed_base = as.integer(seed),
+      seed_stride = 1L
     ),
-    error = function(e) tibble::tibble()
+    error = function(e) .adaptive_link_stage_feasibility_snapshot_empty(stage_order)
   )
-  utility_col <- .adaptive_resolve_selection_column(
-    .adaptive_linking_utility_mode(controller$link_estimation_mode)
-  )
-  utility <- if (!is.na(utility_col) && utility_col %in% names(pool)) {
-    as.double(pool[[utility_col]])
-  } else {
-    rep_len(NA_real_, nrow(pool))
-  }
+  utility <- as.double(unlist(
+    snapshot$utility_values_by_stage[stage_order],
+    recursive = FALSE,
+    use.names = FALSE
+  ))
   utility[!is.finite(utility) | utility < 0] <- 0
   ordered <- sort(utility, decreasing = TRUE)
   k_used <- min(top_k, length(ordered))
+  candidate_count <- as.integer(
+    snapshot$candidate_count %||%
+      sum(as.integer(snapshot$feasible_counts[stage_order] %||% 0L), na.rm = TRUE)
+  )
   list(
     utility_mass = as.double(sum(utils::head(ordered, k_used))),
     top_k_used = as.integer(k_used),
-    candidate_count = as.integer(nrow(pool)),
-    pool = pool
+    candidate_count = as.integer(candidate_count),
+    pool = NULL
   )
 }
 
