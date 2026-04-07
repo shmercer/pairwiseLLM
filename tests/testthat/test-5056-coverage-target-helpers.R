@@ -364,6 +364,20 @@ test_that("adaptive select history-state validators and resolvers reject invalid
     "must contain exactly min\\(n_pairs, 2000\\) rows"
   )
 
+  bad_recent_window <- valid_cache
+  bad_recent_window$recent_window_n <- 2001L
+  expect_error(
+    .adaptive_history_state_validate(bad_recent_window, ids, context = "test"),
+    "recent_window_n"
+  )
+
+  bad_recent_deg <- valid_cache
+  bad_recent_deg$recent_deg <- c(a = 0, b = 0)
+  expect_error(
+    .adaptive_history_state_validate(bad_recent_deg, ids, context = "test"),
+    "`history_state\\$recent_deg` must be an integer vector"
+  )
+
   state <- list(
     item_ids = ids,
     history_pairs = tibble::tibble(A_id = "a", B_id = "b"),
@@ -383,6 +397,20 @@ test_that("adaptive select history-state validators and resolvers reject invalid
   )
   stale_resolved <- .adaptive_history_state_resolve(stale_state, context = "test")
   expect_identical(stale_resolved$n_pairs, 1L)
+
+  legacy_cache <- valid_cache
+  legacy_cache$recent_window_n <- NULL
+  legacy_cache$recent_deg <- NULL
+  upgraded <- .adaptive_history_state_resolve(
+    list(
+      item_ids = ids,
+      history_pairs = tibble::tibble(A_id = "a", B_id = "b"),
+      history_state = legacy_cache
+    ),
+    validate_existing = TRUE,
+    context = "test"
+  )
+  expect_identical(upgraded$recent_deg, c(a = 1L, b = 1L))
 })
 
 test_that("adaptive select history update and utility helpers cover remaining branches", {
@@ -391,6 +419,11 @@ test_that("adaptive select history update and utility helpers cover remaining br
   updated <- .adaptive_history_state_update(cache, "a", "b")
   expect_identical(updated$n_pairs, 1L)
   expect_identical(updated$deg[c("a", "b", "c")], c(a = 1L, b = 1L, c = 0L))
+  expect_identical(
+    updated$recent_window_n,
+    pairwiseLLM:::.adaptive_history_state_live_recent_window(ids)
+  )
+  expect_identical(updated$recent_deg[c("a", "b", "c")], c(a = 1L, b = 1L, c = 0L))
   expect_identical(updated$pair_count[[make_unordered_key("a", "b")]], 1L)
   expect_error(
     .adaptive_history_state_update(updated, "a", "a"),
@@ -408,6 +441,20 @@ test_that("adaptive select history update and utility helpers cover remaining br
   expect_identical(
     .adaptive_history_state_recent_deg(updated, ids = ids, W_cap = 0L),
     c(a = 0L, b = 0L, c = 0L)
+  )
+  expect_error(
+    .adaptive_history_state_recent_deg(
+      utils::modifyList(
+        updated,
+        list(
+          n_pairs = 5000L,
+          recent_pairs = tibble::tibble(A_id = rep("a", 3L), B_id = rep("b", 3L))
+        )
+      ),
+      ids = ids,
+      W_cap = 3000L
+    ),
+    "Rebuild from canonical history"
   )
 
   expect_false(.adaptive_selection_mode_is_linking("link_one_spoke", is_cross_set = FALSE))

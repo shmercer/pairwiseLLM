@@ -735,11 +735,11 @@ apply_step_update <- function(state, step) {
     return(out)
   }
 
-  out$history_pairs <- dplyr::bind_rows(out$history_pairs, new_history)
   history_state <- .adaptive_history_state_resolve(
-    out,
-    ids = as.character(out$item_ids)
+    state,
+    ids = as.character(state$item_ids)
   )
+  out$history_pairs <- dplyr::bind_rows(out$history_pairs, new_history)
   out$history_state <- .adaptive_history_state_update(history_state, step$A_id, step$B_id)
 
   winner_id <- if (step$Y == 1L) step$A_id else step$B_id

@@ -521,6 +521,27 @@ test_that("load_adaptive_session aborts on persisted history-state divergence", 
   )
 })
 
+test_that("load_adaptive_session upgrades legacy persisted history-state recent-degree fields", {
+  items <- make_test_items(4)
+  state <- adaptive_rank_start(items, seed = 35L)
+  judge <- make_deterministic_judge("i_wins")
+
+  withr::local_seed(1)
+  state <- adaptive_rank_run_live(state, judge, n_steps = 2L, progress = "none")
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  state_path <- file.path(session_dir, "state.rds")
+  persisted_state <- readRDS(state_path)
+  persisted_state$history_state$recent_window_n <- NULL
+  persisted_state$history_state$recent_deg <- NULL
+  saveRDS(persisted_state, state_path)
+
+  restored <- load_adaptive_session(session_dir)
+  expect_history_state_matches_history(restored)
+})
+
 test_that("load_adaptive_session rebuilds current refit summary cache from canonical logs", {
   state <- make_probe_resume_state()
   state$step_log <- pairwiseLLM:::append_step_log(

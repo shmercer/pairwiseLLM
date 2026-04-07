@@ -173,6 +173,16 @@ adaptive_defaults <- function(N) {
 
 #' @keywords internal
 #' @noRd
+.adaptive_history_state_live_recent_window <- function(ids) {
+  ids <- as.character(ids)
+  if (length(ids) < 1L) {
+    return(0L)
+  }
+  as.integer(adaptive_defaults(length(ids))$W_cap)
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_history_state_empty <- function(ids) {
   ids <- as.character(ids)
   zero <- stats::setNames(rep.int(0L, length(ids)), ids)
@@ -183,6 +193,8 @@ adaptive_defaults <- function(N) {
     posB = zero,
     pair_count = stats::setNames(integer(), character()),
     pair_last_order = list(),
+    recent_window_n = .adaptive_history_state_live_recent_window(ids),
+    recent_deg = zero,
     recent_pairs = tibble::tibble(
       A_id = character(),
       B_id = character()
@@ -194,7 +206,17 @@ adaptive_defaults <- function(N) {
 #' @noRd
 .adaptive_history_state_validate <- function(cache, ids, context = "runtime") {
   ids <- as.character(ids)
-  required <- c("n_pairs", "deg", "posA", "posB", "pair_count", "pair_last_order", "recent_pairs")
+  required <- c(
+    "n_pairs",
+    "deg",
+    "posA",
+    "posB",
+    "pair_count",
+    "pair_last_order",
+    "recent_window_n",
+    "recent_deg",
+    "recent_pairs"
+  )
   if (!is.list(cache)) {
     rlang::abort(
       paste0(
@@ -266,6 +288,7 @@ adaptive_defaults <- function(N) {
   .validate_named_counts(cache$deg, "deg")
   .validate_named_counts(cache$posA, "posA")
   .validate_named_counts(cache$posB, "posB")
+  .validate_named_counts(cache$recent_deg, "recent_deg")
 
   pair_count <- cache$pair_count %||% integer()
   if (!is.integer(pair_count)) {
@@ -348,6 +371,21 @@ adaptive_defaults <- function(N) {
   recent_pairs$A_id <- as.character(recent_pairs$A_id)
   recent_pairs$B_id <- as.character(recent_pairs$B_id)
   max_recent <- .adaptive_history_state_recent_window_max()
+  recent_window_n <- as.integer(cache$recent_window_n %||% NA_integer_)
+  if (length(recent_window_n) != 1L ||
+    is.na(recent_window_n) ||
+    recent_window_n < 0L ||
+    recent_window_n > max_recent) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$recent_window_n` must be a single integer between 0 and ",
+        max_recent,
+        "."
+      )
+    )
+  }
   expected_recent_n <- min(n_pairs, max_recent)
   if (!identical(nrow(recent_pairs), expected_recent_n)) {
     rlang::abort(
@@ -397,6 +435,8 @@ adaptive_defaults <- function(N) {
     identical(cache$deg, rebuilt$deg) &&
     identical(cache$posA, rebuilt$posA) &&
     identical(cache$posB, rebuilt$posB) &&
+    identical(as.integer(cache$recent_window_n), as.integer(rebuilt$recent_window_n)) &&
+    identical(cache$recent_deg, rebuilt$recent_deg) &&
     identical(
       .adaptive_history_state_pair_count_normalize(cache$pair_count),
       .adaptive_history_state_pair_count_normalize(rebuilt$pair_count)
@@ -425,6 +465,10 @@ adaptive_defaults <- function(N) {
   names(posB) <- names(counts$posB)
   pair_count <- as.integer(counts$pair_count)
   names(pair_count) <- names(counts$pair_count)
+  recent_window_n <- .adaptive_history_state_live_recent_window(ids)
+  recent_deg <- .adaptive_recent_deg(history, ids, recent_window_n)
+  recent_deg <- as.integer(recent_deg)
+  names(recent_deg) <- ids
   max_recent <- .adaptive_history_state_recent_window_max()
   recent_pairs <- if (nrow(history) > 0L) {
     recent <- utils::tail(history, n = min(nrow(history), max_recent))
@@ -442,8 +486,41 @@ adaptive_defaults <- function(N) {
     posB = posB,
     pair_count = pair_count,
     pair_last_order = counts$pair_last_order,
+    recent_window_n = recent_window_n,
+    recent_deg = recent_deg,
     recent_pairs = recent_pairs
   )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_upgrade <- function(cache, ids) {
+  ids <- as.character(ids)
+  if (!is.list(cache)) {
+    return(cache)
+  }
+
+  out <- cache
+  live_window <- .adaptive_history_state_live_recent_window(ids)
+  zero <- stats::setNames(rep.int(0L, length(ids)), ids)
+
+  if (is.null(out$recent_window_n)) {
+    out$recent_window_n <- live_window
+  }
+
+  if (is.null(out$recent_deg)) {
+    recent_pairs <- tibble::as_tibble(out$recent_pairs %||% tibble::tibble())
+    if (all(c("A_id", "B_id") %in% names(recent_pairs))) {
+      rebuilt_recent <- .adaptive_recent_deg(recent_pairs, ids, live_window)
+      rebuilt_recent <- as.integer(rebuilt_recent)
+      names(rebuilt_recent) <- ids
+      out$recent_deg <- rebuilt_recent
+    } else {
+      out$recent_deg <- zero
+    }
+  }
+
+  out
 }
 
 #' @keywords internal
@@ -469,7 +546,7 @@ adaptive_defaults <- function(N) {
 .adaptive_history_state_resolve <- function(state, ids = NULL, validate_existing = FALSE, context = "runtime") {
   ids <- as.character(ids %||% state$item_ids %||% character())
   history <- .adaptive_history_tbl(state)
-  cache <- state$history_state %||% NULL
+  cache <- .adaptive_history_state_upgrade(state$history_state %||% NULL, ids)
   if (is.null(cache)) {
     return(.adaptive_history_state_rebuild(history, ids))
   }
@@ -517,28 +594,47 @@ adaptive_defaults <- function(N) {
   ids <- as.character(ids)
   recent <- stats::setNames(rep.int(0L, length(ids)), ids)
   W_cap <- max(0L, as.integer(W_cap %||% 0L))
-  if (W_cap < 1L || nrow(cache$recent_pairs) < 1L) {
+  if (W_cap < 1L) {
     return(recent)
   }
-  window <- utils::tail(cache$recent_pairs, n = min(nrow(cache$recent_pairs), W_cap))
-  A_id <- as.character(window$A_id)
-  B_id <- as.character(window$B_id)
-  for (idx in seq_len(nrow(window))) {
-    A <- A_id[[idx]]
-    B <- B_id[[idx]]
-    if (!A %in% ids || !B %in% ids || identical(A, B)) {
-      next
-    }
-    recent[[A]] <- recent[[A]] + 1L
-    recent[[B]] <- recent[[B]] + 1L
+
+  cache <- .adaptive_history_state_upgrade(cache, ids)
+  cache_window <- as.integer(cache$recent_window_n %||% NA_integer_)
+  if (length(cache_window) == 1L && !is.na(cache_window) && identical(cache_window, W_cap)) {
+    recent_cached <- cache$recent_deg[ids]
+    recent_cached[is.na(recent_cached)] <- 0L
+    recent_cached <- as.integer(recent_cached)
+    names(recent_cached) <- ids
+    return(recent_cached)
   }
-  recent
+
+  recent_pairs <- tibble::as_tibble(cache$recent_pairs %||% tibble::tibble())
+  if (nrow(recent_pairs) < 1L) {
+    return(recent)
+  }
+
+  n_pairs <- as.integer(cache$n_pairs %||% 0L)
+  if (W_cap > nrow(recent_pairs) && n_pairs > nrow(recent_pairs)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state recent-degree request for window ",
+        W_cap,
+        " exceeded the stored recent-pair tail. Rebuild from canonical history before reuse."
+      )
+    )
+  }
+
+  rebuilt_recent <- .adaptive_recent_deg(recent_pairs, ids, W_cap)
+  rebuilt_recent <- as.integer(rebuilt_recent)
+  names(rebuilt_recent) <- ids
+  rebuilt_recent
 }
 
 #' @keywords internal
 #' @noRd
 .adaptive_history_state_update <- function(cache, A_id, B_id) {
   ids <- names(cache$deg %||% integer())
+  cache <- .adaptive_history_state_upgrade(cache, ids)
   .adaptive_history_state_validate(cache, ids, context = "commit update")
   A_id <- as.character(A_id %||% NA_character_)
   B_id <- as.character(B_id %||% NA_character_)
@@ -555,7 +651,8 @@ adaptive_defaults <- function(N) {
   }
 
   out <- cache
-  out$n_pairs <- as.integer(out$n_pairs) + 1L
+  n_pairs_before <- as.integer(out$n_pairs)
+  out$n_pairs <- n_pairs_before + 1L
   out$posA[[A_id]] <- out$posA[[A_id]] + 1L
   out$posB[[B_id]] <- out$posB[[B_id]] + 1L
   out$deg[[A_id]] <- out$deg[[A_id]] + 1L
@@ -572,9 +669,33 @@ adaptive_defaults <- function(N) {
   pair_last_order[[key]] <- c(A_id, B_id)
   out$pair_last_order <- pair_last_order
 
-  recent_pairs <- tibble::as_tibble(out$recent_pairs %||% tibble::tibble())
+  recent_pairs_before <- tibble::as_tibble(out$recent_pairs %||% tibble::tibble())
+  recent_window_n <- as.integer(out$recent_window_n %||% 0L)
+  recent_deg <- as.integer(out$recent_deg %||% stats::setNames(rep.int(0L, length(ids)), ids))
+  names(recent_deg) <- ids
+  if (recent_window_n > 0L) {
+    departing_row <- NULL
+    if (n_pairs_before >= recent_window_n && nrow(recent_pairs_before) >= recent_window_n) {
+      departing_idx <- nrow(recent_pairs_before) - recent_window_n + 1L
+      departing_row <- recent_pairs_before[departing_idx, , drop = FALSE]
+    }
+    recent_deg[[A_id]] <- recent_deg[[A_id]] + 1L
+    recent_deg[[B_id]] <- recent_deg[[B_id]] + 1L
+    if (!is.null(departing_row) && nrow(departing_row) == 1L) {
+      departing_a <- as.character(departing_row$A_id[[1L]])
+      departing_b <- as.character(departing_row$B_id[[1L]])
+      if (departing_a %in% ids && departing_b %in% ids && !identical(departing_a, departing_b)) {
+        recent_deg[[departing_a]] <- recent_deg[[departing_a]] - 1L
+        recent_deg[[departing_b]] <- recent_deg[[departing_b]] - 1L
+      }
+    }
+  } else {
+    recent_deg[] <- 0L
+  }
+  out$recent_deg <- recent_deg
+
   recent_pairs <- dplyr::bind_rows(
-    recent_pairs,
+    recent_pairs_before,
     tibble::tibble(A_id = A_id, B_id = B_id)
   )
   max_recent <- .adaptive_history_state_recent_window_max()
