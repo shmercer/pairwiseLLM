@@ -118,6 +118,63 @@ test_that("held-out probe commits do not mutate the shared history-state cache",
   expect_history_state_matches_history(out)
 })
 
+test_that("apply_step_update updates history-state from the pre-commit cache", {
+  items <- make_test_items(3)
+  trueskill_state <- make_test_trueskill_state(items)
+  state <- make_test_state(
+    items,
+    trueskill_state,
+    history = tibble::tibble(A_id = "1", B_id = "2")
+  )
+  before_history <- state$history_pairs
+  before_cache <- state$history_state
+  resolve_rows_seen <- NULL
+  history_update_orig <- pairwiseLLM:::.adaptive_history_state_update
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_history_state_resolve = function(state, ids = NULL, validate_existing = FALSE, context = "runtime") {
+      resolve_rows_seen <<- nrow(state$history_pairs)
+      before_cache
+    },
+    .adaptive_history_state_update = function(cache, A_id, B_id) {
+      expect_identical(as.integer(cache$n_pairs), as.integer(nrow(before_history)))
+      history_update_orig(cache, A_id, B_id)
+    },
+    .adaptive_link_refit_summary_update_after_commit = function(state_before, state_after, step_row) {
+      state_after
+    },
+    pairwiseLLM:::apply_step_update(
+      state,
+      list(
+        row = list(
+          step_id = 2L,
+          timestamp = as.POSIXct("2026-01-03 00:00:00", tz = "UTC"),
+          pair_id = 2L,
+          status = "ok",
+          A = 1L,
+          B = 3L,
+          Y = 1L,
+          set_i = 1L,
+          set_j = 1L,
+          is_cross_set = FALSE,
+          is_probe_step = FALSE,
+          run_mode = "within_set"
+        ),
+        is_valid = TRUE,
+        A_id = "1",
+        B_id = "3",
+        Y = 1L
+      )
+    ),
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(resolve_rows_seen, nrow(before_history))
+  expect_identical(nrow(out$history_pairs), nrow(before_history) + 1L)
+  expect_identical(as.integer(out$history_state$n_pairs), as.integer(nrow(before_history) + 1L))
+  expect_history_state_matches_history(out)
+})
+
 test_that("run_one_step enforces canonical judge contract", {
   items <- make_test_items(3)
   trueskill_state <- make_test_trueskill_state(items)

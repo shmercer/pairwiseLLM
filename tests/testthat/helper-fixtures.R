@@ -111,6 +111,16 @@ expect_history_state_matches_history <- function(state, W_cap = NULL) {
 
   W_cap <- as.integer(W_cap %||% pairwiseLLM:::adaptive_defaults(length(ids))$W_cap)
   expect_identical(
+    as.integer(cache$recent_window_n),
+    as.integer(pairwiseLLM:::.adaptive_history_state_live_recent_window(ids))
+  )
+  raw_recent_deg_live <- pairwiseLLM:::.adaptive_recent_deg(
+    history,
+    ids,
+    as.integer(cache$recent_window_n)
+  )
+  expect_identical(cache$recent_deg, raw_recent_deg_live)
+  expect_identical(
     pairwiseLLM:::.adaptive_history_state_recent_deg(cache, ids, W_cap),
     pairwiseLLM:::.adaptive_recent_deg(history, ids, W_cap)
   )

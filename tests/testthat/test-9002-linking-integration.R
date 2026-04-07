@@ -606,6 +606,68 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
   expect_true(all(xor(is_hub_i, is_hub_j)))
 })
 
+test_that("live concurrent budget candidate counts reconcile to the canonical feasibility summary", {
+  withr::local_seed(20260407)
+
+  items <- make_linking_items_three_set()
+  state <- adaptive_rank_start(items, seed = 17L)
+  state$warm_start_done <- TRUE
+  state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+  artifacts <- make_phase_a_import_artifacts(state, spoke_shift = -1)
+  fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+  judge <- make_score_judge(c(
+    h1 = -0.7, h2 = 0.0, h3 = 0.9,
+    s21 = -0.1, s22 = 0.5, s23 = 1.2,
+    s31 = -0.3, s32 = 0.2, s33 = 1.0
+  ))
+
+  out <- adaptive_rank_run_live(
+    state = state,
+    judge = judge,
+    n_steps = 1L,
+    fit_fn = fit_stub$fit_fn,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      min_cross_set_pairs_per_spoke_per_refit = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 3L)),
+    progress = "none"
+  )
+
+  controller <- utils::modifyList(out$controller, list(
+    link_budget_refit_id = NA_integer_,
+    link_budget_map = list()
+  ))
+  budget_map <- pairwiseLLM:::.adaptive_link_budget_map_for_refit(
+    state = out,
+    controller = controller,
+    eligible_spoke_ids = c(2L, 3L),
+    seed = 1L
+  )
+  expect_true(all(c("2", "3") %in% names(budget_map)))
+
+  defaults <- adaptive_defaults(as.integer(out$n_items))
+  for (spoke_id in c(2L, 3L)) {
+    summary <- pairwiseLLM:::.adaptive_link_stage_feasibility_snapshot(
+      state = out,
+      controller = controller,
+      spoke_id = spoke_id,
+      stage_order = pairwiseLLM:::.adaptive_stage_order(),
+      C_max = defaults$C_max,
+      seed_base = as.integer(1L + spoke_id),
+      seed_stride = 1L
+    )
+    expect_identical(
+      as.integer(budget_map[[as.character(spoke_id)]]$concurrent_candidate_count),
+      as.integer(summary$candidate_count)
+    )
+  }
+})
+
 test_that("live concurrent Phase B can commit accelerated holdout work without prior starvation", {
   withr::local_seed(20260320)
 

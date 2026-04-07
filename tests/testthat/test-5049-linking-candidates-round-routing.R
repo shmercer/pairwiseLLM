@@ -967,6 +967,187 @@ test_that("refit-local routing memo matches direct helper outputs and reuses the
   expect_identical(memo$first$coverage, direct_coverage)
 })
 
+test_that("linking refit-local inputs invalidate on step, refit, epoch, spoke, and probe-panel boundaries", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "h3", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = paste0("g", seq_len(7L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 402L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent"
+    )
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  state$controller$link_epoch_id_by_spoke <- list(`2` = 1L, `3` = 1L)
+  state$linking$probe$panels_by_spoke <- list(
+    `2` = tibble::tibble(
+      probe_panel_id = "panel_a",
+      link_epoch_id = 1L,
+      spoke_id = 2L,
+      hub_item_id = "h1",
+      spoke_item_id = "s21",
+      spoke_bin = 1L,
+      hub_bin = 1L,
+      planned_rank = 1L,
+      pair_key = pairwiseLLM:::make_unordered_key("h1", "s21"),
+      realized = FALSE,
+      realized_step_id = NA_integer_,
+      realized_pair_id = NA_integer_,
+      realized_run_mode = NA_character_
+    ),
+    `3` = tibble::tibble(
+      probe_panel_id = "panel_z",
+      link_epoch_id = 1L,
+      spoke_id = 3L,
+      hub_item_id = "h2",
+      spoke_item_id = "s31",
+      spoke_bin = 1L,
+      hub_bin = 1L,
+      planned_rank = 1L,
+      pair_key = pairwiseLLM:::make_unordered_key("h2", "s31"),
+      realized = FALSE,
+      realized_step_id = NA_integer_,
+      realized_pair_id = NA_integer_,
+      realized_run_mode = NA_character_
+    )
+  )
+
+  defaults <- adaptive_defaults(length(state$item_ids))
+  controller <- state$controller
+  orig_build <- pairwiseLLM:::.adaptive_link_refit_local_inputs_build
+  calls <- new.env(parent = emptyenv())
+  calls$build <- 0L
+
+  memo <- testthat::with_mocked_bindings(
+    .adaptive_link_refit_local_inputs_build = function(...) {
+      calls$build <- as.integer(calls$build) + 1L
+      orig_build(...)
+    },
+    {
+      first <- pairwiseLLM:::.adaptive_link_refit_local_inputs(
+        state = state,
+        controller = controller,
+        spoke_id = 2L,
+        defaults = defaults
+      )
+      second <- pairwiseLLM:::.adaptive_link_refit_local_inputs(
+        state = state,
+        controller = controller,
+        spoke_id = 2L,
+        defaults = defaults
+      )
+
+      state_step <- state
+      state_step$step_log <- tibble::add_row(state_step$step_log, step_id = 1L)
+      third <- pairwiseLLM:::.adaptive_link_refit_local_inputs(
+        state = state_step,
+        controller = state_step$controller,
+        spoke_id = 2L,
+        defaults = defaults
+      )
+
+      fourth <- pairwiseLLM:::.adaptive_link_refit_local_inputs(
+        state = state_step,
+        controller = state_step$controller,
+        spoke_id = 3L,
+        defaults = defaults
+      )
+
+      state_panel <- state_step
+      state_panel$linking$probe$panels_by_spoke$`2`$probe_panel_id <- "panel_b"
+      fifth <- pairwiseLLM:::.adaptive_link_refit_local_inputs(
+        state = state_panel,
+        controller = state_panel$controller,
+        spoke_id = 2L,
+        defaults = defaults
+      )
+
+      sixth <- pairwiseLLM:::.adaptive_link_refit_local_inputs(
+        state = state_panel,
+        controller = state_panel$controller,
+        spoke_id = 2L,
+        defaults = defaults,
+        refit_id = 2L
+      )
+
+      state_epoch <- state_panel
+      state_epoch$controller$link_epoch_id_by_spoke$`2` <- 2L
+      state_epoch$linking$probe$panels_by_spoke$`2`$link_epoch_id <- 2L
+      state_epoch$linking$probe$panels_by_spoke$`2`$probe_panel_id <- "panel_c"
+      seventh <- pairwiseLLM:::.adaptive_link_refit_local_inputs(
+        state = state_epoch,
+        controller = state_epoch$controller,
+        spoke_id = 2L,
+        defaults = defaults
+      )
+
+      list(
+        first = first,
+        second = second,
+        third = third,
+        fourth = fourth,
+        fifth = fifth,
+        sixth = sixth,
+        seventh = seventh,
+        state_step = state_step,
+        state_panel = state_panel,
+        state_epoch = state_epoch
+      )
+    },
+    .package = "pairwiseLLM"
+  )
+
+  expect_identical(as.integer(calls$build), 6L)
+  expect_identical(memo$first, memo$second)
+  expect_identical(
+    memo$first,
+    orig_build(state = state, controller = controller, spoke_id = 2L, defaults = defaults)
+  )
+  expect_identical(
+    memo$third,
+    orig_build(
+      state = memo$state_step,
+      controller = memo$state_step$controller,
+      spoke_id = 2L,
+      defaults = defaults
+    )
+  )
+  expect_identical(
+    memo$fourth,
+    orig_build(
+      state = memo$state_step,
+      controller = memo$state_step$controller,
+      spoke_id = 3L,
+      defaults = defaults
+    )
+  )
+  expect_identical(
+    memo$fifth,
+    orig_build(
+      state = memo$state_panel,
+      controller = memo$state_panel$controller,
+      spoke_id = 2L,
+      defaults = defaults
+    )
+  )
+  expect_identical(memo$fifth, memo$sixth)
+  expect_identical(
+    memo$seventh,
+    orig_build(
+      state = memo$state_epoch,
+      controller = memo$state_epoch$controller,
+      spoke_id = 2L,
+      defaults = defaults
+    )
+  )
+})
+
 test_that("linking deterministic ordering prioritizes coverage before utility", {
   cand <- tibble::tibble(
     i = c("a", "b"),
@@ -1121,6 +1302,57 @@ test_that("cached-start D-opt helper matches the uncached helper exactly", {
     pairwiseLLM:::.adaptive_link_d_opt_gain_logdet(it = it, ipair = ipair, ridge = 1e-6),
     tolerance = 0
   )
+})
+
+test_that("rank-one D-opt helpers stay numerically aligned with the legacy logdet path", {
+  legacy_gain <- function(it, ipair, ridge = 1e-6) {
+    logdet_ref <- function(mat) {
+      x <- as.matrix(mat)
+      x <- (x + t(x)) / 2
+      x <- x + diag(ridge, nrow(x))
+      sum(log(eigen(x, symmetric = TRUE, only.values = TRUE)$values))
+    }
+    logdet_ref(it + ipair) - logdet_ref(it)
+  }
+
+  prepared_transform <- pairwiseLLM:::.adaptive_link_d_opt_rank1_prepare(
+    matrix(c(1.4, 0.25, 0.25, 0.9), nrow = 2L),
+    ridge = 1e-6
+  )
+  transform_gain <- pairwiseLLM:::.adaptive_link_d_opt_rank1_gain_transform(
+    prepared = prepared_transform,
+    info_scale = 0.21,
+    transform_mode = "shift_scale",
+    alpha = 1.3,
+    theta_raw_x = -2
+  )
+  transform_g <- pairwiseLLM:::.adaptive_link_info_gradient(
+    transform_mode = "shift_scale",
+    alpha = 1.3,
+    theta_raw_x = -2
+  )
+  transform_legacy <- legacy_gain(
+    it = matrix(c(1.4, 0.25, 0.25, 0.9), nrow = 2L),
+    ipair = as.matrix(0.21 * (transform_g %*% t(transform_g))),
+    ridge = 1e-6
+  )
+  expect_equal(transform_gain, transform_legacy, tolerance = 1e-12)
+
+  prepared_anchored <- pairwiseLLM:::.adaptive_link_d_opt_rank1_prepare(
+    matrix(c(1.2, 0.15, 0.15, 1.1), nrow = 2L),
+    ridge = 1e-6
+  )
+  anchored_gain <- pairwiseLLM:::.adaptive_link_d_opt_rank1_gain_diag(
+    prepared = prepared_anchored,
+    info_scale = 0.24,
+    diag_index = 1L
+  )
+  anchored_legacy <- legacy_gain(
+    it = matrix(c(1.2, 0.15, 0.15, 1.1), nrow = 2L),
+    ipair = matrix(c(0.24, 0, 0, 0), nrow = 2L),
+    ridge = 1e-6
+  )
+  expect_equal(anchored_gain, anchored_legacy, tolerance = 1e-12)
 })
 
 test_that("selection utility helpers cover additional fallback branches", {
@@ -1347,7 +1579,7 @@ test_that("concurrent selector falls back to next eligible spoke in same step wh
   expect_true(xor(set_i == 1L, set_j == 1L))
 })
 
-test_that("concurrent fallback recomputes per-spoke stage context helpers", {
+test_that("concurrent fallback memoizes per-spoke stage context within a selector call", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
     set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
@@ -1415,6 +1647,49 @@ test_that("concurrent fallback recomputes per-spoke stage context helpers", {
     as.integer(progress2$stage_committed[["anchor_link"]]),
     as.integer(progress3$stage_committed[["anchor_link"]])
   )
+
+  orig_compute_quotas <- pairwiseLLM:::.adaptive_round_compute_quotas
+  orig_stage_progress <- pairwiseLLM:::.adaptive_link_stage_progress
+  calls <- new.env(parent = emptyenv())
+  calls$quota <- stats::setNames(integer(), character())
+  calls$progress <- stats::setNames(integer(), character())
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_round_compute_quotas = function(round_id, n_items, controller) {
+      key <- as.character(as.integer(controller$current_link_spoke_id %||% NA_integer_))
+      current <- as.integer(calls$quota[key])
+      current[is.na(current)] <- 0L
+      calls$quota[key] <- as.integer(current[[1L]] %||% 0L) + 1L
+      orig_compute_quotas(round_id = round_id, n_items = n_items, controller = controller)
+    },
+    .adaptive_link_stage_progress = function(state, spoke_id, stage_quotas, stage_order, refit_id = NULL,
+                                             adjust_for_feasibility = TRUE) {
+      key <- as.character(as.integer(spoke_id))
+      current <- as.integer(calls$progress[key])
+      current[is.na(current)] <- 0L
+      calls$progress[key] <- as.integer(current[[1L]] %||% 0L) + 1L
+      orig_stage_progress(
+        state = state,
+        spoke_id = spoke_id,
+        stage_quotas = stage_quotas,
+        stage_order = stage_order,
+        refit_id = refit_id,
+        adjust_for_feasibility = adjust_for_feasibility
+      )
+    },
+    generate_stage_candidates_from_state = function(state, stage_name, fallback_name, C_max, seed,
+                                                    link_spoke_id = NA_integer_) {
+      tibble::tibble(i = character(), j = character())
+    },
+    pairwiseLLM:::select_next_pair(state, step_id = 1L),
+    .package = "pairwiseLLM"
+  )
+
+  expect_true(isTRUE(out$candidate_starved))
+  expect_identical(as.integer(calls$quota[["2"]]), 1L)
+  expect_identical(as.integer(calls$quota[["3"]]), 1L)
+  expect_identical(as.integer(calls$progress[["2"]]), 1L)
+  expect_identical(as.integer(calls$progress[["3"]]), 1L)
 })
 
 test_that("concurrent selector starves only after all eligible spokes are infeasible", {

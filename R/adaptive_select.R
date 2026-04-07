@@ -173,6 +173,16 @@ adaptive_defaults <- function(N) {
 
 #' @keywords internal
 #' @noRd
+.adaptive_history_state_live_recent_window <- function(ids) {
+  ids <- as.character(ids)
+  if (length(ids) < 1L) {
+    return(0L)
+  }
+  as.integer(adaptive_defaults(length(ids))$W_cap)
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_history_state_empty <- function(ids) {
   ids <- as.character(ids)
   zero <- stats::setNames(rep.int(0L, length(ids)), ids)
@@ -183,6 +193,8 @@ adaptive_defaults <- function(N) {
     posB = zero,
     pair_count = stats::setNames(integer(), character()),
     pair_last_order = list(),
+    recent_window_n = .adaptive_history_state_live_recent_window(ids),
+    recent_deg = zero,
     recent_pairs = tibble::tibble(
       A_id = character(),
       B_id = character()
@@ -194,7 +206,17 @@ adaptive_defaults <- function(N) {
 #' @noRd
 .adaptive_history_state_validate <- function(cache, ids, context = "runtime") {
   ids <- as.character(ids)
-  required <- c("n_pairs", "deg", "posA", "posB", "pair_count", "pair_last_order", "recent_pairs")
+  required <- c(
+    "n_pairs",
+    "deg",
+    "posA",
+    "posB",
+    "pair_count",
+    "pair_last_order",
+    "recent_window_n",
+    "recent_deg",
+    "recent_pairs"
+  )
   if (!is.list(cache)) {
     rlang::abort(
       paste0(
@@ -266,6 +288,7 @@ adaptive_defaults <- function(N) {
   .validate_named_counts(cache$deg, "deg")
   .validate_named_counts(cache$posA, "posA")
   .validate_named_counts(cache$posB, "posB")
+  .validate_named_counts(cache$recent_deg, "recent_deg")
 
   pair_count <- cache$pair_count %||% integer()
   if (!is.integer(pair_count)) {
@@ -348,6 +371,21 @@ adaptive_defaults <- function(N) {
   recent_pairs$A_id <- as.character(recent_pairs$A_id)
   recent_pairs$B_id <- as.character(recent_pairs$B_id)
   max_recent <- .adaptive_history_state_recent_window_max()
+  recent_window_n <- as.integer(cache$recent_window_n %||% NA_integer_)
+  if (length(recent_window_n) != 1L ||
+    is.na(recent_window_n) ||
+    recent_window_n < 0L ||
+    recent_window_n > max_recent) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$recent_window_n` must be a single integer between 0 and ",
+        max_recent,
+        "."
+      )
+    )
+  }
   expected_recent_n <- min(n_pairs, max_recent)
   if (!identical(nrow(recent_pairs), expected_recent_n)) {
     rlang::abort(
@@ -397,6 +435,8 @@ adaptive_defaults <- function(N) {
     identical(cache$deg, rebuilt$deg) &&
     identical(cache$posA, rebuilt$posA) &&
     identical(cache$posB, rebuilt$posB) &&
+    identical(as.integer(cache$recent_window_n), as.integer(rebuilt$recent_window_n)) &&
+    identical(cache$recent_deg, rebuilt$recent_deg) &&
     identical(
       .adaptive_history_state_pair_count_normalize(cache$pair_count),
       .adaptive_history_state_pair_count_normalize(rebuilt$pair_count)
@@ -425,6 +465,10 @@ adaptive_defaults <- function(N) {
   names(posB) <- names(counts$posB)
   pair_count <- as.integer(counts$pair_count)
   names(pair_count) <- names(counts$pair_count)
+  recent_window_n <- .adaptive_history_state_live_recent_window(ids)
+  recent_deg <- .adaptive_recent_deg(history, ids, recent_window_n)
+  recent_deg <- as.integer(recent_deg)
+  names(recent_deg) <- ids
   max_recent <- .adaptive_history_state_recent_window_max()
   recent_pairs <- if (nrow(history) > 0L) {
     recent <- utils::tail(history, n = min(nrow(history), max_recent))
@@ -442,8 +486,41 @@ adaptive_defaults <- function(N) {
     posB = posB,
     pair_count = pair_count,
     pair_last_order = counts$pair_last_order,
+    recent_window_n = recent_window_n,
+    recent_deg = recent_deg,
     recent_pairs = recent_pairs
   )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_upgrade <- function(cache, ids) {
+  ids <- as.character(ids)
+  if (!is.list(cache)) {
+    return(cache)
+  }
+
+  out <- cache
+  live_window <- .adaptive_history_state_live_recent_window(ids)
+  zero <- stats::setNames(rep.int(0L, length(ids)), ids)
+
+  if (is.null(out$recent_window_n)) {
+    out$recent_window_n <- live_window
+  }
+
+  if (is.null(out$recent_deg)) {
+    recent_pairs <- tibble::as_tibble(out$recent_pairs %||% tibble::tibble())
+    if (all(c("A_id", "B_id") %in% names(recent_pairs))) {
+      rebuilt_recent <- .adaptive_recent_deg(recent_pairs, ids, live_window)
+      rebuilt_recent <- as.integer(rebuilt_recent)
+      names(rebuilt_recent) <- ids
+      out$recent_deg <- rebuilt_recent
+    } else {
+      out$recent_deg <- zero
+    }
+  }
+
+  out
 }
 
 #' @keywords internal
@@ -469,7 +546,7 @@ adaptive_defaults <- function(N) {
 .adaptive_history_state_resolve <- function(state, ids = NULL, validate_existing = FALSE, context = "runtime") {
   ids <- as.character(ids %||% state$item_ids %||% character())
   history <- .adaptive_history_tbl(state)
-  cache <- state$history_state %||% NULL
+  cache <- .adaptive_history_state_upgrade(state$history_state %||% NULL, ids)
   if (is.null(cache)) {
     return(.adaptive_history_state_rebuild(history, ids))
   }
@@ -517,28 +594,47 @@ adaptive_defaults <- function(N) {
   ids <- as.character(ids)
   recent <- stats::setNames(rep.int(0L, length(ids)), ids)
   W_cap <- max(0L, as.integer(W_cap %||% 0L))
-  if (W_cap < 1L || nrow(cache$recent_pairs) < 1L) {
+  if (W_cap < 1L) {
     return(recent)
   }
-  window <- utils::tail(cache$recent_pairs, n = min(nrow(cache$recent_pairs), W_cap))
-  A_id <- as.character(window$A_id)
-  B_id <- as.character(window$B_id)
-  for (idx in seq_len(nrow(window))) {
-    A <- A_id[[idx]]
-    B <- B_id[[idx]]
-    if (!A %in% ids || !B %in% ids || identical(A, B)) {
-      next
-    }
-    recent[[A]] <- recent[[A]] + 1L
-    recent[[B]] <- recent[[B]] + 1L
+
+  cache <- .adaptive_history_state_upgrade(cache, ids)
+  cache_window <- as.integer(cache$recent_window_n %||% NA_integer_)
+  if (length(cache_window) == 1L && !is.na(cache_window) && identical(cache_window, W_cap)) {
+    recent_cached <- cache$recent_deg[ids]
+    recent_cached[is.na(recent_cached)] <- 0L
+    recent_cached <- as.integer(recent_cached)
+    names(recent_cached) <- ids
+    return(recent_cached)
   }
-  recent
+
+  recent_pairs <- tibble::as_tibble(cache$recent_pairs %||% tibble::tibble())
+  if (nrow(recent_pairs) < 1L) {
+    return(recent)
+  }
+
+  n_pairs <- as.integer(cache$n_pairs %||% 0L)
+  if (W_cap > nrow(recent_pairs) && n_pairs > nrow(recent_pairs)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state recent-degree request for window ",
+        W_cap,
+        " exceeded the stored recent-pair tail. Rebuild from canonical history before reuse."
+      )
+    )
+  }
+
+  rebuilt_recent <- .adaptive_recent_deg(recent_pairs, ids, W_cap)
+  rebuilt_recent <- as.integer(rebuilt_recent)
+  names(rebuilt_recent) <- ids
+  rebuilt_recent
 }
 
 #' @keywords internal
 #' @noRd
 .adaptive_history_state_update <- function(cache, A_id, B_id) {
   ids <- names(cache$deg %||% integer())
+  cache <- .adaptive_history_state_upgrade(cache, ids)
   .adaptive_history_state_validate(cache, ids, context = "commit update")
   A_id <- as.character(A_id %||% NA_character_)
   B_id <- as.character(B_id %||% NA_character_)
@@ -555,7 +651,8 @@ adaptive_defaults <- function(N) {
   }
 
   out <- cache
-  out$n_pairs <- as.integer(out$n_pairs) + 1L
+  n_pairs_before <- as.integer(out$n_pairs)
+  out$n_pairs <- n_pairs_before + 1L
   out$posA[[A_id]] <- out$posA[[A_id]] + 1L
   out$posB[[B_id]] <- out$posB[[B_id]] + 1L
   out$deg[[A_id]] <- out$deg[[A_id]] + 1L
@@ -572,9 +669,33 @@ adaptive_defaults <- function(N) {
   pair_last_order[[key]] <- c(A_id, B_id)
   out$pair_last_order <- pair_last_order
 
-  recent_pairs <- tibble::as_tibble(out$recent_pairs %||% tibble::tibble())
+  recent_pairs_before <- tibble::as_tibble(out$recent_pairs %||% tibble::tibble())
+  recent_window_n <- as.integer(out$recent_window_n %||% 0L)
+  recent_deg <- as.integer(out$recent_deg %||% stats::setNames(rep.int(0L, length(ids)), ids))
+  names(recent_deg) <- ids
+  if (recent_window_n > 0L) {
+    departing_row <- NULL
+    if (n_pairs_before >= recent_window_n && nrow(recent_pairs_before) >= recent_window_n) {
+      departing_idx <- nrow(recent_pairs_before) - recent_window_n + 1L
+      departing_row <- recent_pairs_before[departing_idx, , drop = FALSE]
+    }
+    recent_deg[[A_id]] <- recent_deg[[A_id]] + 1L
+    recent_deg[[B_id]] <- recent_deg[[B_id]] + 1L
+    if (!is.null(departing_row) && nrow(departing_row) == 1L) {
+      departing_a <- as.character(departing_row$A_id[[1L]])
+      departing_b <- as.character(departing_row$B_id[[1L]])
+      if (departing_a %in% ids && departing_b %in% ids && !identical(departing_a, departing_b)) {
+        recent_deg[[departing_a]] <- recent_deg[[departing_a]] - 1L
+        recent_deg[[departing_b]] <- recent_deg[[departing_b]] - 1L
+      }
+    }
+  } else {
+    recent_deg[] <- 0L
+  }
+  out$recent_deg <- recent_deg
+
   recent_pairs <- dplyr::bind_rows(
-    recent_pairs,
+    recent_pairs_before,
     tibble::tibble(A_id = A_id, B_id = B_id)
   )
   max_recent <- .adaptive_history_state_recent_window_max()
@@ -838,6 +959,95 @@ adaptive_defaults <- function(N) {
     return("link_d_opt_gain")
   }
   NA_character_
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_select_link_stage_context_build <- function(state,
+                                                      controller,
+                                                      round,
+                                                      link_phase_b,
+                                                      link_budget_map,
+                                                      round_stage,
+                                                      ids,
+                                                      spoke_id = NA_integer_) {
+  ctx_round_stage <- as.character(round_stage %||% "warm_start")
+  ctx_generation_stage <- if (identical(ctx_round_stage, "warm_start")) {
+    if (length(ids) <= 2L) "anchor_link" else "local_link"
+  } else {
+    ctx_round_stage
+  }
+  ctx_stage_quota <- NA_integer_
+  ctx_stage_committed <- NA_integer_
+  ctx_backfill_active <- FALSE
+  ctx_stage_realized <- NULL
+
+  if (!identical(ctx_round_stage, "warm_start")) {
+    ctx_stage_quota <- as.integer(round$stage_quotas[[ctx_round_stage]] %||% NA_integer_)
+    ctx_stage_committed <- as.integer(round$stage_committed[[ctx_round_stage]] %||% 0L)
+  }
+
+  if (!(isTRUE(link_phase_b) && !is.na(as.integer(spoke_id)))) {
+    return(list(
+      round_stage = as.character(ctx_round_stage),
+      generation_stage = as.character(ctx_generation_stage),
+      stage_quota = as.integer(ctx_stage_quota),
+      stage_committed_so_far = as.integer(ctx_stage_committed),
+      stage_realized = ctx_stage_realized,
+      budget_remaining_actual = as.integer(NA_integer_),
+      backfill_active = isTRUE(ctx_backfill_active)
+    ))
+  }
+
+  refit_id <- .adaptive_link_refit_window_id(state)
+  quota_controller <- controller
+  quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+  quota_controller$B_spoke_refit_budget <- as.integer(
+    link_budget_map[[as.character(spoke_id)]]$B_spoke_refit_budget %||% NA_integer_
+  )
+  quota_controller$B_spoke_refit_budget_source <- as.character(
+    link_budget_map[[as.character(spoke_id)]]$B_spoke_refit_budget_source %||%
+      "single_spoke_default"
+  )
+  stage_quotas <- .adaptive_round_compute_quotas(
+    round_id = as.integer(round$round_id %||% 1L),
+    n_items = as.integer(state$n_items),
+    controller = quota_controller
+  )
+  progress <- .adaptive_link_stage_progress(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    stage_quotas = stage_quotas,
+    stage_order = round$stage_order %||% .adaptive_stage_order(),
+    refit_id = refit_id
+  )
+  ctx_round_stage <- as.character(progress$active_stage %||% ctx_round_stage)
+  ctx_backfill_active <- isTRUE(progress$backfill_active)
+  ctx_stage_realized <- progress$stage_realized %||% NULL
+  if (identical(ctx_round_stage, "warm_start")) {
+    ctx_generation_stage <- if (length(ids) <= 2L) "anchor_link" else "local_link"
+  } else if (isTRUE(ctx_backfill_active)) {
+    ctx_generation_stage <- "pooled_backfill"
+  } else {
+    ctx_generation_stage <- as.character(ctx_round_stage)
+  }
+  if (isTRUE(ctx_backfill_active)) {
+    ctx_stage_quota <- as.integer(sum(progress$stage_quotas))
+    ctx_stage_committed <- as.integer(sum(progress$stage_realized %||% 0L))
+  } else {
+    ctx_stage_quota <- as.integer(progress$stage_quotas[[ctx_round_stage]] %||% NA_integer_)
+    ctx_stage_committed <- as.integer(progress$stage_committed[[ctx_round_stage]] %||% 0L)
+  }
+
+  list(
+    round_stage = as.character(ctx_round_stage),
+    generation_stage = as.character(ctx_generation_stage),
+    stage_quota = as.integer(ctx_stage_quota),
+    stage_committed_so_far = as.integer(ctx_stage_committed),
+    stage_realized = ctx_stage_realized,
+    budget_remaining_actual = as.integer(progress$budget_remaining_actual %||% 0L),
+    backfill_active = isTRUE(ctx_backfill_active)
+  )
 }
 
 .adaptive_long_link_gate_has_posterior <- function(state) {
@@ -1230,6 +1440,95 @@ adaptive_defaults <- function(N) {
   )
 }
 
+.adaptive_link_d_opt_rank1_prepare <- function(it, ridge = 1e-6) {
+  x <- as.matrix(it)
+  if (!is.numeric(x) || nrow(x) != ncol(x) || nrow(x) < 1L) {
+    return(list(ok = FALSE, inv = NULL, inv_diag = NULL))
+  }
+  x <- (x + t(x)) / 2
+  ridge <- as.double(ridge %||% 1e-6)
+  if (!is.finite(ridge) || ridge <= 0) {
+    ridge <- 1e-6
+  }
+  x_ridge <- x + diag(ridge, nrow(x))
+  chol_x <- tryCatch(chol(x_ridge), error = function(e) NULL)
+  if (is.null(chol_x)) {
+    return(list(ok = FALSE, inv = NULL, inv_diag = NULL))
+  }
+  inv_x <- tryCatch(chol2inv(chol_x), error = function(e) NULL)
+  if (is.null(inv_x) || !is.matrix(inv_x) || any(!is.finite(inv_x))) {
+    return(list(ok = FALSE, inv = NULL, inv_diag = NULL))
+  }
+  list(
+    ok = TRUE,
+    inv = inv_x,
+    inv_diag = diag(inv_x)
+  )
+}
+
+.adaptive_link_d_opt_gain_from_quadform <- function(info_scale, quadform) {
+  info_scale <- as.double(info_scale)
+  quadform <- as.double(quadform)
+  out <- rep_len(NA_real_, length(info_scale))
+  valid <- is.finite(info_scale) & is.finite(quadform)
+  if (!any(valid)) {
+    return(out)
+  }
+  update_term <- info_scale[valid] * quadform[valid]
+  keep <- is.finite(update_term) & (1 + update_term) > 0
+  if (!any(keep)) {
+    return(out)
+  }
+  out_valid <- rep_len(NA_real_, sum(valid))
+  out_valid[keep] <- log1p(update_term[keep])
+  out[valid] <- out_valid
+  out
+}
+
+.adaptive_link_d_opt_rank1_gain_transform <- function(prepared,
+                                                      info_scale,
+                                                      transform_mode,
+                                                      alpha,
+                                                      theta_raw_x) {
+  if (!isTRUE(prepared$ok)) {
+    return(rep_len(NA_real_, length(info_scale)))
+  }
+  mode <- as.character(transform_mode %||% "shift_only")
+  inv <- prepared$inv
+  if (identical(mode, "shift_scale")) {
+    if (!is.matrix(inv) || any(dim(inv) != c(2L, 2L))) {
+      return(rep_len(NA_real_, length(info_scale)))
+    }
+    theta_term <- as.double(alpha) * as.double(theta_raw_x)
+    quadform <- inv[1L, 1L] +
+      2 * inv[1L, 2L] * theta_term +
+      inv[2L, 2L] * (theta_term^2)
+    return(.adaptive_link_d_opt_gain_from_quadform(info_scale, quadform))
+  }
+  if (!is.matrix(inv) || any(dim(inv) != c(1L, 1L))) {
+    return(rep_len(NA_real_, length(info_scale)))
+  }
+  .adaptive_link_d_opt_gain_from_quadform(
+    info_scale = info_scale,
+    quadform = rep_len(inv[1L, 1L], length(info_scale))
+  )
+}
+
+.adaptive_link_d_opt_rank1_gain_diag <- function(prepared, info_scale, diag_index) {
+  if (!isTRUE(prepared$ok)) {
+    return(rep_len(NA_real_, length(info_scale)))
+  }
+  diag_index <- as.integer(diag_index)
+  inv_diag <- as.double(prepared$inv_diag %||% numeric())
+  quadform <- rep_len(NA_real_, length(diag_index))
+  valid <- !is.na(diag_index) & diag_index >= 1L & diag_index <= length(inv_diag)
+  if (!any(valid)) {
+    return(rep_len(NA_real_, length(info_scale)))
+  }
+  quadform[valid] <- inv_diag[diag_index[valid]]
+  .adaptive_link_d_opt_gain_from_quadform(info_scale, quadform)
+}
+
 .adaptive_link_d_opt_matrix_dim <- function(transform_mode,
                                            link_estimation_mode = "transform",
                                            free_block_dim = NULL) {
@@ -1373,13 +1672,14 @@ adaptive_defaults <- function(N) {
       link_estimation_mode = "anchored_joint",
       free_block_dim = free_block_dim
     )
-    logdet_current <- .adaptive_link_logdet_spd(it_state$it, ridge = 1e-6)
+    prepared <- .adaptive_link_d_opt_rank1_prepare(it_state$it, ridge = 1e-6)
     theta_h <- unname(as.double(accepted_state$theta_hub_fixed[endpoint_roles$hub_item]))
     theta_x <- unname(as.double(accepted_state$theta_spoke_global_mean[endpoint_roles$spoke_item]))
     spoke_idx <- unname(as.integer(match(endpoint_roles$spoke_item, spoke_items)))
     valid_gain <- is.finite(theta_h) & is.finite(theta_x) & !is.na(spoke_idx)
     link_d_opt_gain <- rep_len(NA_real_, n_cand)
     if (any(valid_gain)) {
+      spoke_idx_valid <- spoke_idx[valid_gain]
       pbar <- .adaptive_link_model_d_pbar_vec(
         theta_h = theta_h[valid_gain],
         theta_x = theta_x[valid_gain],
@@ -1388,15 +1688,28 @@ adaptive_defaults <- function(N) {
       )
       info_scale <- as.double(pbar * (1 - pbar))
       valid_idx <- which(valid_gain)
-      for (idx in seq_along(valid_idx)) {
-        ipair <- matrix(0, nrow = free_block_dim, ncol = free_block_dim)
-        ipair[spoke_idx[valid_gain][[idx]], spoke_idx[valid_gain][[idx]]] <- info_scale[[idx]]
-        link_d_opt_gain[[valid_idx[[idx]]]] <- .adaptive_link_d_opt_gain_logdet_from_start(
-          it = it_state$it,
-          ipair = ipair,
-          logdet_start = logdet_current,
-          ridge = 1e-6
-        )
+      fast_gain <- .adaptive_link_d_opt_rank1_gain_diag(
+        prepared = prepared,
+        info_scale = info_scale,
+        diag_index = spoke_idx_valid
+      )
+      if (length(fast_gain) > 0L) {
+        link_d_opt_gain[valid_idx] <- fast_gain
+      }
+      fallback_pos <- which(is.na(fast_gain))
+      if (length(fallback_pos) > 0L) {
+        logdet_current <- .adaptive_link_logdet_spd(it_state$it, ridge = 1e-6)
+        for (pos in fallback_pos) {
+          idx <- valid_idx[[pos]]
+          ipair <- matrix(0, nrow = free_block_dim, ncol = free_block_dim)
+          ipair[spoke_idx_valid[[pos]], spoke_idx_valid[[pos]]] <- info_scale[[pos]]
+          link_d_opt_gain[[idx]] <- .adaptive_link_d_opt_gain_logdet_from_start(
+            it = it_state$it,
+            ipair = ipair,
+            logdet_start = logdet_current,
+            ridge = 1e-6
+          )
+        }
       }
     }
     cand$link_d_opt_gain <- link_d_opt_gain
@@ -1417,6 +1730,7 @@ adaptive_defaults <- function(N) {
     spoke_id = as.integer(spoke_id),
     transform_mode = transform_mode
   )
+  prepared <- .adaptive_link_d_opt_rank1_prepare(it_state$it, ridge = 1e-6)
   theta_hub_map <- .adaptive_link_safe_theta_map(
     state = state,
     set_id = hub_id,
@@ -1427,7 +1741,6 @@ adaptive_defaults <- function(N) {
     set_id = as.integer(spoke_id),
     prefer_current = identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
   )
-  logdet_current <- .adaptive_link_logdet_spd(it_state$it, ridge = 1e-6)
   theta_h <- unname(as.double(theta_hub_map[endpoint_roles$hub_item]))
   theta_raw_x <- unname(as.double(theta_spoke_raw_map[endpoint_roles$spoke_item]))
   valid_gain <- is.finite(theta_h) & is.finite(theta_raw_x)
@@ -1443,19 +1756,34 @@ adaptive_defaults <- function(N) {
     )
     info_scale <- as.double(pbar * (1 - pbar))
     valid_idx <- which(valid_gain)
-    for (idx in seq_along(valid_idx)) {
-      g <- .adaptive_link_info_gradient(
-        transform_mode = transform_mode,
-        alpha = alpha,
-        theta_raw_x = theta_raw_x_valid[[idx]]
-      )
-      ipair <- as.matrix(info_scale[[idx]] * (g %*% t(g)))
-      link_d_opt_gain[[valid_idx[[idx]]]] <- .adaptive_link_d_opt_gain_logdet_from_start(
-        it = it_state$it,
-        ipair = ipair,
-        logdet_start = logdet_current,
-        ridge = 1e-6
-      )
+    fast_gain <- .adaptive_link_d_opt_rank1_gain_transform(
+      prepared = prepared,
+      info_scale = info_scale,
+      transform_mode = transform_mode,
+      alpha = alpha,
+      theta_raw_x = theta_raw_x_valid
+    )
+    if (length(fast_gain) > 0L) {
+      link_d_opt_gain[valid_idx] <- fast_gain
+    }
+    fallback_pos <- which(is.na(fast_gain))
+    if (length(fallback_pos) > 0L) {
+      logdet_current <- .adaptive_link_logdet_spd(it_state$it, ridge = 1e-6)
+      for (pos in fallback_pos) {
+        idx <- valid_idx[[pos]]
+        g <- .adaptive_link_info_gradient(
+          transform_mode = transform_mode,
+          alpha = alpha,
+          theta_raw_x = theta_raw_x_valid[[pos]]
+        )
+        ipair <- as.matrix(info_scale[[pos]] * (g %*% t(g)))
+        link_d_opt_gain[[idx]] <- .adaptive_link_d_opt_gain_logdet_from_start(
+          it = it_state$it,
+          ipair = ipair,
+          logdet_start = logdet_current,
+          ridge = 1e-6
+        )
+      }
     }
   }
   cand$link_d_opt_gain <- link_d_opt_gain
@@ -1915,9 +2243,22 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
   active_link_spoke <- as.integer(NA_integer_)
   ranked_link_spokes <- integer()
-  link_progress <- NULL
   link_budget_map <- list()
-  round_stage <- as.character(.adaptive_round_active_stage(state) %||% "warm_start")
+  if (isTRUE(link_phase_b)) {
+    if (!isTRUE(round$staged_active)) {
+      base_round_stage <- "warm_start"
+    } else {
+      base_stage_index <- as.integer(round$stage_index %||% 1L)
+      base_stage_order <- as.character(round$stage_order %||% .adaptive_stage_order())
+      if (base_stage_index < 1L || base_stage_index > length(base_stage_order)) {
+        base_round_stage <- NA_character_
+      } else {
+        base_round_stage <- base_stage_order[[base_stage_index]]
+      }
+    }
+  } else {
+    base_round_stage <- as.character(.adaptive_round_active_stage(state) %||% "warm_start")
+  }
   if (isTRUE(link_phase_b)) {
     eligible_spokes <- .adaptive_link_effective_active_spokes(
       state,
@@ -1938,120 +2279,48 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     if (length(ranked_link_spokes) > 0L) {
       active_link_spoke <- as.integer(ranked_link_spokes[[1L]])
     }
-    if (!is.na(active_link_spoke)) {
-      refit_id <- .adaptive_link_refit_window_id(state)
-      quota_controller <- controller
-      quota_controller$current_link_spoke_id <- as.integer(active_link_spoke)
-      quota_controller$B_spoke_refit_budget <- as.integer(
-        link_budget_map[[as.character(active_link_spoke)]]$B_spoke_refit_budget %||% NA_integer_
-      )
-      quota_controller$B_spoke_refit_budget_source <- as.character(
-        link_budget_map[[as.character(active_link_spoke)]]$B_spoke_refit_budget_source %||%
-          "single_spoke_default"
-      )
-      stage_quotas <- .adaptive_round_compute_quotas(
-        round_id = as.integer(round$round_id %||% 1L),
-        n_items = as.integer(state$n_items),
-        controller = quota_controller
-      )
-      link_progress <- .adaptive_link_stage_progress(
-        state = state,
-        spoke_id = as.integer(active_link_spoke),
-        stage_quotas = stage_quotas,
-        stage_order = round$stage_order %||% .adaptive_stage_order(),
-        refit_id = refit_id
-      )
-      round_stage <- as.character(link_progress$active_stage %||% round_stage)
+  }
+  stage_context_memo <- new.env(parent = emptyenv())
+  .resolve_link_stage_context <- function(spoke_id = NA_integer_) {
+    memo_key <- if (isTRUE(link_phase_b) && !is.na(as.integer(spoke_id))) {
+      paste0("spoke::", as.integer(spoke_id))
+    } else {
+      "default"
     }
+    if (exists(memo_key, envir = stage_context_memo, inherits = FALSE)) {
+      return(stage_context_memo[[memo_key]])
+    }
+    stage_context_memo[[memo_key]] <- .adaptive_select_link_stage_context_build(
+      state = state,
+      controller = controller,
+      round = round,
+      link_phase_b = link_phase_b,
+      link_budget_map = link_budget_map,
+      round_stage = base_round_stage,
+      ids = ids,
+      spoke_id = as.integer(spoke_id)
+    )
+    stage_context_memo[[memo_key]]
   }
   is_link_mode <- .adaptive_link_mode(state)
-  generation_stage <- if (identical(round_stage, "warm_start")) {
-    if (length(ids) <= 2L) "anchor_link" else "local_link"
+  stage_ctx_initial <- if (isTRUE(link_phase_b) && !is.na(active_link_spoke)) {
+    .resolve_link_stage_context(spoke_id = as.integer(active_link_spoke))
   } else {
-    round_stage
+    .resolve_link_stage_context(spoke_id = NA_integer_)
   }
-  stage_quota <- NA_integer_
-  stage_committed_so_far <- NA_integer_
-  if (!identical(round_stage, "warm_start")) {
-    if (isTRUE(link_phase_b) && !is.null(link_progress)) {
-      if (identical(round_stage, "pooled_backfill")) {
-        stage_quota <- as.integer(sum(link_progress$stage_quotas %||% 0L))
-        stage_committed_so_far <- as.integer(sum(link_progress$stage_realized %||% 0L))
-      } else {
-        stage_quota <- as.integer(link_progress$stage_quotas[[round_stage]] %||% NA_integer_)
-        stage_committed_so_far <- as.integer(link_progress$stage_committed[[round_stage]] %||% 0L)
-      }
-    } else {
-      stage_quota <- as.integer(round$stage_quotas[[round_stage]] %||% NA_integer_)
-      stage_committed_so_far <- as.integer(round$stage_committed[[round_stage]] %||% 0L)
-    }
-  }
-  .resolve_link_stage_context <- function(spoke_id = NA_integer_) {
-    ctx_round_stage <- round_stage
-    ctx_generation_stage <- generation_stage
-    ctx_stage_quota <- stage_quota
-    ctx_stage_committed <- stage_committed_so_far
-    ctx_backfill_active <- FALSE
-    ctx_stage_realized <- NULL
-    if (!(isTRUE(link_phase_b) && !is.na(as.integer(spoke_id)))) {
-      return(list(
-        round_stage = as.character(ctx_round_stage),
-        generation_stage = as.character(ctx_generation_stage),
-        stage_quota = as.integer(ctx_stage_quota),
-        stage_committed_so_far = as.integer(ctx_stage_committed),
-        stage_realized = ctx_stage_realized,
-        budget_remaining_actual = as.integer(NA_integer_),
-        backfill_active = isTRUE(ctx_backfill_active)
-      ))
-    }
-    refit_id <- .adaptive_link_refit_window_id(state)
-    quota_controller <- controller
-    quota_controller$current_link_spoke_id <- as.integer(spoke_id)
-    quota_controller$B_spoke_refit_budget <- as.integer(
-      link_budget_map[[as.character(spoke_id)]]$B_spoke_refit_budget %||% NA_integer_
-    )
-    quota_controller$B_spoke_refit_budget_source <- as.character(
-      link_budget_map[[as.character(spoke_id)]]$B_spoke_refit_budget_source %||% "single_spoke_default"
-    )
-    stage_quotas <- .adaptive_round_compute_quotas(
-      round_id = as.integer(round$round_id %||% 1L),
-      n_items = as.integer(state$n_items),
-      controller = quota_controller
-    )
-    progress <- .adaptive_link_stage_progress(
-      state = state,
-      spoke_id = as.integer(spoke_id),
-      stage_quotas = stage_quotas,
-      stage_order = round$stage_order %||% .adaptive_stage_order(),
-      refit_id = refit_id
-    )
-    ctx_round_stage <- as.character(progress$active_stage %||% ctx_round_stage)
-    ctx_backfill_active <- isTRUE(progress$backfill_active)
-    ctx_stage_realized <- progress$stage_realized %||% NULL
-    if (identical(ctx_round_stage, "warm_start")) {
-      ctx_generation_stage <- if (length(ids) <= 2L) "anchor_link" else "local_link"
-    } else if (isTRUE(ctx_backfill_active)) {
-      ctx_generation_stage <- "pooled_backfill"
-    } else {
-      ctx_generation_stage <- as.character(ctx_round_stage)
-    }
-    if (isTRUE(ctx_backfill_active)) {
-      ctx_stage_quota <- as.integer(sum(progress$stage_quotas))
-      ctx_stage_committed <- as.integer(sum(progress$stage_realized %||% 0L))
-    } else {
-      ctx_stage_quota <- as.integer(progress$stage_quotas[[ctx_round_stage]] %||% NA_integer_)
-      ctx_stage_committed <- as.integer(progress$stage_committed[[ctx_round_stage]] %||% 0L)
-    }
+  link_progress <- if (isTRUE(link_phase_b) && !is.na(active_link_spoke)) {
     list(
-      round_stage = as.character(ctx_round_stage),
-      generation_stage = as.character(ctx_generation_stage),
-      stage_quota = as.integer(ctx_stage_quota),
-      stage_committed_so_far = as.integer(ctx_stage_committed),
-      stage_realized = ctx_stage_realized,
-      budget_remaining_actual = as.integer(progress$budget_remaining_actual %||% 0L),
-      backfill_active = isTRUE(ctx_backfill_active)
+      active_stage = as.character(stage_ctx_initial$round_stage),
+      backfill_active = isTRUE(stage_ctx_initial$backfill_active),
+      stage_realized = stage_ctx_initial$stage_realized
     )
+  } else {
+    NULL
   }
+  round_stage <- as.character(stage_ctx_initial$round_stage)
+  generation_stage <- as.character(stage_ctx_initial$generation_stage)
+  stage_quota <- as.integer(stage_ctx_initial$stage_quota)
+  stage_committed_so_far <- as.integer(stage_ctx_initial$stage_committed_so_far)
 
   stage_defs <- list(
     list(name = "base", W_used = defaults$W, dup_policy = "default", explore_boost = 1),

@@ -364,6 +364,20 @@ test_that("adaptive select history-state validators and resolvers reject invalid
     "must contain exactly min\\(n_pairs, 2000\\) rows"
   )
 
+  bad_recent_window <- valid_cache
+  bad_recent_window$recent_window_n <- 2001L
+  expect_error(
+    .adaptive_history_state_validate(bad_recent_window, ids, context = "test"),
+    "recent_window_n"
+  )
+
+  bad_recent_deg <- valid_cache
+  bad_recent_deg$recent_deg <- c(a = 0, b = 0)
+  expect_error(
+    .adaptive_history_state_validate(bad_recent_deg, ids, context = "test"),
+    "`history_state\\$recent_deg` must be an integer vector"
+  )
+
   state <- list(
     item_ids = ids,
     history_pairs = tibble::tibble(A_id = "a", B_id = "b"),
@@ -383,6 +397,20 @@ test_that("adaptive select history-state validators and resolvers reject invalid
   )
   stale_resolved <- .adaptive_history_state_resolve(stale_state, context = "test")
   expect_identical(stale_resolved$n_pairs, 1L)
+
+  legacy_cache <- valid_cache
+  legacy_cache$recent_window_n <- NULL
+  legacy_cache$recent_deg <- NULL
+  upgraded <- .adaptive_history_state_resolve(
+    list(
+      item_ids = ids,
+      history_pairs = tibble::tibble(A_id = "a", B_id = "b"),
+      history_state = legacy_cache
+    ),
+    validate_existing = TRUE,
+    context = "test"
+  )
+  expect_identical(upgraded$recent_deg, c(a = 1L, b = 1L))
 })
 
 test_that("adaptive select history update and utility helpers cover remaining branches", {
@@ -391,6 +419,11 @@ test_that("adaptive select history update and utility helpers cover remaining br
   updated <- .adaptive_history_state_update(cache, "a", "b")
   expect_identical(updated$n_pairs, 1L)
   expect_identical(updated$deg[c("a", "b", "c")], c(a = 1L, b = 1L, c = 0L))
+  expect_identical(
+    updated$recent_window_n,
+    pairwiseLLM:::.adaptive_history_state_live_recent_window(ids)
+  )
+  expect_identical(updated$recent_deg[c("a", "b", "c")], c(a = 1L, b = 1L, c = 0L))
   expect_identical(updated$pair_count[[make_unordered_key("a", "b")]], 1L)
   expect_error(
     .adaptive_history_state_update(updated, "a", "a"),
@@ -408,6 +441,20 @@ test_that("adaptive select history update and utility helpers cover remaining br
   expect_identical(
     .adaptive_history_state_recent_deg(updated, ids = ids, W_cap = 0L),
     c(a = 0L, b = 0L, c = 0L)
+  )
+  expect_error(
+    .adaptive_history_state_recent_deg(
+      utils::modifyList(
+        updated,
+        list(
+          n_pairs = 5000L,
+          recent_pairs = tibble::tibble(A_id = rep("a", 3L), B_id = rep("b", 3L))
+        )
+      ),
+      ids = ids,
+      W_cap = 3000L
+    ),
+    "Rebuild from canonical history"
   )
 
   expect_false(.adaptive_selection_mode_is_linking("link_one_spoke", is_cross_set = FALSE))
@@ -1167,4 +1214,114 @@ test_that("adaptive select posterior and predictive helpers cover remaining edge
     ),
     .package = "pairwiseLLM"
   )))
+})
+
+test_that("adaptive round candidate helper guards cover remaining empty and invalid branches", {
+  empty_pairs <- tibble::tibble(
+    i = character(),
+    j = character(),
+    dist_stratum_global = integer()
+  )
+
+  expect_no_error(
+    .adaptive_link_assert_active_domain_count(
+      stage_name = "local_link",
+      n_candidates_after_active_domain = NA_integer_,
+      active_hub_ids = "h1",
+      spoke_ids = c("s1", "s2"),
+      spoke_id = 2L
+    )
+  )
+
+  expect_error(
+    .adaptive_within_set_same_group_pairs(
+      item_ids = c("a", "b"),
+      rank_index = c(a = 1L, b = NA_integer_),
+      dist_stratum_global = 0L
+    ),
+    "finite ranks"
+  )
+
+  expect_identical(
+    .adaptive_within_set_cross_group_pairs(
+      left_ids = character(),
+      right_ids = "b",
+      rank_index = c(a = 1L, b = 2L),
+      stratum_map = c(a = 1L, b = 2L)
+    ),
+    empty_pairs
+  )
+  expect_error(
+    .adaptive_within_set_cross_group_pairs(
+      left_ids = "a",
+      right_ids = "b",
+      rank_index = c(a = 1L, b = NA_integer_),
+      stratum_map = c(a = 1L, b = 2L)
+    ),
+    "finite ranks"
+  )
+  expect_error(
+    .adaptive_within_set_cross_group_pairs(
+      left_ids = "a",
+      right_ids = "b",
+      rank_index = c(a = 1L, b = 2L),
+      stratum_map = c(a = 1L, b = NA_integer_)
+    ),
+    "finite strata"
+  )
+
+  expect_identical(
+    .adaptive_within_set_direct_pairs(
+      ids = "a",
+      anchor_ids = character(),
+      rank_index = c(a = 1L),
+      stratum_map = c(a = 1L),
+      stage_name = "local_link",
+      bounds = list(min = 0L, max = 0L)
+    ),
+    empty_pairs
+  )
+  expect_error(
+    .adaptive_within_set_direct_pairs(
+      ids = c("a", "b"),
+      anchor_ids = character(),
+      rank_index = c(a = 1L, b = 2L),
+      stratum_map = c(a = 1L, b = NA_integer_),
+      stage_name = "local_link",
+      bounds = list(min = 0L, max = 1L)
+    ),
+    "finite strata"
+  )
+  expect_identical(
+    .adaptive_within_set_direct_pairs(
+      ids = c("a", "b"),
+      anchor_ids = character(),
+      rank_index = c(a = 1L, b = 2L),
+      stratum_map = c(a = 1L, b = 2L),
+      stage_name = "local_link",
+      bounds = list(min = 3L, max = 4L)
+    ),
+    empty_pairs
+  )
+  expect_identical(
+    .adaptive_within_set_direct_pairs(
+      ids = c("a", "b"),
+      anchor_ids = character(),
+      rank_index = c(a = 1L, b = 2L),
+      stratum_map = c(a = 1L, b = 2L),
+      stage_name = "local_link",
+      bounds = list(min = 0L, max = 0L)
+    ),
+    empty_pairs
+  )
+
+  expect_identical(
+    .adaptive_link_backfill_order(
+      candidates = tibble::tibble(),
+      hub_id = 1L,
+      set_map = integer(),
+      spoke_id = 2L
+    ),
+    integer()
+  )
 })

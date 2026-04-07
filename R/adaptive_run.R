@@ -880,6 +880,38 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_refit_local_memo_entry <- function(state,
+                                                  controller,
+                                                  spoke_id,
+                                                  refit_id = NULL) {
+  spoke_id <- as.integer(spoke_id)
+  context <- .adaptive_link_refit_local_context(
+    state = state,
+    controller = controller,
+    spoke_id = spoke_id,
+    refit_id = refit_id
+  )
+  env <- .adaptive_link_refit_local_memo_env(state)
+  key <- as.character(spoke_id)
+  entry <- NULL
+  if (is.environment(env)) {
+    .adaptive_link_refit_local_memo_prune(
+      env = env,
+      refit_id = as.integer(context$refit_id),
+      step_id = as.integer(context$step_id)
+    )
+    entry <- env[[key]] %||% NULL
+  }
+  list(
+    env = env,
+    key = key,
+    context = context,
+    entry = entry
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_refit_local_inputs_build <- function(state,
                                                     controller,
                                                     spoke_id,
@@ -924,36 +956,228 @@
                                               spoke_id,
                                               defaults = NULL,
                                               refit_id = NULL) {
-  spoke_id <- as.integer(spoke_id)
-  context <- .adaptive_link_refit_local_context(
+  memo <- .adaptive_link_refit_local_memo_entry(
     state = state,
     controller = controller,
-    spoke_id = spoke_id,
+    spoke_id = as.integer(spoke_id),
     refit_id = refit_id
   )
-  env <- .adaptive_link_refit_local_memo_env(state)
-  key <- as.character(spoke_id)
-  if (is.environment(env)) {
-    .adaptive_link_refit_local_memo_prune(
-      env = env,
-      refit_id = as.integer(context$refit_id),
-      step_id = as.integer(context$step_id)
-    )
-    entry <- env[[key]] %||% NULL
-    if (is.list(entry) &&
-      .adaptive_link_refit_local_context_matches(entry$context %||% list(), context)) {
-      return(entry$value %||% list())
+  if (is.environment(memo$env)) {
+    if (is.list(memo$entry) &&
+      .adaptive_link_refit_local_context_matches(memo$entry$context %||% list(), memo$context)) {
+      return(memo$entry$value %||% list())
     }
   }
 
   value <- .adaptive_link_refit_local_inputs_build(
     state = state,
     controller = controller,
-    spoke_id = spoke_id,
+    spoke_id = as.integer(spoke_id),
     defaults = defaults
   )
-  if (is.environment(env)) {
-    env[[key]] <- list(context = context, value = value)
+  if (is.environment(memo$env)) {
+    entry <- memo$env[[memo$key]] %||% list()
+    entry$context <- memo$context
+    entry$value <- value
+    memo$env[[memo$key]] <- entry
+  }
+  value
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_stage_feasibility_snapshot_key <- function(stage_order,
+                                                          C_max,
+                                                          seed_base,
+                                                          seed_stride) {
+  paste(
+    paste(as.character(stage_order %||% character()), collapse = ","),
+    as.integer(C_max %||% NA_integer_),
+    as.integer(seed_base %||% NA_integer_),
+    as.integer(seed_stride %||% NA_integer_),
+    sep = "::"
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_stage_feasibility_snapshot_empty <- function(stage_order) {
+  stage_order <- as.character(stage_order %||% .adaptive_stage_order())
+  utility_values_by_stage <- stats::setNames(vector("list", length(stage_order)), stage_order)
+  utility_values_by_stage[] <- rep_len(list(numeric()), length(stage_order))
+  list(
+    feasible_counts = stats::setNames(rep.int(0L, length(stage_order)), stage_order),
+    feasible_utility_mass = stats::setNames(rep.int(0, length(stage_order)), stage_order),
+    utility_values_by_stage = utility_values_by_stage,
+    candidate_count = 0L
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_stage_feasibility_snapshot_build <- function(state,
+                                                            controller,
+                                                            spoke_id,
+                                                            stage_order,
+                                                            C_max = NULL,
+                                                            seed_base = NULL,
+                                                            seed_stride = 37L) {
+  round <- state$round %||% list()
+  defaults <- adaptive_defaults(as.integer(state$n_items))
+  ids <- as.character(state$item_ids)
+  history_state <- .adaptive_history_state_resolve(state, ids = ids)
+  counts <- .adaptive_history_state_counts(history_state, ids)
+  recent_deg <- .adaptive_history_state_recent_deg(history_state, ids, defaults$W_cap)
+  link_controller <- controller
+  link_controller$current_link_spoke_id <- as.integer(spoke_id)
+  refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+  stage_order <- as.character(stage_order %||% .adaptive_stage_order())
+  C_max <- as.integer(C_max %||% defaults$C_max)
+  seed_base <- as.integer(seed_base %||% (1000L + (1009L * as.integer(spoke_id))))
+  seed_stride <- as.integer(seed_stride %||% 37L)
+  feasible_counts <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
+  feasible_utility_mass <- stats::setNames(rep.int(0, length(stage_order)), stage_order)
+  utility_values_by_stage <- stats::setNames(vector("list", length(stage_order)), stage_order)
+
+  for (idx in seq_along(stage_order)) {
+    stage_name <- as.character(stage_order[[idx]])
+    stage_seed <- as.integer(seed_base + (seed_stride * idx))
+    generated <- tryCatch(
+      generate_stage_candidates_from_state(
+        state = state,
+        stage_name = stage_name,
+        fallback_name = "base",
+        C_max = C_max,
+        seed = stage_seed,
+        link_spoke_id = as.integer(spoke_id)
+      ),
+      error = function(e) {
+        .adaptive_link_abort_feasibility_failure(
+          refit_id = refit_id,
+          spoke_id = as.integer(spoke_id),
+          stage_name = stage_name,
+          helper_name = "generate_stage_candidates_from_state",
+          error = e
+        )
+      }
+    )
+    filtered <- tryCatch(
+      .adaptive_filter_link_backfill_candidates(
+        candidates = generated,
+        counts = counts,
+        round = round,
+        recent_deg = recent_deg,
+        defaults = defaults
+      ),
+      error = function(e) {
+        .adaptive_link_abort_feasibility_failure(
+          refit_id = refit_id,
+          spoke_id = as.integer(spoke_id),
+          stage_name = stage_name,
+          helper_name = ".adaptive_filter_link_backfill_candidates",
+          error = e
+        )
+      }
+    )
+    cand <- tibble::as_tibble(filtered$candidates)
+    feasible_counts[[stage_name]] <- as.integer(nrow(cand))
+    if (nrow(cand) < 1L) {
+      utility_values_by_stage[[stage_name]] <- numeric()
+      next
+    }
+    if (!"p" %in% names(cand)) {
+      cand$p <- rep(0.5, nrow(cand))
+    }
+    if (!"u0" %in% names(cand)) {
+      cand$u0 <- rep(0, nrow(cand))
+    }
+    cand <- tryCatch(
+      .adaptive_link_attach_predictive_utility(
+        candidates = cand,
+        state = state,
+        controller = link_controller,
+        spoke_id = as.integer(spoke_id)
+      ),
+      error = function(e) {
+        .adaptive_link_abort_feasibility_failure(
+          refit_id = refit_id,
+          spoke_id = as.integer(spoke_id),
+          stage_name = stage_name,
+          helper_name = ".adaptive_link_attach_predictive_utility",
+          error = e
+        )
+      }
+    )
+    utility_col <- .adaptive_resolve_selection_column(
+      .adaptive_linking_utility_mode(link_controller$link_estimation_mode)
+    )
+    utility_vals <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
+      as.double(cand[[utility_col]])
+    } else {
+      rep_len(0, nrow(cand))
+    }
+    utility_vals[!is.finite(utility_vals) | utility_vals < 0] <- 0
+    feasible_utility_mass[[stage_name]] <- as.double(sum(utility_vals))
+    utility_values_by_stage[[stage_name]] <- utility_vals
+  }
+
+  list(
+    feasible_counts = feasible_counts,
+    feasible_utility_mass = feasible_utility_mass,
+    utility_values_by_stage = utility_values_by_stage,
+    candidate_count = as.integer(sum(feasible_counts, na.rm = TRUE))
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_stage_feasibility_snapshot <- function(state,
+                                                      controller,
+                                                      spoke_id,
+                                                      stage_order,
+                                                      C_max = NULL,
+                                                      seed_base = NULL,
+                                                      seed_stride = 37L) {
+  stage_order <- as.character(stage_order %||% .adaptive_stage_order())
+  C_max <- as.integer(C_max %||% adaptive_defaults(as.integer(state$n_items))$C_max)
+  seed_base <- as.integer(seed_base %||% (1000L + (1009L * as.integer(spoke_id))))
+  seed_stride <- as.integer(seed_stride %||% 37L)
+  memo <- .adaptive_link_refit_local_memo_entry(
+    state = state,
+    controller = controller,
+    spoke_id = as.integer(spoke_id)
+  )
+  summary_key <- .adaptive_link_stage_feasibility_snapshot_key(
+    stage_order = stage_order,
+    C_max = C_max,
+    seed_base = seed_base,
+    seed_stride = seed_stride
+  )
+  if (is.environment(memo$env) &&
+    is.list(memo$entry) &&
+    .adaptive_link_refit_local_context_matches(memo$entry$context %||% list(), memo$context)) {
+    summaries <- memo$entry$stage_feasibility_capacity_summaries %||% list()
+    if (is.list(summaries) && !is.null(summaries[[summary_key]])) {
+      return(summaries[[summary_key]])
+    }
+  }
+
+  value <- .adaptive_link_stage_feasibility_snapshot_build(
+    state = state,
+    controller = controller,
+    spoke_id = as.integer(spoke_id),
+    stage_order = stage_order,
+    C_max = C_max,
+    seed_base = seed_base,
+    seed_stride = seed_stride
+  )
+  if (is.environment(memo$env)) {
+    entry <- memo$env[[memo$key]] %||% list()
+    entry$context <- memo$context
+    summaries <- entry$stage_feasibility_capacity_summaries %||% list()
+    summaries[[summary_key]] <- value
+    entry$stage_feasibility_capacity_summaries <- summaries
+    memo$env[[memo$key]] <- entry
   }
   value
 }
@@ -3011,107 +3235,6 @@
       conditionMessage(error)
     ),
     parent = error
-  )
-}
-
-#' @keywords internal
-#' @noRd
-.adaptive_link_stage_feasibility_snapshot <- function(state, controller, spoke_id, stage_order) {
-  round <- state$round %||% list()
-  defaults <- adaptive_defaults(as.integer(state$n_items))
-  ids <- as.character(state$item_ids)
-  history_state <- .adaptive_history_state_resolve(state, ids = ids)
-  counts <- .adaptive_history_state_counts(history_state, ids)
-  recent_deg <- .adaptive_history_state_recent_deg(history_state, ids, defaults$W_cap)
-  link_controller <- controller
-  link_controller$current_link_spoke_id <- as.integer(spoke_id)
-  refit_id <- as.integer(.adaptive_link_refit_window_id(state))
-  feasible_counts <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
-  feasible_utility_mass <- stats::setNames(rep.int(0, length(stage_order)), stage_order)
-
-  for (idx in seq_along(stage_order)) {
-    stage_name <- as.character(stage_order[[idx]])
-    stage_seed <- 1000L + (37L * idx) + (1009L * as.integer(spoke_id))
-    generated <- tryCatch(
-      generate_stage_candidates_from_state(
-        state = state,
-        stage_name = stage_name,
-        fallback_name = "base",
-        C_max = defaults$C_max,
-        seed = stage_seed,
-        link_spoke_id = as.integer(spoke_id)
-      ),
-      error = function(e) {
-        .adaptive_link_abort_feasibility_failure(
-          refit_id = refit_id,
-          spoke_id = as.integer(spoke_id),
-          stage_name = stage_name,
-          helper_name = "generate_stage_candidates_from_state",
-          error = e
-        )
-      }
-    )
-    filtered <- tryCatch(
-      .adaptive_filter_link_backfill_candidates(
-        candidates = generated,
-        counts = counts,
-        round = round,
-        recent_deg = recent_deg,
-        defaults = defaults
-      ),
-      error = function(e) {
-        .adaptive_link_abort_feasibility_failure(
-          refit_id = refit_id,
-          spoke_id = as.integer(spoke_id),
-          stage_name = stage_name,
-          helper_name = ".adaptive_filter_link_backfill_candidates",
-          error = e
-        )
-      }
-    )
-    cand <- tibble::as_tibble(filtered$candidates)
-    feasible_counts[[stage_name]] <- as.integer(nrow(cand))
-    if (nrow(cand) < 1L) {
-      next
-    }
-    if (!"p" %in% names(cand)) {
-      cand$p <- rep(0.5, nrow(cand))
-    }
-    if (!"u0" %in% names(cand)) {
-      cand$u0 <- rep(0, nrow(cand))
-    }
-    cand <- tryCatch(
-      .adaptive_link_attach_predictive_utility(
-        candidates = cand,
-        state = state,
-        controller = link_controller,
-        spoke_id = as.integer(spoke_id)
-      ),
-      error = function(e) {
-        .adaptive_link_abort_feasibility_failure(
-          refit_id = refit_id,
-          spoke_id = as.integer(spoke_id),
-          stage_name = stage_name,
-          helper_name = ".adaptive_link_attach_predictive_utility",
-          error = e
-        )
-      }
-    )
-    utility_col <- .adaptive_resolve_selection_column(
-      .adaptive_linking_utility_mode(link_controller$link_estimation_mode)
-    )
-    utility_vals <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
-      as.double(cand[[utility_col]])
-    } else {
-      rep_len(0, nrow(cand))
-    }
-    utility_vals[!is.finite(utility_vals) | utility_vals < 0] <- 0
-    feasible_utility_mass[[stage_name]] <- as.double(sum(utility_vals))
-  }
-
-  list(
-    feasible_counts = feasible_counts,
-    feasible_utility_mass = feasible_utility_mass
   )
 }
 
