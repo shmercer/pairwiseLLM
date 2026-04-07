@@ -1304,6 +1304,57 @@ test_that("cached-start D-opt helper matches the uncached helper exactly", {
   )
 })
 
+test_that("rank-one D-opt helpers stay numerically aligned with the legacy logdet path", {
+  legacy_gain <- function(it, ipair, ridge = 1e-6) {
+    logdet_ref <- function(mat) {
+      x <- as.matrix(mat)
+      x <- (x + t(x)) / 2
+      x <- x + diag(ridge, nrow(x))
+      sum(log(eigen(x, symmetric = TRUE, only.values = TRUE)$values))
+    }
+    logdet_ref(it + ipair) - logdet_ref(it)
+  }
+
+  prepared_transform <- pairwiseLLM:::.adaptive_link_d_opt_rank1_prepare(
+    matrix(c(1.4, 0.25, 0.25, 0.9), nrow = 2L),
+    ridge = 1e-6
+  )
+  transform_gain <- pairwiseLLM:::.adaptive_link_d_opt_rank1_gain_transform(
+    prepared = prepared_transform,
+    info_scale = 0.21,
+    transform_mode = "shift_scale",
+    alpha = 1.3,
+    theta_raw_x = -2
+  )
+  transform_g <- pairwiseLLM:::.adaptive_link_info_gradient(
+    transform_mode = "shift_scale",
+    alpha = 1.3,
+    theta_raw_x = -2
+  )
+  transform_legacy <- legacy_gain(
+    it = matrix(c(1.4, 0.25, 0.25, 0.9), nrow = 2L),
+    ipair = as.matrix(0.21 * (transform_g %*% t(transform_g))),
+    ridge = 1e-6
+  )
+  expect_equal(transform_gain, transform_legacy, tolerance = 1e-12)
+
+  prepared_anchored <- pairwiseLLM:::.adaptive_link_d_opt_rank1_prepare(
+    matrix(c(1.2, 0.15, 0.15, 1.1), nrow = 2L),
+    ridge = 1e-6
+  )
+  anchored_gain <- pairwiseLLM:::.adaptive_link_d_opt_rank1_gain_diag(
+    prepared = prepared_anchored,
+    info_scale = 0.24,
+    diag_index = 1L
+  )
+  anchored_legacy <- legacy_gain(
+    it = matrix(c(1.2, 0.15, 0.15, 1.1), nrow = 2L),
+    ipair = matrix(c(0.24, 0, 0, 0), nrow = 2L),
+    ridge = 1e-6
+  )
+  expect_equal(anchored_gain, anchored_legacy, tolerance = 1e-12)
+})
+
 test_that("selection utility helpers cover additional fallback branches", {
   expect_identical(
     pairwiseLLM:::.adaptive_selection_utility_mode(

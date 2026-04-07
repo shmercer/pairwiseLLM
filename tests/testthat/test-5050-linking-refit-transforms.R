@@ -109,6 +109,41 @@ append_probe_step <- function(state, step_id, hub_item_id, spoke_item_id, Y, spo
   state
 }
 
+legacy_link_logdet_spd_reference <- function(mat, ridge = 1e-6) {
+  x <- as.matrix(mat)
+  if (!is.numeric(x) || nrow(x) != ncol(x) || nrow(x) < 1L) {
+    return(NA_real_)
+  }
+  x <- (x + t(x)) / 2
+  ridge <- as.double(ridge %||% 1e-6)
+  if (!is.finite(ridge) || ridge <= 0) {
+    ridge <- 1e-6
+  }
+  x <- x + diag(ridge, nrow(x))
+  vals <- tryCatch(
+    eigen(x, symmetric = TRUE, only.values = TRUE)$values,
+    error = function(e) rep(NA_real_, nrow(x))
+  )
+  if (length(vals) != nrow(x) || any(!is.finite(vals)) || any(vals <= 0)) {
+    return(NA_real_)
+  }
+  as.double(sum(log(vals)))
+}
+
+legacy_link_d_opt_gain_logdet_reference <- function(it, ipair, ridge = 1e-6) {
+  it <- as.matrix(it)
+  ipair <- as.matrix(ipair)
+  if (nrow(it) != ncol(it) || nrow(ipair) != ncol(ipair) || nrow(it) != nrow(ipair)) {
+    return(NA_real_)
+  }
+  logdet_start <- legacy_link_logdet_spd_reference(it, ridge = ridge)
+  logdet_end <- legacy_link_logdet_spd_reference(it + ipair, ridge = ridge)
+  if (!is.finite(logdet_start) || !is.finite(logdet_end)) {
+    return(NA_real_)
+  }
+  as.double(logdet_end - logdet_start)
+}
+
 legacy_link_attach_predictive_utility_reference <- function(candidates, state, controller, spoke_id) {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) < 1L || is.na(spoke_id)) {
@@ -228,7 +263,7 @@ legacy_link_attach_predictive_utility_reference <- function(candidates, state, c
       g <- matrix(0, nrow = free_block_dim, ncol = 1L)
       g[spoke_idx, 1L] <- 1
       ipair <- as.matrix(as.double(pbar * (1 - pbar)) * (g %*% t(g)))
-      pairwiseLLM:::.adaptive_link_d_opt_gain_logdet(it = it_state$it, ipair = ipair, ridge = 1e-6)
+      legacy_link_d_opt_gain_logdet_reference(it = it_state$it, ipair = ipair, ridge = 1e-6)
     }, numeric(1L))
     return(cand)
   }
@@ -295,7 +330,7 @@ legacy_link_attach_predictive_utility_reference <- function(candidates, state, c
       return(NA_real_)
     }
     ipair <- as.matrix(info_scale * (g %*% t(g)))
-    pairwiseLLM:::.adaptive_link_d_opt_gain_logdet(it = it_state$it, ipair = ipair, ridge = 1e-6)
+    legacy_link_d_opt_gain_logdet_reference(it = it_state$it, ipair = ipair, ridge = 1e-6)
   }, numeric(1L))
   cand
 }
@@ -758,7 +793,7 @@ test_that("joint_refit utility uses current theta state rather than Phase A summ
   expect_false(isTRUE(all.equal(out_joint$link_p[[1L]], out_shift$link_p[[1L]], tolerance = 1e-12)))
 })
 
-test_that("transform linking utility attachment matches the legacy row-wise implementation exactly", {
+test_that("transform linking utility attachment matches the legacy row-wise implementation to numerical parity", {
   state <- make_linking_refit_state(
     list(
       link_refit_mode = "joint_refit",
@@ -799,7 +834,7 @@ test_that("transform linking utility attachment matches the legacy row-wise impl
 
   expect_equal(current$link_p, legacy$link_p, tolerance = 0)
   expect_equal(current$link_u, legacy$link_u, tolerance = 0)
-  expect_equal(current$link_d_opt_gain, legacy$link_d_opt_gain, tolerance = 0)
+  expect_equal(current$link_d_opt_gain, legacy$link_d_opt_gain, tolerance = 1e-12)
   expect_identical(
     pairwiseLLM:::.adaptive_linking_selection_order(current),
     pairwiseLLM:::.adaptive_linking_selection_order(legacy)
@@ -5231,7 +5266,7 @@ test_that("anchored-joint utility and Fisher updates use the accepted state", {
   expect_identical(d_opt_entry$it_n_pairs_accumulated, 1L)
 })
 
-test_that("anchored-joint linking utility attachment matches the legacy row-wise implementation exactly", {
+test_that("anchored-joint linking utility attachment matches the legacy row-wise implementation to numerical parity", {
   state <- make_linking_refit_state(
     list(
       run_mode = "link_multi_spoke",
@@ -5294,7 +5329,7 @@ test_that("anchored-joint linking utility attachment matches the legacy row-wise
 
   expect_equal(current$link_p, legacy$link_p, tolerance = 0)
   expect_equal(current$link_u, legacy$link_u, tolerance = 0)
-  expect_equal(current$link_d_opt_gain, legacy$link_d_opt_gain, tolerance = 0)
+  expect_equal(current$link_d_opt_gain, legacy$link_d_opt_gain, tolerance = 1e-12)
   expect_identical(
     pairwiseLLM:::.adaptive_linking_selection_order(current, utility_mode = "linking_d_optimal_anchored_joint"),
     pairwiseLLM:::.adaptive_linking_selection_order(legacy, utility_mode = "linking_d_optimal_anchored_joint")
