@@ -11,6 +11,7 @@ docs
 tests/testthat/bad.csv
 dev-checklists
 agents.md
+agents_adaptive.md
 inst/stan/btl_e_b.exe
 inst/stan/btl_e_b
 inst/stan/link_transform_refit
