@@ -16,6 +16,7 @@ submit_gemini_pairs_live(
   top_p = NULL,
   top_k = NULL,
   max_output_tokens = NULL,
+  service_tier = "standard",
   api_version = "v1beta",
   verbose = TRUE,
   status_every = 1L,
@@ -57,6 +58,11 @@ model uses its own default.}
 
 \item{max_output_tokens}{Optional integer; forwarded to
 \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}.}
+
+\item{service_tier}{Gemini Developer API service tier forwarded to
+\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}. Use \code{"standard"} (default) or \code{NULL} for
+provider default behavior, or \code{"flex"} / \code{"priority"} to request the
+documented Gemini service tier.}
 
 \item{api_version}{API version; default \code{"v1beta"}.}
 

@@ -348,6 +348,10 @@
 #' @param top_p Optional nucleus sampling parameter. If \code{NULL}, omitted.
 #' @param top_k Optional top-k sampling parameter. If \code{NULL}, omitted.
 #' @param max_output_tokens Optional integer. If \code{NULL}, omitted.
+#' @param service_tier Gemini Developer API service tier. Use \code{"standard"}
+#'   (default) or \code{NULL} for provider default behavior, or \code{"flex"} /
+#'   \code{"priority"} to encode the documented Gemini \code{serviceTier}
+#'   request field.
 #' @param include_thoughts Logical; if \code{TRUE}, sets
 #'   \code{thinkingConfig.includeThoughts = TRUE} so that Gemini returns
 #'   visible chain-of-thought. For most pairwise scoring use cases this should
@@ -412,10 +416,12 @@ build_gemini_batch_requests <- function(
   top_p = NULL,
   top_k = NULL,
   max_output_tokens = NULL,
+  service_tier = "standard",
   include_thoughts = FALSE,
   ...
 ) {
   thinking_level <- match.arg(thinking_level, c("minimal", "low", "medium", "high"))
+  service_tier <- normalize_gemini_service_tier(service_tier)
 
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
@@ -496,7 +502,7 @@ build_gemini_batch_requests <- function(
 
     generation_config$thinkingConfig <- thinking_config
 
-    list(
+    req <- list(
       contents = list(
         list(
           role = "user",
@@ -507,6 +513,12 @@ build_gemini_batch_requests <- function(
       ),
       generationConfig = generation_config
     )
+
+    if (!is.null(service_tier)) {
+      req$serviceTier <- service_tier
+    }
+
+    req
   }
 
   out <- vector("list", nrow(pairs))
@@ -1244,6 +1256,10 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #'   [gemini_compare_pair_live()]. Parsed results will include a `thoughts`
 #'   column when visible thoughts are returned by the API (currently batch
 #'   typically only exposes `thoughtSignature` + `thoughtsTokenCount`).
+#' @param service_tier Gemini Developer API service tier forwarded to
+#'   \code{\link{build_gemini_batch_requests}}. Use \code{"standard"} (default)
+#'   or \code{NULL} for provider default behavior, or \code{"flex"} /
+#'   \code{"priority"} to request the documented Gemini service tier.
 #' @param ... Additional arguments forwarded to
 #'   \code{\link{build_gemini_batch_requests}} (for example
 #'   \code{temperature}, \code{top_p}, \code{top_k},
@@ -1337,6 +1353,7 @@ run_gemini_batch_pipeline <- function(
   api_version = "v1beta",
   verbose = TRUE,
   include_thoughts = FALSE,
+  service_tier = "standard",
   ...
 ) {
   if (!is.character(model) || length(model) != 1L || !nzchar(model)) {
@@ -1362,6 +1379,7 @@ run_gemini_batch_pipeline <- function(
     trait_description = trait_description,
     prompt_template   = prompt_template,
     thinking_level    = thinking_level,
+    service_tier      = service_tier,
     include_thoughts  = include_thoughts,
     ...
   )

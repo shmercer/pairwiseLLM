@@ -70,10 +70,15 @@ are passed on to \code{\link[=openai_compare_pair_live]{openai_compare_pair_live
 arguments such as \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}, and
 \code{include_thoughts}. For \code{"anthropic"} and \code{"gemini"} they are forwarded to
 the corresponding live helper and may include parameters such as
-\code{reasoning}, \code{include_thoughts}, \code{max_output_tokens}, or
+\code{reasoning}, \code{include_thoughts}, \code{max_output_tokens}, \code{service_tier}, or
 provider-specific options. For \code{"ollama"}, arguments are forwarded to
 \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}} and may include \code{host}, \code{think},
-\code{num_ctx}, and other Ollama-specific controls.}
+\code{num_ctx}, and other Ollama-specific controls.
+
+\code{service_tier} is provider-specific: OpenAI and Gemini Developer API each
+validate and encode it using their own request surfaces. For Gemini,
+supported public values are \code{"standard"} (default / omitted), \code{"flex"},
+and \code{"priority"}.}
 }
 \value{
 A tibble with one row and the same columns as the underlying

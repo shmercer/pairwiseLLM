@@ -82,7 +82,9 @@
 #'   options such as temperature or batch configuration fields. For OpenAI,
 #'   this may include `endpoint`, `temperature`, `top_p`, `logprobs`,
 #'   `reasoning`, `service_tier`, etc. For Anthropic, this may include `reasoning`,
-#'   `max_tokens`, `temperature`, or `thinking_budget_tokens`.
+#'   `max_tokens`, `temperature`, or `thinking_budget_tokens`. For Gemini, this
+#'   may include `thinking_level`, `temperature`, `top_p`, `top_k`,
+#'   `max_output_tokens`, and `service_tier`.
 #'
 #' @return
 #' A list of class `"pairwiseLLM_batch"` containing at least:

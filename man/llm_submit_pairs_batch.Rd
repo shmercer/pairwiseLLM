@@ -59,7 +59,9 @@ result (where supported by backends).}
 options such as temperature or batch configuration fields. For OpenAI,
 this may include \code{endpoint}, \code{temperature}, \code{top_p}, \code{logprobs},
 \code{reasoning}, \code{service_tier}, etc. For Anthropic, this may include \code{reasoning},
-\code{max_tokens}, \code{temperature}, or \code{thinking_budget_tokens}.}
+\code{max_tokens}, \code{temperature}, or \code{thinking_budget_tokens}. For Gemini, this
+may include \code{thinking_level}, \code{temperature}, \code{top_p}, \code{top_k},
+\code{max_output_tokens}, and \code{service_tier}.}
 }
 \value{
 A list of class \code{"pairwiseLLM_batch"} containing at least:

@@ -345,7 +345,8 @@ testthat::test_that("llm_compare_pair routes to gemini backend", {
         backend           = "gemini",
         api_key           = "GEMINI_KEY",
         include_raw       = TRUE,
-        include_thoughts  = TRUE
+        include_thoughts  = TRUE,
+        service_tier      = "flex"
       )
 
       testthat::expect_equal(length(calls), 1L)
@@ -360,6 +361,7 @@ testthat::test_that("llm_compare_pair routes to gemini backend", {
       testthat::expect_equal(call$api_key, "GEMINI_KEY")
       testthat::expect_true("include_thoughts" %in% names(call$dots))
       testthat::expect_true(call$dots$include_thoughts)
+      testthat::expect_equal(call$dots$service_tier, "flex")
 
       testthat::expect_s3_class(res, "tbl_df")
       testthat::expect_equal(res, fake_res)
@@ -1080,6 +1082,7 @@ testthat::test_that("submit_llm_pairs routes to gemini backend with new args", {
         prompt_template   = tmpl,
         backend           = "gemini",
         api_key           = "GEMINI_KEY",
+        service_tier      = "priority",
         parallel          = FALSE,
         save_path         = NULL
       )
@@ -1089,6 +1092,7 @@ testthat::test_that("submit_llm_pairs routes to gemini backend with new args", {
 
       testthat::expect_equal(call$model, "gemini-pro")
       testthat::expect_equal(call$api_key, "GEMINI_KEY")
+      testthat::expect_equal(call$service_tier, "priority")
       testthat::expect_false(call$parallel)
       testthat::expect_null(call$save_path)
 

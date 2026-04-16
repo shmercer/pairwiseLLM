@@ -91,8 +91,8 @@ are forwarded to \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live
 \code{include_thoughts}.
 For \code{"anthropic"} and \code{"gemini"}, they are forwarded to
 \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}} or \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}} and
-may include options such as \code{max_output_tokens}, \code{include_thoughts}, and
-provider-specific controls. For \code{"ollama"}, arguments are forwarded to
+may include options such as \code{max_output_tokens}, \code{include_thoughts},
+\code{service_tier}, and provider-specific controls. For \code{"ollama"}, arguments are forwarded to
 \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} and may include \code{host}, \code{think},
 \code{num_ctx}, and other Ollama-specific options.}
 }

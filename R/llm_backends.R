@@ -67,10 +67,15 @@
 #'   arguments such as `temperature`, `top_p`, `logprobs`, `reasoning`, and
 #'   `include_thoughts`. For `"anthropic"` and `"gemini"` they are forwarded to
 #'   the corresponding live helper and may include parameters such as
-#'   `reasoning`, `include_thoughts`, `max_output_tokens`, or
+#'   `reasoning`, `include_thoughts`, `max_output_tokens`, `service_tier`, or
 #'   provider-specific options. For `"ollama"`, arguments are forwarded to
 #'   [ollama_compare_pair_live()] and may include `host`, `think`,
 #'   `num_ctx`, and other Ollama-specific controls.
+#'
+#'   `service_tier` is provider-specific: OpenAI and Gemini Developer API each
+#'   validate and encode it using their own request surfaces. For Gemini,
+#'   supported public values are `"standard"` (default / omitted), `"flex"`,
+#'   and `"priority"`.
 #'
 #' @return A tibble with one row and the same columns as the underlying
 #'   backend-specific live helper (for example [openai_compare_pair_live()]
@@ -362,8 +367,8 @@ llm_compare_pair <- function(
 #'   `include_thoughts`.
 #'   For `"anthropic"` and `"gemini"`, they are forwarded to
 #'   [submit_anthropic_pairs_live()] or [submit_gemini_pairs_live()] and
-#'   may include options such as `max_output_tokens`, `include_thoughts`, and
-#'   provider-specific controls. For `"ollama"`, arguments are forwarded to
+#'   may include options such as `max_output_tokens`, `include_thoughts`,
+#'   `service_tier`, and provider-specific controls. For `"ollama"`, arguments are forwarded to
 #'   [submit_ollama_pairs_live()] and may include `host`, `think`,
 #'   `num_ctx`, and other Ollama-specific options.
 #'
