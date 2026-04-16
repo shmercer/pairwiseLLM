@@ -934,6 +934,7 @@ test_that("llm_compare_pair dispatches to the correct backend helper", {
 })
 
 test_that(".retry_httr2_request retries on transient statuses and returns success", {
+  retry_fn <- pairwiseLLM:::.retry_httr2_request
   call_count <- 0L
   fake_resp <- function(status) {
     structure(list(status = status), class = "httr2_response")
@@ -948,13 +949,14 @@ test_that(".retry_httr2_request retries on transient statuses and returns succes
       fake_resp(200L)
     },
     `.pairwiseLLM_resp_status` = function(resp) resp$status,
-    .package = "pairwiseLLM",
+    .env = asNamespace("pairwiseLLM"),
     {
-      pairwiseLLM:::.retry_httr2_request(
-        list(),
-        max_attempts = 2L,
-        base_delay = 0,
-        jitter = 0
+      testthat::with_mocked_bindings(
+        Sys.sleep = function(...) NULL,
+        .package = "base",
+        {
+          retry_fn(list())
+        }
       )
     }
   )
@@ -964,27 +966,33 @@ test_that(".retry_httr2_request retries on transient statuses and returns succes
 })
 
 test_that(".retry_httr2_request handles httr2_http errors and rethrows when non-transient", {
-  http_err <- structure(list(response = list()), class = c("httr2_http", "error", "condition"))
+  retry_fn <- pairwiseLLM:::.retry_httr2_request
+  http_err <- structure(
+    list(message = "HTTP 400 Bad Request", response = list()),
+    class = c("httr2_http", "error", "condition")
+  )
 
   err <- testthat::with_mocked_bindings(
     `.pairwiseLLM_req_perform` = function(req) stop(http_err),
     `.pairwiseLLM_resp_status` = function(resp) 400L,
-    .package = "pairwiseLLM",
+    .env = asNamespace("pairwiseLLM"),
     {
       tryCatch(
-        pairwiseLLM:::.retry_httr2_request(list(), max_attempts = 1L, base_delay = 0, jitter = 0),
+        retry_fn(list()),
         error = function(e) e
       )
     }
   )
 
-  testthat::expect_s3_class(err, "httr2_http")
+  testthat::expect_false(inherits(err, "pairwiseLLM_retry_error"))
+  testthat::expect_match(conditionMessage(err), "HTTP 400 Bad Request", fixed = TRUE)
 })
 
 test_that(".retry_httr2_request retries on httr2_http transient errors and eventually succeeds", {
+  retry_fn <- pairwiseLLM:::.retry_httr2_request
   call_count <- 0L
   http_err <- structure(
-    list(response = list(status = 503L)),
+    list(message = "HTTP 503 Service Unavailable", response = list(status = 503L)),
     class = c("httr2_http", "error", "condition")
   )
   fake_resp <- function(status) {
@@ -1000,13 +1008,14 @@ test_that(".retry_httr2_request retries on httr2_http transient errors and event
       fake_resp(200L)
     },
     `.pairwiseLLM_resp_status` = function(resp) resp$status,
-    .package = "pairwiseLLM",
+    .env = asNamespace("pairwiseLLM"),
     {
-      pairwiseLLM:::.retry_httr2_request(
-        list(),
-        max_attempts = 2L,
-        base_delay = 0,
-        jitter = 0
+      testthat::with_mocked_bindings(
+        Sys.sleep = function(...) NULL,
+        .package = "base",
+        {
+          retry_fn(list())
+        }
       )
     }
   )
