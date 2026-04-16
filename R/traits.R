@@ -36,7 +36,8 @@
 #' custom_td$description
 #'
 #' @export
-trait_description <- function(name = c("overall_quality", "organization"),
+trait_description <- function(name = c("overall_quality", "organization",
+                                      "IRRC"),
                               custom_name = NULL,
                               custom_description = NULL) {
   # Custom trait path
