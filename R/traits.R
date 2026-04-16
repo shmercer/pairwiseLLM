@@ -60,21 +60,21 @@ trait_description <- function(name = c("overall_quality", "organization",
 
   trait_desc <- switch(name,
     overall_quality =
-      "Overall quality of the writing, considering how well ideas are expressed,
-      how clearly the writing is organized, and how effective the language and
-      conventions are.",
+"Overall quality of the writing, considering how well ideas are expressed,
+how clearly the writing is organized, and how effective the language and
+conventions are.",
     organization =
-      "How clearly the writing is organized, including logical sequencing of
-      ideas and effective use of transitions.",
+"How clearly the writing is organized, including logical sequencing of
+ideas and effective use of transitions.",
     IRRC = 
-      "How well a piece of writing meets expectations across four traits: 
-      Prompt Task (clearly addressing all parts of the topic, demonstrating 
-      an understanding of the topic and purpose), Development of Explanation 
-      (fully and specifically explaining the topic with relevant supporting 
-      evidence), Organization (introducing, connecting, grouping, and concluding 
-      ideas clearly), and Language Use (using effective word choice and 
-      well-controlled sentence structure, varying word choice and sentence 
-      structure)."
+"How well a piece of writing meets expectations across four traits: 
+Prompt Task (clearly addressing all parts of the topic, demonstrating 
+an understanding of the topic and purpose), Development of Explanation 
+(fully and specifically explaining the topic with relevant supporting 
+evidence), Organization (introducing, connecting, grouping, and concluding 
+ideas clearly), and Language Use (using effective word choice and 
+well-controlled sentence structure, varying word choice and sentence 
+structure)."
   )
 
   list(
