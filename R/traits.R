@@ -53,7 +53,8 @@ trait_description <- function(name = c("overall_quality", "organization"),
 
   trait_name <- switch(name,
     overall_quality = "Overall Quality",
-    organization    = "Organization"
+    organization    = "Organization",
+    IRRC = "Overall Writing Quality"
   )
 
   trait_desc <- switch(name,
@@ -63,7 +64,16 @@ trait_description <- function(name = c("overall_quality", "organization"),
       conventions are.",
     organization =
       "How clearly the writing is organized, including logical sequencing of
-      ideas and effective use of transitions."
+      ideas and effective use of transitions.",
+    IRRC = 
+      "How well a piece of writing meets expectations across four traits: 
+      Prompt Task (clearly addressing all parts of the topic, demonstrating 
+      an understanding of the topic and purpose), Development of Explanation 
+      (fully and specifically explaining the topic with relevant supporting 
+      evidence), Organization (introducing, connecting, grouping, and concluding 
+      ideas clearly), and Language Use (using effective word choice and 
+      well-controlled sentence structure, varying word choice and sentence 
+      structure)."
   )
 
   list(
