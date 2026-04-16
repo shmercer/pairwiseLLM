@@ -44,6 +44,20 @@ Vertex is currently supported on the live path only.
 \item Summaries: \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}, \code{\link[=summarize_items]{summarize_items()}}, \code{\link[=summarize_refits]{summarize_refits()}}
 }
 }
+\subsection{Provider matrix}{
+\itemize{
+\item Live backends: \code{"openai"}, \code{"anthropic"}, \code{"gemini"} (Gemini Developer
+API), \code{"vertex"} (Vertex AI Gemini API), \code{"together"}, and \code{"ollama"}.
+\item Batch backends: \code{"openai"}, \code{"anthropic"}, and \code{"gemini"}.
+\code{backend = "vertex"} is rejected explicitly on generic batch surfaces.
+\item Gemini Developer API and Vertex use separate API-key surfaces:
+\code{GEMINI_API_KEY} and \code{VERTEX_API_KEY}.
+\item \code{service_tier} is provider-specific. Gemini Developer API and Vertex share
+the public values \code{"standard"}, \code{"flex"}, and \code{"priority"}, but they use
+different request transports.
+}
+}
+
 }
 
 \subsection{Adaptive Bayesian pairing + ranking (end-to-end loop)}{

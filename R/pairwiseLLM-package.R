@@ -34,6 +34,17 @@
 #'    - Bayesian BTL (MCMC): [fit_bayes_btl_mcmc()]
 #'    - Summaries: [summarize_bt_fit()], [summarize_items()], [summarize_refits()]
 #'
+#' ### Provider matrix
+#' - Live backends: `"openai"`, `"anthropic"`, `"gemini"` (Gemini Developer
+#'   API), `"vertex"` (Vertex AI Gemini API), `"together"`, and `"ollama"`.
+#' - Batch backends: `"openai"`, `"anthropic"`, and `"gemini"`.
+#'   `backend = "vertex"` is rejected explicitly on generic batch surfaces.
+#' - Gemini Developer API and Vertex use separate API-key surfaces:
+#'   `GEMINI_API_KEY` and `VERTEX_API_KEY`.
+#' - `service_tier` is provider-specific. Gemini Developer API and Vertex share
+#'   the public values `"standard"`, `"flex"`, and `"priority"`, but they use
+#'   different request transports.
+#'
 #' ## Adaptive Bayesian pairing + ranking (end-to-end loop)
 #' If you want the package to both **choose pairs** and **fit Bayesian BTL**
 #' in an auditable loop, use the adaptive workflow:
