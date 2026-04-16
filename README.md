@@ -27,7 +27,9 @@ of writing quality using large language models (LLMs).
 
 It includes:
 
-- Unified live and batch APIs across OpenAI, Anthropic, and Gemini  
+- Unified live APIs across OpenAI, Anthropic, Gemini Developer API,
+  Vertex AI Gemini API, Together.ai, and Ollama, plus batch APIs for
+  OpenAI, Anthropic, and Gemini Developer API  
 - An adaptive pairing workflow to run optimal pairs of writing samples
   until reliability targets are met  
 - A prompt template registry with tested templates designed to reduce
@@ -71,8 +73,10 @@ Other similar models may work, but have not been fully tested.
 | **[Anthropic](https://console.anthropic.com/)** | claude-sonnet-4-5 | ✅ Yes |
 | **[Anthropic](https://console.anthropic.com/)** | claude-haiku-4-5 | ✅ Yes |
 | **[Anthropic](https://console.anthropic.com/)** | claude-opus-4-5 | ✅ Yes |
-| **[Google/Gemini](https://aistudio.google.com/)** | gemini-3-pro-preview | ✅ Yes |
-| **[Google/Gemini](https://aistudio.google.com/)** | gemini-3-flash-preview | ✅ Yes |
+| **[Gemini Developer API](https://ai.google.dev/gemini-api/docs)** | gemini-3.1-pro-preview       | ✅ Yes |
+| **[Gemini Developer API](https://ai.google.dev/gemini-api/docs)**  | gemini-3-flash-preview     | ✅ Yes |
+| **[Vertex AI API](https://cloud.google.com/vertex-ai)** | gemini-3.1-pro-preview       | ✅ Yes |
+| **[Vertex AI API](https://cloud.google.com/vertex-ai)** | gemini-3-flash-preview       | ✅ Yes |
 | **[DeepSeek-AI](https://www.deepseek.com/en)<sub>1</sub>** | DeepSeek-R1 | ✅ Yes |
 | **[DeepSeek-AI](https://www.deepseek.com/en)<sub>1</sub>** | DeepSeek-V3 | ❌ No |
 | **[Moonshot-AI](https://www.moonshot.ai/)<sub>1</sub>** | Kimi-K2-Instruct-0905 | ❌ No |
@@ -85,17 +89,21 @@ Other similar models may work, but have not been fully tested.
 
 <sub>2</sub> via [Ollama](https://ollama.com/) on a local machine
 
-Batch APIs are currently available for OpenAI, Anthropic, and Gemini
-only. Models accessed via Together.ai and Ollama are supported for live
-comparisons via `submit_llm_pairs()` / `llm_compare_pair()`.
+The backend matrix is provider-specific:
 
-| Backend   | Live | Batch |
-|-----------|------|-------|
-| openai    | ✅   | ✅    |
-| anthropic | ✅   | ✅    |
-| gemini    | ✅   | ✅    |
-| together  | ✅   | ❌    |
-| ollama    | ✅   | ❌    |
+| Backend   | Provider Surface     | Live | Batch | API Key Surface |
+|-----------|----------------------|------|-------|-----------------|
+| openai    | OpenAI               | ✅   | ✅    | `OPENAI_API_KEY` |
+| anthropic | Anthropic            | ✅   | ✅    | `ANTHROPIC_API_KEY` |
+| gemini    | Gemini Developer API | ✅   | ✅    | `GEMINI_API_KEY` |
+| vertex    | Vertex AI Gemini API | ✅   | ❌    | `VERTEX_API_KEY` |
+| together  | Together.ai          | ✅   | ❌    | `TOGETHER_API_KEY` |
+| ollama    | Ollama (local)       | ✅   | ❌    | none |
+
+`backend = "gemini"` means the Gemini Developer API only. `backend =
+"vertex"` means the Vertex AI Gemini API only. Vertex is live-only in
+this series, so generic batch wrappers reject `backend = "vertex"`
+explicitly instead of falling back to Gemini batch mode.
 
 ------------------------------------------------------------------------
 
@@ -138,8 +146,13 @@ This returns a tibble showing whether R can see the required keys for:
 
 - OpenAI  
 - Anthropic  
-- Google Gemini
+- Gemini Developer API
+- Vertex AI Gemini API
 - Together.ai
+
+Gemini Developer API and Vertex use separate API-key surfaces:
+`GEMINI_API_KEY` is not reused for Vertex, and `VERTEX_API_KEY` is not
+reused for Gemini Developer API.
 
 ### Setting API Keys
 
@@ -149,6 +162,7 @@ You may set keys **temporarily** for the current R session:
 Sys.setenv(OPENAI_API_KEY = "your-key-here")
 Sys.setenv(ANTHROPIC_API_KEY = "your-key-here")
 Sys.setenv(GEMINI_API_KEY = "your-key-here")
+Sys.setenv(VERTEX_API_KEY = "your-key-here")
 Sys.setenv(TOGETHER_API_KEY = "your-key-here")
 ```
 
@@ -168,6 +182,7 @@ Add the following lines:
     OPENAI_API_KEY="your-openai-key"
     ANTHROPIC_API_KEY="your-anthropic-key"
     GEMINI_API_KEY="your-gemini-key"
+    VERTEX_API_KEY="your-vertex-key"
     TOGETHER_API_KEY="your-together-key"
 
 Save the file, then restart R.
@@ -192,7 +207,7 @@ At a high level, `pairwiseLLM` workflows follow this structure:
 4.  **Prompt template** – instructions + placeholders for
     `{TRAIT_NAME}`, `{TRAIT_DESCRIPTION}`, `{SAMPLE_1}`, `{SAMPLE_2}`.  
 5.  **Backend** – which provider/model to use (OpenAI, Anthropic,
-    Gemini, Together, Ollama).  
+    Gemini Developer API, Vertex AI Gemini API, Together, Ollama).  
 6.  **Modeling** – convert pairwise results to latent scores via BT or
     Elo.
 
@@ -318,8 +333,8 @@ trait_description(
 
 Use the unified API for direct API calls. The `submit_llm_pairs()`
 function supports **parallel processing** and **incremental output
-saving** for all supported backends (OpenAI, Anthropic, Gemini,
-Together, and Ollama).
+saving** for all live backends (OpenAI, Anthropic, Gemini Developer
+API, Vertex AI Gemini API, Together.ai, and Ollama).
 
 - `llm_compare_pair()` — compare one pair  
 - `submit_llm_pairs()` — compare many pairs at once
@@ -378,11 +393,39 @@ if (nrow(res_list$failed_attempts) > 0) {
 }
 ```
 
+`service_tier` is provider-specific. OpenAI, Gemini Developer API, and
+Vertex validate and encode it separately rather than sharing one
+transport rule.
+
+| Backend | Public Values | Notes |
+|----|----|----|
+| `gemini` | `"standard"`, `"flex"`, `"priority"` | Gemini Developer API; available on live and batch paths. |
+| `vertex` | `"standard"`, `"flex"`, `"priority"` | Vertex AI Gemini API; live only and encoded via the Vertex request header. |
+| `openai` | provider-specific | OpenAI validates its own tier surface separately. |
+
+Example Vertex live request with a Vertex-specific API key surface:
+
+``` r
+res_vertex <- submit_llm_pairs(
+  pairs             = pairs,
+  backend           = "vertex",
+  model             = "gemini-2.5-flash",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  service_tier      = "flex"
+)
+```
+
 ------------------------------------------------------------------------
 
 ## Batch Comparisons
 
-Most providers give a discount for batch jobs. For large-scale runs use:
+Batch helpers are available for OpenAI, Anthropic, and Gemini Developer
+API. Vertex batch is intentionally unsupported in this series, and
+`llm_submit_pairs_batch(backend = "vertex", ...)` aborts explicitly.
+
+For large-scale runs use:
 
 - `llm_submit_pairs_batch()`  
 - `llm_download_batch_results()`
@@ -391,8 +434,8 @@ Example:
 
 ``` r
 batch <- llm_submit_pairs_batch(
-  backend           = "anthropic",
-  model             = "claude-sonnet-4-5",
+  backend           = "gemini",
+  model             = "gemini-3-pro-preview",
   pairs             = pairs,
   trait_name        = td$name,
   trait_description = td$description,

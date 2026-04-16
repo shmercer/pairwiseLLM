@@ -31,6 +31,10 @@ Supported Batch API providers:
 - **Anthropic** (batch pipeline: `run_anthropic_batch_pipeline()`)
 - **Gemini** (batch pipeline: `run_gemini_batch_pipeline()`)
 
+Vertex AI Gemini API is intentionally excluded here. In this series,
+Vertex is supported on the live path only via `backend = "vertex"` with
+`VERTEX_API_KEY`, and generic batch wrappers reject Vertex explicitly.
+
 > **Recommended approach:** For *multiple* batches (e.g., templates × providers × models × forward/reverse), use:
 > 
 > - `llm_submit_pairs_multi_batch()` to **split + submit** jobs (no polling; writes an optional registry CSV)
@@ -75,6 +79,10 @@ Required environment variables:
 | OpenAI   | `OPENAI_API_KEY`     |
 | Anthropic | `ANTHROPIC_API_KEY` |
 | Gemini    | `GEMINI_API_KEY`    |
+
+This vignette only covers batch-capable providers. Vertex live requests
+use a separate `VERTEX_API_KEY` surface and are documented in
+`vignette("getting-started")`.
 
 Check which are set:
 

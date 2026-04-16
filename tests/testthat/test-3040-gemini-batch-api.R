@@ -58,6 +58,7 @@ testthat::test_that("build_gemini_batch_requests builds valid requests (Happy Pa
 
   # Verify thinking level mapping (low -> Low)
   testthat::expect_equal(r1$generationConfig$thinkingConfig$thinkingLevel, "Low")
+  testthat::expect_null(r1$serviceTier)
 })
 
 testthat::test_that("build_gemini_batch_requests validates inputs and parameters", {
@@ -106,6 +107,27 @@ testthat::test_that("build_gemini_batch_requests validates inputs and parameters
   testthat::expect_equal(config$temperature, 0.7)
   testthat::expect_equal(config$topP, 0.9)
   testthat::expect_true(config$thinkingConfig$includeThoughts)
+
+  # 6. Service-tier handling
+  tiered <- build_gemini_batch_requests(
+    pairs, "m", td$name, td$description,
+    service_tier = "priority"
+  )
+  testthat::expect_equal(tiered$request[[1]]$serviceTier, "priority")
+
+  standard <- build_gemini_batch_requests(
+    pairs, "m", td$name, td$description,
+    service_tier = "standard"
+  )
+  testthat::expect_null(standard$request[[1]]$serviceTier)
+
+  testthat::expect_error(
+    build_gemini_batch_requests(
+      pairs, "m", td$name, td$description,
+      service_tier = "auto"
+    ),
+    "service_tier"
+  )
 })
 
 # ==============================================================================
@@ -465,6 +487,7 @@ testthat::test_that("run_gemini_batch_pipeline runs full mocked cycle", {
   pairs <- tibble::tibble(ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B")
   td <- trait_description("overall_quality") # Valid trait name
   tmpl <- set_prompt_template()
+  build_calls <- list()
 
   # Mock returns
   fake_req_tbl <- tibble::tibble(custom_id = "1", ID1 = "S1", ID2 = "S2", request = list(list()))
@@ -479,7 +502,10 @@ testthat::test_that("run_gemini_batch_pipeline runs full mocked cycle", {
   )
 
   testthat::with_mocked_bindings(
-    build_gemini_batch_requests = function(...) fake_req_tbl,
+    build_gemini_batch_requests = function(...) {
+      build_calls <<- append(build_calls, list(list(...)))
+      fake_req_tbl
+    },
     gemini_create_batch = function(...) fake_batch_initial,
     gemini_poll_batch_until_complete = function(...) fake_batch_final,
     gemini_download_batch_results = function(batch, requests_tbl, output_path, ...) {
@@ -490,13 +516,16 @@ testthat::test_that("run_gemini_batch_pipeline runs full mocked cycle", {
     {
       res <- run_gemini_batch_pipeline(
         pairs, "m", td$name, td$description, tmpl,
-        interval_seconds = 0, timeout_seconds = 0, verbose = FALSE
+        interval_seconds = 0, timeout_seconds = 0, verbose = FALSE,
+        service_tier = "priority"
       )
 
       testthat::expect_equal(res$batch$metadata$state, "SUCCEEDED")
       testthat::expect_equal(res$results$better_id, "S1")
       testthat::expect_true(file.exists(res$batch_input_path))
       testthat::expect_true(file.exists(res$batch_output_path))
+      testthat::expect_equal(length(build_calls), 1L)
+      testthat::expect_equal(build_calls[[1]]$service_tier, "priority")
     }
   )
 })

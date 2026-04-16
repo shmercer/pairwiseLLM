@@ -25,7 +25,8 @@
 #' @param prompt_template Prompt template string, typically from
 #'   \code{\link{set_prompt_template}}.
 #' @param backend Backend for the pilot run; one of \code{"openai"},
-#'   \code{"anthropic"}, \code{"gemini"}, or \code{"together"}.
+#'   \code{"anthropic"}, \code{"gemini"}, \code{"vertex"}, or
+#'   \code{"together"}.
 #' @param endpoint OpenAI endpoint; one of \code{"chat.completions"} or
 #'   \code{"responses"}. Ignored for other backends.
 #' @param mode Target execution mode for the full job; one of \code{"live"} or
@@ -108,7 +109,7 @@ estimate_llm_pairs_cost <- function(
     trait_name,
     trait_description,
     prompt_template = set_prompt_template(),
-    backend = c("openai", "anthropic", "gemini", "together"),
+    backend = c("openai", "anthropic", "gemini", "vertex", "together"),
     endpoint = c("chat.completions", "responses"),
     mode = c("live", "batch"),
     n_test = 25,
@@ -129,6 +130,16 @@ estimate_llm_pairs_cost <- function(
   backend <- match.arg(backend)
   mode <- match.arg(mode)
   test_strategy <- match.arg(test_strategy)
+
+  if (identical(backend, "vertex") && identical(mode, "batch")) {
+    rlang::abort(
+      paste0(
+        "`backend = \"vertex\"` is supported for live cost estimation only. ",
+        "Vertex batch mode is not implemented in this series, so use ",
+        "`mode = \"live\"`."
+      )
+    )
+  }
 
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")

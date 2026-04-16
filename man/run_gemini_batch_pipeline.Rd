@@ -20,6 +20,7 @@ run_gemini_batch_pipeline(
   api_version = "v1beta",
   verbose = TRUE,
   include_thoughts = FALSE,
+  service_tier = "standard",
   ...
 )
 }
@@ -75,6 +76,11 @@ file.}
 \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}. Parsed results will include a \code{thoughts}
 column when visible thoughts are returned by the API (currently batch
 typically only exposes \code{thoughtSignature} + \code{thoughtsTokenCount}).}
+
+\item{service_tier}{Gemini Developer API service tier forwarded to
+\code{\link{build_gemini_batch_requests}}. Use \code{"standard"} (default)
+or \code{NULL} for provider default behavior, or \code{"flex"} /
+\code{"priority"} to request the documented Gemini service tier.}
 
 \item{...}{Additional arguments forwarded to
 \code{\link{build_gemini_batch_requests}} (for example

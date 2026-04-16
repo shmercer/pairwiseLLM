@@ -15,9 +15,10 @@ configure missing ones.}
 A tibble (data frame) with one row per backend and columns:
 \describe{
 \item{backend}{Short backend identifier, e.g. \code{"openai"}, \code{"anthropic"},
-\code{"gemini"}, \code{"together"}.}
+\code{"gemini"}, \code{"vertex"}, \code{"together"}.}
 \item{service}{Human-readable service name, e.g. \code{"OpenAI"},
-\code{"Anthropic"}, \code{"Google Gemini"}, \code{"Together.ai"}.}
+\code{"Anthropic"}, \code{"Google Gemini"}, \code{"Vertex AI Gemini API"},
+\code{"Together.ai"}.}
 \item{env_var}{Name of the environment variable that is checked.}
 \item{has_key}{Logical flag indicating whether the key is set and
 non-empty.}
@@ -26,8 +27,9 @@ non-empty.}
 \description{
 This function inspects the current R session for configured API keys
 used by pairwiseLLM. It checks for known environment variables such as
-\code{OPENAI_API_KEY}, \code{ANTHROPIC_API_KEY}, and \code{GEMINI_API_KEY}, and returns
-a small tibble summarising which keys are available.
+\code{OPENAI_API_KEY}, \code{ANTHROPIC_API_KEY}, \code{GEMINI_API_KEY}, and
+\code{VERTEX_API_KEY}, and returns a small tibble summarising which keys are
+available.
 }
 \details{
 It does \strong{not} print or return the key values themselves - only whether

@@ -16,6 +16,7 @@ build_gemini_batch_requests(
   top_p = NULL,
   top_k = NULL,
   max_output_tokens = NULL,
+  service_tier = "standard",
   include_thoughts = FALSE,
   ...
 )
@@ -65,6 +66,11 @@ omitted and Gemini uses its own default.}
 \item{top_k}{Optional top-k sampling parameter. If \code{NULL}, omitted.}
 
 \item{max_output_tokens}{Optional integer. If \code{NULL}, omitted.}
+
+\item{service_tier}{Gemini Developer API service tier. Use \code{"standard"}
+(default) or \code{NULL} for provider default behavior, or \code{"flex"} /
+\code{"priority"} to encode the documented Gemini \code{serviceTier}
+request field.}
 
 \item{include_thoughts}{Logical; if \code{TRUE}, sets
 \code{thinkingConfig.includeThoughts = TRUE} so that Gemini returns

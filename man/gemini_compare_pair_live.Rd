@@ -19,6 +19,7 @@ gemini_compare_pair_live(
   top_p = NULL,
   top_k = NULL,
   max_output_tokens = NULL,
+  service_tier = "standard",
   api_version = "v1beta",
   include_raw = FALSE,
   include_thoughts = FALSE,
@@ -71,6 +72,10 @@ parameter is omitted and Gemini uses its own default (currently 1.0).}
 
 \item{max_output_tokens}{Optional maximum output token count. If \code{NULL},
 omitted.}
+
+\item{service_tier}{Gemini Developer API service tier. Use \code{"standard"}
+(default) or \code{NULL} for the provider default request, or \code{"flex"} /
+\code{"priority"} to encode the documented Gemini \code{serviceTier} request field.}
 
 \item{api_version}{API version to use, default \code{"v1beta"}. For plain text
 pairwise comparisons v1beta is recommended.}

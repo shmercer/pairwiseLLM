@@ -5,7 +5,7 @@
 \title{Build an LLM judge function for adaptive ranking}
 \usage{
 make_adaptive_judge_llm(
-  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
   model,
   trait = "overall_quality",
   trait_name = NULL,
@@ -20,8 +20,8 @@ make_adaptive_judge_llm(
 }
 \arguments{
 \item{backend}{Backend passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}. Choices are
-\code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"together"}, and \code{"ollama"}.
-Default is \code{"openai"}.}
+\code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"vertex"}, \code{"together"}, and
+\code{"ollama"}. Default is \code{"openai"}.}
 
 \item{model}{Model identifier passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}. Required.}
 

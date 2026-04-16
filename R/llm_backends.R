@@ -2,12 +2,13 @@
 #'
 #' `llm_compare_pair()` is a thin wrapper around backend-specific comparison
 #' functions. It currently supports the `"openai"`, `"anthropic"`, `"gemini"`,
-#' `"together"`, and `"ollama"` backends and forwards the call to the
+#' `"vertex"`, `"together"`, and `"ollama"` backends and forwards the call to the
 #' appropriate live comparison helper:
 #' \itemize{
 #'   \item `"openai"`   → [openai_compare_pair_live()]
 #'   \item `"anthropic"` → [anthropic_compare_pair_live()]
 #'   \item `"gemini"`   → [gemini_compare_pair_live()]
+#'   \item `"vertex"`   → [vertex_compare_pair_live()]
 #'   \item `"together"`  → [together_compare_pair_live()]
 #'   \item `"ollama"`   → [ollama_compare_pair_live()]
 #' }
@@ -26,9 +27,9 @@
 #'
 #' For the `"openai"` backend, the \code{endpoint} argument controls whether
 #' the Chat Completions API (\code{"chat.completions"}) or the Responses API
-#' (\code{"responses"}) is used. For the `"anthropic"`, `"gemini"`, and
-#' `"ollama"` backends, \code{endpoint} is currently ignored and the default
-#' live API for that provider is used.
+#' (\code{"responses"}) is used. For the `"anthropic"`, `"gemini"`,
+#' `"vertex"`, `"together"`, and `"ollama"` backends, \code{endpoint} is
+#' currently ignored and the default live API for that provider is used.
 #'
 #' @param ID1 Character ID for the first sample.
 #' @param text1 Character string containing the first sample's text.
@@ -36,9 +37,10 @@
 #' @param text2 Character string containing the second sample's text.
 #' @param model Model identifier for the chosen backend. For `"openai"` this
 #'   should be an OpenAI model name (for example `"gpt-4.1"`, `"gpt-5.1"`).
-#'   For `"anthropic"` and `"gemini"`, use the corresponding provider model
-#'   names (for example `"claude-4-5-sonnet"` or
-#'   `"gemini-3-pro-preview"`). For "together", use Together.ai model identifiers
+#'   For `"anthropic"`, use Anthropic model names such as
+#'   `"claude-4-5-sonnet"`. For `"gemini"` and `"vertex"`, use the
+#'   corresponding Gemini model names (for example `"gemini-3-pro-preview"` or
+#'   `"gemini-2.5-flash"`). For "together", use Together.ai model identifiers
 #'   such as `"deepseek-ai/DeepSeek-R1"` or `"deepseek-ai/DeepSeek-V3"`. For
 #'   `"ollama"`, use a local model name known to the Ollama server (for example
 #'    `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`).
@@ -48,29 +50,35 @@
 #' @param prompt_template Prompt template string, typically from
 #'   [set_prompt_template()].
 #' @param backend Character scalar indicating which LLM provider to use.
-#'   One of `"openai"`, `"anthropic"`, `"gemini"`, `"together"`, or `"ollama"`.
+#'   One of `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`,
+#'   or `"ollama"`.
 #' @param endpoint Character scalar specifying which endpoint family to use
 #'   for backends that support multiple live APIs. For the `"openai"` backend
 #'   this must be one of `"chat.completions"` or `"responses"`, matching
-#'   [openai_compare_pair_live()]. For `"anthropic"`, `"gemini"`, and
-#'   `"ollama"`, this argument is currently ignored.
+#'   [openai_compare_pair_live()]. For `"anthropic"`, `"gemini"`, `"vertex"`,
+#'   `"together"`, and `"ollama"`, this argument is currently ignored.
 #' @param api_key Optional API key for the selected backend. If `NULL`, the
 #'   backend-specific helper will use its own default environment variable
 #'   (for example `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
-#'   `TOGETHER_API_KEY`). For `"ollama"`, this argument is ignored (no API key
-#'   is required for local inference).
+#'   `VERTEX_API_KEY`, `TOGETHER_API_KEY`). For `"ollama"`, this argument is
+#'   ignored (no API key is required for local inference).
 #' @param include_raw Logical; if `TRUE`, the returned tibble includes a
 #'   `raw_response` list-column with the parsed JSON body (or `NULL` on parse
 #'   failure). Support for this may vary across backends.
 #' @param ... Additional backend-specific parameters. For `"openai"` these
 #'   are passed on to [openai_compare_pair_live()] and typically include
 #'   arguments such as `temperature`, `top_p`, `logprobs`, `reasoning`, and
-#'   `include_thoughts`. For `"anthropic"` and `"gemini"` they are forwarded to
-#'   the corresponding live helper and may include parameters such as
-#'   `reasoning`, `include_thoughts`, `max_output_tokens`, or
-#'   provider-specific options. For `"ollama"`, arguments are forwarded to
-#'   [ollama_compare_pair_live()] and may include `host`, `think`,
-#'   `num_ctx`, and other Ollama-specific controls.
+#'   `include_thoughts`. For `"anthropic"`, `"gemini"`, and `"vertex"` they are
+#'   forwarded to the corresponding live helper and may include parameters such
+#'   as `reasoning`, `include_thoughts`, `max_output_tokens`, `service_tier`,
+#'   `thinking_level`, or provider-specific options. For `"ollama"`, arguments
+#'   are forwarded to [ollama_compare_pair_live()] and may include `host`,
+#'   `think`, `num_ctx`, and other Ollama-specific controls.
+#'
+#'   `service_tier` is provider-specific: OpenAI, Gemini Developer API, and
+#'   Vertex each validate and encode it using their own request surfaces. For
+#'   Gemini Developer API and Vertex, supported public values are `"standard"`
+#'   (default / omitted), `"flex"`, and `"priority"`.
 #'
 #' @return A tibble with one row and the same columns as the underlying
 #'   backend-specific live helper (for example [openai_compare_pair_live()]
@@ -155,8 +163,9 @@
 #'
 #' @seealso
 #' * [openai_compare_pair_live()], [anthropic_compare_pair_live()],
-#'   [gemini_compare_pair_live()], [together_compare_pair_live()], and
-#'   [ollama_compare_pair_live()] for backend-specific implementations.
+#'   [gemini_compare_pair_live()], [vertex_compare_pair_live()],
+#'   [together_compare_pair_live()], and [ollama_compare_pair_live()] for
+#'   backend-specific implementations.
 #' * [submit_llm_pairs()] for row-wise comparisons over a tibble of pairs.
 #' * [build_bt_data()] and [fit_bt_model()] for Bradley–Terry modelling of
 #'   comparison results.
@@ -171,14 +180,14 @@ llm_compare_pair <- function(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
   endpoint = c("chat.completions", "responses"),
   api_key = NULL,
   include_raw = FALSE,
   ...
 ) {
   backend <- as.character(backend)
-  valid_backends <- c("openai", "anthropic", "gemini", "together", "ollama")
+  valid_backends <- c("openai", "anthropic", "gemini", "vertex", "together", "ollama")
   if (length(backend) < 1L || is.na(backend[1L]) || !nzchar(backend[1L])) {
     rlang::abort("`backend` must be a non-empty character scalar.")
   }
@@ -187,7 +196,8 @@ llm_compare_pair <- function(
     rlang::abort(paste0(
       "Backend '", backend, "' is not implemented yet. ",
       "Currently supported backends are: ",
-      "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\"."
+      "\"openai\", \"anthropic\", \"gemini\", \"vertex\", ",
+      "\"together\", and \"ollama\"."
     ))
   }
 
@@ -253,6 +263,24 @@ llm_compare_pair <- function(
     )
   }
 
+  if (backend == "vertex") {
+    return(
+      vertex_compare_pair_live(
+        ID1               = ID1,
+        text1             = text1,
+        ID2               = ID2,
+        text2             = text2,
+        model             = model,
+        trait_name        = trait_name,
+        trait_description = trait_description,
+        prompt_template   = prompt_template,
+        api_key           = api_key,
+        include_raw       = include_raw,
+        ...
+      )
+    )
+  }
+
   if (backend == "together") {
     return(
       together_compare_pair_live(
@@ -298,14 +326,15 @@ llm_compare_pair <- function(
 #' `text2`), submits each pair to the selected backend, and aggregates the results.
 #'
 #' This function supports parallel processing, incremental saving, and resume
-#' capability for the `"openai"`, `"anthropic"`, `"gemini"`, `"together"`,
-#' and `"ollama"` backends.
+#' capability for the `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`,
+#' `"together"`, and `"ollama"` backends.
 #'
 #' At present, the following backends are implemented:
 #' \itemize{
 #'   \item `"openai"`   → [submit_openai_pairs_live()]
 #'   \item `"anthropic"` → [submit_anthropic_pairs_live()]
 #'   \item `"gemini"`   → [submit_gemini_pairs_live()]
+#'   \item `"vertex"`   → [submit_vertex_pairs_live()]
 #'   \item `"together"`  → [submit_together_pairs_live()]
 #'   \item `"ollama"`   → [submit_ollama_pairs_live()]
 #' }
@@ -315,9 +344,10 @@ llm_compare_pair <- function(
 #'   [randomize_pair_order()].
 #' @param model Model identifier for the chosen backend. For `"openai"` this
 #'   should be an OpenAI model name (for example `"gpt-4.1"`, `"gpt-5.1"`).
-#'   For `"anthropic"` and `"gemini"`, use the corresponding provider model
-#'   names (for example `"claude-4-5-sonnet"` or
-#'   `"gemini-3-pro-preview"`). For "together", use Together.ai model identifiers
+#'   For `"anthropic"`, use Anthropic model names such as
+#'   `"claude-4-5-sonnet"`. For `"gemini"` and `"vertex"`, use the
+#'   corresponding Gemini model names (for example `"gemini-3-pro-preview"` or
+#'   `"gemini-2.5-flash"`). For "together", use Together.ai model identifiers
 #'   such as `"deepseek-ai/DeepSeek-R1"` or `"deepseek-ai/DeepSeek-V3"`. For
 #'   `"ollama"`, use a local model name known to the Ollama server (for example
 #'    `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`).
@@ -327,12 +357,13 @@ llm_compare_pair <- function(
 #' @param prompt_template Prompt template string, typically from
 #'   [set_prompt_template()].
 #' @param backend Character scalar indicating which LLM provider to use.
-#'   One of `"openai"`, `"anthropic"`, `"gemini"`, `"together"`, or `"ollama"`.
+#'   One of `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`,
+#'   or `"ollama"`.
 #' @param endpoint Character scalar specifying which endpoint family to use for
 #'   backends that support multiple live APIs. For the `"openai"` backend this
 #'   must be one of `"chat.completions"` or `"responses"`, matching
-#'   [submit_openai_pairs_live()]. For `"anthropic"`, `"gemini"`, `"together"`,
-#'   and `"ollama"`, this is currently ignored.
+#'   [submit_openai_pairs_live()]. For `"anthropic"`, `"gemini"`, `"vertex"`,
+#'   `"together"`, and `"ollama"`, this is currently ignored.
 #' @param api_key Optional API key for the selected backend. If `NULL`, the
 #'   backend-specific helper will use its own default environment variable.
 #'   For `"ollama"`, this argument is ignored (no API key is required for
@@ -360,12 +391,13 @@ llm_compare_pair <- function(
 #'   are forwarded to [submit_openai_pairs_live()] and typically include
 #'   `temperature`, `top_p`, `logprobs`, `reasoning`, `service_tier`, and
 #'   `include_thoughts`.
-#'   For `"anthropic"` and `"gemini"`, they are forwarded to
-#'   [submit_anthropic_pairs_live()] or [submit_gemini_pairs_live()] and
-#'   may include options such as `max_output_tokens`, `include_thoughts`, and
-#'   provider-specific controls. For `"ollama"`, arguments are forwarded to
-#'   [submit_ollama_pairs_live()] and may include `host`, `think`,
-#'   `num_ctx`, and other Ollama-specific options.
+#'   For `"anthropic"`, `"gemini"`, and `"vertex"`, they are forwarded to
+#'   [submit_anthropic_pairs_live()], [submit_gemini_pairs_live()], or
+#'   [submit_vertex_pairs_live()] and may include options such as
+#'   `max_output_tokens`, `include_thoughts`, `service_tier`,
+#'   `thinking_level`, and provider-specific controls. For `"ollama"`,
+#'   arguments are forwarded to [submit_ollama_pairs_live()] and may include
+#'   `host`, `think`, `num_ctx`, and other Ollama-specific options.
 #'
 #' @return A list containing:
 #' \describe{
@@ -433,8 +465,9 @@ llm_compare_pair <- function(
 #'
 #' @seealso
 #' * [submit_openai_pairs_live()], [submit_anthropic_pairs_live()],
-#'   [submit_gemini_pairs_live()], [submit_together_pairs_live()], and
-#'   [submit_ollama_pairs_live()] for backend-specific implementations.
+#'   [submit_gemini_pairs_live()], [submit_vertex_pairs_live()],
+#'   [submit_together_pairs_live()], and [submit_ollama_pairs_live()] for
+#'   backend-specific implementations.
 #'
 #' @export
 submit_llm_pairs <- function(
@@ -443,7 +476,7 @@ submit_llm_pairs <- function(
     trait_name,
     trait_description,
     prompt_template = set_prompt_template(),
-    backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+    backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
     endpoint = c("chat.completions", "responses"),
     api_key = NULL,
     verbose = TRUE,
@@ -456,7 +489,7 @@ submit_llm_pairs <- function(
     ...
 ) {
   backend <- as.character(backend)
-  valid_backends <- c("openai", "anthropic", "gemini", "together", "ollama")
+  valid_backends <- c("openai", "anthropic", "gemini", "vertex", "together", "ollama")
   if (length(backend) < 1L || is.na(backend[1L]) || !nzchar(backend[1L])) {
     rlang::abort("`backend` must be a non-empty character scalar.")
   }
@@ -465,7 +498,8 @@ submit_llm_pairs <- function(
     rlang::abort(paste0(
       "Backend '", backend, "' is not implemented yet. ",
       "Currently supported backends are: ",
-      "\"openai\", \"anthropic\", \"gemini\", \"together\", and \"ollama\"."
+      "\"openai\", \"anthropic\", \"gemini\", \"vertex\", ",
+      "\"together\", and \"ollama\"."
     ))
   }
 
@@ -522,6 +556,27 @@ submit_llm_pairs <- function(
   if (backend == "gemini") {
     return(
       submit_gemini_pairs_live(
+        pairs             = pairs,
+        model             = model,
+        trait_name        = trait_name,
+        trait_description = trait_description,
+        prompt_template   = prompt_template,
+        api_key           = api_key,
+        verbose           = verbose,
+        status_every      = status_every,
+        progress          = progress,
+        include_raw       = include_raw,
+        save_path         = save_path,
+        parallel          = parallel,
+        workers           = workers,
+        ...
+      )
+    )
+  }
+
+  if (backend == "vertex") {
+    return(
+      submit_vertex_pairs_live(
         pairs             = pairs,
         model             = model,
         trait_name        = trait_name,

@@ -112,6 +112,9 @@
 #' @param top_k Optional top-k sampling parameter. If `NULL`, omitted.
 #' @param max_output_tokens Optional maximum output token count. If `NULL`,
 #'   omitted.
+#' @param service_tier Gemini Developer API service tier. Use `"standard"`
+#'   (default) or `NULL` for the provider default request, or `"flex"` /
+#'   `"priority"` to encode the documented Gemini `serviceTier` request field.
 #' @param api_version API version to use, default `"v1beta"`. For plain text
 #'   pairwise comparisons v1beta is recommended.
 #' @param include_raw Logical; if `TRUE`, the returned tibble includes a
@@ -206,6 +209,7 @@ gemini_compare_pair_live <- function(
   top_p = NULL,
   top_k = NULL,
   max_output_tokens = NULL,
+  service_tier = "standard",
   api_version = "v1beta",
   include_raw = FALSE,
   include_thoughts = FALSE,
@@ -236,6 +240,8 @@ gemini_compare_pair_live <- function(
       "(e.g., `gemini-3-flash-preview`)."
     ))
   }
+
+  service_tier <- normalize_gemini_service_tier(service_tier)
 
   ID1 <- as.character(ID1)
   ID2 <- as.character(ID2)
@@ -310,6 +316,9 @@ gemini_compare_pair_live <- function(
   # Attach generationConfig only if non-empty
   if (length(generation_config) > 0L) {
     body$generationConfig <- generation_config
+  }
+  if (!is.null(service_tier)) {
+    body$serviceTier <- service_tier
   }
 
   path <- sprintf("/%s/models/%s:generateContent", api_version, model)
@@ -539,6 +548,10 @@ gemini_compare_pair_live <- function(
 #' @param top_k Optional numeric; forwarded to [gemini_compare_pair_live()].
 #' @param max_output_tokens Optional integer; forwarded to
 #'   [gemini_compare_pair_live()].
+#' @param service_tier Gemini Developer API service tier forwarded to
+#'   [gemini_compare_pair_live()]. Use `"standard"` (default) or `NULL` for
+#'   provider default behavior, or `"flex"` / `"priority"` to request the
+#'   documented Gemini service tier.
 #' @param api_version API version; default `"v1beta"`.
 #' @param verbose Logical; print status/timing every `status_every` pairs.
 #' @param status_every Integer; how often to print status (default 1 = every
@@ -641,6 +654,7 @@ submit_gemini_pairs_live <- function(
     top_p = NULL,
     top_k = NULL,
     max_output_tokens = NULL,
+    service_tier = "standard",
     api_version = "v1beta",
     verbose = TRUE,
     status_every = 1L,
@@ -820,6 +834,7 @@ submit_gemini_pairs_live <- function(
               prompt_template = prompt_template, api_key = api_key,
               thinking_level = thinking_level, temperature = temperature,
               top_p = top_p, top_k = top_k, max_output_tokens = max_output_tokens,
+              service_tier = service_tier,
               api_version = api_version, include_raw = include_raw, include_thoughts = include_thoughts,
               pair_uid = pair_uid,
               ...
@@ -907,6 +922,7 @@ submit_gemini_pairs_live <- function(
             prompt_template = prompt_template, api_key = api_key,
             thinking_level = thinking_level, temperature = temperature,
             top_p = top_p, top_k = top_k, max_output_tokens = max_output_tokens,
+            service_tier = service_tier,
             api_version = api_version, include_raw = include_raw, include_thoughts = include_thoughts,
             pair_uid = pair_uid,
             ...

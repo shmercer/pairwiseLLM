@@ -78,6 +78,40 @@ test_that("make_adaptive_judge_llm forwards model options and returns valid cont
   expect_identical(call$reasoning, "low")
 })
 
+test_that("make_adaptive_judge_llm forwards vertex backend options", {
+  calls <- list()
+
+  judge <- pairwiseLLM::make_adaptive_judge_llm(
+    backend = "vertex",
+    model = "gemini-2.5-flash",
+    judge_args = list(service_tier = "flex")
+  )
+
+  A <- tibble::tibble(item_id = "S01", text = "A")
+  B <- tibble::tibble(item_id = "S02", text = "B")
+
+  testthat::with_mocked_bindings(
+    llm_compare_pair = function(...) {
+      calls <<- append(calls, list(list(...)))
+      tibble::tibble(better_id = "S01")
+    },
+    {
+      out <- judge(A, B, state = list(), thinking_level = "low")
+      expect_true(isTRUE(out$is_valid))
+      expect_identical(out$Y, 1L)
+      expect_true(is.na(out$invalid_reason))
+    },
+    .env = asNamespace("pairwiseLLM")
+  )
+
+  expect_length(calls, 1L)
+  call <- calls[[1L]]
+  expect_identical(call$backend, "vertex")
+  expect_identical(call$model, "gemini-2.5-flash")
+  expect_identical(call$service_tier, "flex")
+  expect_identical(call$thinking_level, "low")
+})
+
 test_that("make_adaptive_judge_llm returns invalid when response cannot be mapped", {
   judge <- pairwiseLLM::make_adaptive_judge_llm(
     backend = "openai",
@@ -141,6 +175,14 @@ test_that("endpoint validation is only enforced for openai backend", {
     pairwiseLLM::make_adaptive_judge_llm(
       backend = "anthropic",
       model = "claude",
+      endpoint = "bad-endpoint"
+    )
+  )
+
+  expect_no_error(
+    pairwiseLLM::make_adaptive_judge_llm(
+      backend = "vertex",
+      model = "gemini-2.5-flash",
       endpoint = "bad-endpoint"
     )
   )
@@ -403,6 +445,41 @@ test_that("adaptive_rank builds internal llm judge and forwards judge_call_args"
   expect_length(calls, 1L)
   expect_identical(calls[[1L]]$service_tier, "flex")
   expect_identical(calls[[1L]]$reasoning, "low")
+})
+
+test_that("adaptive_rank builds internal vertex judge and forwards judge args", {
+  samples <- make_test_samples_df(4L)[, c("ID", "text")]
+  calls <- list()
+
+  testthat::with_mocked_bindings(
+    llm_compare_pair = function(...) {
+      args <- list(...)
+      calls <<- append(calls, list(args))
+      tibble::tibble(better_id = as.character(args$ID1))
+    },
+    {
+      out <- pairwiseLLM::adaptive_rank(
+        data = samples,
+        id_col = "ID",
+        text_col = "text",
+        backend = "vertex",
+        model = "gemini-2.5-flash",
+        endpoint = "not-used-here",
+        judge_args = list(service_tier = "priority"),
+        judge_call_args = list(thinking_level = "low"),
+        n_steps = 1L,
+        progress = "none"
+      )
+      expect_true(inherits(out$state, "adaptive_state"))
+      expect_equal(nrow(out$state$step_log), 1L)
+    },
+    .env = asNamespace("pairwiseLLM")
+  )
+
+  expect_length(calls, 1L)
+  expect_identical(calls[[1L]]$backend, "vertex")
+  expect_identical(calls[[1L]]$service_tier, "priority")
+  expect_identical(calls[[1L]]$thinking_level, "low")
 })
 
 test_that("adaptive_rank ignores endpoint for non-openai backends", {

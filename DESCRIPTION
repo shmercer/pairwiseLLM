@@ -109,6 +109,7 @@ Collate:
     'elo_model.R'
     'gemini_batch_api.R'
     'gemini_live.R'
+    'gemini_params.R'
     'httr2_retry.R'
     'llm_backends.R'
     'llm_batch.R'
@@ -126,3 +127,4 @@ Collate:
     'together_live.R'
     'traits.R'
     'utils-null-coalesce.R'
+    'vertex_live.R'

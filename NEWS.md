@@ -1,3 +1,20 @@
+# pairwiseLLM 1.3.1
+
+## New Features
+
+### Model support & live API improvements
+* Added a separate Vertex AI Gemini live backend via `backend = "vertex"` with
+  `VERTEX_API_KEY`.
+  - Vertex remains live-only in this series; generic batch wrappers reject
+    `backend = "vertex"` explicitly rather than routing it through Gemini
+    batch helpers.
+* Clarified provider-specific `service_tier` behavior for Gemini Developer API
+  and Vertex AI Gemini API in the package docs, README, and vignettes.
+
+## Documentation
+* Updated the backend support matrix to distinguish Gemini Developer API from
+  Vertex AI Gemini API and to document the live-only Vertex scope.
+
 # pairwiseLLM 1.3.0
 
 ## New Features

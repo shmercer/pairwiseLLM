@@ -28,10 +28,11 @@ templates managed by \code{\link[=list_prompt_templates]{list_prompt_templates()
 \itemize{
 \item Live: \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} or provider wrappers like
 \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}, \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
-\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
-\code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}.
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
+\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}, \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}.
 \item Batch (recommended for scale): \code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}},
 \code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}}, \code{\link[=run_gemini_batch_pipeline]{run_gemini_batch_pipeline()}}.
+Vertex is currently supported on the live path only.
 }
 \item \strong{Assemble modeling data} with \code{\link[=build_bt_data]{build_bt_data()}} or \code{\link[=build_elo_data]{build_elo_data()}}
 (and for some pipelines, \code{\link[=build_btl_results_data]{build_btl_results_data()}}).
@@ -43,6 +44,20 @@ templates managed by \code{\link[=list_prompt_templates]{list_prompt_templates()
 \item Summaries: \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}, \code{\link[=summarize_items]{summarize_items()}}, \code{\link[=summarize_refits]{summarize_refits()}}
 }
 }
+\subsection{Provider matrix}{
+\itemize{
+\item Live backends: \code{"openai"}, \code{"anthropic"}, \code{"gemini"} (Gemini Developer
+API), \code{"vertex"} (Vertex AI Gemini API), \code{"together"}, and \code{"ollama"}.
+\item Batch backends: \code{"openai"}, \code{"anthropic"}, and \code{"gemini"}.
+\code{backend = "vertex"} is rejected explicitly on generic batch surfaces.
+\item Gemini Developer API and Vertex use separate API-key surfaces:
+\code{GEMINI_API_KEY} and \code{VERTEX_API_KEY}.
+\item \code{service_tier} is provider-specific. Gemini Developer API and Vertex share
+the public values \code{"standard"}, \code{"flex"}, and \code{"priority"}, but they use
+different request transports.
+}
+}
+
 }
 
 \subsection{Adaptive Bayesian pairing + ranking (end-to-end loop)}{
@@ -96,6 +111,7 @@ and validate directories with \code{\link[=validate_session_dir]{validate_sessio
 \item OpenAI: \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}, \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}
 \item Anthropic: \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}}, \code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}}
 \item Gemini: \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}
+\item Vertex: \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}}, \code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}
 \item Ollama: \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}, \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}},
 \code{\link[=ensure_only_ollama_model_loaded]{ensure_only_ollama_model_loaded()}}
 \item Together: \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}, \code{\link[=together_compare_pair_live]{together_compare_pair_live()}}

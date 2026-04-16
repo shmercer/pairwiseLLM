@@ -33,8 +33,10 @@ the corresponding \verb{run_*_batch_pipeline()} function.}
 to \code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}}, \code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}}, or
 \code{\link[=run_gemini_batch_pipeline]{run_gemini_batch_pipeline()}}.  See those functions for details.}
 
-\item{backend}{One of \code{"openai"}, \code{"anthropic"}, or \code{"gemini"}.  Determines
-which provider pipeline is used for each batch.}
+\item{backend}{One of \code{"openai"}, \code{"anthropic"}, or \code{"gemini"}. Determines
+which provider pipeline is used for each batch. If \code{"vertex"} is
+supplied, this function aborts explicitly because Vertex batch mode is not
+implemented in this series.}
 
 \item{batch_size}{Integer giving the maximum number of pairs per batch.
 Exactly one of \code{batch_size} or \code{n_segments} must be supplied; if

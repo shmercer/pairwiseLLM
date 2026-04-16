@@ -8,7 +8,7 @@ adaptive_rank(
   data,
   id_col = 1,
   text_col = 2,
-  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
   model = NULL,
   trait = "overall_quality",
   trait_name = NULL,
@@ -47,8 +47,8 @@ adaptive_rank(
 \code{\link[=read_samples_df]{read_samples_df()}}. Default is \code{2}.}
 
 \item{backend}{Backend passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}. Choices are
-\code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"together"}, and \code{"ollama"}.
-Default is \code{"openai"}.}
+\code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"vertex"}, \code{"together"}, and
+\code{"ollama"}. Default is \code{"openai"}.}
 
 \item{model}{Model passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}. Required when
 \code{judge} is \code{NULL}. Default is \code{NULL}.}

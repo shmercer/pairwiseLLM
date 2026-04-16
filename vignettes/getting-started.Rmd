@@ -20,7 +20,11 @@ library(dplyr)
 
 # 1. Introduction
 
-`pairwiseLLM` provides a unified workflow for generating and analyzing **pairwise comparisons of writing quality** using LLM APIs (OpenAI, Anthropic, Gemini, Together), and local models via Ollama..
+`pairwiseLLM` provides a unified workflow for generating and analyzing
+**pairwise comparisons of writing quality** using live LLM APIs
+(OpenAI, Anthropic, Gemini Developer API, Vertex AI Gemini API,
+Together.ai), local models via Ollama, and batch APIs for OpenAI,
+Anthropic, and Gemini Developer API.
 
 A typical workflow:
 
@@ -44,12 +48,17 @@ For advanced batch processing workflows, see:
 
 `pairwiseLLM` reads provider keys **only from environment variables**, never from R options or global variables.
 
-| Provider  | Environment Variable |
-|----------|----------------------|
-| [OpenAI](https://openai.com/api/)   | OPENAI_API_KEY       |
-| [Anthropic](https://console.anthropic.com/)| ANTHROPIC_API_KEY    |
-| [Gemini](https://aistudio.google.com/)   | GEMINI_API_KEY       |
-| [Together](https://www.together.ai/) | TOGETHER_API_KEY     |
+| Provider Surface | Environment Variable |
+|------------------|----------------------|
+| [OpenAI](https://openai.com/api/) | OPENAI_API_KEY |
+| [Anthropic](https://console.anthropic.com/) | ANTHROPIC_API_KEY |
+| Gemini Developer API | GEMINI_API_KEY |
+| Vertex AI Gemini API | VERTEX_API_KEY |
+| [Together](https://www.together.ai/) | TOGETHER_API_KEY |
+
+`backend = "gemini"` uses the Gemini Developer API and
+`backend = "vertex"` uses the Vertex AI Gemini API. Those backends use
+separate API-key surfaces.
 
 You should put these in your `~/.Renviron`:
 
@@ -57,6 +66,7 @@ You should put these in your `~/.Renviron`:
 OPENAI_API_KEY="sk-..."
 ANTHROPIC_API_KEY="..."
 GEMINI_API_KEY="..."
+VERTEX_API_KEY="..."
 TOGETHER_API_KEY="..."
 ```
 
@@ -66,13 +76,15 @@ Check which keys are available:
 library(pairwiseLLM)
 
 check_llm_api_keys()
-#> All known LLM API keys are set: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, TOGETHER_API_KEY.
-#> # A tibble: 4 × 4
-#>   backend   service        env_var           has_key
-#> 1 openai    OpenAI         OPENAI_API_KEY    TRUE
-#> 2 anthropic Anthropic      ANTHROPIC_API_KEY TRUE
-#> 3 gemini    Google Gemini  GEMINI_API_KEY    TRUE
-#> 4 together  Together.ai    TOGETHER_API_KEY  TRUE
+#> All known LLM API keys are set: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, VERTEX_API_KEY, TOGETHER_API_KEY.
+#> # A tibble: 5 × 4
+#>   backend   service              env_var           has_key
+#>   <chr>     <chr>                <chr>             <lgl>
+#> 1 openai    OpenAI               OPENAI_API_KEY    TRUE
+#> 2 anthropic Anthropic            ANTHROPIC_API_KEY TRUE
+#> 3 gemini    Google Gemini        GEMINI_API_KEY    TRUE
+#> 4 vertex    Vertex AI Gemini API VERTEX_API_KEY    TRUE
+#> 5 together  Together.ai          TOGETHER_API_KEY  TRUE
 ```
 
 [Ollama](https://ollama.com/) runs locally and does not require an API key, just that the Ollama server is running.
@@ -164,7 +176,8 @@ set_prompt_template(file = "my_template.txt")
 
 # 6. Live Pairwise Comparisons
 
-The unified wrapper works for **OpenAI, Anthropic, Gemini, Together, and Ollama.**
+The unified wrapper works for **OpenAI, Anthropic, Gemini Developer API,
+Vertex AI Gemini API, Together.ai, and Ollama**.
 
 It supports **parallel processing** and **incremental output file saving** (resume capability) for **all** supported backends. The function returns a list containing:
 
@@ -176,7 +189,7 @@ It supports **parallel processing** and **incremental output file saving** (resu
 # Example using parallel processing and incremental saving
 res_list <- submit_llm_pairs(
   pairs             = pairs_small,
-  backend           = "openai", # also "anthropic", "gemini", "together"
+  backend           = "openai", # also "anthropic", "gemini", "vertex", "together", "ollama"
   model             = "gpt-4o",
   trait_name        = td$name,
   trait_description = td$description,
@@ -185,6 +198,35 @@ res_list <- submit_llm_pairs(
   parallel          = TRUE,
   workers           = 4,
   save_path         = "live_results.csv"
+)
+```
+
+`service_tier` is provider-specific rather than portable across
+backends. Gemini Developer API and Vertex AI Gemini API currently accept
+the public values `"standard"`, `"flex"`, and `"priority"`, but Vertex is
+live-only and uses a different wire format internally.
+
+```{r, eval=FALSE}
+# Gemini Developer API live request
+res_gemini <- submit_llm_pairs(
+  pairs             = pairs_small,
+  backend           = "gemini",
+  model             = "gemini-3-pro-preview",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  service_tier      = "priority"
+)
+
+# Vertex AI Gemini API live request
+res_vertex <- submit_llm_pairs(
+  pairs             = pairs_small,
+  backend           = "vertex",
+  model             = "gemini-2.5-flash",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  service_tier      = "flex"
 )
 ```
 
@@ -274,14 +316,19 @@ Outputs:
 
 ## 10.1 Submit a batch
 
+Batch helpers support `"openai"`, `"anthropic"`, and `"gemini"`.
+`backend = "vertex"` is rejected explicitly because Vertex batch mode is
+not implemented in this series.
+
 ```{r, eval=FALSE}
 batch <- llm_submit_pairs_batch(
-  backend            = "openai",
-  model              = "gpt-4o",
+  backend            = "gemini",
+  model              = "gemini-3-pro-preview",
   pairs              = pairs_small,
   trait_name         = td$name,
   trait_description  = td$description,
-  prompt_template    = tmpl
+  prompt_template    = tmpl,
+  service_tier       = "priority"
 )
 ```
 
@@ -426,11 +473,15 @@ Most users use the unified interface, but backend helpers are available.
 - `run_gemini_batch_pipeline()`
 - `parse_gemini_batch_output()`
 
-### 11.4 Together.ai  (live only)
+### 11.4 Vertex AI Gemini API (live only)
+- `submit_vertex_pairs_live()`
+- `vertex_compare_pair_live()`
+
+### 11.5 Together.ai  (live only)
 - `together_compare_pair_live()`
 - `submit_together_pairs_live()`
 
-### 11.5 Ollama (local, live only)
+### 11.6 Ollama (local, live only)
 - `ollama_compare_pair_live()`
 - `submit_ollama_pairs_live()`
 

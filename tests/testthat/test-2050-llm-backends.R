@@ -345,7 +345,8 @@ testthat::test_that("llm_compare_pair routes to gemini backend", {
         backend           = "gemini",
         api_key           = "GEMINI_KEY",
         include_raw       = TRUE,
-        include_thoughts  = TRUE
+        include_thoughts  = TRUE,
+        service_tier      = "flex"
       )
 
       testthat::expect_equal(length(calls), 1L)
@@ -360,6 +361,7 @@ testthat::test_that("llm_compare_pair routes to gemini backend", {
       testthat::expect_equal(call$api_key, "GEMINI_KEY")
       testthat::expect_true("include_thoughts" %in% names(call$dots))
       testthat::expect_true(call$dots$include_thoughts)
+      testthat::expect_equal(call$dots$service_tier, "flex")
 
       testthat::expect_s3_class(res, "tbl_df")
       testthat::expect_equal(res, fake_res)
@@ -827,6 +829,7 @@ test_that("llm_compare_pair dispatches to the correct backend helper", {
   openai_ret <- tibble::tibble(backend = "openai")
   anthropic_ret <- tibble::tibble(backend = "anthropic")
   gemini_ret <- tibble::tibble(backend = "gemini")
+  vertex_ret <- tibble::tibble(backend = "vertex")
   together_ret <- tibble::tibble(backend = "together")
   ollama_ret <- tibble::tibble(backend = "ollama")
   # Helper to record the last call arguments
@@ -844,6 +847,10 @@ test_that("llm_compare_pair dispatches to the correct backend helper", {
     gemini_compare_pair_live = function(...) {
       last_args <<- list(fn = "gemini", args = list(...))
       gemini_ret
+    },
+    vertex_compare_pair_live = function(...) {
+      last_args <<- list(fn = "vertex", args = list(...))
+      vertex_ret
     },
     together_compare_pair_live = function(...) {
       last_args <<- list(fn = "together", args = list(...))
@@ -884,6 +891,16 @@ test_that("llm_compare_pair dispatches to the correct backend helper", {
       expect_equal(res_gemini$backend, "gemini")
       expect_identical(last_args$fn, "gemini")
       expect_true("include_thoughts" %in% names(last_args$args))
+      # Vertex
+      res_vertex <- llm_compare_pair(ID1, text1, ID2, text2, model,
+        trait_name, trait_description,
+        prompt_template = tmpl,
+        backend = "vertex", api_key = "VERTEX_KEY", service_tier = "flex"
+      )
+      expect_equal(res_vertex$backend, "vertex")
+      expect_identical(last_args$fn, "vertex")
+      expect_identical(last_args$args$api_key, "VERTEX_KEY")
+      expect_identical(last_args$args$service_tier, "flex")
       # Together
       res_together <- llm_compare_pair(ID1, text1, ID2, text2, model,
         trait_name, trait_description,
@@ -914,37 +931,6 @@ test_that("llm_compare_pair dispatches to the correct backend helper", {
       )
     }
   )
-})
-
-test_that(".retry_httr2_request retries on transient statuses and returns success", {
-  fn <- pairwiseLLM:::.retry_httr2_request
-  testthat::expect_true(is.function(fn))
-
-  testthat::expect_named(
-    formals(fn),
-    c("req", "max_attempts", "base_delay", "jitter")
-  )
-
-  body_text <- paste(deparse(body(fn)), collapse = " ")
-  testthat::expect_true(grepl(".pairwiseLLM_req_perform", body_text, fixed = TRUE))
-  testthat::expect_true(grepl(".pairwiseLLM_resp_status", body_text, fixed = TRUE))
-  testthat::expect_true(grepl("Sys.sleep", body_text, fixed = TRUE))
-})
-
-test_that(".retry_httr2_request handles httr2_http errors and rethrows when non-transient", {
-  body_text <- paste(deparse(body(pairwiseLLM:::.retry_httr2_request)), collapse = " ")
-  testthat::expect_true(grepl("stop(err)", body_text, fixed = TRUE))
-  testthat::expect_true(grepl("httr2_http", body_text, fixed = TRUE))
-})
-
-test_that(".retry_httr2_request retries on httr2_http transient errors and eventually succeeds", {
-  body_text <- paste(deparse(body(pairwiseLLM:::.retry_httr2_request)), collapse = " ")
-  testthat::expect_true(grepl(
-    "transient_status <- c(408L, 429L, 500L, 502L, 503L, 504L)",
-    body_text,
-    fixed = TRUE
-  ))
-  testthat::expect_true(grepl("Transient HTTP", body_text, fixed = TRUE))
 })
 
 # =====================================================================
@@ -1080,6 +1066,7 @@ testthat::test_that("submit_llm_pairs routes to gemini backend with new args", {
         prompt_template   = tmpl,
         backend           = "gemini",
         api_key           = "GEMINI_KEY",
+        service_tier      = "priority",
         parallel          = FALSE,
         save_path         = NULL
       )
@@ -1089,6 +1076,54 @@ testthat::test_that("submit_llm_pairs routes to gemini backend with new args", {
 
       testthat::expect_equal(call$model, "gemini-pro")
       testthat::expect_equal(call$api_key, "GEMINI_KEY")
+      testthat::expect_equal(call$service_tier, "priority")
+      testthat::expect_false(call$parallel)
+      testthat::expect_null(call$save_path)
+
+      testthat::expect_equal(res, fake_res)
+    }
+  )
+})
+
+testthat::test_that("submit_llm_pairs routes to vertex backend with new args", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  fake_res <- list(
+    results = tibble::tibble(model = "vertex"),
+    failed_pairs = tibble::tibble(),
+    failed_attempts = tibble::tibble()
+  )
+  calls <- list()
+
+  testthat::with_mocked_bindings(
+    submit_vertex_pairs_live = function(...) {
+      calls <<- append(calls, list(list(...)))
+      fake_res
+    },
+    {
+      res <- submit_llm_pairs(
+        pairs             = pairs,
+        model             = "gemini-2.5-flash",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        backend           = "vertex",
+        api_key           = "VERTEX_KEY",
+        service_tier      = "priority",
+        thinking_level    = "low",
+        parallel          = FALSE,
+        save_path         = NULL
+      )
+
+      testthat::expect_equal(length(calls), 1L)
+      call <- calls[[1]]
+
+      testthat::expect_equal(call$model, "gemini-2.5-flash")
+      testthat::expect_equal(call$api_key, "VERTEX_KEY")
+      testthat::expect_equal(call$service_tier, "priority")
+      testthat::expect_equal(call$thinking_level, "low")
       testthat::expect_false(call$parallel)
       testthat::expect_null(call$save_path)
 

@@ -4,6 +4,23 @@ trait_description <- pairwiseLLM:::trait_description
 set_prompt_template <- pairwiseLLM:::set_prompt_template
 gemini_compare_pair_live <- pairwiseLLM::gemini_compare_pair_live
 submit_gemini_pairs_live <- pairwiseLLM::submit_gemini_pairs_live
+normalize_gemini_service_tier <- pairwiseLLM:::normalize_gemini_service_tier
+
+test_that("normalize_gemini_service_tier validates public Gemini tiers", {
+  expect_null(normalize_gemini_service_tier(NULL))
+  expect_null(normalize_gemini_service_tier("standard"))
+  expect_equal(normalize_gemini_service_tier("flex"), "flex")
+  expect_equal(normalize_gemini_service_tier("priority"), "priority")
+
+  expect_error(
+    normalize_gemini_service_tier(1),
+    "service_tier"
+  )
+  expect_error(
+    normalize_gemini_service_tier("auto"),
+    "service_tier"
+  )
+})
 
 test_that("gemini_compare_pair_live parses a successful response without
           thoughts", {
@@ -397,7 +414,8 @@ test_that("gemini_compare_pair_live correctly constructs request body with confi
     top_k = 40,
     max_output_tokens = 100,
     thinking_level = "low",
-    include_thoughts = TRUE
+    include_thoughts = TRUE,
+    service_tier = "flex"
   )
 
   expect_type(captured_body, "list")
@@ -411,6 +429,41 @@ test_that("gemini_compare_pair_live correctly constructs request body with confi
   # Check thinking config
   expect_equal(gc$thinkingConfig$thinkingLevel, "Low")
   expect_true(gc$thinkingConfig$includeThoughts)
+  expect_equal(captured_body$serviceTier, "flex")
+
+  gemini_compare_pair_live(
+    ID1 = "A", text1 = "A", ID2 = "B", text2 = "B",
+    model = "gemini-3-pro-preview",
+    trait_name = td$name, trait_description = td$description,
+    prompt_template = tmpl,
+    service_tier = "standard"
+  )
+  expect_null(captured_body$serviceTier)
+
+  gemini_compare_pair_live(
+    ID1 = "A", text1 = "A", ID2 = "B", text2 = "B",
+    model = "gemini-3-pro-preview",
+    trait_name = td$name, trait_description = td$description,
+    prompt_template = tmpl,
+    service_tier = NULL
+  )
+  expect_null(captured_body$serviceTier)
+})
+
+test_that("gemini_compare_pair_live rejects unsupported service_tier values", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  expect_error(
+    gemini_compare_pair_live(
+      ID1 = "A", text1 = "A", ID2 = "B", text2 = "B",
+      model = "gemini-3-pro-preview",
+      trait_name = td$name, trait_description = td$description,
+      prompt_template = tmpl,
+      service_tier = "auto"
+    ),
+    "service_tier"
+  )
 })
 
 test_that("gemini_compare_pair_live handles empty/malformed candidates gracefully", {
@@ -507,6 +560,7 @@ testthat::test_that("submit_gemini_pairs_live runs correctly and returns list", 
   pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
+  calls <- list()
 
   pairs <- tibble::tibble(
     ID1 = c("S01", "S02"),
@@ -518,6 +572,7 @@ testthat::test_that("submit_gemini_pairs_live runs correctly and returns list", 
   # Mock success response
   testthat::local_mocked_bindings(
     gemini_compare_pair_live = function(ID1, ID2, ...) {
+      calls <<- append(calls, list(list(ID1 = ID1, ID2 = ID2, dots = list(...))))
       tibble::tibble(
         custom_id = sprintf("LIVE_%s_vs_%s", ID1, ID2),
         ID1 = ID1,
@@ -538,12 +593,15 @@ testthat::test_that("submit_gemini_pairs_live runs correctly and returns list", 
     trait_name = td$name,
     trait_description = td$description,
     prompt_template = tmpl,
+    service_tier = "priority",
     verbose = FALSE
   )
 
   testthat::expect_type(res, "list")
   testthat::expect_equal(nrow(res$results), 2L)
   testthat::expect_equal(nrow(res$failed_pairs), 0L)
+  testthat::expect_equal(length(calls), 2L)
+  testthat::expect_equal(calls[[1]]$dots$service_tier, "priority")
 })
 
 testthat::test_that("submit_gemini_pairs_live separates failed pairs", {

@@ -52,8 +52,9 @@
 #'
 #' This function inspects the current R session for configured API keys
 #' used by pairwiseLLM. It checks for known environment variables such as
-#' `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`, and returns
-#' a small tibble summarising which keys are available.
+#' `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, and
+#' `VERTEX_API_KEY`, and returns a small tibble summarising which keys are
+#' available.
 #'
 #' It does **not** print or return the key values themselves - only whether
 #' each key is present. This makes it safe to run in logs, scripts, and
@@ -66,9 +67,10 @@
 #' @return A tibble (data frame) with one row per backend and columns:
 #' \describe{
 #'   \item{backend}{Short backend identifier, e.g. `"openai"`, `"anthropic"`,
-#'   `"gemini"`, `"together"`.}
+#'   `"gemini"`, `"vertex"`, `"together"`.}
 #'   \item{service}{Human-readable service name, e.g. `"OpenAI"`,
-#'   `"Anthropic"`, `"Google Gemini"`, `"Together.ai"`.}
+#'   `"Anthropic"`, `"Google Gemini"`, `"Vertex AI Gemini API"`,
+#'   `"Together.ai"`.}
 #'   \item{env_var}{Name of the environment variable that is checked.}
 #'   \item{has_key}{Logical flag indicating whether the key is set and
 #'   non-empty.}
@@ -86,12 +88,19 @@
 #' @export
 check_llm_api_keys <- function(verbose = TRUE) {
   # Known backends and their primary env vars
-  backends <- c("openai", "anthropic", "gemini", "together")
-  services <- c("OpenAI", "Anthropic", "Google Gemini", "Together.ai")
+  backends <- c("openai", "anthropic", "gemini", "vertex", "together")
+  services <- c(
+    "OpenAI",
+    "Anthropic",
+    "Google Gemini",
+    "Vertex AI Gemini API",
+    "Together.ai"
+  )
   env_vars <- c(
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "GEMINI_API_KEY",
+    "VERTEX_API_KEY",
     "TOGETHER_API_KEY"
   )
 
@@ -127,12 +136,14 @@ check_llm_api_keys <- function(verbose = TRUE) {
         "  - OpenAI:         OPENAI_API_KEY\n",
         "  - Anthropic:      ANTHROPIC_API_KEY\n",
         "  - Google Gemini:  GEMINI_API_KEY\n",
+        "  - Vertex AI:      VERTEX_API_KEY\n",
         "  - Together.ai:    TOGETHER_API_KEY\n",
         "\n",
         "Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:\n",
         '  OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"\n',
         '  ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"\n',
         '  GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"\n',
+        '  VERTEX_API_KEY    = "YOUR_VERTEX_KEY_HERE"\n',
         '  TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"'
       )
     } else {
@@ -178,6 +189,24 @@ check_llm_api_keys <- function(verbose = TRUE) {
     api_key = api_key,
     env_var = "GEMINI_API_KEY",
     service = "Google Gemini"
+  )
+}
+
+#' Internal: Vertex AI Gemini API key helper
+#'
+#' This is a thin wrapper around `.get_api_key()` for the Vertex AI Gemini
+#' backend. It looks for a `VERTEX_API_KEY` environment variable by default and
+#' can be overridden explicitly via the `api_key` argument.
+#'
+#' @param api_key Optional character scalar. If `NULL` or an empty string, the
+#'   helper falls back to `Sys.getenv("VERTEX_API_KEY")`.
+#'
+#' @keywords internal
+.vertex_api_key <- function(api_key = NULL) {
+  .get_api_key(
+    api_key = api_key,
+    env_var = "VERTEX_API_KEY",
+    service = "Vertex AI Gemini API"
   )
 }
 
