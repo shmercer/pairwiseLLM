@@ -127,3 +127,4 @@ Collate:
     'together_live.R'
     'traits.R'
     'utils-null-coalesce.R'
+    'vertex_live.R'

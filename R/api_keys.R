@@ -181,6 +181,24 @@ check_llm_api_keys <- function(verbose = TRUE) {
   )
 }
 
+#' Internal: Vertex AI Gemini API key helper
+#'
+#' This is a thin wrapper around `.get_api_key()` for the Vertex AI Gemini
+#' backend. It looks for a `VERTEX_API_KEY` environment variable by default and
+#' can be overridden explicitly via the `api_key` argument.
+#'
+#' @param api_key Optional character scalar. If `NULL` or an empty string, the
+#'   helper falls back to `Sys.getenv("VERTEX_API_KEY")`.
+#'
+#' @keywords internal
+.vertex_api_key <- function(api_key = NULL) {
+  .get_api_key(
+    api_key = api_key,
+    env_var = "VERTEX_API_KEY",
+    service = "Vertex AI Gemini API"
+  )
+}
+
 #' Internal: Together.ai API key helper
 #'
 #' This is a thin wrapper around `.get_api_key()` for the Together.ai backend.

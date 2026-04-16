@@ -154,31 +154,47 @@ testthat::test_that("check_llm_api_keys(verbose = TRUE) prints mixed status per 
 })
 
 # ---------------------------------------------------------------------
-# Coverage for .gemini_api_key() / .together_api_key()
+# Coverage for .gemini_api_key() / .vertex_api_key() / .together_api_key()
 # ---------------------------------------------------------------------
 
-testthat::test_that(".gemini_api_key and .together_api_key prefer explicit api_key", {
+testthat::test_that(".gemini_api_key, .vertex_api_key, and .together_api_key prefer explicit api_key", {
   # Even if env vars are set, explicit argument wins
   withr::local_envvar(c(
     GEMINI_API_KEY = "GEMINI_FROM_ENV",
+    VERTEX_API_KEY = "VERTEX_FROM_ENV",
     TOGETHER_API_KEY = "TOGETHER_FROM_ENV"
   ))
 
   testthat::expect_equal(.gemini_api_key("GEMINI_EXPLICIT"), "GEMINI_EXPLICIT")
+  testthat::expect_equal(.vertex_api_key("VERTEX_EXPLICIT"), "VERTEX_EXPLICIT")
   testthat::expect_equal(.together_api_key("TOGETHER_EXPLICIT"), "TOGETHER_EXPLICIT")
 })
 
-testthat::test_that(".gemini_api_key and .together_api_key fallback to env vars and error when missing", {
+testthat::test_that(
+  ".gemini_api_key, .vertex_api_key, and .together_api_key fallback to env vars and error when missing",
+  {
   withr::local_envvar(c(
     GEMINI_API_KEY = "GEMINI_FROM_ENV",
+    VERTEX_API_KEY = "VERTEX_FROM_ENV",
     TOGETHER_API_KEY = ""
   ))
   testthat::expect_equal(.gemini_api_key(NULL), "GEMINI_FROM_ENV")
+  testthat::expect_equal(.vertex_api_key(NULL), "VERTEX_FROM_ENV")
 
   # TOGETHER: error path when nothing set
   testthat::expect_error(
     .together_api_key(NULL),
     "No API key found for Together\\.ai"
+  )
+  }
+)
+
+testthat::test_that(".vertex_api_key errors when no Vertex key is configured", {
+  withr::local_envvar(c(VERTEX_API_KEY = ""))
+
+  testthat::expect_error(
+    .vertex_api_key(NULL),
+    "No API key found for Vertex AI Gemini API"
   )
 })
 
