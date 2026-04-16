@@ -48,6 +48,19 @@ test_that("llm_submit_pairs_batch validates pairs and model", {
     "`model` must be a non-empty character scalar",
     fixed = TRUE
   )
+
+  expect_error(
+    llm_submit_pairs_batch(
+      pairs = good_pairs,
+      backend = "vertex",
+      model = "gemini-2.5-flash",
+      trait_name = td$name,
+      trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "Vertex batch mode is not implemented in this series",
+    fixed = FALSE
+  )
 })
 
 test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", {

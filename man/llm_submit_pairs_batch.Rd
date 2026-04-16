@@ -22,7 +22,9 @@ llm_submit_pairs_batch(
 through where supported.}
 
 \item{backend}{Character scalar; one of \code{"openai"}, \code{"anthropic"}, or
-\code{"gemini"}. Matching is case-insensitive.}
+\code{"gemini"}. Matching is case-insensitive. If \code{"vertex"} is supplied, this
+function aborts explicitly because Vertex batch mode is not implemented in
+this series.}
 
 \item{model}{Character scalar model name to use for the batch job.
 \itemize{
@@ -81,8 +83,8 @@ preserved.
 }
 \description{
 \code{llm_submit_pairs_batch()} is a backend-agnostic front-end for running
-provider batch pipelines (OpenAI, Anthropic, Gemini). Together.ai and Ollama
-are supported only for live comparisons.
+provider batch pipelines (OpenAI, Anthropic, Gemini). Vertex, Together.ai,
+and Ollama are supported only for live comparisons in this series.
 
 It mirrors \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} but uses the provider batch APIs under the
 hood via \code{run_openai_batch_pipeline()}, \code{run_anthropic_batch_pipeline()},

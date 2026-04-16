@@ -2,8 +2,8 @@
 #'
 #' @description
 #' `llm_submit_pairs_batch()` is a backend-agnostic front-end for running
-#' provider batch pipelines (OpenAI, Anthropic, Gemini). Together.ai and Ollama
-#' are supported only for live comparisons.
+#' provider batch pipelines (OpenAI, Anthropic, Gemini). Vertex, Together.ai,
+#' and Ollama are supported only for live comparisons in this series.
 #'
 #' It mirrors [submit_llm_pairs()] but uses the provider batch APIs under the
 #' hood via `run_openai_batch_pipeline()`, `run_anthropic_batch_pipeline()`,
@@ -56,7 +56,9 @@
 #'   `ID2`, and `text2`. Additional columns are allowed and will be carried
 #'   through where supported.
 #' @param backend Character scalar; one of `"openai"`, `"anthropic"`, or
-#'   `"gemini"`. Matching is case-insensitive.
+#'   `"gemini"`. Matching is case-insensitive. If `"vertex"` is supplied, this
+#'   function aborts explicitly because Vertex batch mode is not implemented in
+#'   this series.
 #' @param model Character scalar model name to use for the batch job.
 #'   * For `"openai"`, use models like `"gpt-4.1"`, `"gpt-5"`, `"gpt-5-mini"`,
 #'     `"gpt-5.1"`, or `"gpt-5.2"` (including date-stamped versions like
@@ -168,7 +170,24 @@ llm_submit_pairs_batch <- function(
   include_raw = FALSE,
   ...
 ) {
-  backend <- match.arg(tolower(backend), c("openai", "anthropic", "gemini"))
+  backend <- as.character(backend)
+  if (length(backend) < 1L || is.na(backend[1L]) || !nzchar(backend[1L])) {
+    rlang::abort("`backend` must be a non-empty character scalar.")
+  }
+  backend <- tolower(backend[1L])
+
+  if (identical(backend, "vertex")) {
+    rlang::abort(
+      paste0(
+        "`backend = \"vertex\"` is not supported by `llm_submit_pairs_batch()` ",
+        "because Vertex batch mode is not implemented in this series. ",
+        "Use `submit_llm_pairs()` or `submit_vertex_pairs_live()` for live ",
+        "Vertex requests."
+      )
+    )
+  }
+
+  backend <- match.arg(backend, c("openai", "anthropic", "gemini"))
 
   if (!rlang::is_scalar_character(model) || !nzchar(model)) {
     rlang::abort("`model` must be a non-empty character scalar.")

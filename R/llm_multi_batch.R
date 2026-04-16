@@ -25,8 +25,10 @@
 #' @param trait_name,trait_description,prompt_template Parameters forwarded
 #'   to [run_openai_batch_pipeline()], [run_anthropic_batch_pipeline()], or
 #'   [run_gemini_batch_pipeline()].  See those functions for details.
-#' @param backend One of `"openai"`, `"anthropic"`, or `"gemini"`.  Determines
-#'   which provider pipeline is used for each batch.
+#' @param backend One of `"openai"`, `"anthropic"`, or `"gemini"`. Determines
+#'   which provider pipeline is used for each batch. If `"vertex"` is
+#'   supplied, this function aborts explicitly because Vertex batch mode is not
+#'   implemented in this series.
 #' @param batch_size Integer giving the maximum number of pairs per batch.
 #'   Exactly one of `batch_size` or `n_segments` must be supplied; if
 #'   `batch_size` is supplied, the number of segments is computed as
@@ -136,7 +138,22 @@ llm_submit_pairs_multi_batch <- function(
   ...,
   openai_max_retries = 3
 ) {
-  backend <- match.arg(backend)
+  backend <- as.character(backend)
+  if (length(backend) < 1L || is.na(backend[1L]) || !nzchar(backend[1L])) {
+    rlang::abort("`backend` must be a non-empty character scalar.")
+  }
+  backend <- tolower(backend[1L])
+
+  if (identical(backend, "vertex")) {
+    rlang::abort(
+      paste0(
+        "`backend = \"vertex\"` is not supported by `llm_submit_pairs_multi_batch()` ",
+        "because Vertex batch mode is not implemented in this series."
+      )
+    )
+  }
+
+  backend <- match.arg(backend, c("openai", "anthropic", "gemini"))
 
   # Validate input and splitting options
   if (!is.null(batch_size) && !is.null(n_segments)) {

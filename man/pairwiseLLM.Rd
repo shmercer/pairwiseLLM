@@ -32,6 +32,7 @@ templates managed by \code{\link[=list_prompt_templates]{list_prompt_templates()
 \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}, \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}.
 \item Batch (recommended for scale): \code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}},
 \code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}}, \code{\link[=run_gemini_batch_pipeline]{run_gemini_batch_pipeline()}}.
+Vertex is currently supported on the live path only.
 }
 \item \strong{Assemble modeling data} with \code{\link[=build_bt_data]{build_bt_data()}} or \code{\link[=build_elo_data]{build_elo_data()}}
 (and for some pipelines, \code{\link[=build_btl_results_data]{build_btl_results_data()}}).

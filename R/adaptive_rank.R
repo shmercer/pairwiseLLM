@@ -155,8 +155,8 @@
 #' backend-specific parameters such as OpenAI `reasoning` and `service_tier`.
 #'
 #' @param backend Backend passed to [llm_compare_pair()]. Choices are
-#'   `"openai"`, `"anthropic"`, `"gemini"`, `"together"`, and `"ollama"`.
-#'   Default is `"openai"`.
+#'   `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, and
+#'   `"ollama"`. Default is `"openai"`.
 #' @param model Model identifier passed to [llm_compare_pair()]. Required.
 #' @param trait Built-in trait key used when no custom trait is supplied.
 #'   Ignored when both `trait_name` and `trait_description` are supplied.
@@ -199,7 +199,7 @@
 #' @family adaptive ranking
 #' @export
 make_adaptive_judge_llm <- function(
-    backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+    backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
     model,
     trait = "overall_quality",
     trait_name = NULL,
@@ -389,8 +389,8 @@ make_adaptive_judge_llm <- function(
 #' @param text_col Text column selector for tabular inputs. Passed to
 #'   [read_samples_df()]. Default is `2`.
 #' @param backend Backend passed to [make_adaptive_judge_llm()]. Choices are
-#'   `"openai"`, `"anthropic"`, `"gemini"`, `"together"`, and `"ollama"`.
-#'   Default is `"openai"`.
+#'   `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, and
+#'   `"ollama"`. Default is `"openai"`.
 #' @param model Model passed to [make_adaptive_judge_llm()]. Required when
 #'   `judge` is `NULL`. Default is `NULL`.
 #' @param trait Built-in trait key used when no custom trait is supplied.
@@ -861,7 +861,7 @@ adaptive_rank <- function(
     data,
     id_col = 1,
     text_col = 2,
-    backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+    backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
     model = NULL,
     trait = "overall_quality",
     trait_name = NULL,

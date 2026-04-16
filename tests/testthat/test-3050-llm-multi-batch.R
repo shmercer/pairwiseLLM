@@ -116,9 +116,22 @@ test_that("llm_submit_pairs_multi_batch validates batch_size and n_segments inpu
         ),
         "Either 'batch_size' or 'n_segments' must be supplied"
       )
+      # Vertex is recognized explicitly but remains live-only in this series
+      expect_error(
+        llm_submit_pairs_multi_batch(
+          pairs             = pairs,
+          model             = "gemini-2.5-flash",
+          trait_name        = td$name,
+          trait_description = td$description,
+          prompt_template   = tmpl,
+          backend           = "vertex",
+          n_segments        = 1L,
+          output_dir        = tempdir(),
+          verbose           = FALSE
+        ),
+        "Vertex batch mode is not implemented in this series"
+      )
       # Error when unsupported backend provided
-      # The first argument of match.arg throws an error like
-      # "'arg' should be one of \"openai\", \"anthropic\", \"gemini\""
       expect_error(
         llm_submit_pairs_multi_batch(
           pairs             = pairs,

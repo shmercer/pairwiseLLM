@@ -25,6 +25,7 @@
 #'      [submit_ollama_pairs_live()], [submit_together_pairs_live()].
 #'    - Batch (recommended for scale): [run_openai_batch_pipeline()],
 #'      [run_anthropic_batch_pipeline()], [run_gemini_batch_pipeline()].
+#'      Vertex is currently supported on the live path only.
 #' 6. **Assemble modeling data** with [build_bt_data()] or [build_elo_data()]
 #'    (and for some pipelines, [build_btl_results_data()]).
 #' 7. **Fit / summarize**:

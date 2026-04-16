@@ -829,6 +829,7 @@ test_that("llm_compare_pair dispatches to the correct backend helper", {
   openai_ret <- tibble::tibble(backend = "openai")
   anthropic_ret <- tibble::tibble(backend = "anthropic")
   gemini_ret <- tibble::tibble(backend = "gemini")
+  vertex_ret <- tibble::tibble(backend = "vertex")
   together_ret <- tibble::tibble(backend = "together")
   ollama_ret <- tibble::tibble(backend = "ollama")
   # Helper to record the last call arguments
@@ -846,6 +847,10 @@ test_that("llm_compare_pair dispatches to the correct backend helper", {
     gemini_compare_pair_live = function(...) {
       last_args <<- list(fn = "gemini", args = list(...))
       gemini_ret
+    },
+    vertex_compare_pair_live = function(...) {
+      last_args <<- list(fn = "vertex", args = list(...))
+      vertex_ret
     },
     together_compare_pair_live = function(...) {
       last_args <<- list(fn = "together", args = list(...))
@@ -886,6 +891,16 @@ test_that("llm_compare_pair dispatches to the correct backend helper", {
       expect_equal(res_gemini$backend, "gemini")
       expect_identical(last_args$fn, "gemini")
       expect_true("include_thoughts" %in% names(last_args$args))
+      # Vertex
+      res_vertex <- llm_compare_pair(ID1, text1, ID2, text2, model,
+        trait_name, trait_description,
+        prompt_template = tmpl,
+        backend = "vertex", api_key = "VERTEX_KEY", service_tier = "flex"
+      )
+      expect_equal(res_vertex$backend, "vertex")
+      expect_identical(last_args$fn, "vertex")
+      expect_identical(last_args$args$api_key, "VERTEX_KEY")
+      expect_identical(last_args$args$service_tier, "flex")
       # Together
       res_together <- llm_compare_pair(ID1, text1, ID2, text2, model,
         trait_name, trait_description,
@@ -1093,6 +1108,53 @@ testthat::test_that("submit_llm_pairs routes to gemini backend with new args", {
       testthat::expect_equal(call$model, "gemini-pro")
       testthat::expect_equal(call$api_key, "GEMINI_KEY")
       testthat::expect_equal(call$service_tier, "priority")
+      testthat::expect_false(call$parallel)
+      testthat::expect_null(call$save_path)
+
+      testthat::expect_equal(res, fake_res)
+    }
+  )
+})
+
+testthat::test_that("submit_llm_pairs routes to vertex backend with new args", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  fake_res <- list(
+    results = tibble::tibble(model = "vertex"),
+    failed_pairs = tibble::tibble(),
+    failed_attempts = tibble::tibble()
+  )
+  calls <- list()
+
+  testthat::with_mocked_bindings(
+    submit_vertex_pairs_live = function(...) {
+      calls <<- append(calls, list(list(...)))
+      fake_res
+    },
+    {
+      res <- submit_llm_pairs(
+        pairs             = pairs,
+        model             = "gemini-2.5-flash",
+        trait_name        = td$name,
+        trait_description = td$description,
+        prompt_template   = tmpl,
+        backend           = "vertex",
+        api_key           = "VERTEX_KEY",
+        service_tier      = "priority",
+        thinking_level    = "low",
+        parallel          = FALSE,
+        save_path         = NULL
+      )
+
+      testthat::expect_equal(length(calls), 1L)
+      call <- calls[[1]]
+
+      testthat::expect_equal(call$model, "gemini-2.5-flash")
+      testthat::expect_equal(call$api_key, "VERTEX_KEY")
+      testthat::expect_equal(call$service_tier, "priority")
+      testthat::expect_equal(call$thinking_level, "low")
       testthat::expect_false(call$parallel)
       testthat::expect_null(call$save_path)
 

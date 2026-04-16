@@ -10,7 +10,7 @@ submit_llm_pairs(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
   endpoint = c("chat.completions", "responses"),
   api_key = NULL,
   verbose = TRUE,
@@ -30,9 +30,10 @@ submit_llm_pairs(
 
 \item{model}{Model identifier for the chosen backend. For \code{"openai"} this
 should be an OpenAI model name (for example \code{"gpt-4.1"}, \code{"gpt-5.1"}).
-For \code{"anthropic"} and \code{"gemini"}, use the corresponding provider model
-names (for example \code{"claude-4-5-sonnet"} or
-\code{"gemini-3-pro-preview"}). For "together", use Together.ai model identifiers
+For \code{"anthropic"}, use Anthropic model names such as
+\code{"claude-4-5-sonnet"}. For \code{"gemini"} and \code{"vertex"}, use the
+corresponding Gemini model names (for example \code{"gemini-3-pro-preview"} or
+\code{"gemini-2.5-flash"}). For "together", use Together.ai model identifiers
 such as \code{"deepseek-ai/DeepSeek-R1"} or \code{"deepseek-ai/DeepSeek-V3"}. For
 \code{"ollama"}, use a local model name known to the Ollama server (for example
 \code{"mistral-small3.2:24b"}, \code{"qwen3:32b"}, \code{"gemma3:27b"}).}
@@ -46,13 +47,14 @@ comparison function (for example \code{"Overall Quality"}).}
 \code{\link[=set_prompt_template]{set_prompt_template()}}.}
 
 \item{backend}{Character scalar indicating which LLM provider to use.
-One of \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"together"}, or \code{"ollama"}.}
+One of \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"vertex"}, \code{"together"},
+or \code{"ollama"}.}
 
 \item{endpoint}{Character scalar specifying which endpoint family to use for
 backends that support multiple live APIs. For the \code{"openai"} backend this
 must be one of \code{"chat.completions"} or \code{"responses"}, matching
-\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}. For \code{"anthropic"}, \code{"gemini"}, \code{"together"},
-and \code{"ollama"}, this is currently ignored.}
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}. For \code{"anthropic"}, \code{"gemini"}, \code{"vertex"},
+\code{"together"}, and \code{"ollama"}, this is currently ignored.}
 
 \item{api_key}{Optional API key for the selected backend. If \code{NULL}, the
 backend-specific helper will use its own default environment variable.
@@ -89,12 +91,13 @@ all backends (though defaults may vary).}
 are forwarded to \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}} and typically include
 \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}, \code{service_tier}, and
 \code{include_thoughts}.
-For \code{"anthropic"} and \code{"gemini"}, they are forwarded to
-\code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}} or \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}} and
-may include options such as \code{max_output_tokens}, \code{include_thoughts},
-\code{service_tier}, and provider-specific controls. For \code{"ollama"}, arguments are forwarded to
-\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} and may include \code{host}, \code{think},
-\code{num_ctx}, and other Ollama-specific options.}
+For \code{"anthropic"}, \code{"gemini"}, and \code{"vertex"}, they are forwarded to
+\code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}}, \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, or
+\code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}} and may include options such as
+\code{max_output_tokens}, \code{include_thoughts}, \code{service_tier},
+\code{thinking_level}, and provider-specific controls. For \code{"ollama"},
+arguments are forwarded to \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} and may include
+\code{host}, \code{think}, \code{num_ctx}, and other Ollama-specific options.}
 }
 \value{
 A list containing:
@@ -113,14 +116,15 @@ for multiple pairs. It takes a tibble of pairs (\code{ID1}, \code{text1}, \code{
 }
 \details{
 This function supports parallel processing, incremental saving, and resume
-capability for the \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"together"},
-and \code{"ollama"} backends.
+capability for the \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"vertex"},
+\code{"together"}, and \code{"ollama"} backends.
 
 At present, the following backends are implemented:
 \itemize{
 \item \code{"openai"}   → \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}
 \item \code{"anthropic"} → \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}}
 \item \code{"gemini"}   → \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}
+\item \code{"vertex"}   → \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}}
 \item \code{"together"}  → \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}
 \item \code{"ollama"}   → \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}
 }
@@ -184,7 +188,8 @@ res_ollama$results
 \seealso{
 \itemize{
 \item \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}, \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
-\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}, and
-\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} for backend-specific implementations.
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
+\code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}, and \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} for
+backend-specific implementations.
 }
 }

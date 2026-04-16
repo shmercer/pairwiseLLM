@@ -130,6 +130,40 @@ testthat::test_that("estimate_llm_pairs_cost validates inputs", {
     "backend = \"ollama\""
   )
 
+  testthat::expect_error(
+    estimate_llm_pairs_cost(pairs,
+      model = "m", trait_name = "t", trait_description = "d",
+      backend = "vertex", mode = "batch",
+      cost_per_million_input = 1, cost_per_million_output = 1,
+      .submit_fun = function(...) stop("should not run")
+    ),
+    "Vertex batch mode is not implemented in this series"
+  )
+
+  vertex_est <- estimate_llm_pairs_cost(
+    pairs,
+    model = "gemini-2.5-flash",
+    trait_name = td$name,
+    trait_description = td$description,
+    backend = "vertex",
+    mode = "live",
+    n_test = 1,
+    cost_per_million_input = 1,
+    cost_per_million_output = 1,
+    .submit_fun = function(pairs, ...) {
+      tibble::tibble(
+        ID1 = pairs$ID1,
+        ID2 = pairs$ID2,
+        better_id = pairs$ID1,
+        status_code = 200L,
+        prompt_tokens = 10L,
+        completion_tokens = 5L,
+        total_tokens = 15L
+      )
+    }
+  )
+  testthat::expect_s3_class(vertex_est, "pairwiseLLM_cost_estimate")
+
   # Missing columns
   testthat::expect_error(
     estimate_llm_pairs_cost(tibble::tibble(x = 1),
