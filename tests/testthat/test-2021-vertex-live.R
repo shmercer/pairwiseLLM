@@ -35,6 +35,35 @@ testthat::test_that(".vertex_model_resource normalizes short model names and rej
     pairwiseLLM:::.vertex_model_resource("publishers/anthropic/models/claude"),
     "Google publisher model"
   )
+  testthat::expect_error(
+    pairwiseLLM:::.vertex_model_resource(""),
+    "non-empty character scalar"
+  )
+})
+
+testthat::test_that("Vertex helper wrappers delegate to retry and response helpers", {
+  skip_if_not_installed("httr2")
+
+  ns <- asNamespace("pairwiseLLM")
+
+  testthat::local_mocked_bindings(
+    .retry_httr2_request = function(req) list(ok = TRUE, req = req),
+    .env = ns
+  )
+
+  testthat::expect_identical(
+    pairwiseLLM:::.vertex_req_perform("req-1"),
+    list(ok = TRUE, req = "req-1")
+  )
+
+  resp <- httr2::response(
+    status_code = 201,
+    body = charToRaw("{\"ok\":true}"),
+    headers = list("Content-Type" = "application/json")
+  )
+
+  testthat::expect_equal(pairwiseLLM:::.vertex_resp_status(resp), 201L)
+  testthat::expect_equal(pairwiseLLM:::.vertex_resp_body_json(resp)$ok, TRUE)
 })
 
 testthat::test_that(".vertex_is_gemini_3_model detects Gemini 3 resources", {
@@ -351,6 +380,45 @@ testthat::test_that("vertex_compare_pair_live returns an error row on request fa
   testthat::expect_match(res$error_message, "HTTP 500", fixed = FALSE)
 })
 
+testthat::test_that("vertex_compare_pair_live keeps raw placeholder and retry failures on error rows", {
+  skip_if_not_installed("httr2")
+
+  ns <- asNamespace("pairwiseLLM")
+  retry_failures <- tibble::tibble(
+    error_code = "rate_limit",
+    error_detail = "retry me"
+  )
+
+  testthat::local_mocked_bindings(
+    .vertex_api_key = function(api_key = NULL) "VERTEX_TEST_KEY",
+    .vertex_req_perform = function(req) {
+      err <- simpleError("temporary failure")
+      attr(err, "retry_failures") <- retry_failures
+      stop(err)
+    },
+    .env = ns
+  )
+
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+
+  res <- vertex_compare_pair_live(
+    ID1 = "S01",
+    text1 = "Sample 1 text.",
+    ID2 = "S02",
+    text2 = "Sample 2 text.",
+    model = "gemini-2.5-flash",
+    trait_name = td$name,
+    trait_description = td$description,
+    prompt_template = tmpl,
+    include_raw = TRUE
+  )
+
+  testthat::expect_true(is.null(res$raw_response[[1]]))
+  testthat::expect_identical(res$retry_failures[[1]], retry_failures)
+  testthat::expect_true(is.na(res$better_sample))
+})
+
 testthat::test_that("vertex_compare_pair_live handles httr2_http errors and extracts body", {
   skip_if_not_installed("httr2")
 
@@ -648,4 +716,412 @@ testthat::test_that("submit_vertex_pairs_live validates inputs", {
     ),
     "positive integer"
   )
+})
+
+testthat::test_that("submit_vertex_pairs_live aborts when readr is unavailable for save_path", {
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  base_require_namespace <- get("requireNamespace", envir = baseenv())
+
+  testthat::with_mocked_bindings(
+    requireNamespace = function(package, ...) {
+      if (identical(package, "readr")) {
+        return(FALSE)
+      }
+      base_require_namespace(package, ...)
+    },
+    .package = "base",
+    {
+      testthat::expect_error(
+        submit_vertex_pairs_live(
+          pairs = pairs,
+          model = "gemini-2.5-flash",
+          trait_name = td$name,
+          trait_description = td$description,
+          save_path = tempfile(fileext = ".csv")
+        ),
+        "readr"
+      )
+    }
+  )
+})
+
+testthat::test_that("submit_vertex_pairs_live aborts when parallel packages are unavailable", {
+  td <- trait_description("overall_quality")
+  pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
+  base_require_namespace <- get("requireNamespace", envir = baseenv())
+
+  testthat::with_mocked_bindings(
+    requireNamespace = function(package, ...) {
+      if (identical(package, "future.apply")) {
+        return(FALSE)
+      }
+      base_require_namespace(package, ...)
+    },
+    .package = "base",
+    {
+      testthat::expect_error(
+        submit_vertex_pairs_live(
+          pairs = pairs,
+          model = "gemini-2.5-flash",
+          trait_name = td$name,
+          trait_description = td$description,
+          parallel = TRUE,
+          workers = 2
+        ),
+        "future.apply"
+      )
+    }
+  )
+})
+
+testthat::test_that("submit_vertex_pairs_live creates directories and returns empty raw results", {
+  testthat::skip_if_not_installed("readr")
+
+  td <- trait_description("overall_quality")
+  save_dir <- file.path(tempdir(), paste0("vertex-live-", basename(tempfile())))
+  save_path <- file.path(save_dir, "results.csv")
+  empty_pairs <- tibble::tibble(
+    ID1 = character(0),
+    text1 = character(0),
+    ID2 = character(0),
+    text2 = character(0)
+  )
+
+  msgs <- testthat::capture_messages(
+    res <- submit_vertex_pairs_live(
+      pairs = empty_pairs,
+      model = "gemini-2.5-flash",
+      trait_name = td$name,
+      trait_description = td$description,
+      save_path = save_path,
+      include_raw = TRUE,
+      verbose = TRUE
+    )
+  )
+
+  testthat::expect_true(dir.exists(save_dir))
+  testthat::expect_true("raw_response" %in% names(res$results))
+  testthat::expect_equal(length(res$results$raw_response), 0L)
+  testthat::expect_true(any(grepl("Creating output directory", msgs, fixed = TRUE)))
+  unlink(save_dir, recursive = TRUE)
+})
+
+testthat::test_that("submit_vertex_pairs_live resumes by pair_uid and logs skip messages", {
+  testthat::skip_if_not_installed("readr")
+
+  td <- trait_description("overall_quality")
+  save_path <- tempfile(fileext = ".csv")
+  on.exit(unlink(save_path), add = TRUE)
+
+  existing_data <- tibble::tibble(
+    pair_uid = "pair-1",
+    ID1 = "S01",
+    ID2 = "S02",
+    model = "vertex-model",
+    status_code = 200L,
+    error_message = NA_character_,
+    better_id = "S01"
+  )
+  readr::write_csv(existing_data, save_path)
+
+  pairs <- tibble::tibble(
+    ID1 = "S01",
+    text1 = "A",
+    ID2 = "S02",
+    text2 = "B",
+    pair_uid = "pair-1"
+  )
+
+  msgs <- testthat::capture_messages(
+    res <- submit_vertex_pairs_live(
+      pairs = pairs,
+      model = "gemini-2.5-flash",
+      trait_name = td$name,
+      trait_description = td$description,
+      save_path = save_path,
+      verbose = TRUE
+    )
+  )
+
+  testthat::expect_equal(nrow(res$results), 1L)
+  testthat::expect_equal(res$results$pair_uid, "pair-1")
+  testthat::expect_true(any(grepl("Checking for resumable pairs", msgs, fixed = TRUE)))
+  testthat::expect_true(any(grepl("Skipping 1 pairs already present", msgs, fixed = TRUE)))
+})
+
+testthat::test_that("submit_vertex_pairs_live processes all pairs when resume file has no pair identifiers", {
+  testthat::skip_if_not_installed("readr")
+
+  ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  save_path <- tempfile(fileext = ".csv")
+  on.exit(unlink(save_path), add = TRUE)
+
+  readr::write_csv(tibble::tibble(model = "vertex-model"), save_path)
+
+  pairs <- tibble::tibble(
+    ID1 = "S03",
+    text1 = "A",
+    ID2 = "S04",
+    text2 = "B"
+  )
+
+  call_count <- 0L
+
+  testthat::with_mocked_bindings(
+    vertex_compare_pair_live = function(...) {
+      call_count <<- call_count + 1L
+      tibble::tibble(
+        custom_id = "LIVE_S03_vs_S04",
+        ID1 = "S03",
+        ID2 = "S04",
+        model = "vertex-model",
+        status_code = 200L,
+        error_message = NA_character_,
+        better_id = "S03"
+      )
+    },
+    .env = ns,
+    {
+      res <- submit_vertex_pairs_live(
+        pairs = pairs,
+        model = "gemini-2.5-flash",
+        trait_name = td$name,
+        trait_description = td$description,
+        save_path = save_path,
+        verbose = FALSE
+      )
+
+      testthat::expect_equal(call_count, 1L)
+      testthat::expect_equal(nrow(res$results), 1L)
+    }
+  )
+})
+
+testthat::test_that("submit_vertex_pairs_live warns when an existing save path cannot be read", {
+  testthat::skip_if_not_installed("readr")
+
+  td <- trait_description("overall_quality")
+  save_path <- tempfile(fileext = ".csv")
+  writeLines("placeholder", save_path)
+  on.exit(unlink(save_path), add = TRUE)
+  empty_pairs <- tibble::tibble(
+    ID1 = character(0),
+    text1 = character(0),
+    ID2 = character(0),
+    text2 = character(0)
+  )
+
+  testthat::with_mocked_bindings(
+    read_csv = function(...) stop("bad csv"),
+    .package = "readr",
+    {
+      testthat::expect_warning(
+        res <- submit_vertex_pairs_live(
+          pairs = empty_pairs,
+          model = "gemini-2.5-flash",
+          trait_name = td$name,
+          trait_description = td$description,
+          save_path = save_path,
+          verbose = TRUE
+        ),
+        "Could not read existing save file to resume"
+      )
+    }
+  )
+
+  testthat::expect_equal(nrow(res$results), 0L)
+})
+
+testthat::test_that("submit_vertex_pairs_live sequential path logs status and catches thrown errors", {
+  testthat::skip_if_not_installed("readr")
+
+  ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  save_path <- tempfile(fileext = ".csv")
+  write_cols <- list()
+
+  pairs <- tibble::tibble(
+    ID1 = c("S01", "S02"),
+    text1 = c("A", "B"),
+    ID2 = c("S03", "S04"),
+    text2 = c("C", "D"),
+    pair_uid = c("pair-1", "pair-2")
+  )
+
+  msgs <- testthat::capture_messages(
+    testthat::with_mocked_bindings(
+      write_csv = function(x, ...) {
+        write_cols <<- append(write_cols, list(names(x)))
+        invisible(x)
+      },
+      .package = "readr",
+      {
+        testthat::with_mocked_bindings(
+          vertex_compare_pair_live = function(ID1, ID2, pair_uid, include_raw, ...) {
+            if (ID1 == "S02") {
+              stop("sequential fail")
+            }
+
+            tibble::tibble(
+              custom_id = pair_uid,
+              ID1 = ID1,
+              ID2 = ID2,
+              model = "vertex-model",
+              object_type = "generateContent",
+              status_code = 200L,
+              error_message = NA_character_,
+              thoughts = NA_character_,
+              content = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>",
+              better_sample = "SAMPLE_1",
+              better_id = ID1,
+              prompt_tokens = 1,
+              completion_tokens = 1,
+              total_tokens = 2,
+              raw_response = if (isTRUE(include_raw)) list(list(ok = TRUE)) else NULL,
+              retry_failures = list(tibble::tibble())
+            )
+          },
+          .env = ns,
+          {
+            res <- submit_vertex_pairs_live(
+              pairs = pairs,
+              model = "gemini-2.5-flash",
+              trait_name = td$name,
+              trait_description = td$description,
+              save_path = save_path,
+              include_raw = TRUE,
+              verbose = TRUE,
+              status_every = 1,
+              progress = FALSE
+            )
+          }
+        )
+      }
+    )
+  )
+
+  testthat::expect_equal(nrow(res$results), 1L)
+  testthat::expect_equal(nrow(res$failed_pairs), 1L)
+  testthat::expect_true(any(grepl("Submitting 2 live pair\\(s\\)", msgs)))
+  testthat::expect_true(any(grepl("\\[Vertex live pair 1 of 2\\]", msgs)))
+  testthat::expect_true(any(grepl("Elapsed:", msgs, fixed = TRUE)))
+  testthat::expect_true(any(grepl("Completed 2 pairs", msgs, fixed = TRUE)))
+  testthat::expect_true(all(!vapply(write_cols, function(x) "raw_response" %in% x, logical(1L))))
+  testthat::expect_match(res$failed_pairs$error_message, "sequential fail")
+})
+
+testthat::test_that("submit_vertex_pairs_live parallel path processes chunks and save warnings", {
+  testthat::skip_if_not_installed("future")
+  testthat::skip_if_not_installed("future.apply")
+  testthat::skip_if_not_installed("readr")
+
+  ns <- asNamespace("pairwiseLLM")
+  td <- trait_description("overall_quality")
+  save_path <- tempfile(fileext = ".csv")
+  plan_calls <- list()
+  write_cols <- list()
+  progress_updates <- integer(0)
+
+  pairs <- tibble::tibble(
+    ID1 = c("S01", "S02"),
+    text1 = c("A", "B"),
+    ID2 = c("S03", "S04"),
+    text2 = c("C", "D"),
+    pair_uid = c("pair-1", "pair-2")
+  )
+
+  msgs <- testthat::capture_messages(
+    testthat::expect_warning(
+      testthat::with_mocked_bindings(
+        plan = function(...) {
+          plan_calls <<- append(plan_calls, list(list(...)))
+          "old-plan"
+        },
+        .package = "future",
+        {
+          testthat::with_mocked_bindings(
+            future_lapply = function(X, FUN, ...) lapply(X, FUN),
+            .package = "future.apply",
+            {
+              testthat::with_mocked_bindings(
+                txtProgressBar = function(...) structure(list(), class = "vertex_pb"),
+                setTxtProgressBar = function(pb, value, ...) {
+                  progress_updates <<- c(progress_updates, value)
+                  invisible(pb)
+                },
+                .package = "utils",
+                {
+                  testthat::with_mocked_bindings(
+                    close = function(con, ...) invisible(NULL),
+                    .package = "base",
+                    {
+                      testthat::with_mocked_bindings(
+                        write_csv = function(...) stop("disk full"),
+                        .package = "readr",
+                        {
+                          testthat::with_mocked_bindings(
+                            vertex_compare_pair_live = function(ID1, ID2, pair_uid, include_raw, ...) {
+                              if (ID1 == "S02") {
+                                stop("parallel fail")
+                              }
+
+                              tibble::tibble(
+                                custom_id = pair_uid,
+                                ID1 = ID1,
+                                ID2 = ID2,
+                                model = "vertex-model",
+                                object_type = "generateContent",
+                                status_code = 200L,
+                                error_message = NA_character_,
+                                thoughts = NA_character_,
+                                content = "<BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>",
+                                better_sample = "SAMPLE_2",
+                                better_id = ID2,
+                                prompt_tokens = 1,
+                                completion_tokens = 1,
+                                total_tokens = 2,
+                                raw_response = if (isTRUE(include_raw)) list(list(ok = TRUE)) else NULL,
+                                retry_failures = list(tibble::tibble())
+                              )
+                            },
+                            .env = ns,
+                            {
+                              res <- submit_vertex_pairs_live(
+                                pairs = pairs,
+                                model = "gemini-2.5-flash",
+                                trait_name = td$name,
+                                trait_description = td$description,
+                                save_path = save_path,
+                                include_raw = TRUE,
+                                verbose = TRUE,
+                                progress = TRUE,
+                                parallel = TRUE,
+                                workers = 2
+                              )
+                            }
+                          )
+                        }
+                      )
+                    }
+                  )
+                }
+              )
+            }
+          )
+        }
+      ),
+      "Failed to save incremental results"
+    )
+  )
+
+  testthat::expect_equal(nrow(res$results), 1L)
+  testthat::expect_equal(nrow(res$failed_pairs), 1L)
+  testthat::expect_true(length(plan_calls) >= 2L)
+  testthat::expect_equal(progress_updates, 2L)
+  testthat::expect_true(any(grepl("Setting up parallel plan with 2 workers", msgs, fixed = TRUE)))
+  testthat::expect_true(any(grepl("Processing 2 pairs in PARALLEL", msgs, fixed = TRUE)))
+  testthat::expect_true(any(grepl("Completed 2 pairs", msgs, fixed = TRUE)))
+  testthat::expect_match(res$failed_pairs$error_message, "parallel fail")
 })
