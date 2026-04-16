@@ -934,34 +934,85 @@ test_that("llm_compare_pair dispatches to the correct backend helper", {
 })
 
 test_that(".retry_httr2_request retries on transient statuses and returns success", {
-  fn <- pairwiseLLM:::.retry_httr2_request
-  testthat::expect_true(is.function(fn))
+  call_count <- 0L
+  fake_resp <- function(status) {
+    structure(list(status = status), class = "httr2_response")
+  }
 
-  testthat::expect_named(
-    formals(fn),
-    c("req", "max_attempts", "base_delay", "jitter")
+  res <- testthat::with_mocked_bindings(
+    `.pairwiseLLM_req_perform` = function(req) {
+      call_count <<- call_count + 1L
+      if (call_count == 1L) {
+        return(fake_resp(503L))
+      }
+      fake_resp(200L)
+    },
+    `.pairwiseLLM_resp_status` = function(resp) resp$status,
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.retry_httr2_request(
+        list(),
+        max_attempts = 2L,
+        base_delay = 0,
+        jitter = 0
+      )
+    }
   )
 
-  body_text <- paste(deparse(body(fn)), collapse = " ")
-  testthat::expect_true(grepl(".pairwiseLLM_req_perform", body_text, fixed = TRUE))
-  testthat::expect_true(grepl(".pairwiseLLM_resp_status", body_text, fixed = TRUE))
-  testthat::expect_true(grepl("Sys.sleep", body_text, fixed = TRUE))
+  testthat::expect_equal(call_count, 2L)
+  testthat::expect_equal(attr(res, "retry_failures")$error_detail[[1L]], "HTTP 503")
 })
 
 test_that(".retry_httr2_request handles httr2_http errors and rethrows when non-transient", {
-  body_text <- paste(deparse(body(pairwiseLLM:::.retry_httr2_request)), collapse = " ")
-  testthat::expect_true(grepl("stop(err)", body_text, fixed = TRUE))
-  testthat::expect_true(grepl("httr2_http", body_text, fixed = TRUE))
+  http_err <- structure(list(response = list()), class = c("httr2_http", "error", "condition"))
+
+  err <- testthat::with_mocked_bindings(
+    `.pairwiseLLM_req_perform` = function(req) stop(http_err),
+    `.pairwiseLLM_resp_status` = function(resp) 400L,
+    .package = "pairwiseLLM",
+    {
+      tryCatch(
+        pairwiseLLM:::.retry_httr2_request(list(), max_attempts = 1L, base_delay = 0, jitter = 0),
+        error = function(e) e
+      )
+    }
+  )
+
+  testthat::expect_s3_class(err, "httr2_http")
 })
 
 test_that(".retry_httr2_request retries on httr2_http transient errors and eventually succeeds", {
-  body_text <- paste(deparse(body(pairwiseLLM:::.retry_httr2_request)), collapse = " ")
-  testthat::expect_true(grepl(
-    "transient_status <- c(408L, 429L, 500L, 502L, 503L, 504L)",
-    body_text,
-    fixed = TRUE
-  ))
-  testthat::expect_true(grepl("Transient HTTP", body_text, fixed = TRUE))
+  call_count <- 0L
+  http_err <- structure(
+    list(response = list(status = 503L)),
+    class = c("httr2_http", "error", "condition")
+  )
+  fake_resp <- function(status) {
+    structure(list(status = status), class = "httr2_response")
+  }
+
+  res <- testthat::with_mocked_bindings(
+    `.pairwiseLLM_req_perform` = function(req) {
+      call_count <<- call_count + 1L
+      if (call_count == 1L) {
+        stop(http_err)
+      }
+      fake_resp(200L)
+    },
+    `.pairwiseLLM_resp_status` = function(resp) resp$status,
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM:::.retry_httr2_request(
+        list(),
+        max_attempts = 2L,
+        base_delay = 0,
+        jitter = 0
+      )
+    }
+  )
+
+  testthat::expect_equal(call_count, 2L)
+  testthat::expect_equal(attr(res, "retry_failures")$error_detail[[1L]], "HTTP 503")
 })
 
 # =====================================================================

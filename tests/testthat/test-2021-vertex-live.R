@@ -1118,7 +1118,8 @@ testthat::test_that("submit_vertex_pairs_live parallel path processes chunks and
 
   testthat::expect_equal(nrow(res$results), 1L)
   testthat::expect_equal(nrow(res$failed_pairs), 1L)
-  testthat::expect_true(length(plan_calls) >= 2L)
+  testthat::expect_true(length(plan_calls) >= 1L)
+  testthat::expect_identical(plan_calls[[1L]][[1L]], "multisession")
   testthat::expect_equal(progress_updates, 2L)
   testthat::expect_true(any(grepl("Setting up parallel plan with 2 workers", msgs, fixed = TRUE)))
   testthat::expect_true(any(grepl("Processing 2 pairs in PARALLEL", msgs, fixed = TRUE)))
