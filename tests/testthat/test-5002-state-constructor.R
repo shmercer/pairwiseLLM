@@ -18,7 +18,8 @@ test_that("new_adaptive_state builds a stable adaptive scaffold", {
   expect_true(tibble::is_tibble(state$round_log))
   expect_true(is.list(state$item_log))
   expect_true(tibble::is_tibble(state$item_step_log))
-  expect_identical(state$controller$link_estimation_mode, "transform")
+  expect_identical(state$controller$link_estimation_mode, "anchored_joint")
+  expect_identical(state$controller$hub_lock_mode, "hard_lock")
   expect_identical(state$controller$link_state_frozen_by_spoke, list())
 })
 

@@ -7,7 +7,12 @@ make_probe_resume_state <- function() {
   state <- adaptive_rank_start(
     items,
     seed = 61L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$warm_start_done <- TRUE
   state$linking$phase_a <- list(
@@ -877,6 +882,8 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock",
       link_transform_policy = "auto"
     )
   )
@@ -923,6 +930,8 @@ test_that("load_adaptive_session normalizes legacy controller freeze fields into
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock",
       link_transform_policy = "auto"
     )
   )
@@ -1008,6 +1017,31 @@ test_that("load_adaptive_session normalizes legacy link_stage_log transform colu
   expect_identical(as.character(restored$link_stage_log$link_transform_state[[1L]]), "shift_only")
 })
 
+test_that("load_adaptive_session backfills missing legacy controller mode fields to transform semantics", {
+  state <- make_probe_resume_state()
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  state_path <- file.path(session_dir, "state.rds")
+  persisted_state <- readRDS(state_path)
+  persisted_state$controller$link_estimation_mode <- NULL
+  persisted_state$controller$hub_lock_mode <- NULL
+  saveRDS(persisted_state, state_path)
+
+  link_path <- file.path(session_dir, "link_stage_log.rds")
+  legacy_link_stage <- readRDS(link_path)
+  legacy_link_stage$link_estimation_mode <- NULL
+  legacy_link_stage$hub_lock_mode <- NULL
+  saveRDS(legacy_link_stage, link_path)
+
+  restored <- load_adaptive_session(session_dir)
+
+  expect_identical(restored$controller$link_estimation_mode, "transform")
+  expect_identical(restored$controller$hub_lock_mode, "soft_lock")
+  expect_identical(as.character(restored$link_stage_log$link_estimation_mode[[1L]]), "transform")
+  expect_identical(as.character(restored$link_stage_log$hub_lock_mode[[1L]]), "soft_lock")
+})
+
 test_that("save/load preserves free hub lock across controller and link_stage_log", {
   state <- make_probe_resume_state()
   state$controller$link_refit_mode <- "joint_refit"
@@ -1034,7 +1068,12 @@ test_that("save/load preserves feasibility and canonical stop-threshold fields i
   state <- adaptive_rank_start(
     items,
     seed = 41L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
     state$link_stage_log,
@@ -1124,7 +1163,12 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
   state <- adaptive_rank_start(
     items,
     seed = 52L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$warm_start_done <- TRUE
   state$linking$phase_a <- list(
@@ -1225,6 +1269,8 @@ test_that("save/load preserves probe acceleration controller fields and canonica
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock",
       probe_acceleration_mode = "active_floor_plus_sole_blocker",
       probe_active_floor_enabled = TRUE,
       probe_sole_blocker_acceleration_enabled = TRUE,

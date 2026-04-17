@@ -779,7 +779,7 @@ test_that("adaptive_rank logs include documented adaptive step and refit fields"
   expect_true(all(round_cols %in% names(out$logs$round_log)))
 })
 
-test_that("adaptive_rank wrapper supports link_one_spoke import flow", {
+test_that("adaptive_rank wrapper defaults link_one_spoke import flow to anchored-joint", {
   samples <- make_linking_samples_df()
   two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
   items <- dplyr::rename(samples, item_id = ID)
@@ -816,9 +816,11 @@ test_that("adaptive_rank wrapper supports link_one_spoke import flow", {
   expect_true(nrow(cross) > 0L)
   expect_true(all(cross$link_spoke_id == 2L))
   expect_true(nrow(out$logs$link_stage_log) >= 1L)
-  expect_true(all(as.character(out$logs$link_stage_log$link_estimation_mode) == "transform"))
-  expect_true(all(c("link_transform_policy", "link_transform_state", "reliability_link_global") %in%
-    names(out$logs$link_stage_log)))
+  expect_true(all(as.character(out$logs$link_stage_log$link_estimation_mode) == "anchored_joint"))
+  expect_true(all(is.na(out$logs$link_stage_log$link_transform_policy)))
+  expect_true(all(is.na(out$logs$link_stage_log$link_transform_state)))
+  expect_true(all(is.na(out$logs$link_stage_log$link_refit_mode)))
+  expect_true(all(as.character(out$logs$link_stage_log$hub_lock_mode) == "hard_lock"))
   expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))
   expect_true("rank_link" %in% names(out$items))
 })
@@ -887,6 +889,7 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       multi_spoke_mode = "concurrent",
       hub_lock_mode = "soft_lock",
       min_cross_set_pairs_per_spoke_per_refit = 1L,
@@ -907,6 +910,7 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
   expect_true(all(sort(unique(cross$link_spoke_id)) == c(2L, 3L)))
   expect_true(all(xor(cross$set_i == 1L, cross$set_j == 1L)))
   expect_true(nrow(out$logs$link_stage_log) >= 2L)
+  expect_true(all(as.character(out$logs$link_stage_log$link_estimation_mode) == "transform"))
   expect_true(all(c("link_transform_policy", "link_transform_state", "link_epoch_id") %in%
     names(out$logs$link_stage_log)))
   expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))

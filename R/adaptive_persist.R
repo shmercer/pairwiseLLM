@@ -355,6 +355,57 @@ read_log <- function(path) {
   out[, c(ordered_existing, trailing_extra), drop = FALSE]
 }
 
+.adaptive_resume_backfill_legacy_linking_defaults <- function(state) {
+  out <- state
+  controller <- out$controller %||% list()
+  if (!is.list(controller)) {
+    controller <- list()
+  }
+
+  read_latest_non_missing <- function(tbl, col) {
+    if (!is.data.frame(tbl) || !col %in% names(tbl) || nrow(tbl) < 1L) {
+      return(NA_character_)
+    }
+    vals <- as.character(tbl[[col]])
+    vals <- vals[!is.na(vals) & nzchar(vals)]
+    if (length(vals) < 1L) {
+      return(NA_character_)
+    }
+    vals[[length(vals)]]
+  }
+
+  mode_missing <- is.null(controller$link_estimation_mode) ||
+    length(controller$link_estimation_mode) < 1L ||
+    is.na(as.character(controller$link_estimation_mode[[1L]])) ||
+    !nzchar(as.character(controller$link_estimation_mode[[1L]]))
+  if (isTRUE(mode_missing)) {
+    log_mode <- read_latest_non_missing(out$link_stage_log, "link_estimation_mode")
+    if (is.na(log_mode)) {
+      log_mode <- read_latest_non_missing(out$step_log, "link_estimation_mode")
+    }
+    controller$link_estimation_mode <- if (is.na(log_mode)) "transform" else log_mode
+  }
+
+  lock_missing <- is.null(controller$hub_lock_mode) ||
+    length(controller$hub_lock_mode) < 1L ||
+    is.na(as.character(controller$hub_lock_mode[[1L]])) ||
+    !nzchar(as.character(controller$hub_lock_mode[[1L]]))
+  if (isTRUE(lock_missing)) {
+    mode <- as.character(controller$link_estimation_mode[[1L]] %||% NA_character_)
+    log_lock <- read_latest_non_missing(out$link_stage_log, "hub_lock_mode")
+    controller$hub_lock_mode <- if (identical(mode, "anchored_joint")) {
+      "hard_lock"
+    } else if (!is.na(log_lock)) {
+      log_lock
+    } else {
+      "soft_lock"
+    }
+  }
+
+  out$controller <- controller
+  out
+}
+
 .adaptive_item_log_current_schema <- function() {
   cols <- .adaptive_item_log_columns()
   int_cols <- c(
@@ -1179,7 +1230,6 @@ load_adaptive_session <- function(session_dir) {
   }
 
   state <- .adaptive_validate_state_for_resume(state)
-  state$controller <- .adaptive_controller_resolve(state)
   state$meta$schema_version <- metadata$schema_version
   state$linking <- state$linking %||% list()
   state$linking$probe <- .adaptive_link_probe_state(state)
@@ -1207,6 +1257,7 @@ load_adaptive_session <- function(session_dir) {
   state$step_log <- tibble::as_tibble(step_log)
   state$round_log <- tibble::as_tibble(round_log)
   state$link_stage_log <- tibble::as_tibble(link_stage_log)
+  state <- .adaptive_resume_backfill_legacy_linking_defaults(state)
 
   if (file.exists(paths$btl_fit)) {
     state$btl_fit <- readRDS(paths$btl_fit)

@@ -459,9 +459,9 @@ make_adaptive_judge_llm <- function(
 #' `run_mode = "link_one_spoke"` and `run_mode = "link_multi_spoke"` require
 #' multi-set input (`set_id`/`global_item_id`), enforce hub<->spoke routing
 #' defaults, and preserve Phase A artifact gating before Phase B cross-set
-#' comparisons begin. `link_estimation_mode = "transform"` remains the default
-#' wrapper behavior; use `link_estimation_mode = "anchored_joint"` together
-#' with `hub_lock_mode = "hard_lock"` for the alternative anchored-joint
+#' comparisons begin. `link_estimation_mode = "anchored_joint"` is the default
+#' wrapper behavior and resolves to `hub_lock_mode = "hard_lock"`. Use
+#' `link_estimation_mode = "transform"` for the transform-based alternative
 #' Phase B fit.
 #'
 #' Selection semantics:
@@ -571,7 +571,7 @@ make_adaptive_judge_llm <- function(
 #'     multi-set inputs with `set_id` and `global_item_id` in `data`.}
 #'   \item{`hub_id`}{Hub `set_id` for linking modes. Default is `1L`.}
 #'   \item{`link_estimation_mode`}{Phase B estimation family. Choices are
-#'     `"transform"` (default) and `"anchored_joint"`. `"transform"` preserves
+#'     `"transform"` and `"anchored_joint"` (default). `"transform"` preserves
 #'     the existing shift/shift-scale linking workflow. `"anchored_joint"` uses
 #'     a hub-fixed, spoke-free full-evidence Phase B fit, requires
 #'     `hub_lock_mode = "hard_lock"`, and does not accept transform-only config
@@ -609,7 +609,7 @@ make_adaptive_judge_llm <- function(
 #'     `run_mode = "link_one_spoke"` with `link_estimation_mode = "transform"`
 #'     and `link_refit_mode = "joint_refit"`. In
 #'     `link_estimation_mode = "anchored_joint"`, the only supported value is
-#'     `"hard_lock"`. Default is `"soft_lock"`.}
+#'     `"hard_lock"`. Default is `"hard_lock"`.}
 #'   \item{`hub_lock_kappa`}{Only used when `hub_lock_mode = "soft_lock"`.
 #'     Regularization strength in `[0,1]`. Default is `0.75`.}
 #'   \item{`anchored_joint_spoke_prior_scale`}{Scale multiplier for anchored-
