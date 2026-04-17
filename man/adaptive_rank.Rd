@@ -132,7 +132,7 @@ multiple spokes). Default is \code{"within_set"}. Linking modes require
 multi-set inputs with \code{set_id} and \code{global_item_id} in \code{data}.}
 \item{\code{hub_id}}{Hub \code{set_id} for linking modes. Default is \code{1L}.}
 \item{\code{link_estimation_mode}}{Phase B estimation family. Choices are
-\code{"transform"} (default) and \code{"anchored_joint"}. \code{"transform"} preserves
+\code{"transform"} and \code{"anchored_joint"} (default). \code{"transform"} preserves
 the existing shift/shift-scale linking workflow. \code{"anchored_joint"} uses
 a hub-fixed, spoke-free full-evidence Phase B fit, requires
 \code{hub_lock_mode = "hard_lock"}, and does not accept transform-only config
@@ -170,7 +170,7 @@ would begin with this set to \code{TRUE}. Default is \code{FALSE}.}
 \code{run_mode = "link_one_spoke"} with \code{link_estimation_mode = "transform"}
 and \code{link_refit_mode = "joint_refit"}. In
 \code{link_estimation_mode = "anchored_joint"}, the only supported value is
-\code{"hard_lock"}. Default is \code{"soft_lock"}.}
+\code{"hard_lock"}. Default is \code{"hard_lock"}.}
 \item{\code{hub_lock_kappa}}{Only used when \code{hub_lock_mode = "soft_lock"}.
 Regularization strength in \verb{[0,1]}. Default is \code{0.75}.}
 \item{\code{anchored_joint_spoke_prior_scale}}{Scale multiplier for anchored-
@@ -484,9 +484,9 @@ Linking run modes:
 \code{run_mode = "link_one_spoke"} and \code{run_mode = "link_multi_spoke"} require
 multi-set input (\code{set_id}/\code{global_item_id}), enforce hub<->spoke routing
 defaults, and preserve Phase A artifact gating before Phase B cross-set
-comparisons begin. \code{link_estimation_mode = "transform"} remains the default
-wrapper behavior; use \code{link_estimation_mode = "anchored_joint"} together
-with \code{hub_lock_mode = "hard_lock"} for the alternative anchored-joint
+comparisons begin. \code{link_estimation_mode = "anchored_joint"} is the default
+wrapper behavior and resolves to \code{hub_lock_mode = "hard_lock"}. Use
+\code{link_estimation_mode = "transform"} for the transform-based alternative
 Phase B fit.
 
 Selection semantics:
