@@ -418,7 +418,8 @@ test_that("phase A helpers cover stop-pass sources, pending runs, and config sur
     adaptive_config = list(hub_lock_mode = "hard_lock", hub_lock_kappa = 0.4)
   )
   surface <- pairwiseLLM:::.adaptive_phase_a_required_config_surface(hard_lock, set_id = 2L)
-  expect_true(is.na(surface$hub_lock_kappa))
+  expect_identical(names(surface), c("judge_param_mode", "model_variant"))
+  expect_false("hub_lock_kappa" %in% names(surface))
 
   expect_null(pairwiseLLM:::.adaptive_phase_a_latest_refit_row(state, set_id = 99L))
 })

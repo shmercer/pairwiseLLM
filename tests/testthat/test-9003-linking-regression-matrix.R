@@ -238,8 +238,7 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
       hub_id = 1L,
       phase_a_mode = "mixed",
       phase_a_set_source = c(`1` = "import", `2` = "run"),
-      phase_a_artifacts = list(`1` = artifacts[["1"]]),
-      phase_a_compatible_config_hashes = artifacts[["1"]]$fit_config_hash
+      phase_a_artifacts = list(`1` = artifacts[["1"]])
     ),
     btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"

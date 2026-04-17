@@ -848,9 +848,6 @@ test_that("adaptive_rank wrapper supports anchored-joint linking activation", {
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts[c("1", "2")],
-      phase_a_compatible_config_hashes = vapply(artifacts[c("1", "2")], function(x) {
-        as.character(x$fit_config_hash)
-      }, character(1L)),
       link_estimation_mode = "anchored_joint",
       hub_lock_mode = "hard_lock"
     ),
@@ -894,10 +891,7 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
       hub_lock_mode = "soft_lock",
       min_cross_set_pairs_per_spoke_per_refit = 1L,
       phase_a_mode = "import",
-      phase_a_artifacts = artifacts,
-      phase_a_compatible_config_hashes = vapply(artifacts, function(x) {
-        as.character(x$fit_config_hash)
-      }, character(1L))
+      phase_a_artifacts = artifacts
     ),
     btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none",

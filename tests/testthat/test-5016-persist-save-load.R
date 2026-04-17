@@ -1042,6 +1042,52 @@ test_that("load_adaptive_session backfills missing legacy controller mode fields
   expect_identical(as.character(restored$link_stage_log$hub_lock_mode[[1L]]), "soft_lock")
 })
 
+test_that("save/load preserves legacy broad-surface Phase A artifact reuse without manual hash allowlists", {
+  state <- make_anchored_joint_resume_state()
+  artifacts <- state$linking$phase_a$artifacts
+
+  legacyize <- function(artifact) {
+    legacy_surface <- list(
+      set_id = as.integer(artifact$set_id %||% NA_integer_),
+      judge_param_mode = as.character(artifact$judge_param_mode %||% "global_shared"),
+      model_variant = as.character(artifact$fit_model_id %||% "btl_e_b"),
+      link_refit_mode = "shift_only",
+      shift_only_theta_treatment = "fixed_eap_plugin_var",
+      link_transform_policy = "auto",
+      hub_lock_mode = "soft_lock",
+      hub_lock_kappa = 0.75,
+      cross_set_utility = "linking_d_optimal"
+    )
+    artifact$fit_config_surface <- legacy_surface
+    artifact$fit_config_hash <- pairwiseLLM:::.adaptive_phase_a_hash_object(legacy_surface)
+    artifact
+  }
+
+  state$linking$phase_a$artifacts <- lapply(artifacts, legacyize)
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir, overwrite = TRUE)
+
+  restored <- load_adaptive_session(session_dir)
+  restored$btl_fit <- NULL
+  restored <- .adaptive_apply_controller_config(
+    restored,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock",
+      phase_a_artifacts = list()
+    )
+  )
+
+  expect_no_error(
+    restored <- .adaptive_phase_a_prepare(restored)
+  )
+  status <- tibble::as_tibble(restored$linking$phase_a$set_status)
+  expect_true(all(status$status == "ready"))
+})
+
 test_that("save/load preserves free hub lock across controller and link_stage_log", {
   state <- make_probe_resume_state()
   state$controller$link_refit_mode <- "joint_refit"
