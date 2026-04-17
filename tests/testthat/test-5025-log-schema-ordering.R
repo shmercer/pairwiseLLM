@@ -1,6 +1,11 @@
 test_that("canonical log schemas follow the expected column order", {
   expected_step <- c(
-    "step_id", "timestamp", "pair_id", "i", "j", "A", "B", "Y", "status",
+    "step_id", "timestamp", "pair_id", "i", "j", "i_id", "j_id", "A", "B",
+    "A_id", "B_id", "unordered_key", "ordered_key", "Y", "status",
+    "judge_backend", "judge_model", "judge_endpoint", "judge_valid",
+    "judge_invalid_reason", "llm_status_code", "llm_error_message",
+    "llm_custom_id", "prompt_tokens", "completion_tokens", "total_tokens",
+    "raw_response_json",
     "round_id", "round_stage", "pair_type", "used_in_round_i", "used_in_round_j",
     "is_anchor_i", "is_anchor_j", "stratum_i", "stratum_j", "dist_stratum",
     "stage_committed_so_far", "stage_quota",

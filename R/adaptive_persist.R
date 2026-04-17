@@ -490,9 +490,23 @@ read_log <- function(path) {
   }
 
   ids <- as.character(state$item_ids %||% character())
+  out_A <- if ("A_id" %in% names(committed)) {
+    as.character(committed$A_id)
+  } else {
+    rep(NA_character_, nrow(committed))
+  }
+  out_B <- if ("B_id" %in% names(committed)) {
+    as.character(committed$B_id)
+  } else {
+    rep(NA_character_, nrow(committed))
+  }
+  missing_A <- is.na(out_A) | !nzchar(out_A)
+  missing_B <- is.na(out_B) | !nzchar(out_B)
+  out_A[missing_A] <- as.character(ids[as.integer(committed$A[missing_A])])
+  out_B[missing_B] <- as.character(ids[as.integer(committed$B[missing_B])])
   tibble::tibble(
-    A_id = as.character(ids[as.integer(committed$A)]),
-    B_id = as.character(ids[as.integer(committed$B)])
+    A_id = out_A,
+    B_id = out_B
   )
 }
 

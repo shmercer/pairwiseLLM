@@ -51,6 +51,7 @@ test_that("make_adaptive_judge_llm forwards model options and returns valid cont
     backend = "openai",
     model = "gpt-5.1",
     endpoint = "responses",
+    include_raw = TRUE,
     judge_args = list(service_tier = "flex")
   )
 
@@ -60,13 +61,33 @@ test_that("make_adaptive_judge_llm forwards model options and returns valid cont
   testthat::with_mocked_bindings(
     llm_compare_pair = function(...) {
       calls <<- append(calls, list(list(...)))
-      tibble::tibble(better_id = "S02")
+      tibble::tibble(
+        better_id = "S02",
+        model = "gpt-5.1-2026-01-01",
+        status_code = 200L,
+        error_message = NA_character_,
+        custom_id = "wrapped-custom",
+        prompt_tokens = 21,
+        completion_tokens = 4,
+        total_tokens = 25,
+        raw_response = list(list(ok = TRUE, winner = "S02"))
+      )
     },
     {
       out <- judge(A, B, state = list(), reasoning = "low")
       expect_true(isTRUE(out$is_valid))
       expect_identical(out$Y, 0L)
       expect_true(is.na(out$invalid_reason))
+      expect_identical(out$judge_backend, "openai")
+      expect_identical(out$judge_model, "gpt-5.1-2026-01-01")
+      expect_identical(out$judge_endpoint, "responses")
+      expect_identical(out$llm_status_code, 200L)
+      expect_true(is.na(out$llm_error_message))
+      expect_identical(out$llm_custom_id, "wrapped-custom")
+      expect_identical(out$prompt_tokens, 21)
+      expect_identical(out$completion_tokens, 4)
+      expect_identical(out$total_tokens, 25)
+      expect_identical(out$raw_response_json, "{\"ok\":true,\"winner\":\"S02\"}")
     },
     .env = asNamespace("pairwiseLLM")
   )
@@ -115,18 +136,40 @@ test_that("make_adaptive_judge_llm forwards vertex backend options", {
 test_that("make_adaptive_judge_llm returns invalid when response cannot be mapped", {
   judge <- pairwiseLLM::make_adaptive_judge_llm(
     backend = "openai",
-    model = "gpt-5.1"
+    model = "gpt-5.1",
+    include_raw = TRUE
   )
 
   A <- tibble::tibble(item_id = "S01", text = "A")
   B <- tibble::tibble(item_id = "S02", text = "B")
 
   testthat::with_mocked_bindings(
-    llm_compare_pair = function(...) tibble::tibble(better_id = NA_character_),
+    llm_compare_pair = function(...) {
+      tibble::tibble(
+        better_id = NA_character_,
+        status_code = 422L,
+        error_message = "missing winner",
+        custom_id = "bad-custom",
+        prompt_tokens = 12,
+        completion_tokens = 0,
+        total_tokens = 12,
+        raw_response = list(list(error = "missing winner"))
+      )
+    },
     {
       out <- judge(A, B, state = list())
       expect_false(isTRUE(out$is_valid))
       expect_identical(out$invalid_reason, "invalid_response")
+      expect_identical(out$judge_backend, "openai")
+      expect_identical(out$judge_model, "gpt-5.1")
+      expect_identical(out$judge_endpoint, "chat.completions")
+      expect_identical(out$llm_status_code, 422L)
+      expect_identical(out$llm_error_message, "missing winner")
+      expect_identical(out$llm_custom_id, "bad-custom")
+      expect_identical(out$prompt_tokens, 12)
+      expect_identical(out$completion_tokens, 0)
+      expect_identical(out$total_tokens, 12)
+      expect_identical(out$raw_response_json, "{\"error\":\"missing winner\"}")
     },
     .env = asNamespace("pairwiseLLM")
   )

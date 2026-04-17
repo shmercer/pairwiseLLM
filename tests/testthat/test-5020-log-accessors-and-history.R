@@ -31,7 +31,10 @@ test_that("adaptive log accessors and history return canonical shapes", {
 
   step_log <- adaptive_step_log(state)
   round_log <- adaptive_round_log(state)
-  expect_true(all(c("step_id", "pair_id", "A", "B", "Y", "status", "pair_type") %in% names(step_log)))
+  expect_true(all(c(
+    "step_id", "pair_id", "A", "B", "A_id", "B_id", "unordered_key",
+    "ordered_key", "judge_valid", "raw_response_json", "Y", "status", "pair_type"
+  ) %in% names(step_log)))
   expect_true(all(c("refit_id", "round_id_at_refit", "step_id_at_refit") %in% names(round_log)))
 
   item_log <- adaptive_item_log(state)
@@ -132,4 +135,12 @@ test_that("star_override_used follows commit and no-selection semantics", {
   expect_true(is.na(starved_row$pair_id[[1L]]))
   expect_true(isTRUE(starved_row$candidate_starved[[1L]]))
   expect_true(is.na(starved_row$star_override_used[[1L]]))
+  expect_true(is.na(starved_row$i_id[[1L]]))
+  expect_true(is.na(starved_row$j_id[[1L]]))
+  expect_true(is.na(starved_row$A_id[[1L]]))
+  expect_true(is.na(starved_row$B_id[[1L]]))
+  expect_true(is.na(starved_row$unordered_key[[1L]]))
+  expect_true(is.na(starved_row$ordered_key[[1L]]))
+  expect_true(is.na(starved_row$judge_valid[[1L]]))
+  expect_true(is.na(starved_row$judge_invalid_reason[[1L]]))
 })

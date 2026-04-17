@@ -675,12 +675,25 @@ adaptive_get_logs <- function(state) {
 #' \code{step_log} is the canonical per-step audit log for the adaptive
 #' workflow. It records candidate pipeline outcomes, selected pair/order, and
 #' commit status. A step with invalid judge response keeps committed fields
-#' as \code{NA} and must not update model state.
+#' as \code{NA} and must not update model state. The selected endpoints
+#' \code{i}/\code{j} are the pre-orientation item indices, while
+#' \code{A}/\code{B} are the displayed / judged item indices after order
+#' assignment. The matching \code{*_id} columns, plus
+#' \code{unordered_key}/\code{ordered_key}, make each attempted step reusable
+#' outside the live state.
 #'
 #' Core columns:
 #' \itemize{
 #'   \item Identity/outcome: \code{step_id}, \code{timestamp}, \code{pair_id},
-#'   \code{i}, \code{j}, \code{A}, \code{B}, \code{Y}, \code{status}.
+#'   \code{i}, \code{j}, \code{i_id}, \code{j_id}, \code{A}, \code{B},
+#'   \code{A_id}, \code{B_id}, \code{unordered_key}, \code{ordered_key},
+#'   \code{Y}, \code{status}.
+#'   \item Judge audit: \code{judge_backend}, \code{judge_model},
+#'   \code{judge_endpoint}, \code{judge_valid},
+#'   \code{judge_invalid_reason}, \code{llm_status_code},
+#'   \code{llm_error_message}, \code{llm_custom_id},
+#'   \code{prompt_tokens}, \code{completion_tokens}, \code{total_tokens},
+#'   \code{raw_response_json}.
 #'   \item Routing/scheduling: \code{round_id}, \code{round_stage},
 #'   \code{pair_type}, \code{stage_committed_so_far}, \code{stage_quota}.
 #'   \item Exposure/strata: \code{used_in_round_i}, \code{used_in_round_j},

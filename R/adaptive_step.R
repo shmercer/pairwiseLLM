@@ -4,13 +4,181 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_judge_extract_value <- function(result, names) {
+  for (name in names) {
+    if (name %in% names(result)) {
+      return(result[[name]])
+    }
+  }
+  NULL
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_judge_scalar_character <- function(value) {
+  if (is.null(value)) {
+    return(NA_character_)
+  }
+  if (is.list(value) && !is.data.frame(value) && length(value) == 1L) {
+    value <- value[[1L]]
+  }
+  if (length(value) != 1L) {
+    return(NA_character_)
+  }
+  out <- suppressWarnings(as.character(value))
+  if (length(out) != 1L || is.na(out) || !nzchar(out)) {
+    return(NA_character_)
+  }
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_judge_scalar_integer <- function(value) {
+  if (is.null(value)) {
+    return(NA_integer_)
+  }
+  if (is.list(value) && !is.data.frame(value) && length(value) == 1L) {
+    value <- value[[1L]]
+  }
+  if (length(value) != 1L || is.na(value) || !.adaptive_is_integerish(value)) {
+    return(NA_integer_)
+  }
+  as.integer(value)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_judge_scalar_double <- function(value) {
+  if (is.null(value)) {
+    return(NA_real_)
+  }
+  if (is.list(value) && !is.data.frame(value) && length(value) == 1L) {
+    value <- value[[1L]]
+  }
+  if (length(value) != 1L || is.na(value)) {
+    return(NA_real_)
+  }
+  out <- suppressWarnings(as.double(value))
+  if (length(out) != 1L || is.na(out)) {
+    return(NA_real_)
+  }
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_serialize_raw_response <- function(raw_response) {
+  if (is.null(raw_response)) {
+    return(NA_character_)
+  }
+  if (is.character(raw_response) && length(raw_response) == 1L) {
+    if (is.na(raw_response) || !nzchar(raw_response)) {
+      return(NA_character_)
+    }
+    return(as.character(raw_response))
+  }
+  if (is.list(raw_response) &&
+    !is.data.frame(raw_response) &&
+    length(raw_response) == 1L &&
+    (is.null(names(raw_response)) || identical(names(raw_response), ""))) {
+    raw_response <- raw_response[[1L]]
+  }
+  if (is.null(raw_response)) {
+    return(NA_character_)
+  }
+  out <- tryCatch(
+    jsonlite::toJSON(
+      raw_response,
+      auto_unbox = TRUE,
+      dataframe = "rows",
+      null = "null",
+      na = "null",
+      digits = NA
+    ),
+    error = function(e) NA_character_
+  )
+  if (!is.character(out) || length(out) != 1L || is.na(out) || !nzchar(out)) {
+    return(NA_character_)
+  }
+  as.character(out)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_judge_optional_metadata <- function(result) {
+  if (!is.list(result) || is.data.frame(result)) {
+    return(list(
+      judge_backend = NA_character_,
+      judge_model = NA_character_,
+      judge_endpoint = NA_character_,
+      llm_status_code = NA_integer_,
+      llm_error_message = NA_character_,
+      llm_custom_id = NA_character_,
+      prompt_tokens = NA_real_,
+      completion_tokens = NA_real_,
+      total_tokens = NA_real_,
+      raw_response_json = NA_character_
+    ))
+  }
+
+  raw_response_json <- .adaptive_judge_scalar_character(
+    .adaptive_judge_extract_value(result, "raw_response_json")
+  )
+  if (is.na(raw_response_json)) {
+    raw_response_json <- .adaptive_serialize_raw_response(
+      .adaptive_judge_extract_value(result, "raw_response")
+    )
+  }
+
+  list(
+    judge_backend = .adaptive_judge_scalar_character(
+      .adaptive_judge_extract_value(result, c("judge_backend", "backend"))
+    ),
+    judge_model = .adaptive_judge_scalar_character(
+      .adaptive_judge_extract_value(result, c("judge_model", "model"))
+    ),
+    judge_endpoint = .adaptive_judge_scalar_character(
+      .adaptive_judge_extract_value(result, c("judge_endpoint", "endpoint"))
+    ),
+    llm_status_code = .adaptive_judge_scalar_integer(
+      .adaptive_judge_extract_value(result, c("llm_status_code", "status_code"))
+    ),
+    llm_error_message = .adaptive_judge_scalar_character(
+      .adaptive_judge_extract_value(result, c("llm_error_message", "error_message"))
+    ),
+    llm_custom_id = .adaptive_judge_scalar_character(
+      .adaptive_judge_extract_value(result, c("llm_custom_id", "custom_id"))
+    ),
+    prompt_tokens = .adaptive_judge_scalar_double(
+      .adaptive_judge_extract_value(result, "prompt_tokens")
+    ),
+    completion_tokens = .adaptive_judge_scalar_double(
+      .adaptive_judge_extract_value(result, "completion_tokens")
+    ),
+    total_tokens = .adaptive_judge_scalar_double(
+      .adaptive_judge_extract_value(result, "total_tokens")
+    ),
+    raw_response_json = raw_response_json
+  )
+}
+
+#' @keywords internal
+#' @noRd
 validate_judge_result <- function(result, A_id, B_id) {
+  metadata <- .adaptive_judge_optional_metadata(result)
+
   invalid <- function(reason) {
-    list(
-      Y = NA_integer_,
-      is_valid = FALSE,
-      invalid_reason = reason,
-      raw = result
+    c(
+      list(
+        Y = NA_integer_,
+        is_valid = FALSE,
+        invalid_reason = reason,
+        judge_valid = FALSE,
+        judge_invalid_reason = reason,
+        raw = result
+      ),
+      metadata
     )
   }
 
@@ -43,6 +211,18 @@ validate_judge_result <- function(result, A_id, B_id) {
       Y = y_val,
       is_valid = TRUE,
       invalid_reason = NA_character_,
+      judge_valid = TRUE,
+      judge_invalid_reason = NA_character_,
+      judge_backend = metadata$judge_backend,
+      judge_model = metadata$judge_model,
+      judge_endpoint = metadata$judge_endpoint,
+      llm_status_code = metadata$llm_status_code,
+      llm_error_message = metadata$llm_error_message,
+      llm_custom_id = metadata$llm_custom_id,
+      prompt_tokens = metadata$prompt_tokens,
+      completion_tokens = metadata$completion_tokens,
+      total_tokens = metadata$total_tokens,
+      raw_response_json = metadata$raw_response_json,
       raw = result
     ))
   }
@@ -57,6 +237,18 @@ validate_judge_result <- function(result, A_id, B_id) {
     Y = NA_integer_,
     is_valid = FALSE,
     invalid_reason = invalid_reason,
+    judge_valid = FALSE,
+    judge_invalid_reason = invalid_reason,
+    judge_backend = metadata$judge_backend,
+    judge_model = metadata$judge_model,
+    judge_endpoint = metadata$judge_endpoint,
+    llm_status_code = metadata$llm_status_code,
+    llm_error_message = metadata$llm_error_message,
+    llm_custom_id = metadata$llm_custom_id,
+    prompt_tokens = metadata$prompt_tokens,
+    completion_tokens = metadata$completion_tokens,
+    total_tokens = metadata$total_tokens,
+    raw_response_json = metadata$raw_response_json,
     raw = result
   )
 }
@@ -902,14 +1094,49 @@ run_one_step <- function(state, judge, ...) {
   invalid_reason <- NA_character_
   Y <- NA_integer_
 
+  i_id <- NA_character_
+  j_id <- NA_character_
   A_id <- NA_character_
   B_id <- NA_character_
+  unordered_key <- NA_character_
+  ordered_key <- NA_character_
+  judge_backend <- NA_character_
+  judge_model <- NA_character_
+  judge_endpoint <- NA_character_
+  judge_valid <- NA
+  judge_invalid_reason <- NA_character_
+  llm_status_code <- NA_integer_
+  llm_error_message <- NA_character_
+  llm_custom_id <- NA_character_
+  prompt_tokens <- NA_real_
+  completion_tokens <- NA_real_
+  total_tokens <- NA_real_
+  raw_response_json <- NA_character_
+
+  if (!isTRUE(selection$candidate_starved)) {
+    if (!is.na(selection$i)) {
+      i_id <- as.character(state$item_ids[[selection$i]])
+    }
+    if (!is.na(selection$j)) {
+      j_id <- as.character(state$item_ids[[selection$j]])
+    }
+    if (!is.na(selection$A)) {
+      A_id <- as.character(state$item_ids[[selection$A]])
+    }
+    if (!is.na(selection$B)) {
+      B_id <- as.character(state$item_ids[[selection$B]])
+    }
+    if (!is.na(i_id) && !is.na(j_id)) {
+      unordered_key <- make_unordered_key(i_id, j_id)
+    }
+    if (!is.na(A_id) && !is.na(B_id)) {
+      ordered_key <- make_ordered_key(A_id, B_id)
+    }
+  }
 
   if (!isTRUE(selection$candidate_starved) &&
     !is.na(selection$A) &&
     !is.na(selection$B)) {
-    A_id <- state$item_ids[[selection$A]]
-    B_id <- state$item_ids[[selection$B]]
 
     A_item <- state$items[state$items$item_id == A_id, , drop = FALSE]
     B_item <- state$items[state$items$item_id == B_id, , drop = FALSE]
@@ -919,6 +1146,18 @@ run_one_step <- function(state, judge, ...) {
     is_valid <- isTRUE(validated$is_valid)
     invalid_reason <- validated$invalid_reason
     Y <- as.integer(validated$Y)
+    judge_backend <- as.character(validated$judge_backend %||% NA_character_)
+    judge_model <- as.character(validated$judge_model %||% NA_character_)
+    judge_endpoint <- as.character(validated$judge_endpoint %||% NA_character_)
+    judge_valid <- as.logical(validated$judge_valid %||% NA)
+    judge_invalid_reason <- as.character(validated$judge_invalid_reason %||% NA_character_)
+    llm_status_code <- as.integer(validated$llm_status_code %||% NA_integer_)
+    llm_error_message <- as.character(validated$llm_error_message %||% NA_character_)
+    llm_custom_id <- as.character(validated$llm_custom_id %||% NA_character_)
+    prompt_tokens <- as.double(validated$prompt_tokens %||% NA_real_)
+    completion_tokens <- as.double(validated$completion_tokens %||% NA_real_)
+    total_tokens <- as.double(validated$total_tokens %||% NA_real_)
+    raw_response_json <- as.character(validated$raw_response_json %||% NA_character_)
   } else {
     invalid_reason <- "candidate_starved"
   }
@@ -1116,10 +1355,28 @@ run_one_step <- function(state, judge, ...) {
     pair_id = pair_id,
     i = selection$i,
     j = selection$j,
+    i_id = i_id,
+    j_id = j_id,
     A = selection$A,
     B = selection$B,
+    A_id = A_id,
+    B_id = B_id,
+    unordered_key = unordered_key,
+    ordered_key = ordered_key,
     Y = if (isTRUE(is_valid)) Y else NA_integer_,
     status = status,
+    judge_backend = judge_backend,
+    judge_model = judge_model,
+    judge_endpoint = judge_endpoint,
+    judge_valid = judge_valid,
+    judge_invalid_reason = judge_invalid_reason,
+    llm_status_code = llm_status_code,
+    llm_error_message = llm_error_message,
+    llm_custom_id = llm_custom_id,
+    prompt_tokens = prompt_tokens,
+    completion_tokens = completion_tokens,
+    total_tokens = total_tokens,
+    raw_response_json = raw_response_json,
     round_id = selection$round_id,
     round_stage = selection$round_stage,
     pair_type = selection$pair_type,

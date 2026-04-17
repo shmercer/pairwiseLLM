@@ -2,7 +2,22 @@ test_that("run_one_step commits valid results transactionally", {
   items <- make_test_items(3)
   trueskill_state <- make_test_trueskill_state(items)
   state <- make_test_state(items, trueskill_state)
-  judge <- make_deterministic_judge("i_wins")
+  judge <- function(A, B, state, ...) {
+    list(
+      is_valid = TRUE,
+      Y = 1L,
+      backend = "openai",
+      model = "gpt-5.1",
+      endpoint = "responses",
+      status_code = 200L,
+      error_message = NA_character_,
+      custom_id = "custom-ok",
+      prompt_tokens = 11,
+      completion_tokens = 7,
+      total_tokens = 18,
+      raw_response = list(ok = TRUE, better_id = as.character(A$item_id[[1L]]))
+    )
+  }
 
   before_mu <- state$trueskill_state$items$mu
   before_sigma <- state$trueskill_state$items$sigma
@@ -14,6 +29,29 @@ test_that("run_one_step commits valid results transactionally", {
   expect_equal(out$step_log$utility_mode[[1L]], "pairing_trueskill_u0")
   expect_false(is.na(out$step_log$pair_id[[1L]]))
   expect_equal(out$step_log$Y[[1L]], 1L)
+  expect_identical(out$step_log$i_id[[1L]], as.character(state$item_ids[[out$step_log$i[[1L]]]]))
+  expect_identical(out$step_log$j_id[[1L]], as.character(state$item_ids[[out$step_log$j[[1L]]]]))
+  expect_identical(out$step_log$A_id[[1L]], as.character(state$item_ids[[out$step_log$A[[1L]]]]))
+  expect_identical(out$step_log$B_id[[1L]], as.character(state$item_ids[[out$step_log$B[[1L]]]]))
+  expect_identical(
+    out$step_log$unordered_key[[1L]],
+    pairwiseLLM:::make_unordered_key(out$step_log$i_id[[1L]], out$step_log$j_id[[1L]])
+  )
+  expect_identical(
+    out$step_log$ordered_key[[1L]],
+    pairwiseLLM:::make_ordered_key(out$step_log$A_id[[1L]], out$step_log$B_id[[1L]])
+  )
+  expect_identical(out$step_log$judge_backend[[1L]], "openai")
+  expect_identical(out$step_log$judge_model[[1L]], "gpt-5.1")
+  expect_identical(out$step_log$judge_endpoint[[1L]], "responses")
+  expect_true(isTRUE(out$step_log$judge_valid[[1L]]))
+  expect_true(is.na(out$step_log$judge_invalid_reason[[1L]]))
+  expect_identical(out$step_log$llm_status_code[[1L]], 200L)
+  expect_identical(out$step_log$llm_custom_id[[1L]], "custom-ok")
+  expect_identical(out$step_log$prompt_tokens[[1L]], 11)
+  expect_identical(out$step_log$completion_tokens[[1L]], 7)
+  expect_identical(out$step_log$total_tokens[[1L]], 18)
+  expect_identical(out$step_log$raw_response_json[[1L]], "{\"ok\":true,\"better_id\":\"1\"}")
   expect_false(isTRUE(all.equal(before_mu, out$trueskill_state$items$mu)))
   expect_false(isTRUE(all.equal(before_sigma, out$trueskill_state$items$sigma)))
 
@@ -25,7 +63,21 @@ test_that("run_one_step logs invalid results without mutating state", {
   items <- make_test_items(3)
   trueskill_state <- make_test_trueskill_state(items)
   state <- make_test_state(items, trueskill_state)
-  judge <- make_deterministic_judge("invalid")
+  judge <- function(A, B, state, ...) {
+    list(
+      is_valid = FALSE,
+      invalid_reason = "invalid_fixture",
+      backend = "anthropic",
+      model = "claude-test",
+      status_code = 422L,
+      error_message = "bad output",
+      custom_id = "custom-invalid",
+      prompt_tokens = 9,
+      completion_tokens = 0,
+      total_tokens = 9,
+      raw_response = list(error = "bad output")
+    )
+  }
 
   snapshot <- snapshot_state_core(state)
   withr::local_seed(1)
@@ -35,6 +87,24 @@ test_that("run_one_step logs invalid results without mutating state", {
   expect_equal(out$step_log$status[[1L]], "invalid")
   expect_true(is.na(out$step_log$pair_id[[1L]]))
   expect_true(is.na(out$step_log$Y[[1L]]))
+  expect_false(is.na(out$step_log$i_id[[1L]]))
+  expect_false(is.na(out$step_log$j_id[[1L]]))
+  expect_false(is.na(out$step_log$A_id[[1L]]))
+  expect_false(is.na(out$step_log$B_id[[1L]]))
+  expect_false(is.na(out$step_log$unordered_key[[1L]]))
+  expect_false(is.na(out$step_log$ordered_key[[1L]]))
+  expect_identical(out$step_log$judge_backend[[1L]], "anthropic")
+  expect_identical(out$step_log$judge_model[[1L]], "claude-test")
+  expect_true(is.na(out$step_log$judge_endpoint[[1L]]))
+  expect_false(isTRUE(out$step_log$judge_valid[[1L]]))
+  expect_identical(out$step_log$judge_invalid_reason[[1L]], "invalid_fixture")
+  expect_identical(out$step_log$llm_status_code[[1L]], 422L)
+  expect_identical(out$step_log$llm_error_message[[1L]], "bad output")
+  expect_identical(out$step_log$llm_custom_id[[1L]], "custom-invalid")
+  expect_identical(out$step_log$prompt_tokens[[1L]], 9)
+  expect_identical(out$step_log$completion_tokens[[1L]], 0)
+  expect_identical(out$step_log$total_tokens[[1L]], 9)
+  expect_identical(out$step_log$raw_response_json[[1L]], "{\"error\":\"bad output\"}")
   expect_true(is.na(out$step_log$p_ij[[1L]]))
   expect_true(is.na(out$step_log$U0_ij[[1L]]))
 

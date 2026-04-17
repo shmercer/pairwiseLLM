@@ -186,6 +186,67 @@ test_that("save_adaptive_session and load_adaptive_session round-trip adaptive a
   )
 })
 
+test_that("save/load preserves tasklist 01 step_log audit fields exactly", {
+  items <- make_test_items(3)
+  state <- adaptive_rank_start(items)
+  judge <- function(A, B, state, ...) {
+    list(
+      is_valid = TRUE,
+      Y = 1L,
+      backend = "openai",
+      model = "gpt-5.1",
+      endpoint = "responses",
+      status_code = 200L,
+      error_message = NA_character_,
+      custom_id = "persist-custom",
+      prompt_tokens = 13,
+      completion_tokens = 5,
+      total_tokens = 18,
+      raw_response = list(ok = TRUE, picked = as.character(A$item_id[[1L]]))
+    )
+  }
+
+  withr::local_seed(1)
+  state <- adaptive_rank_run_live(state, judge, n_steps = 1L, progress = "none")
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  loaded <- load_adaptive_session(session_dir)
+
+  cols <- c(
+    "i_id", "j_id", "A_id", "B_id", "unordered_key", "ordered_key",
+    "judge_backend", "judge_model", "judge_endpoint", "judge_valid",
+    "judge_invalid_reason", "llm_status_code", "llm_error_message",
+    "llm_custom_id", "prompt_tokens", "completion_tokens", "total_tokens",
+    "raw_response_json"
+  )
+  expect_identical(loaded$step_log[cols], state$step_log[cols])
+})
+
+test_that("load_adaptive_session backfills tasklist 01 step_log audit fields", {
+  state <- adaptive_rank_start(make_test_items(3), seed = 2L)
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir, overwrite = TRUE)
+
+  step_path <- file.path(session_dir, "step_log.rds")
+  step_log <- readRDS(step_path)
+  drop_cols <- c(
+    "i_id", "j_id", "A_id", "B_id", "unordered_key", "ordered_key",
+    "judge_backend", "judge_model", "judge_endpoint", "judge_valid",
+    "judge_invalid_reason", "llm_status_code", "llm_error_message",
+    "llm_custom_id", "prompt_tokens", "completion_tokens", "total_tokens",
+    "raw_response_json"
+  )
+  step_log <- step_log[, setdiff(names(step_log), drop_cols), drop = FALSE]
+  saveRDS(step_log, step_path)
+
+  expect_error(validate_session_dir(session_dir), "missing required columns")
+  loaded <- load_adaptive_session(session_dir)
+  expect_true(all(drop_cols %in% names(loaded$step_log)))
+  expect_true(all(vapply(drop_cols, function(col) all(is.na(loaded$step_log[[col]])), logical(1L))))
+  expect_true(is.character(loaded$step_log$raw_response_json))
+})
+
 test_that("load_adaptive_session rejects malformed schema metadata", {
   items <- make_test_items(4)
   state <- adaptive_rank_start(items)

@@ -5,7 +5,7 @@
 \title{Get a trait name and description for prompts}
 \usage{
 trait_description(
-  name = c("overall_quality", "organization"),
+  name = c("overall_quality", "organization", "IRRC"),
   custom_name = NULL,
   custom_description = NULL
 )

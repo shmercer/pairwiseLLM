@@ -142,7 +142,10 @@
 #' the adaptive transactional contract:
 #' it returns `is_valid = TRUE` with `Y` in `{0,1}` when the model response
 #' identifies one of the two presented items, and returns `is_valid = FALSE`
-#' otherwise.
+#' otherwise. In addition to the required contract fields, the returned judge
+#' preserves canonical audit metadata from the first `llm_compare_pair()` row,
+#' including backend/model provenance, status/error fields, token counts, and a
+#' serialized `raw_response_json` payload when available.
 #'
 #' Model configuration is split into:
 #' \itemize{
@@ -179,8 +182,12 @@
 #'   `reasoning`, `service_tier`, `temperature`, `top_p`, `logprobs`, `host`,
 #'   or `include_thoughts`. Default is `list()`.
 #'
-#' @return A function `judge(A, B, state, ...)` returning a list with fields
-#'   `is_valid`, `Y`, and `invalid_reason`.
+#' @return A function `judge(A, B, state, ...)` returning a list with required
+#'   fields `is_valid`, `Y`, and `invalid_reason`, plus optional canonical audit
+#'   fields such as `judge_backend`, `judge_model`, `judge_endpoint`,
+#'   `llm_status_code`, `llm_error_message`, `llm_custom_id`,
+#'   `prompt_tokens`, `completion_tokens`, `total_tokens`, and
+#'   `raw_response_json`.
 #'
 #' @examples
 #' judge <- make_adaptive_judge_llm(
@@ -237,8 +244,29 @@ make_adaptive_judge_llm <- function(
   trait_info <- .adaptive_rank_resolve_trait(trait, trait_name, trait_description)
 
   function(A, B, state, ...) {
-    invalid <- function(reason) {
-      list(is_valid = FALSE, Y = NA_integer_, invalid_reason = reason)
+    invalid <- function(reason,
+                        llm_error_message = NA_character_,
+                        llm_status_code = NA_integer_,
+                        llm_custom_id = NA_character_,
+                        prompt_tokens = NA_real_,
+                        completion_tokens = NA_real_,
+                        total_tokens = NA_real_,
+                        raw_response_json = NA_character_) {
+      list(
+        is_valid = FALSE,
+        Y = NA_integer_,
+        invalid_reason = reason,
+        judge_backend = backend,
+        judge_model = model,
+        judge_endpoint = if (identical(backend, "openai")) endpoint else NA_character_,
+        llm_status_code = llm_status_code,
+        llm_error_message = llm_error_message,
+        llm_custom_id = llm_custom_id,
+        prompt_tokens = prompt_tokens,
+        completion_tokens = completion_tokens,
+        total_tokens = total_tokens,
+        raw_response_json = raw_response_json
+      )
     }
 
     if (!is.data.frame(A) || !is.data.frame(B) || nrow(A) != 1L || nrow(B) != 1L) {
@@ -263,9 +291,14 @@ make_adaptive_judge_llm <- function(
       return(invalid("missing_text"))
     }
 
+    llm_custom_id_default <- .pairwiseLLM_make_custom_id(A_id, B_id)
+
     runtime_args <- list(...)
     if (length(runtime_args) > 0L && (is.null(names(runtime_args)) || any(names(runtime_args) == ""))) {
-      return(invalid("invalid_runtime_args"))
+      return(invalid(
+        "invalid_runtime_args",
+        llm_custom_id = llm_custom_id_default
+      ))
     }
     merged_extra <- .adaptive_rank_merge_args(judge_args, runtime_args)
 
@@ -288,25 +321,102 @@ make_adaptive_judge_llm <- function(
     res <- tryCatch(
       do.call(llm_compare_pair, call_args),
       error = function(e) {
-        structure(list(error = conditionMessage(e)), class = "adaptive_judge_error")
+        structure(
+          list(error = conditionMessage(e)),
+          class = "adaptive_judge_error"
+        )
       }
     )
     if (inherits(res, "adaptive_judge_error")) {
-      return(invalid("llm_error"))
+      return(invalid(
+        "llm_error",
+        llm_error_message = as.character(res$error %||% NA_character_),
+        llm_custom_id = llm_custom_id_default
+      ))
     }
     if (!is.data.frame(res) || nrow(res) < 1L || !"better_id" %in% names(res)) {
-      return(invalid("invalid_response"))
+      return(invalid(
+        "invalid_response",
+        llm_custom_id = llm_custom_id_default
+      ))
+    }
+
+    first <- tibble::as_tibble(res[1L, , drop = FALSE])
+    raw_response_json <- if ("raw_response" %in% names(first)) {
+      .adaptive_serialize_raw_response(first$raw_response[[1L]])
+    } else {
+      NA_character_
+    }
+    judge_model_logged <- if ("model" %in% names(first)) {
+      .adaptive_judge_scalar_character(first$model[[1L]])
+    } else {
+      NA_character_
+    }
+    if (is.na(judge_model_logged)) {
+      judge_model_logged <- model
+    }
+    llm_status_code <- if ("status_code" %in% names(first)) {
+      .adaptive_judge_scalar_integer(first$status_code[[1L]])
+    } else {
+      NA_integer_
+    }
+    llm_error_message <- if ("error_message" %in% names(first)) {
+      .adaptive_judge_scalar_character(first$error_message[[1L]])
+    } else {
+      NA_character_
+    }
+    llm_custom_id <- if ("custom_id" %in% names(first)) {
+      .adaptive_judge_scalar_character(first$custom_id[[1L]])
+    } else {
+      NA_character_
+    }
+    if (is.na(llm_custom_id)) {
+      llm_custom_id <- llm_custom_id_default
+    }
+    prompt_tokens <- if ("prompt_tokens" %in% names(first)) {
+      .adaptive_judge_scalar_double(first$prompt_tokens[[1L]])
+    } else {
+      NA_real_
+    }
+    completion_tokens <- if ("completion_tokens" %in% names(first)) {
+      .adaptive_judge_scalar_double(first$completion_tokens[[1L]])
+    } else {
+      NA_real_
+    }
+    total_tokens <- if ("total_tokens" %in% names(first)) {
+      .adaptive_judge_scalar_double(first$total_tokens[[1L]])
+    } else {
+      NA_real_
     }
 
     better_id <- as.character(res$better_id[[1L]])
     if (is.na(better_id) || !better_id %in% c(A_id, B_id)) {
-      return(invalid("invalid_response"))
+      return(invalid(
+        "invalid_response",
+        llm_error_message = llm_error_message,
+        llm_status_code = llm_status_code,
+        llm_custom_id = llm_custom_id,
+        prompt_tokens = prompt_tokens,
+        completion_tokens = completion_tokens,
+        total_tokens = total_tokens,
+        raw_response_json = raw_response_json
+      ))
     }
 
     list(
       is_valid = TRUE,
       Y = as.integer(identical(better_id, A_id)),
-      invalid_reason = NA_character_
+      invalid_reason = NA_character_,
+      judge_backend = backend,
+      judge_model = judge_model_logged,
+      judge_endpoint = if (identical(backend, "openai")) endpoint else NA_character_,
+      llm_status_code = llm_status_code,
+      llm_error_message = llm_error_message,
+      llm_custom_id = llm_custom_id,
+      prompt_tokens = prompt_tokens,
+      completion_tokens = completion_tokens,
+      total_tokens = total_tokens,
+      raw_response_json = raw_response_json
     )
   }
 }
