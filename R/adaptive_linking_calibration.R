@@ -281,7 +281,9 @@
       run_mode = "link_one_spoke",
       hub_id = 1L,
       phase_a_mode = "run",
+      link_estimation_mode = "transform",
       link_transform_policy = "auto",
+      hub_lock_mode = "soft_lock",
       probe_pairs_per_refit_per_spoke = 2L,
       cross_set_utility = "linking_d_optimal"
     ),

@@ -120,7 +120,12 @@ test_that("held-out probe commits do not mutate the shared history-state cache",
   state <- adaptive_rank_start(
     items,
     seed = 19L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$history_pairs <- tibble::tibble(A_id = "h1", B_id = "h2")
   state$history_state <- pairwiseLLM:::.adaptive_history_state_rebuild(
@@ -298,6 +303,7 @@ test_that("run_one_step populates linking scaffold columns for cross-set rows", 
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_transform_mode = "auto",
       hub_lock_mode = "soft_lock",
       hub_lock_kappa = 0.75
@@ -338,6 +344,7 @@ test_that("run_one_step logs hub_lock_kappa as NA unless hub_lock_mode is soft_l
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       hub_lock_mode = "hard_lock",
       hub_lock_kappa = 0.75
     )
@@ -360,6 +367,7 @@ test_that("run_one_step logs linking pre-step transform estimates when available
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_transform_mode = "auto"
     )
   )
@@ -394,7 +402,12 @@ test_that("run_one_step retires frozen spoke work without emitting a new step", 
   state <- adaptive_rank_start(
     items,
     seed = 37L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$warm_start_done <- TRUE
   state$linking$phase_a <- list(
@@ -462,7 +475,12 @@ test_that("run_one_step gives active-link work precedence over held-out probes",
   state <- adaptive_rank_start(
     items,
     seed = 52L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$warm_start_done <- TRUE
   state$linking$phase_a <- list(
@@ -553,7 +571,12 @@ test_that("run_one_step preserves a legal active selection after probe accelerat
   state <- adaptive_rank_start(
     items,
     seed = 521L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$warm_start_done <- TRUE
   state$linking$phase_a <- list(
@@ -652,7 +675,12 @@ test_that("run_one_step can commit accelerated holdout work without prior starva
   state <- adaptive_rank_start(
     items,
     seed = 523L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$warm_start_done <- TRUE
   state$linking$phase_a <- list(
@@ -746,7 +774,12 @@ test_that("run_one_step uses link_probe_holdout after active-link starvation", {
   state <- adaptive_rank_start(
     items,
     seed = 41L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$warm_start_done <- TRUE
   state$linking$phase_a <- list(
@@ -872,7 +905,12 @@ test_that("run_one_step keeps holdout probe work within the ordinary per-refit c
   state <- adaptive_rank_start(
     items,
     seed = 52L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$warm_start_done <- TRUE
   state$linking$phase_a <- list(
@@ -1035,7 +1073,9 @@ test_that("run_one_step keeps independent multi-spoke holdout probes on the acti
     seed = 410L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
     )
   )
   draws <- matrix(
@@ -1317,6 +1357,8 @@ test_that("run_one_step keeps accelerated concurrent holdout routing on the acti
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock",
       multi_spoke_mode = "concurrent"
     )
   )
@@ -1434,7 +1476,9 @@ test_that("invalid linking step does not mutate controller link routing state", 
     seed = 8L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
     )
   )
   state$controller$current_link_spoke_id <- 99L
@@ -1482,7 +1526,12 @@ test_that("run_one_step uses selected spoke fallback for non-hub cross-set rows"
   state <- adaptive_rank_start(
     items,
     seed = 13L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$warm_start_done <- TRUE
   state$linking$phase_a$phase <- "phase_b"

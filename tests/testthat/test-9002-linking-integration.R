@@ -111,8 +111,12 @@ test_that("two-set linking recovers spoke offset from cross-set outcomes", {
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       phase_a_mode = "import",
-      phase_a_artifacts = artifacts
+      phase_a_artifacts = artifacts,
+      phase_a_compatible_config_hashes = vapply(artifacts, function(x) {
+        as.character(x$fit_config_hash)
+      }, character(1L))
     ),
     btl_config = test_link_btl_config(list(refit_pairs_target = 3L)),
     progress = "none"
@@ -156,6 +160,7 @@ test_that("joint_refit integration records joint mode and soft-lock runtime fiel
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_refit_mode = "joint_refit",
       hub_lock_mode = "soft_lock",
       hub_lock_kappa = 0.75,
@@ -203,6 +208,7 @@ test_that("joint_refit integration supports free hub lock", {
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_refit_mode = "joint_refit",
       hub_lock_mode = "free",
       phase_a_mode = "import",
@@ -983,6 +989,7 @@ test_that("single-set runs remain behaviorally equivalent when linking controls 
     adaptive_config = list(
       run_mode = "within_set",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_transform_mode = "auto",
       link_refit_mode = "shift_only",
       phase_a_mode = "run"

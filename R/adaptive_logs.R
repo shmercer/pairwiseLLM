@@ -500,6 +500,14 @@ schema_item_step_log <- c(
   }
 
   mode <- as.character(out$link_estimation_mode %||% rep_len(NA_character_, nrow(out)))
+  if ("hub_lock_mode" %in% names(schema)) {
+    if (!"hub_lock_mode" %in% names(out)) {
+      out$hub_lock_mode <- rep_len(NA_character_, nrow(out))
+    }
+    missing_lock <- is.na(out$hub_lock_mode) | as.character(out$hub_lock_mode) == ""
+    out$hub_lock_mode[missing_lock & mode == "transform"] <- "soft_lock"
+    out$hub_lock_mode[missing_lock & mode == "anchored_joint"] <- "hard_lock"
+  }
   anchored_idx <- !is.na(mode) & mode == "anchored_joint"
   if (!any(anchored_idx)) {
     return(out)

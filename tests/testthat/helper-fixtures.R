@@ -349,10 +349,15 @@ make_positive_probe_acceleration_runtime_state <- function() {
     adaptive_config <- list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       multi_spoke_mode = "concurrent",
+      hub_lock_mode = "soft_lock",
       min_cross_set_pairs_per_spoke_per_refit = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts,
+      phase_a_compatible_config_hashes = vapply(artifacts, function(artifact) {
+        as.character(artifact$fit_config_hash %||% NA_character_)
+      }, character(1L)),
       probe_pairs_per_refit_per_spoke = 1L,
       probe_pairs_per_refit_per_spoke_bootstrap_max = 3L,
       probe_edges_min_for_stop = 12L,

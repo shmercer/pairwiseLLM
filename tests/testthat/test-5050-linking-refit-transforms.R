@@ -4,7 +4,12 @@ make_linking_refit_state <- function(adaptive_config = list()) {
     set_id = c(1L, 1L, 1L, 2L, 2L, 3L, 3L),
     global_item_id = c("gh1", "gh2", "gh3", "gs21", "gs22", "gs31", "gs32")
   )
-  base_cfg <- list(run_mode = "link_multi_spoke", hub_id = 1L)
+  base_cfg <- list(
+    run_mode = "link_multi_spoke",
+    hub_id = 1L,
+    link_estimation_mode = "transform",
+    hub_lock_mode = "soft_lock"
+  )
   state <- adaptive_rank_start(
     items,
     seed = 123L,
@@ -608,14 +613,22 @@ test_that("soft lock with kappa=0 is rejected in joint refit", {
   hard <- base
   hard <- pairwiseLLM:::.adaptive_apply_controller_config(
     hard,
-    list(hub_lock_mode = "hard_lock", hub_lock_kappa = 0.75)
+    list(
+      link_estimation_mode = "transform",
+      hub_lock_mode = "hard_lock",
+      hub_lock_kappa = 0.75
+    )
   )
   hard <- pairwiseLLM:::.adaptive_linking_refit_update_state(hard, list(last_refit_step = 0L))
 
   expect_error(
     pairwiseLLM:::.adaptive_apply_controller_config(
       base,
-      list(hub_lock_mode = "soft_lock", hub_lock_kappa = 0)
+      list(
+        link_estimation_mode = "transform",
+        hub_lock_mode = "soft_lock",
+        hub_lock_kappa = 0
+      )
     ),
     "strictly in \\(0, 1\\]"
   )
@@ -640,11 +653,19 @@ test_that("soft lock uses artifact uncertainty and kappa strength", {
 
   soft_high <- pairwiseLLM:::.adaptive_apply_controller_config(
     base,
-    list(hub_lock_mode = "soft_lock", hub_lock_kappa = 1)
+    list(
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock",
+      hub_lock_kappa = 1
+    )
   )
   soft_low <- pairwiseLLM:::.adaptive_apply_controller_config(
     base,
-    list(hub_lock_mode = "soft_lock", hub_lock_kappa = 0.1)
+    list(
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock",
+      hub_lock_kappa = 0.1
+    )
   )
 
   out_high <- pairwiseLLM:::.adaptive_linking_refit_update_state(soft_high, list(last_refit_step = 0L))
@@ -777,7 +798,10 @@ test_that("joint_refit utility uses current theta state rather than Phase A summ
     spoke_id = 2L
   )
 
-  state_shift <- pairwiseLLM:::.adaptive_apply_controller_config(state, list(link_refit_mode = "shift_only"))
+  state_shift <- pairwiseLLM:::.adaptive_apply_controller_config(
+    state,
+    list(link_estimation_mode = "transform", link_refit_mode = "shift_only")
+  )
   out_shift <- pairwiseLLM:::.adaptive_link_attach_predictive_utility(
     candidates = cand,
     state = state_shift,
@@ -1429,7 +1453,10 @@ test_that("invalid linking mode combinations fail validation", {
   expect_true("shift_only_theta_treatment" %in% keys)
 
   ok <- pairwiseLLM:::.adaptive_validate_controller_config(
-    list(shift_only_theta_treatment = "fixed_eap_plugin_var"),
+    list(
+      link_estimation_mode = "transform",
+      shift_only_theta_treatment = "fixed_eap_plugin_var"
+    ),
     n_items = 5L,
     set_ids = c(1L, 2L)
   )
@@ -1437,7 +1464,10 @@ test_that("invalid linking mode combinations fail validation", {
 
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
-      list(shift_only_theta_treatment = "bad"),
+      list(
+        link_estimation_mode = "transform",
+        shift_only_theta_treatment = "bad"
+      ),
       n_items = 5L,
       set_ids = c(1L, 2L)
     ),
@@ -1449,6 +1479,7 @@ test_that("invalid linking mode combinations fail validation", {
       list(
         run_mode = "link_multi_spoke",
         multi_spoke_mode = "concurrent",
+        link_estimation_mode = "transform",
         link_refit_mode = "joint_refit",
         hub_lock_mode = "free"
       ),

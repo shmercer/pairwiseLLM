@@ -32,7 +32,12 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
   state <- adaptive_rank_start(
     items,
     seed = 9L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$linking$phase_a$phase <- "phase_b"
   state$linking$phase_a$ready_spokes <- 2L
@@ -198,6 +203,7 @@ test_that("adaptive_get_logs and print preserve free hub-lock mode", {
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_refit_mode = "joint_refit",
       hub_lock_mode = "free"
     )

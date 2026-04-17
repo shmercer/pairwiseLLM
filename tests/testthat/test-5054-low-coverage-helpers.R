@@ -10,9 +10,11 @@ make_lowcov_link_state <- function(run_mode = "link_multi_spoke") {
     adaptive_config = list(
       run_mode = run_mode,
       hub_id = 1L,
+      link_estimation_mode = "transform",
       multi_spoke_mode = "concurrent",
       probe_pairs_per_refit_per_spoke = 2L,
-      probe_edges_min_for_stop = 2L
+      probe_edges_min_for_stop = 2L,
+      hub_lock_mode = "soft_lock"
     )
   )
   state$warm_start_done <- TRUE
@@ -275,6 +277,7 @@ test_that("low-coverage state, simulation, and cost helpers cover edge branches"
 
   normalized <- pairwiseLLM:::.adaptive_controller_normalize_legacy_fields(
     list(
+      link_estimation_mode = "transform",
       link_transform_mode = "shift_scale",
       link_transform_mode_by_spoke = list(`2` = "shift_only"),
       shift_only_theta_treatment = "normal_prior",

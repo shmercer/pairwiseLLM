@@ -365,7 +365,10 @@ test_that("phase A import hash rejects linking compatibility mismatch in require
 
   state_joint <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(link_refit_mode = "joint_refit")
+    adaptive_config = list(
+      link_estimation_mode = "transform",
+      link_refit_mode = "joint_refit"
+    )
   )
   controller_joint <- .adaptive_controller_resolve(state_joint)
   expect_error(

@@ -26,6 +26,22 @@ mark_link_phase_b_ready <- function(state, source = "import", probe_edges_min_fo
   state
 }
 
+adaptive_rank_start <- function(items, seed, adaptive_config = NULL, ...) {
+  run_mode <- adaptive_config$run_mode %||% NULL
+  if (!is.null(run_mode) && startsWith(as.character(run_mode), "link")) {
+    adaptive_config <- utils::modifyList(
+      list(link_estimation_mode = "transform"),
+      adaptive_config
+    )
+  }
+  pairwiseLLM::adaptive_rank_start(
+    items = items,
+    seed = seed,
+    adaptive_config = adaptive_config,
+    ...
+  )
+}
+
 reference_phase_b_stage_candidates <- function(state,
                                                stage_name,
                                                fallback_name,
@@ -3211,7 +3227,11 @@ test_that("phase-B routing score source switches between Phase A and current the
   state <- adaptive_rank_start(
     items,
     seed = 902L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform"
+    )
   )
   active_ids <- c("h1", "h2", "s1", "s2")
   controller_shift <- utils::modifyList(
@@ -3272,7 +3292,11 @@ test_that("linking candidates and step log carry global distance strata", {
   state <- make_test_state(items, trueskill_state)
   state <- pairwiseLLM:::.adaptive_apply_controller_config(
     state,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform"
+    )
   )
   state$round$staged_active <- TRUE
   state$round$stage_index <- 2L
@@ -3327,7 +3351,11 @@ test_that("link stage log is appended per refit and spoke in linking mode", {
   state <- adaptive_rank_start(
     items,
     seed = 2L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform"
+    )
   )
   state <- mark_link_phase_b_ready(state)
   judge <- make_deterministic_judge("i_wins")
@@ -3353,7 +3381,12 @@ test_that("link stage log uses NA hub_lock_kappa when lock mode is not soft_lock
   state <- adaptive_rank_start(
     items,
     seed = 4L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, hub_lock_mode = "hard_lock")
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "hard_lock"
+    )
   )
   state <- mark_link_phase_b_ready(state)
   judge <- make_deterministic_judge("i_wins")
@@ -3378,7 +3411,11 @@ test_that("per-spoke link stage rows do not inherit global identified fallback",
   state <- adaptive_rank_start(
     items,
     seed = 25L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform"
+    )
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
@@ -3668,7 +3705,11 @@ test_that("phase B pooled backfill starvation exhausts only the attempted spoke"
   state <- adaptive_rank_start(
     items,
     seed = 79L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform"
+    )
   )
   state$warm_start_done <- TRUE
   state$round$staged_active <- TRUE
@@ -3744,7 +3785,11 @@ test_that("pooled backfill enforces duplicate caps and preserves candidate count
   state <- adaptive_rank_start(
     items,
     seed = 81L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform"
+    )
   )
   state$warm_start_done <- TRUE
   state$round$staged_active <- TRUE

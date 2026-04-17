@@ -9,7 +9,9 @@ make_link_probe_state <- function() {
     seed = 101L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
     )
   )
   state$controller$probe_pairs_per_refit_per_spoke <- 0L
