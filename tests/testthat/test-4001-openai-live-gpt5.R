@@ -123,3 +123,42 @@ testthat::test_that("gpt-5.2 service_tier includes flex/priority and omits stand
     }
   )
 })
+
+testthat::test_that("gpt-5.4-mini keeps flex tier and model-default sampling when reasoning is none", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  captured_body <- NULL
+
+  fake_body <- list(object = "response", model = "gpt-5.4-mini", output = list())
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) {
+      captured_body <<- body
+      req
+    },
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) fake_body,
+    .openai_resp_status = function(...) 200L,
+    {
+      pairwiseLLM::openai_compare_pair_live(
+        ID1 = "A", text1 = "Text A",
+        ID2 = "B", text2 = "Text B",
+        model = "gpt-5.4-mini",
+        trait_name = td$name,
+        trait_description = td$description,
+        prompt_template = tmpl,
+        endpoint = "responses",
+        reasoning = "none",
+        service_tier = "flex",
+        temperature = NULL,
+        top_p = NULL
+      )
+
+      testthat::expect_equal(captured_body$service_tier, "flex")
+      testthat::expect_equal(captured_body$reasoning$effort, "none")
+      testthat::expect_false("temperature" %in% names(captured_body))
+      testthat::expect_false("top_p" %in% names(captured_body))
+    }
+  )
+})

@@ -11,7 +11,7 @@ is_gpt5_series_model <- function(model) {
     return(TRUE)
   }
 
-  grepl("^gpt-5\\.(1|2)", model)
+  grepl("^gpt-5\\.[0-9]+(?:-(mini|nano))?(?:-[0-9]{4}-[0-9]{2}-[0-9]{2})?$", model)
 }
 
 #' @keywords internal

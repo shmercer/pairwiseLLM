@@ -16,12 +16,15 @@ testthat::test_that("is_gpt5_series_model identifies GPT-5 series models", {
     "gpt-5.1",
     "gpt-5.1-2025-12-11",
     "gpt-5.2",
-    "gpt-5.2-2025-12-11"
+    "gpt-5.2-2025-12-11",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.4-mini-2026-01-15"
   )
 
   testthat::expect_true(all(vapply(positives, is_gpt5_series_model, logical(1))))
   testthat::expect_false(is_gpt5_series_model("gpt-4.1"))
-  testthat::expect_false(is_gpt5_series_model("gpt-5.3"))
+  testthat::expect_false(is_gpt5_series_model("gpt-5x"))
   testthat::expect_false(is_gpt5_series_model(NA_character_))
   testthat::expect_false(is_gpt5_series_model(NULL))
 })
