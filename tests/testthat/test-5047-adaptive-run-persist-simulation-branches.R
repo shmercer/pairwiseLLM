@@ -388,7 +388,10 @@ test_that("adaptive_rank_run_live covers progress event, persistence writes, and
     .adaptive_session_paths = function(session_dir) {
       list(item_log_dir = file.path(tempdir(), "item-log"))
     },
-    .adaptive_write_item_log_files = function(item_log, item_log_dir) {
+    .adaptive_write_item_log_files = function(item_log,
+                                             item_log_dir,
+                                             overwrite_existing = TRUE,
+                                             trim_stale = FALSE) {
       tracker$write_called <- tracker$write_called + 1L
       invisible(NULL)
     },
