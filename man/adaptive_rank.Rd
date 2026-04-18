@@ -25,6 +25,7 @@ adaptive_rank(
   btl_config = NULL,
   session_dir = NULL,
   persist_item_log = FALSE,
+  checkpoint_every_steps = NULL,
   resume = TRUE,
   seed = 1L,
   progress = c("all", "refits", "steps", "none"),
@@ -410,6 +411,10 @@ Default is \code{NULL}.}
 
 \item{persist_item_log}{Logical; write per-refit item logs when \code{TRUE}.
 Default is \code{FALSE}.}
+
+\item{checkpoint_every_steps}{Optional positive integer checkpoint cadence for
+ordinary live persistence. New sessions default to \code{100L}; resumed sessions
+reuse the persisted cadence unless overridden.}
 
 \item{resume}{Logical; when \code{TRUE} and \code{session_dir} contains a valid session,
 resume from disk; otherwise initialize a new state.

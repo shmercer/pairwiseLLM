@@ -10,7 +10,8 @@ adaptive_rank_start(
   session_dir = NULL,
   persist_item_log = FALSE,
   ...,
-  adaptive_config = NULL
+  adaptive_config = NULL,
+  checkpoint_every_steps = NULL
 )
 }
 \arguments{
@@ -36,6 +37,9 @@ for timestamps.}
 Unknown fields and invalid values abort with an actionable error. See
 \code{\link[=adaptive_rank]{adaptive_rank()}} for the full list of supported keys, detailed semantics,
 and defaults.}
+
+\item{checkpoint_every_steps}{Optional positive integer checkpoint cadence for
+ordinary live persistence. If \code{NULL}, defaults to \code{100L}.}
 }
 \value{
 An adaptive state object containing \code{step_log}, \code{round_log}, and

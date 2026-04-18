@@ -2,6 +2,54 @@
 # Adaptive entrypoints.
 # -------------------------------------------------------------------------
 
+.adaptive_default_checkpoint_every_steps <- function() {
+  100L
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_normalize_checkpoint_every_steps <- function(checkpoint_every_steps,
+                                                       allow_null = TRUE) {
+  if (is.null(checkpoint_every_steps)) {
+    if (isTRUE(allow_null)) {
+      return(NULL)
+    }
+    rlang::abort("`checkpoint_every_steps` must be a positive integer.")
+  }
+
+  checkpoint_every_steps <- as.integer(checkpoint_every_steps)
+  if (length(checkpoint_every_steps) != 1L ||
+    is.na(checkpoint_every_steps) ||
+    checkpoint_every_steps < 1L) {
+    rlang::abort("`checkpoint_every_steps` must be a positive integer.")
+  }
+
+  checkpoint_every_steps
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_resolve_checkpoint_every_steps <- function(state,
+                                                     checkpoint_every_steps = NULL) {
+  explicit <- .adaptive_normalize_checkpoint_every_steps(
+    checkpoint_every_steps,
+    allow_null = TRUE
+  )
+  if (!is.null(explicit)) {
+    return(explicit)
+  }
+
+  existing <- .adaptive_normalize_checkpoint_every_steps(
+    (state$config %||% list())$checkpoint_every_steps %||% NULL,
+    allow_null = TRUE
+  )
+  if (!is.null(existing)) {
+    return(existing)
+  }
+
+  .adaptive_default_checkpoint_every_steps()
+}
+
 .adaptive_build_warm_start_pairs <- function(item_ids, seed) {
   item_ids <- as.character(item_ids)
   if (length(item_ids) < 2L) {
@@ -3859,6 +3907,8 @@
 #'   Default is `NULL`.
 #' @param persist_item_log Logical; when TRUE, write per-refit item logs to disk.
 #'   Default is `FALSE`.
+#' @param checkpoint_every_steps Optional positive integer checkpoint cadence for
+#'   ordinary live persistence. If `NULL`, defaults to `100L`.
 #' @param ... Internal/testing only. Supply `now_fn` to override the clock used
 #'   for timestamps.
 #'
@@ -3881,7 +3931,8 @@ adaptive_rank_start <- function(items,
                                 session_dir = NULL,
                                 persist_item_log = FALSE,
                                 ...,
-                                adaptive_config = NULL) {
+                                adaptive_config = NULL,
+                                checkpoint_every_steps = NULL) {
   dots <- list(...)
   if (length(dots) > 0L) {
     dot_names <- names(dots)
@@ -3902,6 +3953,10 @@ adaptive_rank_start <- function(items,
     is.na(persist_item_log)) {
     rlang::abort("`persist_item_log` must be TRUE or FALSE.")
   }
+  checkpoint_every_steps <- .adaptive_normalize_checkpoint_every_steps(
+    checkpoint_every_steps,
+    allow_null = TRUE
+  ) %||% .adaptive_default_checkpoint_every_steps()
   seed <- .adaptive_validate_seed(seed)
   now_fn <- dots$now_fn %||% function() Sys.time()
   state <- new_adaptive_state(items, now_fn = now_fn)
@@ -3924,6 +3979,7 @@ adaptive_rank_start <- function(items,
   )
   state$config$session_dir <- session_dir %||% NULL
   state$config$persist_item_log <- isTRUE(persist_item_log)
+  state$config$checkpoint_every_steps <- as.integer(checkpoint_every_steps)
   if (!is.null(session_dir)) {
     save_adaptive_session(state, session_dir = session_dir, overwrite = FALSE)
   }
@@ -4053,6 +4109,9 @@ adaptive_rank_start <- function(items,
 #'   If `NULL`, uses `state$config$session_dir`. Default is `NULL`.
 #' @param persist_item_log Logical; when TRUE, write per-refit item logs to disk.
 #'   If `NULL`, uses `state$config$persist_item_log`. Default is `NULL`.
+#' @param checkpoint_every_steps Optional positive integer checkpoint cadence for
+#'   ordinary live persistence. If `NULL`, uses the persisted state value when
+#'   present, otherwise defaults to `100L`.
 #' @param progress Progress output: `"all"`, `"refits"`, `"steps"`, or `"none"`.
 #'   Default is `"all"`.
 #' @param progress_redraw_every Redraw progress bar every N steps. Default is
@@ -4269,6 +4328,7 @@ adaptive_rank_run_live <- function(state,
                                    btl_config = NULL,
                                    session_dir = NULL,
                                    persist_item_log = NULL,
+                                   checkpoint_every_steps = NULL,
                                    progress = c("all", "refits", "steps", "none"),
                                    progress_redraw_every = 10L,
                                    progress_show_events = TRUE,
@@ -4292,6 +4352,10 @@ adaptive_rank_run_live <- function(state,
     (!is.logical(persist_item_log) || length(persist_item_log) != 1L)) {
     rlang::abort("`persist_item_log` must be TRUE or FALSE.")
   }
+  checkpoint_every_steps <- .adaptive_normalize_checkpoint_every_steps(
+    checkpoint_every_steps,
+    allow_null = TRUE
+  )
 
   if (!is.null(session_dir)) {
     state$config$session_dir <- session_dir
@@ -4299,6 +4363,10 @@ adaptive_rank_run_live <- function(state,
   if (!is.null(persist_item_log)) {
     state$config$persist_item_log <- isTRUE(persist_item_log)
   }
+  state$config$checkpoint_every_steps <- .adaptive_resolve_checkpoint_every_steps(
+    state,
+    checkpoint_every_steps = checkpoint_every_steps
+  )
   resumed_from_session <- .adaptive_is_resumed_session(state)
   state$config$resumed_from_session <- isTRUE(resumed_from_session)
   state$meta$resumed_from_session <- isTRUE(resumed_from_session)
@@ -4333,6 +4401,32 @@ adaptive_rank_run_live <- function(state,
   progress_handle <- adaptive_progress_init(state, cfg)
   on.exit(adaptive_progress_finish(progress_handle), add = TRUE)
 
+  dirty_since_save <- FALSE
+  persist_session <- function(force = FALSE) {
+    session_dir_current <- state$config$session_dir %||% NULL
+    if (is.null(session_dir_current)) {
+      return(invisible(FALSE))
+    }
+    if (!isTRUE(force) && !isTRUE(dirty_since_save)) {
+      return(invisible(FALSE))
+    }
+
+    if (!isTRUE(force)) {
+      checkpoint_mod <- as.integer(state$config$checkpoint_every_steps %||% NA_integer_)
+      step_count <- nrow(tibble::as_tibble(state$step_log %||% tibble::tibble()))
+      if (is.na(checkpoint_mod) || checkpoint_mod < 1L || step_count < 1L) {
+        return(invisible(FALSE))
+      }
+      if ((step_count %% checkpoint_mod) != 0L) {
+        return(invisible(FALSE))
+      }
+    }
+
+    save_adaptive_session(state, session_dir = session_dir_current, overwrite = TRUE)
+    dirty_since_save <<- FALSE
+    invisible(TRUE)
+  }
+
   remaining <- n_steps
   while (remaining > 0L) {
     state <- .adaptive_stop_boundary_bootstrap(state)
@@ -4346,31 +4440,26 @@ adaptive_rank_run_live <- function(state,
     ))) {
       state$meta$stop_decision <- TRUE
       state$meta$stop_reason <- "all_spokes_exhausted"
-      if (!is.null(state$config$session_dir)) {
-        save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
-      }
+      persist_session(force = TRUE)
       return(state)
     }
     if (isTRUE(.adaptive_link_all_spokes_stopped(state))) {
       state$meta$stop_decision <- TRUE
       state$meta$stop_reason <- "all_spokes_stopped"
-      if (!is.null(state$config$session_dir)) {
-        save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
-      }
+      persist_session(force = TRUE)
       return(state)
     }
     budget_status <- .adaptive_stop_boundary_budget_status(state)
     if (isTRUE(budget_status$active) && isTRUE(budget_status$exhausted)) {
       state$meta$stop_decision <- TRUE
       state$meta$stop_reason <- "max_pairs_after_stop_exhausted"
-      if (!is.null(state$config$session_dir)) {
-        save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
-      }
+      persist_session(force = TRUE)
       return(state)
     }
     state <- .adaptive_link_sync_warm_start(state)
     state <- .adaptive_round_activate_if_ready(state)
     state <- run_one_step(state, judge, ...)
+    dirty_since_save <- TRUE
     step_row <- tibble::as_tibble(state$step_log)[nrow(state$step_log), , drop = FALSE]
     event <- adaptive_progress_step_event(step_row, cfg)
     if (!is.null(event)) {
@@ -4391,9 +4480,7 @@ adaptive_rank_run_live <- function(state,
         if (isTRUE(budget_status$exhausted)) {
           state$meta$stop_decision <- TRUE
           state$meta$stop_reason <- "max_pairs_after_stop_exhausted"
-          if (!is.null(state$config$session_dir)) {
-            save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
-          }
+          persist_session(force = TRUE)
           return(state)
         }
       }
@@ -4422,9 +4509,7 @@ adaptive_rank_run_live <- function(state,
             state <- .adaptive_phase_a_mark_unresolved(state, set_id = active_set, message = msg)
             state$meta$stop_decision <- TRUE
             state$meta$stop_reason <- "phase_a_set_unresolved"
-            if (!is.null(state$config$session_dir)) {
-              save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
-            }
+            persist_session(force = TRUE)
             return(state)
           }
         } else {
@@ -4437,17 +4522,13 @@ adaptive_rank_run_live <- function(state,
             if (isTRUE(.adaptive_link_all_spokes_exhausted(state, refit_id = refit_id))) {
               state$meta$stop_decision <- TRUE
               state$meta$stop_reason <- "all_spokes_exhausted"
-              if (!is.null(state$config$session_dir)) {
-                save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
-              }
+              persist_session(force = TRUE)
               return(state)
             }
           } else {
             state$meta$stop_decision <- TRUE
             state$meta$stop_reason <- "candidate_starvation"
-            if (!is.null(state$config$session_dir)) {
-              save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
-            }
+            persist_session(force = TRUE)
             return(state)
           }
         }
@@ -4455,16 +4536,16 @@ adaptive_rank_run_live <- function(state,
     } else if (isTRUE(step_row$candidate_starved[[1L]])) {
       state$meta$stop_decision <- TRUE
       state$meta$stop_reason <- "candidate_starvation"
-      if (!is.null(state$config$session_dir)) {
-        save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
-      }
+      persist_session(force = TRUE)
       return(state)
     }
 
     refit_out <- maybe_refit_btl(state, config = btl_cfg, fit_fn = fit_fn)
     state <- refit_out$state
     state$config$btl_config <- refit_out$config
+    force_persist_after_iteration <- FALSE
     if (isTRUE(refit_out$refit_performed)) {
+      force_persist_after_iteration <- TRUE
       state <- .adaptive_linking_refit_update_state(
         state = state,
         refit_context = refit_out$refit_context
@@ -4573,9 +4654,7 @@ adaptive_rank_run_live <- function(state,
         if (budget_status$max_pairs_after_stop <= 0L) {
           state$meta$stop_decision <- TRUE
           state$meta$stop_reason <- stop_reason
-          if (!is.null(state$config$session_dir)) {
-            save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
-          }
+          persist_session(force = TRUE)
           return(state)
         }
       }
@@ -4585,17 +4664,13 @@ adaptive_rank_run_live <- function(state,
       ))) {
         state$meta$stop_decision <- TRUE
         state$meta$stop_reason <- "all_spokes_exhausted"
-        if (!is.null(state$config$session_dir)) {
-          save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
-        }
+        persist_session(force = TRUE)
         return(state)
       }
       if (isTRUE(.adaptive_link_all_spokes_stopped(state))) {
         state$meta$stop_decision <- TRUE
         state$meta$stop_reason <- "all_spokes_stopped"
-        if (!is.null(state$config$session_dir)) {
-          save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
-        }
+        persist_session(force = TRUE)
         return(state)
       }
     }
@@ -4604,9 +4679,8 @@ adaptive_rank_run_live <- function(state,
     state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
     state <- .adaptive_clear_stale_global_stop_state(state)
     .adaptive_phase_a_gate_or_abort(state)
-    if (!is.null(state$config$session_dir)) {
-      save_adaptive_session(state, session_dir = state$config$session_dir, overwrite = TRUE)
-    }
+    persist_session(force = isTRUE(force_persist_after_iteration) || identical(remaining, 1L))
+    persist_session(force = FALSE)
     progress_handle <- adaptive_progress_update(progress_handle, state, cfg)
     remaining <- remaining - 1L
   }
