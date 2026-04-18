@@ -355,7 +355,12 @@ identifiers for imported Phase A artifacts (e.g., \code{"btl_e_b"}). Default is
 accepted Phase A config hashes for imported artifacts. Default is
 \code{character()}.}
 \item{\code{phase_a_artifacts}}{Named list mapping \code{set_id} to an imported Phase A
-artifact (list) or a \code{.rds} path containing one. Default is \code{list()}.}
+artifact (list) or a \code{.rds} path containing one. On the wrapper surface,
+this field also accepts a prior \code{adaptive_rank()} \code{phase_a} return,
+an \code{out$phase_a$manifest}, a saved session directory, or a
+\verb{phase_a_artifacts/} directory, and normalizes those inputs back to the
+canonical named-list form before runtime validation. Default is
+\code{list()}.}
 \item{\code{phase_a_set_source}}{Optional named character vector mapping \code{set_id}
 to \code{"run"} or \code{"import"} to force the source for specific sets. Default is
 \code{character()}.}
@@ -444,6 +449,10 @@ A list with:
 canonical rank column (\code{rank_link} for linking runs when available,
 otherwise \code{rank_raw}).}
 \item{logs}{Canonical logs from \code{\link[=adaptive_get_logs]{adaptive_get_logs()}}.}
+\item{phase_a}{Canonical wrapper-visible Phase A discovery surface with
+per-set status, \code{artifact_dir}, \code{artifact_paths}, and a reusable
+\code{manifest} that can be fed back into a later linking run via
+\code{adaptive_config$phase_a_artifacts}.}
 \item{output_file}{Saved output path when \code{save_outputs = TRUE}, otherwise
 \code{NULL}.}
 }
@@ -592,6 +601,26 @@ link_out <- adaptive_rank(
   resume = TRUE,
   progress = "refits"
 )
+
+# Later linking from prior wrapper outputs:
+# link_out <- adaptive_rank(
+#   data = linking_samples,
+#   id_col = "ID",
+#   text_col = "text",
+#   backend = "openai",
+#   model = "gpt-5.1",
+#   adaptive_config = list(
+#     run_mode = "link_one_spoke",
+#     hub_id = 1L,
+#     phase_a_mode = "import",
+#     phase_a_artifacts = list(
+#       `1` = hub_run$phase_a$manifest,
+#       `2` = spoke_run$phase_a$artifact_dir
+#     )
+#   ),
+#   n_steps = 200,
+#   progress = "refits"
+# )
 
 # Anchored-joint is an explicit alternative, not the default:
 # adaptive_config = list(

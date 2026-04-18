@@ -65,6 +65,370 @@
   read_samples_df(parsed, id_col = id_col, text_col = text_col)
 }
 
+.adaptive_rank_phase_a_surface_like <- function(x) {
+  is.list(x) &&
+    is.list(x$manifest %||% NULL) &&
+    any(c("set_status", "artifact_dir", "artifact_paths") %in% names(x))
+}
+
+.adaptive_rank_phase_a_artifact_object <- function(x) {
+  is.list(x) &&
+    !is.null(x$set_id %||% NULL) &&
+    is.list(x$diagnostics %||% NULL) &&
+    is.data.frame(x$items %||% NULL)
+}
+
+.adaptive_rank_phase_a_manifest <- function(artifacts,
+                                            set_status,
+                                            session_dir,
+                                            artifact_dir,
+                                            artifact_paths) {
+  manifest <- artifacts %||% list()
+  if (!is.list(manifest)) {
+    manifest <- list()
+  }
+  class(manifest) <- unique(c("adaptive_phase_a_manifest", class(manifest)))
+  attr(manifest, "set_status") <- tibble::as_tibble(set_status %||% tibble::tibble())
+  attr(manifest, "session_dir") <- as.character(session_dir %||% NA_character_)
+  attr(manifest, "artifact_dir") <- as.character(artifact_dir %||% NA_character_)
+  attr(manifest, "artifact_paths") <- as.character(artifact_paths %||% character())
+  manifest
+}
+
+.adaptive_rank_phase_a_artifact_dir <- function(session_dir) {
+  if (!is.character(session_dir) ||
+    length(session_dir) != 1L ||
+    is.na(session_dir) ||
+    !nzchar(session_dir)) {
+    return(NA_character_)
+  }
+  .adaptive_session_paths(session_dir)$phase_a_artifact_dir
+}
+
+.adaptive_rank_collect_phase_a_artifacts <- function(state, set_ids = NULL) {
+  set_ids <- as.integer(set_ids %||% sort(unique(as.integer(state$items$set_id))))
+  persisted <- state$linking$phase_a$artifacts %||% list()
+  artifacts <- list()
+  errors <- list()
+
+  if (is.list(persisted) && length(persisted) > 0L) {
+    for (nm in names(persisted)) {
+      art <- persisted[[nm]]
+      set_id <- as.integer(art$set_id %||% suppressWarnings(as.integer(nm)))
+      if (is.list(art) && is.finite(set_id) && !is.na(set_id)) {
+        artifacts[[as.character(set_id)]] <- art
+      }
+    }
+  }
+
+  for (set_id in set_ids) {
+    set_key <- as.character(set_id)
+    if (!is.null(artifacts[[set_key]])) {
+      next
+    }
+    built <- tryCatch(
+      .adaptive_phase_a_build_artifact(state, set_id = set_id),
+      error = function(e) {
+        errors[[set_key]] <<- conditionMessage(e)
+        NULL
+      }
+    )
+    if (!is.null(built)) {
+      artifacts[[set_key]] <- built
+    }
+  }
+
+  list(
+    artifacts = artifacts,
+    errors = errors
+  )
+}
+
+.adaptive_rank_phase_a_surface <- function(state, session_dir = NULL) {
+  controller <- .adaptive_controller_resolve(state)
+  set_ids <- as.integer(sort(unique(state$items$set_id)))
+  collected <- .adaptive_rank_collect_phase_a_artifacts(state, set_ids = set_ids)
+  artifacts <- collected$artifacts
+  artifact_dir <- .adaptive_rank_phase_a_artifact_dir(session_dir)
+
+  if (!is.na(artifact_dir) && length(artifacts) > 0L) {
+    .adaptive_write_phase_a_artifacts(artifacts, artifact_dir)
+  }
+
+  artifact_paths <- stats::setNames(rep(NA_character_, length(set_ids)), as.character(set_ids))
+  if (!is.na(artifact_dir) && dir.exists(artifact_dir)) {
+    for (set_id in set_ids) {
+      path <- file.path(artifact_dir, .adaptive_phase_a_artifact_filename(set_id))
+      if (file.exists(path)) {
+        artifact_paths[[as.character(set_id)]] <- path
+      }
+    }
+  }
+
+  status_tbl <- .adaptive_phase_a_empty_state(set_ids = set_ids)
+  persisted_status <- tibble::as_tibble(state$linking$phase_a$set_status %||% tibble::tibble())
+  required_cols <- c("set_id", "source", "status", "validation_message", "artifact_path")
+  if (!all(required_cols %in% names(persisted_status))) {
+    persisted_status <- tibble::tibble()
+  }
+
+  for (idx in seq_along(set_ids)) {
+    set_id <- as.integer(set_ids[[idx]])
+    set_key <- as.character(set_id)
+    persisted_row <- persisted_status[persisted_status$set_id == set_id, , drop = FALSE]
+    artifact <- artifacts[[set_key]] %||% NULL
+    source <- if (nrow(persisted_row) > 0L) {
+      as.character(persisted_row$source[[1L]] %||% NA_character_)
+    } else {
+      "run"
+    }
+    if (is.na(source) || !nzchar(source)) {
+      source <- "run"
+    }
+
+    status <- if (nrow(persisted_row) > 0L) {
+      as.character(persisted_row$status[[1L]] %||% NA_character_)
+    } else {
+      NA_character_
+    }
+    message <- if (nrow(persisted_row) > 0L) {
+      as.character(persisted_row$validation_message[[1L]] %||% NA_character_)
+    } else {
+      NA_character_
+    }
+
+    if (!is.null(artifact)) {
+      ready <- isTRUE(.adaptive_phase_a_set_stop_passed(
+        artifact = artifact,
+        source = source,
+        controller = controller
+      ))
+      if (is.na(status) || !nzchar(status)) {
+        status <- if (isTRUE(ready)) "ready" else "pending_finalization"
+      }
+      if (is.na(message) || !nzchar(message)) {
+        message <- if (isTRUE(ready)) {
+          "wrapper_discovered"
+        } else {
+          "pending_finalization: within-set stop criteria not yet met"
+        }
+      }
+    } else {
+      build_error <- as.character(collected$errors[[set_key]] %||% NA_character_)
+      if (is.na(status) || !nzchar(status)) {
+        status <- if (!is.na(build_error) &&
+          grepl("Within-set summaries are unavailable", build_error, fixed = TRUE)) {
+          "pending_finalization"
+        } else {
+          "failed"
+        }
+      }
+      if (is.na(message) || !nzchar(message)) {
+        message <- build_error
+      }
+    }
+
+    status_tbl$source[[idx]] <- source
+    status_tbl$status[[idx]] <- status
+    status_tbl$validation_message[[idx]] <- message
+    status_tbl$artifact_path[[idx]] <- artifact_paths[[set_key]]
+  }
+
+  manifest <- .adaptive_rank_phase_a_manifest(
+    artifacts = artifacts,
+    set_status = status_tbl,
+    session_dir = session_dir,
+    artifact_dir = artifact_dir,
+    artifact_paths = artifact_paths
+  )
+
+  list(
+    session_dir = as.character(session_dir %||% NA_character_),
+    artifact_dir = as.character(artifact_dir),
+    artifact_paths = artifact_paths,
+    set_status = status_tbl,
+    manifest = manifest
+  )
+}
+
+.adaptive_rank_resolve_phase_a_from_directory <- function(path) {
+  if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path) || !dir.exists(path)) {
+    rlang::abort("Phase A artifact directory/session_dir must be an existing directory.")
+  }
+
+  artifacts <- .adaptive_read_phase_a_artifacts(path)
+  if (length(artifacts) > 0L) {
+    return(artifacts)
+  }
+
+  nested_dir <- .adaptive_session_paths(path)$phase_a_artifact_dir
+  if (dir.exists(nested_dir)) {
+    artifacts <- .adaptive_read_phase_a_artifacts(nested_dir)
+    if (length(artifacts) > 0L) {
+      return(artifacts)
+    }
+  }
+
+  session_files <- .adaptive_session_paths(path)
+  has_session_artifacts <- any(file.exists(c(
+    session_files$state,
+    session_files$step_log,
+    session_files$round_log,
+    session_files$metadata
+  )))
+  if (!isTRUE(has_session_artifacts)) {
+    rlang::abort(paste0(
+      "No Phase A artifacts were found in directory: ",
+      path
+    ))
+  }
+
+  loaded <- tryCatch(
+    load_adaptive_session(path),
+    error = function(e) {
+      rlang::abort(paste0(
+        "Failed to load Phase A artifacts from session directory `",
+        path,
+        "`: ",
+        conditionMessage(e)
+      ))
+    }
+  )
+
+  collected <- .adaptive_rank_collect_phase_a_artifacts(loaded)
+  artifacts <- collected$artifacts
+  if (length(artifacts) < 1L) {
+    rlang::abort(paste0(
+      "No reusable Phase A artifacts were discoverable in session directory: ",
+      path
+    ))
+  }
+  artifacts
+}
+
+.adaptive_rank_resolve_phase_a_artifact_source <- function(x) {
+  if (inherits(x, "adaptive_phase_a_manifest")) {
+    return(unclass(x))
+  }
+  if (.adaptive_rank_phase_a_surface_like(x)) {
+    return(.adaptive_rank_resolve_phase_a_artifact_source(x$manifest))
+  }
+  if (is.list(x) && is.list(x$phase_a %||% NULL)) {
+    return(.adaptive_rank_resolve_phase_a_artifact_source(x$phase_a))
+  }
+  if (is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)) {
+    if (dir.exists(x)) {
+      return(.adaptive_rank_resolve_phase_a_from_directory(x))
+    }
+    if (file.exists(x) && grepl("\\.rds$", x, ignore.case = TRUE)) {
+      return(.adaptive_rank_resolve_phase_a_artifact_source(readRDS(x)))
+    }
+  }
+  if (is.list(x)) {
+    return(x)
+  }
+  x
+}
+
+.adaptive_rank_normalize_phase_a_artifacts <- function(raw) {
+  if (is.null(raw)) {
+    return(NULL)
+  }
+
+  if (.adaptive_rank_phase_a_artifact_object(raw)) {
+    set_id <- as.character(as.integer(raw$set_id %||% NA_integer_))
+    out <- list(raw)
+    if (!is.na(set_id) && nzchar(set_id)) {
+      names(out) <- set_id
+    }
+    return(out)
+  }
+
+  if (inherits(raw, "adaptive_phase_a_manifest") ||
+    .adaptive_rank_phase_a_surface_like(raw) ||
+    (is.list(raw) && is.list(raw$phase_a %||% NULL)) ||
+    (is.character(raw) && length(raw) == 1L && !is.na(raw) && nzchar(raw) &&
+      (dir.exists(raw) || (file.exists(raw) && grepl("\\.rds$", raw, ignore.case = TRUE))))) {
+    resolved <- .adaptive_rank_resolve_phase_a_artifact_source(raw)
+    if (.adaptive_rank_phase_a_artifact_object(resolved)) {
+      return(.adaptive_rank_normalize_phase_a_artifacts(resolved))
+    }
+    return(resolved)
+  }
+
+  if (!is.list(raw)) {
+    return(raw)
+  }
+
+  out <- list()
+  nms <- names(raw)
+  if (is.null(nms)) {
+    nms <- rep("", length(raw))
+  }
+
+  for (idx in seq_along(raw)) {
+    entry <- raw[[idx]]
+    entry_name <- as.character(nms[[idx]] %||% "")
+    resolved <- if (inherits(entry, "adaptive_phase_a_manifest") ||
+      .adaptive_rank_phase_a_surface_like(entry) ||
+      (is.list(entry) && is.list(entry$phase_a %||% NULL)) ||
+      (is.character(entry) && length(entry) == 1L && !is.na(entry) && nzchar(entry) &&
+        (dir.exists(entry) || (file.exists(entry) && grepl("\\.rds$", entry, ignore.case = TRUE))))) {
+      .adaptive_rank_resolve_phase_a_artifact_source(entry)
+    } else {
+      entry
+    }
+
+    if (.adaptive_rank_phase_a_artifact_object(resolved) ||
+      !is.list(resolved) ||
+      is.null(names(resolved))) {
+      if (nzchar(entry_name)) {
+        out[[entry_name]] <- resolved
+      } else {
+        out[[length(out) + 1L]] <- resolved
+      }
+      next
+    }
+
+    if (nzchar(entry_name) && !is.null(resolved[[entry_name]])) {
+      out[[entry_name]] <- resolved[[entry_name]]
+      next
+    }
+    if (nzchar(entry_name) && length(resolved) == 1L) {
+      out[[entry_name]] <- resolved[[1L]]
+      next
+    }
+    if (nzchar(entry_name)) {
+      rlang::abort(
+        paste0(
+          "`adaptive_config$phase_a_artifacts[[",
+          idx,
+          "]]` resolved to multiple artifacts. ",
+          "Name the entry with the target set_id or supply a single-set source."
+        )
+      )
+    }
+    for (resolved_name in names(resolved)) {
+      out[[resolved_name]] <- resolved[[resolved_name]]
+    }
+  }
+
+  out
+}
+
+.adaptive_rank_normalize_adaptive_config <- function(adaptive_config) {
+  if (is.null(adaptive_config)) {
+    return(NULL)
+  }
+  if (!is.list(adaptive_config)) {
+    rlang::abort("`adaptive_config` must be NULL or a named list.")
+  }
+  adaptive_config$phase_a_artifacts <- .adaptive_rank_normalize_phase_a_artifacts(
+    adaptive_config$phase_a_artifacts %||% NULL
+  )
+  adaptive_config
+}
+
 .adaptive_rank_validate_linking_config <- function(items, adaptive_config) {
   if (is.null(adaptive_config)) {
     return(invisible(NULL))
@@ -794,7 +1158,12 @@ make_adaptive_judge_llm <- function(
 #'     accepted Phase A config hashes for imported artifacts. Default is
 #'     `character()`.}
 #'   \item{`phase_a_artifacts`}{Named list mapping `set_id` to an imported Phase A
-#'     artifact (list) or a `.rds` path containing one. Default is `list()`.}
+#'     artifact (list) or a `.rds` path containing one. On the wrapper surface,
+#'     this field also accepts a prior `adaptive_rank()` `phase_a` return,
+#'     an `out$phase_a$manifest`, a saved session directory, or a
+#'     `phase_a_artifacts/` directory, and normalizes those inputs back to the
+#'     canonical named-list form before runtime validation. Default is
+#'     `list()`.}
 #'   \item{`phase_a_set_source`}{Optional named character vector mapping `set_id`
 #'     to `"run"` or `"import"` to force the source for specific sets. Default is
 #'     `character()`.}
@@ -870,6 +1239,10 @@ make_adaptive_judge_llm <- function(
 #'     canonical rank column (`rank_link` for linking runs when available,
 #'     otherwise `rank_raw`).}
 #'   \item{logs}{Canonical logs from [adaptive_get_logs()].}
+#'   \item{phase_a}{Canonical wrapper-visible Phase A discovery surface with
+#'     per-set status, `artifact_dir`, `artifact_paths`, and a reusable
+#'     `manifest` that can be fed back into a later linking run via
+#'     `adaptive_config$phase_a_artifacts`.}
 #'   \item{output_file}{Saved output path when `save_outputs = TRUE`, otherwise
 #'     `NULL`.}
 #' }
@@ -949,6 +1322,26 @@ make_adaptive_judge_llm <- function(
 #'   resume = TRUE,
 #'   progress = "refits"
 #' )
+#'
+#' # Later linking from prior wrapper outputs:
+#' # link_out <- adaptive_rank(
+#' #   data = linking_samples,
+#' #   id_col = "ID",
+#' #   text_col = "text",
+#' #   backend = "openai",
+#' #   model = "gpt-5.1",
+#' #   adaptive_config = list(
+#' #     run_mode = "link_one_spoke",
+#' #     hub_id = 1L,
+#' #     phase_a_mode = "import",
+#' #     phase_a_artifacts = list(
+#' #       `1` = hub_run$phase_a$manifest,
+#' #       `2` = spoke_run$phase_a$artifact_dir
+#' #     )
+#' #   ),
+#' #   n_steps = 200,
+#' #   progress = "refits"
+#' # )
 #'
 #' # Anchored-joint is an explicit alternative, not the default:
 #' # adaptive_config = list(
@@ -1038,6 +1431,7 @@ adaptive_rank <- function(
   samples <- .adaptive_rank_read_data(data, id_col = id_col, text_col = text_col)
   items <- samples
   names(items)[names(items) == "ID"] <- "item_id"
+  adaptive_config <- .adaptive_rank_normalize_adaptive_config(adaptive_config)
 
   if (!"text" %in% names(items)) {
     rlang::abort("Input data must include a text column after normalization.")
@@ -1120,6 +1514,10 @@ adaptive_rank <- function(
   )
   run_args <- c(run_args, judge_call_args)
   state <- do.call(adaptive_rank_run_live, run_args)
+  phase_a <- .adaptive_rank_phase_a_surface(
+    state = state,
+    session_dir = state$config$session_dir %||% session_dir
+  )
 
   logs <- adaptive_get_logs(state)
   item_sort_by <- "rank_raw"
@@ -1143,6 +1541,7 @@ adaptive_rank <- function(
     refits = summarize_refits(list(round_log = logs$round_log)),
     items = summarize_items(list(item_log_list = logs$item_log), sort_by = item_sort_by),
     logs = logs,
+    phase_a = phase_a,
     output_file = NULL
   )
 
