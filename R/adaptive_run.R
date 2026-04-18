@@ -3930,9 +3930,9 @@ adaptive_rank_start <- function(items,
                                 seed = 1L,
                                 session_dir = NULL,
                                 persist_item_log = FALSE,
-                                checkpoint_every_steps = NULL,
                                 ...,
-                                adaptive_config = NULL) {
+                                adaptive_config = NULL,
+                                checkpoint_every_steps = NULL) {
   dots <- list(...)
   if (length(dots) > 0L) {
     dot_names <- names(dots)
