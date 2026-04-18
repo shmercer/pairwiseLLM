@@ -1030,6 +1030,11 @@ test_that("adaptive_rank wrapper defaults link_one_spoke import flow to anchored
   expect_true(all(as.character(out$logs$link_stage_log$hub_lock_mode) == "hard_lock"))
   expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))
   expect_true("rank_link" %in% names(out$items))
+
+  printed <- capture.output(print(out$state))
+  expect_true(any(grepl("estimation_mode=anchored_joint", printed, fixed = TRUE)))
+  expect_true(any(grepl("mode=anchored_joint", printed, fixed = TRUE)))
+  expect_false(any(grepl("transform_policy=", printed, fixed = TRUE)))
 })
 
 test_that("adaptive_rank wrapper supports anchored-joint linking activation", {

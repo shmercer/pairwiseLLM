@@ -89,6 +89,41 @@ test_that("invalid-step rows keep committed-only fields as NA", {
   expect_true(is.na(step_row$U0_ij[[1L]]))
 })
 
+test_that("step log keeps orientation, displayed outcome, and stable keys aligned", {
+  state <- adaptive_rank_start(make_test_items(2))
+  judge_pick_item_1 <- function(A, B, state, ...) {
+    list(
+      is_valid = TRUE,
+      Y = as.integer(as.character(A$item_id[[1L]]) == "1"),
+      invalid_reason = NA_character_
+    )
+  }
+
+  withr::local_seed(1)
+  out <- adaptive_rank_run_live(
+    state,
+    judge_pick_item_1,
+    n_steps = 2L,
+    progress = "none"
+  )
+
+  step_log <- adaptive_step_log(out)
+  committed <- step_log[!is.na(step_log$pair_id), , drop = FALSE]
+
+  expect_equal(nrow(committed), 2L)
+  expect_true(all(committed$Y == as.integer(committed$A_id == "1")))
+  expect_true(all(
+    committed$unordered_key ==
+      pairwiseLLM:::make_unordered_key(committed$i_id, committed$j_id)
+  ))
+  expect_true(all(
+    committed$ordered_key ==
+      pairwiseLLM:::make_ordered_key(committed$A_id, committed$B_id)
+  ))
+  expect_identical(length(unique(committed$unordered_key)), 1L)
+  expect_identical(length(unique(committed$ordered_key)), 2L)
+})
+
 test_that("star_override_used follows commit and no-selection semantics", {
   committed_state <- adaptive_rank_start(make_test_items(3))
   judge_ok <- make_deterministic_judge("i_wins")

@@ -470,6 +470,9 @@ runs. It supports:
 or a directory of \code{.txt} files;
 \item model/backend configuration through \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}};
 \item all adaptive runtime controls exposed by \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}};
+\item wrapper-visible \code{phase_a} reuse surfaces (\code{manifest},
+\code{artifact_dir}, and per-set status) for separate-run then later-link
+workflows;
 \item resumability via \code{session_dir} and \code{resume};
 \item optional saving of run outputs to an \code{.rds} artifact.
 }
@@ -496,7 +499,9 @@ defaults, and preserve Phase A artifact gating before Phase B cross-set
 comparisons begin. \code{link_estimation_mode = "anchored_joint"} is the default
 wrapper behavior and resolves to \code{hub_lock_mode = "hard_lock"}. Use
 \code{link_estimation_mode = "transform"} for the transform-based alternative
-Phase B fit.
+Phase B fit. Every wrapper call returns canonical \code{phase_a} outputs that can
+be fed back into a later linking run through
+\code{adaptive_config$phase_a_artifacts}.
 
 Selection semantics:
 pair selection is TrueSkill-driven in one-pair transactional steps.
@@ -603,6 +608,21 @@ link_out <- adaptive_rank(
 )
 
 # Later linking from prior wrapper outputs:
+# hub_run <- adaptive_rank(
+#   data = linking_samples[linking_samples$set_id == 1L, c("ID", "text")],
+#   backend = "openai",
+#   model = "gpt-5.1",
+#   n_steps = 120,
+#   progress = "none"
+# )
+# spoke_run <- adaptive_rank(
+#   data = linking_samples[linking_samples$set_id == 2L, c("ID", "text")],
+#   backend = "openai",
+#   model = "gpt-5.1",
+#   n_steps = 120,
+#   progress = "none"
+# )
+#
 # link_out <- adaptive_rank(
 #   data = linking_samples,
 #   id_col = "ID",
@@ -622,13 +642,13 @@ link_out <- adaptive_rank(
 #   progress = "refits"
 # )
 
-# Anchored-joint is an explicit alternative, not the default:
+# Transform is the explicit opt-in alternative:
 # adaptive_config = list(
 #   run_mode = "link_one_spoke",
 #   hub_id = 1L,
 #   phase_a_mode = "run",
-#   link_estimation_mode = "anchored_joint",
-#   hub_lock_mode = "hard_lock"
+#   link_estimation_mode = "transform",
+#   link_transform_policy = "auto"
 # )
 
 names(link_out$logs)

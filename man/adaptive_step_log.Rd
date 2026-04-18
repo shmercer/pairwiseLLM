@@ -22,9 +22,14 @@ commit status. A step with invalid judge response keeps committed fields
 as \code{NA} and must not update model state. The selected endpoints
 \code{i}/\code{j} are the pre-orientation item indices, while
 \code{A}/\code{B} are the displayed / judged item indices after order
-assignment. The matching \code{*_id} columns, plus
-\code{unordered_key}/\code{ordered_key}, make each attempted step reusable
-outside the live state.
+assignment. \code{Y} is defined relative to displayed order:
+\code{Y = 1} means \code{A} wins and \code{Y = 0} means \code{B} wins.
+For cross-run audit and reuse, prefer the stable \code{*_id} columns plus
+\code{unordered_key}/\code{ordered_key} rather than transient integer item
+positions from the live state. Judge provenance, token counts, and
+\code{raw_response_json} are canonical step-log outputs, with
+\code{raw_response_json} stored as serialized character data rather than a
+list-column.
 
 Core columns:
 \itemize{
