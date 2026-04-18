@@ -1215,6 +1215,9 @@ make_adaptive_judge_llm <- function(
 #'   Default is `NULL`.
 #' @param persist_item_log Logical; write per-refit item logs when `TRUE`.
 #'   Default is `FALSE`.
+#' @param checkpoint_every_steps Optional positive integer checkpoint cadence for
+#'   ordinary live persistence. New sessions default to `100L`; resumed sessions
+#'   reuse the persisted cadence unless overridden.
 #' @param resume Logical; when `TRUE` and `session_dir` contains a valid session,
 #'   resume from disk; otherwise initialize a new state.
 #'   Default is `TRUE`.
@@ -1401,6 +1404,7 @@ adaptive_rank <- function(
     btl_config = NULL,
     session_dir = NULL,
     persist_item_log = FALSE,
+    checkpoint_every_steps = NULL,
     resume = TRUE,
     seed = 1L,
     progress = c("all", "refits", "steps", "none"),
@@ -1492,7 +1496,8 @@ adaptive_rank <- function(
       seed = seed,
       adaptive_config = adaptive_config,
       session_dir = session_dir,
-      persist_item_log = persist_item_log
+      persist_item_log = persist_item_log,
+      checkpoint_every_steps = checkpoint_every_steps
     )
   } else {
     loaded_ids <- as.character(state$item_ids)
@@ -1527,6 +1532,7 @@ adaptive_rank <- function(
     btl_config = btl_config,
     session_dir = session_dir,
     persist_item_log = persist_item_log,
+    checkpoint_every_steps = checkpoint_every_steps,
     progress = progress,
     progress_redraw_every = progress_redraw_every,
     progress_show_events = progress_show_events,

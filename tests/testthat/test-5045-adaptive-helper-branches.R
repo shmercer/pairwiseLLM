@@ -347,6 +347,10 @@ test_that("adaptive_rank_run_live validates inputs", {
     pairwiseLLM::adaptive_rank_run_live(state, judge_invalid, n_steps = 1L, persist_item_log = 1L, progress = "none"),
     "must be TRUE or FALSE"
   )
+  expect_error(
+    pairwiseLLM::adaptive_rank_run_live(state, judge_invalid, n_steps = 1L, checkpoint_every_steps = 0L, progress = "none"),
+    "positive integer"
+  )
 })
 
 test_that("adaptive print and log accessors cover validation and canonicalization branches", {

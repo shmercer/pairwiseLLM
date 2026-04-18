@@ -13,6 +13,7 @@ adaptive_rank_run_live(
   btl_config = NULL,
   session_dir = NULL,
   persist_item_log = NULL,
+  checkpoint_every_steps = NULL,
   progress = c("all", "refits", "steps", "none"),
   progress_redraw_every = 10L,
   progress_show_events = TRUE,
@@ -78,6 +79,10 @@ If \code{NULL}, uses \code{state$config$session_dir}. Default is \code{NULL}.}
 
 \item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.
 If \code{NULL}, uses \code{state$config$persist_item_log}. Default is \code{NULL}.}
+
+\item{checkpoint_every_steps}{Optional positive integer checkpoint cadence for
+ordinary live persistence. If \code{NULL}, uses the persisted state value when
+present, otherwise defaults to \code{100L}.}
 
 \item{progress}{Progress output: \code{"all"}, \code{"refits"}, \code{"steps"}, or \code{"none"}.
 Default is \code{"all"}.}

@@ -517,6 +517,59 @@ test_that("adaptive_rank_run_live covers progress event, persistence writes, and
   expect_gte(tracker3$save_called, 1L)
 })
 
+test_that("adaptive_rank_run_live checkpoints on cadence and at call end", {
+  state <- pairwiseLLM::adaptive_rank_start(make_test_items(4), seed = 1L)
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$config$session_dir <- tempfile("session-cadence-")
+
+  tracker <- new.env(parent = emptyenv())
+  tracker$save_called <- 0L
+
+  out <- testthat::with_mocked_bindings(
+    .adaptive_phase_a_prepare = function(state) state,
+    .adaptive_phase_a_finalize_if_ready = function(state) state,
+    .adaptive_phase_a_gate_or_abort = function(state) invisible(NULL),
+    .adaptive_link_sync_warm_start = function(state) state,
+    .adaptive_clear_stale_global_stop_state = function(state) state,
+    .adaptive_round_activate_if_ready = function(state) state,
+    run_one_step = function(st, judge, ...) {
+      row <- list(
+        step_id = as.integer(nrow(st$step_log) + 1L),
+        timestamp = as.POSIXct("2026-01-01 00:00:00", tz = "UTC"),
+        status = "invalid",
+        candidate_starved = FALSE,
+        round_stage = "anchor_link"
+      )
+      st$step_log <- pairwiseLLM:::append_step_log(st$step_log, row)
+      st
+    },
+    adaptive_progress_step_event = function(step_row, cfg) NULL,
+    maybe_refit_btl = function(state, config, fit_fn) {
+      list(state = state, refit_performed = FALSE, config = config, refit_context = list())
+    },
+    adaptive_progress_update = function(handle, state, cfg) handle,
+    save_adaptive_session = function(state, session_dir, overwrite = TRUE) {
+      tracker$save_called <- tracker$save_called + 1L
+      invisible(state)
+    },
+    .package = "pairwiseLLM",
+    {
+      pairwiseLLM::adaptive_rank_run_live(
+        state = state,
+        judge = make_deterministic_judge("invalid"),
+        n_steps = 3L,
+        checkpoint_every_steps = 2L,
+        progress = "none"
+      )
+    }
+  )
+
+  expect_true(inherits(out, "adaptive_state"))
+  expect_identical(nrow(out$step_log), 3L)
+  expect_identical(tracker$save_called, 2L)
+})
+
 test_that("adaptive round helper early-return branches are covered directly", {
   state <- pairwiseLLM::adaptive_rank_start(make_test_items(3), seed = 1L)
   state$round <- NULL
@@ -573,6 +626,10 @@ test_that("adaptive rank start and warm-start starvation save branch validations
   expect_error(
     pairwiseLLM::adaptive_rank_start(make_test_items(3), seed = 1L, persist_item_log = NA),
     "must be TRUE or FALSE"
+  )
+  expect_error(
+    pairwiseLLM::adaptive_rank_start(make_test_items(3), seed = 1L, checkpoint_every_steps = 0L),
+    "positive integer"
   )
 
   state <- pairwiseLLM::adaptive_rank_start(make_test_items(3), seed = 1L)

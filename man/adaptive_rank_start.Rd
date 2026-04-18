@@ -9,6 +9,7 @@ adaptive_rank_start(
   seed = 1L,
   session_dir = NULL,
   persist_item_log = FALSE,
+  checkpoint_every_steps = NULL,
   ...,
   adaptive_config = NULL
 )
@@ -28,6 +29,9 @@ Default is \code{NULL}.}
 
 \item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.
 Default is \code{FALSE}.}
+
+\item{checkpoint_every_steps}{Optional positive integer checkpoint cadence for
+ordinary live persistence. If \code{NULL}, defaults to \code{100L}.}
 
 \item{...}{Internal/testing only. Supply \code{now_fn} to override the clock used
 for timestamps.}
