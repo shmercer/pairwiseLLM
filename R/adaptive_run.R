@@ -4533,7 +4533,12 @@ adaptive_rank_run_live <- function(state,
       if (!is.null(state$config$session_dir) &&
         isTRUE(state$config$persist_item_log)) {
         paths <- .adaptive_session_paths(state$config$session_dir)
-        .adaptive_write_item_log_files(state$item_log, paths$item_log_dir)
+        .adaptive_write_item_log_files(
+          state$item_log,
+          paths$item_log_dir,
+          overwrite_existing = FALSE,
+          trim_stale = FALSE
+        )
       }
       if (cfg$progress %in% c("all", "refits")) {
         block <- adaptive_progress_refit_block(

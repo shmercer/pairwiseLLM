@@ -296,6 +296,67 @@ test_that("save_adaptive_session overwrite removes stale optional artifacts", {
   expect_false(isTRUE(reloaded$config$persist_item_log))
 })
 
+test_that("save_adaptive_session overwrite preserves existing item-log files", {
+  items <- make_test_items(6)
+  judge <- make_deterministic_judge("i_wins")
+  stub <- make_deterministic_fit_fn(items$item_id)
+
+  state_one_refit <- adaptive_rank_start(items, persist_item_log = TRUE)
+  withr::local_seed(1)
+  state_one_refit <- adaptive_rank_run_live(
+    state_one_refit,
+    judge,
+    n_steps = 2L,
+    fit_fn = stub$fit_fn,
+    btl_config = list(refit_pairs_target = 2L),
+    progress = "none"
+  )
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state_one_refit, session_dir, overwrite = TRUE)
+
+  refit_1_path <- file.path(session_dir, "item_log", "refit_0001.rds")
+  expect_true(file.exists(refit_1_path))
+  refit_1_mtime <- file.info(refit_1_path)$mtime
+
+  Sys.sleep(1.1)
+
+  state_two_refits <- adaptive_rank_start(items, persist_item_log = TRUE)
+  withr::local_seed(1)
+  state_two_refits <- adaptive_rank_run_live(
+    state_two_refits,
+    judge,
+    n_steps = 4L,
+    fit_fn = stub$fit_fn,
+    btl_config = list(refit_pairs_target = 2L),
+    progress = "none"
+  )
+
+  save_adaptive_session(state_two_refits, session_dir, overwrite = TRUE)
+
+  expect_true(file.exists(refit_1_path))
+  expect_true(file.exists(file.path(session_dir, "item_log", "refit_0002.rds")))
+  expect_identical(file.info(refit_1_path)$mtime, refit_1_mtime)
+})
+
+test_that("save_adaptive_session overwrite preserves existing phase-a artifact files", {
+  state <- make_anchored_joint_resume_state()
+  session_dir <- withr::local_tempdir()
+
+  save_adaptive_session(state, session_dir, overwrite = TRUE)
+
+  artifact_path <- file.path(session_dir, "phase_a_artifacts", "set_0001.rds")
+  expect_true(file.exists(artifact_path))
+  artifact_mtime <- file.info(artifact_path)$mtime
+
+  Sys.sleep(1.1)
+
+  save_adaptive_session(state, session_dir, overwrite = TRUE)
+
+  expect_true(file.exists(artifact_path))
+  expect_identical(file.info(artifact_path)$mtime, artifact_mtime)
+})
+
 test_that("load_adaptive_session rejects step rows with partial item indices", {
   items <- make_test_items(4)
   state <- adaptive_rank_start(items)

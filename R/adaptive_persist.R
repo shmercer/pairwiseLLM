@@ -998,14 +998,34 @@ read_log <- function(path) {
   )
 }
 
-.adaptive_write_item_log_files <- function(item_log_list, item_log_dir) {
+.adaptive_write_item_log_files <- function(item_log_list,
+                                          item_log_dir,
+                                          overwrite_existing = TRUE,
+                                          trim_stale = FALSE) {
   if (!is.list(item_log_list) || length(item_log_list) == 0L) {
+    if (isTRUE(trim_stale) && dir.exists(item_log_dir)) {
+      unlink(item_log_dir, recursive = TRUE, force = TRUE)
+    }
     return(invisible(NULL))
   }
   dir.create(item_log_dir, recursive = TRUE, showWarnings = FALSE)
   refit_ids <- seq_along(item_log_list)
   paths <- .adaptive_item_log_paths(item_log_dir, refit_ids)
+  if (isTRUE(trim_stale) && dir.exists(item_log_dir)) {
+    existing_paths <- list.files(
+      item_log_dir,
+      pattern = "^refit_\\d+\\.rds$",
+      full.names = TRUE
+    )
+    stale_paths <- setdiff(existing_paths, unname(paths))
+    if (length(stale_paths) > 0L) {
+      unlink(stale_paths, force = TRUE)
+    }
+  }
   for (idx in seq_along(item_log_list)) {
+    if (!isTRUE(overwrite_existing) && file.exists(paths[[idx]])) {
+      next
+    }
     write_log(item_log_list[[idx]], paths[[idx]])
   }
   invisible(NULL)
@@ -1134,6 +1154,7 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
 
   dir.create(session_dir, recursive = TRUE, showWarnings = FALSE)
   paths <- .adaptive_session_paths(session_dir)
+  phase_a_artifacts <- state$linking$phase_a$artifacts %||% list()
 
   if (!isTRUE(overwrite)) {
     .adaptive_abort_if_exists(c(
@@ -1150,10 +1171,11 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
     if (is.null(state$btl_fit) && file.exists(paths$btl_fit)) {
       file.remove(paths$btl_fit)
     }
-    if (dir.exists(paths$item_log_dir)) {
+    if (!isTRUE(state$config$persist_item_log) && dir.exists(paths$item_log_dir)) {
       unlink(paths$item_log_dir, recursive = TRUE, force = TRUE)
     }
-    if (dir.exists(paths$phase_a_artifact_dir)) {
+    if ((!is.list(phase_a_artifacts) || length(phase_a_artifacts) < 1L) &&
+      dir.exists(paths$phase_a_artifact_dir)) {
       unlink(paths$phase_a_artifact_dir, recursive = TRUE, force = TRUE)
     }
   }
@@ -1182,10 +1204,19 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
   }
 
   if (isTRUE(state$config$persist_item_log)) {
-    .adaptive_write_item_log_files(state$item_log, paths$item_log_dir)
+    .adaptive_write_item_log_files(
+      state$item_log,
+      paths$item_log_dir,
+      overwrite_existing = !isTRUE(overwrite),
+      trim_stale = isTRUE(overwrite)
+    )
   }
-  phase_a_artifacts <- state$linking$phase_a$artifacts %||% list()
-  .adaptive_write_phase_a_artifacts(phase_a_artifacts, paths$phase_a_artifact_dir)
+  .adaptive_write_phase_a_artifacts(
+    phase_a_artifacts,
+    paths$phase_a_artifact_dir,
+    overwrite_existing = !isTRUE(overwrite),
+    trim_stale = isTRUE(overwrite)
+  )
 
   invisible(session_dir)
 }

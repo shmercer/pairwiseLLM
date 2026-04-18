@@ -1797,11 +1797,18 @@
   paste0("set_", formatC(as.integer(set_id), width = 4, flag = "0"), ".rds")
 }
 
-.adaptive_write_phase_a_artifacts <- function(artifacts, artifact_dir) {
+.adaptive_write_phase_a_artifacts <- function(artifacts,
+                                             artifact_dir,
+                                             overwrite_existing = TRUE,
+                                             trim_stale = FALSE) {
   if (is.null(artifacts) || !is.list(artifacts) || length(artifacts) == 0L) {
+    if (isTRUE(trim_stale) && dir.exists(artifact_dir)) {
+      unlink(artifact_dir, recursive = TRUE, force = TRUE)
+    }
     return(invisible(NULL))
   }
   dir.create(artifact_dir, recursive = TRUE, showWarnings = FALSE)
+  expected_paths <- character(0)
 
   for (name in names(artifacts)) {
     art <- artifacts[[name]]
@@ -1810,7 +1817,23 @@
       next
     }
     path <- file.path(artifact_dir, .adaptive_phase_a_artifact_filename(set_id))
+    expected_paths <- c(expected_paths, path)
+    if (!isTRUE(overwrite_existing) && file.exists(path)) {
+      next
+    }
     write_log(art, path)
+  }
+
+  if (isTRUE(trim_stale) && dir.exists(artifact_dir)) {
+    existing_paths <- list.files(
+      artifact_dir,
+      pattern = "^set_\\d+\\.rds$",
+      full.names = TRUE
+    )
+    stale_paths <- setdiff(existing_paths, unique(expected_paths))
+    if (length(stale_paths) > 0L) {
+      unlink(stale_paths, force = TRUE)
+    }
   }
 
   invisible(NULL)
