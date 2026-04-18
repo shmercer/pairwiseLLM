@@ -7,7 +7,12 @@ make_probe_resume_state <- function() {
   state <- adaptive_rank_start(
     items,
     seed = 61L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$warm_start_done <- TRUE
   state$linking$phase_a <- list(
@@ -184,6 +189,67 @@ test_that("save_adaptive_session and load_adaptive_session round-trip adaptive a
     load_adaptive_session(session_dir),
     "missing required artifacts"
   )
+})
+
+test_that("save/load preserves tasklist 01 step_log audit fields exactly", {
+  items <- make_test_items(3)
+  state <- adaptive_rank_start(items)
+  judge <- function(A, B, state, ...) {
+    list(
+      is_valid = TRUE,
+      Y = 1L,
+      backend = "openai",
+      model = "gpt-5.1",
+      endpoint = "responses",
+      status_code = 200L,
+      error_message = NA_character_,
+      custom_id = "persist-custom",
+      prompt_tokens = 13,
+      completion_tokens = 5,
+      total_tokens = 18,
+      raw_response = list(ok = TRUE, picked = as.character(A$item_id[[1L]]))
+    )
+  }
+
+  withr::local_seed(1)
+  state <- adaptive_rank_run_live(state, judge, n_steps = 1L, progress = "none")
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  loaded <- load_adaptive_session(session_dir)
+
+  cols <- c(
+    "i_id", "j_id", "A_id", "B_id", "unordered_key", "ordered_key",
+    "judge_backend", "judge_model", "judge_endpoint", "judge_valid",
+    "judge_invalid_reason", "llm_status_code", "llm_error_message",
+    "llm_custom_id", "prompt_tokens", "completion_tokens", "total_tokens",
+    "raw_response_json"
+  )
+  expect_identical(loaded$step_log[cols], state$step_log[cols])
+})
+
+test_that("load_adaptive_session backfills tasklist 01 step_log audit fields", {
+  state <- adaptive_rank_start(make_test_items(3), seed = 2L)
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir, overwrite = TRUE)
+
+  step_path <- file.path(session_dir, "step_log.rds")
+  step_log <- readRDS(step_path)
+  drop_cols <- c(
+    "i_id", "j_id", "A_id", "B_id", "unordered_key", "ordered_key",
+    "judge_backend", "judge_model", "judge_endpoint", "judge_valid",
+    "judge_invalid_reason", "llm_status_code", "llm_error_message",
+    "llm_custom_id", "prompt_tokens", "completion_tokens", "total_tokens",
+    "raw_response_json"
+  )
+  step_log <- step_log[, setdiff(names(step_log), drop_cols), drop = FALSE]
+  saveRDS(step_log, step_path)
+
+  expect_error(validate_session_dir(session_dir), "missing required columns")
+  loaded <- load_adaptive_session(session_dir)
+  expect_true(all(drop_cols %in% names(loaded$step_log)))
+  expect_true(all(vapply(drop_cols, function(col) all(is.na(loaded$step_log[[col]])), logical(1L))))
+  expect_true(is.character(loaded$step_log$raw_response_json))
 })
 
 test_that("load_adaptive_session rejects malformed schema metadata", {
@@ -816,6 +882,8 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock",
       link_transform_policy = "auto"
     )
   )
@@ -862,6 +930,8 @@ test_that("load_adaptive_session normalizes legacy controller freeze fields into
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock",
       link_transform_policy = "auto"
     )
   )
@@ -947,6 +1017,77 @@ test_that("load_adaptive_session normalizes legacy link_stage_log transform colu
   expect_identical(as.character(restored$link_stage_log$link_transform_state[[1L]]), "shift_only")
 })
 
+test_that("load_adaptive_session backfills missing legacy controller mode fields to transform semantics", {
+  state <- make_probe_resume_state()
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  state_path <- file.path(session_dir, "state.rds")
+  persisted_state <- readRDS(state_path)
+  persisted_state$controller$link_estimation_mode <- NULL
+  persisted_state$controller$hub_lock_mode <- NULL
+  saveRDS(persisted_state, state_path)
+
+  link_path <- file.path(session_dir, "link_stage_log.rds")
+  legacy_link_stage <- readRDS(link_path)
+  legacy_link_stage$link_estimation_mode <- NULL
+  legacy_link_stage$hub_lock_mode <- NULL
+  saveRDS(legacy_link_stage, link_path)
+
+  restored <- load_adaptive_session(session_dir)
+
+  expect_identical(restored$controller$link_estimation_mode, "transform")
+  expect_identical(restored$controller$hub_lock_mode, "soft_lock")
+  expect_identical(as.character(restored$link_stage_log$link_estimation_mode[[1L]]), "transform")
+  expect_identical(as.character(restored$link_stage_log$hub_lock_mode[[1L]]), "soft_lock")
+})
+
+test_that("save/load preserves legacy broad-surface Phase A artifact reuse without manual hash allowlists", {
+  state <- make_anchored_joint_resume_state()
+  artifacts <- state$linking$phase_a$artifacts
+
+  legacyize <- function(artifact) {
+    legacy_surface <- list(
+      set_id = as.integer(artifact$set_id %||% NA_integer_),
+      judge_param_mode = as.character(artifact$judge_param_mode %||% "global_shared"),
+      model_variant = as.character(artifact$fit_model_id %||% "btl_e_b"),
+      link_refit_mode = "shift_only",
+      shift_only_theta_treatment = "fixed_eap_plugin_var",
+      link_transform_policy = "auto",
+      hub_lock_mode = "soft_lock",
+      hub_lock_kappa = 0.75,
+      cross_set_utility = "linking_d_optimal"
+    )
+    artifact$fit_config_surface <- legacy_surface
+    artifact$fit_config_hash <- pairwiseLLM:::.adaptive_phase_a_hash_object(legacy_surface)
+    artifact
+  }
+
+  state$linking$phase_a$artifacts <- lapply(artifacts, legacyize)
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir, overwrite = TRUE)
+
+  restored <- load_adaptive_session(session_dir)
+  restored$btl_fit <- NULL
+  restored <- .adaptive_apply_controller_config(
+    restored,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      link_estimation_mode = "anchored_joint",
+      hub_lock_mode = "hard_lock",
+      phase_a_artifacts = list()
+    )
+  )
+
+  expect_no_error(
+    restored <- .adaptive_phase_a_prepare(restored)
+  )
+  status <- tibble::as_tibble(restored$linking$phase_a$set_status)
+  expect_true(all(status$status == "ready"))
+})
+
 test_that("save/load preserves free hub lock across controller and link_stage_log", {
   state <- make_probe_resume_state()
   state$controller$link_refit_mode <- "joint_refit"
@@ -973,7 +1114,12 @@ test_that("save/load preserves feasibility and canonical stop-threshold fields i
   state <- adaptive_rank_start(
     items,
     seed = 41L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
     state$link_stage_log,
@@ -1063,7 +1209,12 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
   state <- adaptive_rank_start(
     items,
     seed = 52L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock"
+    )
   )
   state$warm_start_done <- TRUE
   state$linking$phase_a <- list(
@@ -1164,6 +1315,8 @@ test_that("save/load preserves probe acceleration controller fields and canonica
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock",
       probe_acceleration_mode = "active_floor_plus_sole_blocker",
       probe_active_floor_enabled = TRUE,
       probe_sole_blocker_acceleration_enabled = TRUE,

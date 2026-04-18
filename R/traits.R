@@ -66,7 +66,7 @@ conventions are.",
     organization =
 "How clearly the writing is organized, including logical sequencing of
 ideas and effective use of transitions.",
-    IRRC = 
+    IRRC =
 "How well a piece of writing meets expectations across four traits: 
 Prompt Task (clearly addressing all parts of the topic, demonstrating 
 an understanding of the topic and purpose), Development of Explanation 

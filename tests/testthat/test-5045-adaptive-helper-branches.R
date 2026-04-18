@@ -919,6 +919,7 @@ test_that("adaptive state and trueskill validators cover additional edge branche
       list(
         run_mode = "link_multi_spoke",
         multi_spoke_mode = "concurrent",
+        link_estimation_mode = "transform",
         link_refit_mode = "joint_refit",
         hub_lock_mode = "free"
       ),

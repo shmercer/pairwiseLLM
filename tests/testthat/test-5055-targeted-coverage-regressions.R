@@ -419,8 +419,11 @@ test_that("phase A validators and anchored-joint guards cover uncovered error br
     "requires finite fixed judge parameters"
   )
 
+  state_non_aj <- make_covr_phase_a_ready_state_with_evidence()
+  state_non_aj$controller$link_estimation_mode <- "transform"
+  state_non_aj$controller$hub_lock_mode <- "soft_lock"
   expect_error(
-    .adaptive_anchored_joint_artifact_copy_init(make_covr_phase_a_ready_state_with_evidence(), spoke_id = 2L),
+    .adaptive_anchored_joint_artifact_copy_init(state_non_aj, spoke_id = 2L),
     "requires `link_estimation_mode = anchored_joint`"
   )
   state_aj_missing <- state_aj
@@ -544,6 +547,8 @@ test_that("phase A validators and anchored-joint guards cover uncovered error br
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock",
       phase_a_mode = "run",
       phase_a_required_reliability_min = 0
     )

@@ -448,6 +448,7 @@ test_that("validate_state enforces linking identifiers and mode guards", {
 
   bad_concurrent <- state
   bad_concurrent$controller$multi_spoke_mode <- "concurrent"
+  bad_concurrent$controller$link_estimation_mode <- "transform"
   bad_concurrent$linking$run_mode <- "link_multi_spoke"
   bad_concurrent$controller$link_refit_mode <- "joint_refit"
   bad_concurrent$controller$hub_lock_mode <- "free"
@@ -514,6 +515,7 @@ test_that("controller config accepts free only for single-spoke transform joint 
       adaptive_config = list(
         run_mode = "link_one_spoke",
         hub_id = 1L,
+        link_estimation_mode = "transform",
         link_refit_mode = "joint_refit",
         hub_lock_mode = "free"
       ),
@@ -527,6 +529,7 @@ test_that("controller config accepts free only for single-spoke transform joint 
       adaptive_config = list(
         run_mode = "link_one_spoke",
         hub_id = 1L,
+        link_estimation_mode = "transform",
         hub_lock_mode = "free"
       ),
       n_items = 4L,
@@ -541,6 +544,7 @@ test_that("controller config accepts free only for single-spoke transform joint 
         run_mode = "link_multi_spoke",
         hub_id = 1L,
         multi_spoke_mode = "independent",
+        link_estimation_mode = "transform",
         link_refit_mode = "joint_refit",
         hub_lock_mode = "free"
       ),

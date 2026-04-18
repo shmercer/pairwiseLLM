@@ -8,10 +8,28 @@ schema_step_log <- c(
   pair_id = "integer",
   i = "integer",
   j = "integer",
+  i_id = "character",
+  j_id = "character",
   A = "integer",
   B = "integer",
+  A_id = "character",
+  B_id = "character",
+  unordered_key = "character",
+  ordered_key = "character",
   Y = "integer",
   status = "character",
+  judge_backend = "character",
+  judge_model = "character",
+  judge_endpoint = "character",
+  judge_valid = "logical",
+  judge_invalid_reason = "character",
+  llm_status_code = "integer",
+  llm_error_message = "character",
+  llm_custom_id = "character",
+  prompt_tokens = "double",
+  completion_tokens = "double",
+  total_tokens = "double",
+  raw_response_json = "character",
   round_id = "integer",
   round_stage = "character",
   pair_type = "character",
@@ -482,6 +500,14 @@ schema_item_step_log <- c(
   }
 
   mode <- as.character(out$link_estimation_mode %||% rep_len(NA_character_, nrow(out)))
+  if ("hub_lock_mode" %in% names(schema)) {
+    if (!"hub_lock_mode" %in% names(out)) {
+      out$hub_lock_mode <- rep_len(NA_character_, nrow(out))
+    }
+    missing_lock <- is.na(out$hub_lock_mode) | as.character(out$hub_lock_mode) == ""
+    out$hub_lock_mode[missing_lock & mode == "transform"] <- "soft_lock"
+    out$hub_lock_mode[missing_lock & mode == "anchored_joint"] <- "hard_lock"
+  }
   anchored_idx <- !is.na(mode) & mode == "anchored_joint"
   if (!any(anchored_idx)) {
     return(out)

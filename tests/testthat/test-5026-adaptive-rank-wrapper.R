@@ -23,6 +23,11 @@ make_linking_samples_df <- function() {
   )
 }
 
+make_linking_subset_df <- function(set_id) {
+  samples <- make_linking_samples_df()
+  samples[samples$set_id == as.integer(set_id), , drop = FALSE]
+}
+
 make_wrapper_import_artifacts <- function(items) {
   state <- pairwiseLLM::adaptive_rank_start(items = items, seed = 91L)
   ids <- as.character(state$item_ids)
@@ -51,6 +56,7 @@ test_that("make_adaptive_judge_llm forwards model options and returns valid cont
     backend = "openai",
     model = "gpt-5.1",
     endpoint = "responses",
+    include_raw = TRUE,
     judge_args = list(service_tier = "flex")
   )
 
@@ -60,13 +66,33 @@ test_that("make_adaptive_judge_llm forwards model options and returns valid cont
   testthat::with_mocked_bindings(
     llm_compare_pair = function(...) {
       calls <<- append(calls, list(list(...)))
-      tibble::tibble(better_id = "S02")
+      tibble::tibble(
+        better_id = "S02",
+        model = "gpt-5.1-2026-01-01",
+        status_code = 200L,
+        error_message = NA_character_,
+        custom_id = "wrapped-custom",
+        prompt_tokens = 21,
+        completion_tokens = 4,
+        total_tokens = 25,
+        raw_response = list(list(ok = TRUE, winner = "S02"))
+      )
     },
     {
       out <- judge(A, B, state = list(), reasoning = "low")
       expect_true(isTRUE(out$is_valid))
       expect_identical(out$Y, 0L)
       expect_true(is.na(out$invalid_reason))
+      expect_identical(out$judge_backend, "openai")
+      expect_identical(out$judge_model, "gpt-5.1-2026-01-01")
+      expect_identical(out$judge_endpoint, "responses")
+      expect_identical(out$llm_status_code, 200L)
+      expect_true(is.na(out$llm_error_message))
+      expect_identical(out$llm_custom_id, "wrapped-custom")
+      expect_identical(out$prompt_tokens, 21)
+      expect_identical(out$completion_tokens, 4)
+      expect_identical(out$total_tokens, 25)
+      expect_identical(out$raw_response_json, "{\"ok\":true,\"winner\":\"S02\"}")
     },
     .env = asNamespace("pairwiseLLM")
   )
@@ -115,18 +141,40 @@ test_that("make_adaptive_judge_llm forwards vertex backend options", {
 test_that("make_adaptive_judge_llm returns invalid when response cannot be mapped", {
   judge <- pairwiseLLM::make_adaptive_judge_llm(
     backend = "openai",
-    model = "gpt-5.1"
+    model = "gpt-5.1",
+    include_raw = TRUE
   )
 
   A <- tibble::tibble(item_id = "S01", text = "A")
   B <- tibble::tibble(item_id = "S02", text = "B")
 
   testthat::with_mocked_bindings(
-    llm_compare_pair = function(...) tibble::tibble(better_id = NA_character_),
+    llm_compare_pair = function(...) {
+      tibble::tibble(
+        better_id = NA_character_,
+        status_code = 422L,
+        error_message = "missing winner",
+        custom_id = "bad-custom",
+        prompt_tokens = 12,
+        completion_tokens = 0,
+        total_tokens = 12,
+        raw_response = list(list(error = "missing winner"))
+      )
+    },
     {
       out <- judge(A, B, state = list())
       expect_false(isTRUE(out$is_valid))
       expect_identical(out$invalid_reason, "invalid_response")
+      expect_identical(out$judge_backend, "openai")
+      expect_identical(out$judge_model, "gpt-5.1")
+      expect_identical(out$judge_endpoint, "chat.completions")
+      expect_identical(out$llm_status_code, 422L)
+      expect_identical(out$llm_error_message, "missing winner")
+      expect_identical(out$llm_custom_id, "bad-custom")
+      expect_identical(out$prompt_tokens, 12)
+      expect_identical(out$completion_tokens, 0)
+      expect_identical(out$total_tokens, 12)
+      expect_identical(out$raw_response_json, "{\"error\":\"missing winner\"}")
     },
     .env = asNamespace("pairwiseLLM")
   )
@@ -246,6 +294,45 @@ test_that("adaptive_rank supports file inputs and resumability", {
   )
 
   expect_equal(nrow(second$state$step_log), nrow(first$state$step_log) + 1L)
+})
+
+test_that("adaptive_rank exposes canonical phase_a outputs for wrapper-driven within-set runs", {
+  samples <- make_linking_subset_df(1L)
+  fit_override <- make_deterministic_fit_fn(ids = as.character(samples$ID))
+  session_dir <- withr::local_tempdir()
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  out <- pairwiseLLM::adaptive_rank(
+    data = samples,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_override$fit_fn,
+    n_steps = 6L,
+    session_dir = session_dir,
+    resume = FALSE,
+    btl_config = list(refit_pairs_target = 1L),
+    progress = "none",
+    seed = 101L
+  )
+
+  expect_true(all(c(
+    "session_dir", "artifact_dir", "artifact_paths", "set_status", "manifest"
+  ) %in% names(out$phase_a)))
+  expect_identical(out$phase_a$session_dir, session_dir)
+  expect_identical(out$phase_a$artifact_dir, file.path(session_dir, "phase_a_artifacts"))
+  expect_true(inherits(out$phase_a$manifest, "adaptive_phase_a_manifest"))
+  expect_true("1" %in% names(out$phase_a$manifest))
+  expect_true(file.exists(out$phase_a$artifact_paths[["1"]]))
+
+  status <- tibble::as_tibble(out$phase_a$set_status)
+  expect_equal(status$set_id, 1L)
+  expect_identical(status$source, "run")
+  expect_true(status$status %in% c("ready", "pending_finalization"))
+  expect_identical(as.integer(out$phase_a$manifest[["1"]]$set_id), 1L)
 })
 
 test_that("adaptive_rank aborts loudly when saved artifacts cannot be resumed", {
@@ -411,6 +498,169 @@ test_that("adaptive_rank summary uses persisted meta stop state, not stale round
   expect_true(is.na(out$summary$last_stop_reason[[1L]]))
   expect_true(isTRUE(out$logs$round_log$stop_decision[[1L]]))
   expect_identical(as.character(out$logs$round_log$stop_reason[[1L]]), "btl_converged")
+})
+
+test_that("adaptive_rank later linking consumes prior wrapper phase_a surfaces", {
+  samples <- make_linking_samples_df()
+  two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
+  hub_samples <- make_linking_subset_df(1L)
+  spoke_samples <- make_linking_subset_df(2L)
+  fit_hub <- make_deterministic_fit_fn(ids = as.character(hub_samples$ID))
+  fit_spoke <- make_deterministic_fit_fn(ids = as.character(spoke_samples$ID))
+  fit_link <- make_deterministic_fit_fn(ids = as.character(two_set$ID))
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  hub_run <- pairwiseLLM::adaptive_rank(
+    data = hub_samples,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_hub$fit_fn,
+    n_steps = 6L,
+    btl_config = list(refit_pairs_target = 1L),
+    progress = "none",
+    seed = 111L
+  )
+  spoke_run <- pairwiseLLM::adaptive_rank(
+    data = spoke_samples,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_spoke$fit_fn,
+    n_steps = 6L,
+    btl_config = list(refit_pairs_target = 1L),
+    progress = "none",
+    seed = 112L
+  )
+
+  link_out <- pairwiseLLM::adaptive_rank(
+    data = two_set,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_link$fit_fn,
+    n_steps = 12L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = list(
+        `1` = hub_run$phase_a,
+        `2` = spoke_run$phase_a$manifest
+      )
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
+    progress = "none",
+    seed = 113L
+  )
+
+  cross <- link_out$logs$step_log[
+    link_out$logs$step_log$is_cross_set %in% TRUE &
+      !is.na(link_out$logs$step_log$pair_id),
+    ,
+    drop = FALSE
+  ]
+  expect_true(nrow(cross) > 0L)
+  expect_true(nrow(link_out$logs$link_stage_log) >= 1L)
+  status <- tibble::as_tibble(link_out$phase_a$set_status)
+  expect_true(all(status$source == "import"))
+  expect_true(all(status$status == "ready"))
+})
+
+test_that("adaptive_rank reuses session_dir and artifact_dir phase_a sources after resume", {
+  samples <- make_linking_samples_df()
+  two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
+  hub_samples <- make_linking_subset_df(1L)
+  spoke_samples <- make_linking_subset_df(2L)
+  hub_session <- file.path(withr::local_tempdir(), "hub")
+  spoke_session <- file.path(withr::local_tempdir(), "spoke")
+  fit_hub <- make_deterministic_fit_fn(ids = as.character(hub_samples$ID))
+  fit_spoke <- make_deterministic_fit_fn(ids = as.character(spoke_samples$ID))
+  fit_link <- make_deterministic_fit_fn(ids = as.character(two_set$ID))
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  first_hub <- pairwiseLLM::adaptive_rank(
+    data = hub_samples,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_hub$fit_fn,
+    n_steps = 6L,
+    session_dir = hub_session,
+    resume = FALSE,
+    btl_config = list(refit_pairs_target = 1L),
+    progress = "none",
+    seed = 121L
+  )
+  first_spoke <- pairwiseLLM::adaptive_rank(
+    data = spoke_samples,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_spoke$fit_fn,
+    n_steps = 6L,
+    session_dir = spoke_session,
+    resume = FALSE,
+    btl_config = list(refit_pairs_target = 1L),
+    progress = "none",
+    seed = 122L
+  )
+  resumed_hub <- pairwiseLLM::adaptive_rank(
+    data = hub_samples,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_hub$fit_fn,
+    n_steps = 1L,
+    session_dir = hub_session,
+    resume = TRUE,
+    btl_config = list(refit_pairs_target = 1L),
+    progress = "none"
+  )
+
+  expect_identical(resumed_hub$phase_a$artifact_dir, first_hub$phase_a$artifact_dir)
+  expect_identical(names(resumed_hub$phase_a$manifest), names(first_hub$phase_a$manifest))
+  expect_identical(
+    names(resumed_hub$phase_a$artifact_paths),
+    names(first_hub$phase_a$artifact_paths)
+  )
+
+  link_out <- pairwiseLLM::adaptive_rank(
+    data = two_set,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_link$fit_fn,
+    n_steps = 12L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = list(
+        `1` = hub_session,
+        `2` = first_spoke$phase_a$artifact_dir
+      )
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
+    progress = "none",
+    seed = 123L
+  )
+
+  cross <- link_out$logs$step_log[
+    link_out$logs$step_log$is_cross_set %in% TRUE &
+      !is.na(link_out$logs$step_log$pair_id),
+    ,
+    drop = FALSE
+  ]
+  expect_true(nrow(cross) > 0L)
+  expect_true(nrow(link_out$logs$link_stage_log) >= 1L)
+  expect_true(file.exists(first_spoke$phase_a$artifact_paths[["2"]]))
 })
 
 test_that("adaptive_rank builds internal llm judge and forwards judge_call_args", {
@@ -736,7 +986,7 @@ test_that("adaptive_rank logs include documented adaptive step and refit fields"
   expect_true(all(round_cols %in% names(out$logs$round_log)))
 })
 
-test_that("adaptive_rank wrapper supports link_one_spoke import flow", {
+test_that("adaptive_rank wrapper defaults link_one_spoke import flow to anchored-joint", {
   samples <- make_linking_samples_df()
   two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
   items <- dplyr::rename(samples, item_id = ID)
@@ -773,11 +1023,18 @@ test_that("adaptive_rank wrapper supports link_one_spoke import flow", {
   expect_true(nrow(cross) > 0L)
   expect_true(all(cross$link_spoke_id == 2L))
   expect_true(nrow(out$logs$link_stage_log) >= 1L)
-  expect_true(all(as.character(out$logs$link_stage_log$link_estimation_mode) == "transform"))
-  expect_true(all(c("link_transform_policy", "link_transform_state", "reliability_link_global") %in%
-    names(out$logs$link_stage_log)))
+  expect_true(all(as.character(out$logs$link_stage_log$link_estimation_mode) == "anchored_joint"))
+  expect_true(all(is.na(out$logs$link_stage_log$link_transform_policy)))
+  expect_true(all(is.na(out$logs$link_stage_log$link_transform_state)))
+  expect_true(all(is.na(out$logs$link_stage_log$link_refit_mode)))
+  expect_true(all(as.character(out$logs$link_stage_log$hub_lock_mode) == "hard_lock"))
   expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))
   expect_true("rank_link" %in% names(out$items))
+
+  printed <- capture.output(print(out$state))
+  expect_true(any(grepl("estimation_mode=anchored_joint", printed, fixed = TRUE)))
+  expect_true(any(grepl("mode=anchored_joint", printed, fixed = TRUE)))
+  expect_false(any(grepl("transform_policy=", printed, fixed = TRUE)))
 })
 
 test_that("adaptive_rank wrapper supports anchored-joint linking activation", {
@@ -803,9 +1060,6 @@ test_that("adaptive_rank wrapper supports anchored-joint linking activation", {
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts[c("1", "2")],
-      phase_a_compatible_config_hashes = vapply(artifacts[c("1", "2")], function(x) {
-        as.character(x$fit_config_hash)
-      }, character(1L)),
       link_estimation_mode = "anchored_joint",
       hub_lock_mode = "hard_lock"
     ),
@@ -844,6 +1098,7 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       multi_spoke_mode = "concurrent",
       hub_lock_mode = "soft_lock",
       min_cross_set_pairs_per_spoke_per_refit = 1L,
@@ -864,6 +1119,7 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
   expect_true(all(sort(unique(cross$link_spoke_id)) == c(2L, 3L)))
   expect_true(all(xor(cross$set_i == 1L, cross$set_j == 1L)))
   expect_true(nrow(out$logs$link_stage_log) >= 2L)
+  expect_true(all(as.character(out$logs$link_stage_log$link_estimation_mode) == "transform"))
   expect_true(all(c("link_transform_policy", "link_transform_state", "link_epoch_id") %in%
     names(out$logs$link_stage_log)))
   expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))

@@ -132,7 +132,7 @@ multiple spokes). Default is \code{"within_set"}. Linking modes require
 multi-set inputs with \code{set_id} and \code{global_item_id} in \code{data}.}
 \item{\code{hub_id}}{Hub \code{set_id} for linking modes. Default is \code{1L}.}
 \item{\code{link_estimation_mode}}{Phase B estimation family. Choices are
-\code{"transform"} (default) and \code{"anchored_joint"}. \code{"transform"} preserves
+\code{"transform"} and \code{"anchored_joint"} (default). \code{"transform"} preserves
 the existing shift/shift-scale linking workflow. \code{"anchored_joint"} uses
 a hub-fixed, spoke-free full-evidence Phase B fit, requires
 \code{hub_lock_mode = "hard_lock"}, and does not accept transform-only config
@@ -170,7 +170,7 @@ would begin with this set to \code{TRUE}. Default is \code{FALSE}.}
 \code{run_mode = "link_one_spoke"} with \code{link_estimation_mode = "transform"}
 and \code{link_refit_mode = "joint_refit"}. In
 \code{link_estimation_mode = "anchored_joint"}, the only supported value is
-\code{"hard_lock"}. Default is \code{"soft_lock"}.}
+\code{"hard_lock"}. Default is \code{"hard_lock"}.}
 \item{\code{hub_lock_kappa}}{Only used when \code{hub_lock_mode = "soft_lock"}.
 Regularization strength in \verb{[0,1]}. Default is \code{0.75}.}
 \item{\code{anchored_joint_spoke_prior_scale}}{Scale multiplier for anchored-
@@ -355,7 +355,12 @@ identifiers for imported Phase A artifacts (e.g., \code{"btl_e_b"}). Default is
 accepted Phase A config hashes for imported artifacts. Default is
 \code{character()}.}
 \item{\code{phase_a_artifacts}}{Named list mapping \code{set_id} to an imported Phase A
-artifact (list) or a \code{.rds} path containing one. Default is \code{list()}.}
+artifact (list) or a \code{.rds} path containing one. On the wrapper surface,
+this field also accepts a prior \code{adaptive_rank()} \code{phase_a} return,
+an \code{out$phase_a$manifest}, a saved session directory, or a
+\verb{phase_a_artifacts/} directory, and normalizes those inputs back to the
+canonical named-list form before runtime validation. Default is
+\code{list()}.}
 \item{\code{phase_a_set_source}}{Optional named character vector mapping \code{set_id}
 to \code{"run"} or \code{"import"} to force the source for specific sets. Default is
 \code{character()}.}
@@ -444,6 +449,10 @@ A list with:
 canonical rank column (\code{rank_link} for linking runs when available,
 otherwise \code{rank_raw}).}
 \item{logs}{Canonical logs from \code{\link[=adaptive_get_logs]{adaptive_get_logs()}}.}
+\item{phase_a}{Canonical wrapper-visible Phase A discovery surface with
+per-set status, \code{artifact_dir}, \code{artifact_paths}, and a reusable
+\code{manifest} that can be fed back into a later linking run via
+\code{adaptive_config$phase_a_artifacts}.}
 \item{output_file}{Saved output path when \code{save_outputs = TRUE}, otherwise
 \code{NULL}.}
 }
@@ -461,6 +470,9 @@ runs. It supports:
 or a directory of \code{.txt} files;
 \item model/backend configuration through \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}};
 \item all adaptive runtime controls exposed by \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}};
+\item wrapper-visible \code{phase_a} reuse surfaces (\code{manifest},
+\code{artifact_dir}, and per-set status) for separate-run then later-link
+workflows;
 \item resumability via \code{session_dir} and \code{resume};
 \item optional saving of run outputs to an \code{.rds} artifact.
 }
@@ -484,10 +496,12 @@ Linking run modes:
 \code{run_mode = "link_one_spoke"} and \code{run_mode = "link_multi_spoke"} require
 multi-set input (\code{set_id}/\code{global_item_id}), enforce hub<->spoke routing
 defaults, and preserve Phase A artifact gating before Phase B cross-set
-comparisons begin. \code{link_estimation_mode = "transform"} remains the default
-wrapper behavior; use \code{link_estimation_mode = "anchored_joint"} together
-with \code{hub_lock_mode = "hard_lock"} for the alternative anchored-joint
-Phase B fit.
+comparisons begin. \code{link_estimation_mode = "anchored_joint"} is the default
+wrapper behavior and resolves to \code{hub_lock_mode = "hard_lock"}. Use
+\code{link_estimation_mode = "transform"} for the transform-based alternative
+Phase B fit. Every wrapper call returns canonical \code{phase_a} outputs that can
+be fed back into a later linking run through
+\code{adaptive_config$phase_a_artifacts}.
 
 Selection semantics:
 pair selection is TrueSkill-driven in one-pair transactional steps.
@@ -593,13 +607,48 @@ link_out <- adaptive_rank(
   progress = "refits"
 )
 
-# Anchored-joint is an explicit alternative, not the default:
+# Later linking from prior wrapper outputs:
+# hub_run <- adaptive_rank(
+#   data = linking_samples[linking_samples$set_id == 1L, c("ID", "text")],
+#   backend = "openai",
+#   model = "gpt-5.1",
+#   n_steps = 120,
+#   progress = "none"
+# )
+# spoke_run <- adaptive_rank(
+#   data = linking_samples[linking_samples$set_id == 2L, c("ID", "text")],
+#   backend = "openai",
+#   model = "gpt-5.1",
+#   n_steps = 120,
+#   progress = "none"
+# )
+#
+# link_out <- adaptive_rank(
+#   data = linking_samples,
+#   id_col = "ID",
+#   text_col = "text",
+#   backend = "openai",
+#   model = "gpt-5.1",
+#   adaptive_config = list(
+#     run_mode = "link_one_spoke",
+#     hub_id = 1L,
+#     phase_a_mode = "import",
+#     phase_a_artifacts = list(
+#       `1` = hub_run$phase_a$manifest,
+#       `2` = spoke_run$phase_a$artifact_dir
+#     )
+#   ),
+#   n_steps = 200,
+#   progress = "refits"
+# )
+
+# Transform is the explicit opt-in alternative:
 # adaptive_config = list(
 #   run_mode = "link_one_spoke",
 #   hub_id = 1L,
 #   phase_a_mode = "run",
-#   link_estimation_mode = "anchored_joint",
-#   hub_lock_mode = "hard_lock"
+#   link_estimation_mode = "transform",
+#   link_transform_policy = "auto"
 # )
 
 names(link_out$logs)

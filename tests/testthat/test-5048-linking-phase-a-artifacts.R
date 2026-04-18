@@ -87,6 +87,35 @@ make_phase_a_ready_state_with_evidence <- function() {
   state
 }
 
+make_legacy_phase_a_artifact <- function(artifact,
+                                         link_refit_mode = "shift_only",
+                                         shift_only_theta_treatment = "fixed_eap_plugin_var",
+                                         link_transform_policy = "auto",
+                                         hub_lock_mode = "soft_lock",
+                                         hub_lock_kappa = 0.75,
+                                         cross_set_utility = "linking_d_optimal") {
+  legacy_surface <- list(
+    set_id = as.integer(artifact$set_id %||% NA_integer_),
+    judge_param_mode = as.character(artifact$judge_param_mode %||% "global_shared"),
+    model_variant = as.character(artifact$fit_model_id %||% "btl_e_b"),
+    link_refit_mode = as.character(link_refit_mode),
+    shift_only_theta_treatment = as.character(shift_only_theta_treatment),
+    link_transform_policy = as.character(link_transform_policy),
+    hub_lock_mode = as.character(hub_lock_mode),
+    hub_lock_kappa = if (identical(hub_lock_mode, "soft_lock")) {
+      as.double(hub_lock_kappa)
+    } else {
+      NA_real_
+    },
+    cross_set_utility = as.character(cross_set_utility)
+  )
+
+  legacy <- artifact
+  legacy$fit_config_surface <- legacy_surface
+  legacy$fit_config_hash <- .adaptive_phase_a_hash_object(legacy_surface)
+  legacy
+}
+
 test_that("phase A artifacts carry exact within-set evidence surfaces", {
   state <- make_phase_a_ready_state_with_evidence()
 
@@ -291,10 +320,12 @@ test_that("phase A import validation rejects each required failure mode", {
   )
 
   bad_hash <- valid
-  bad_hash$fit_config_hash <- "hash_mismatch"
+  bad_hash$judge_param_mode <- "phase_specific"
+  bad_hash$fit_config_surface$judge_param_mode <- "phase_specific"
+  bad_hash$fit_config_hash <- .adaptive_phase_a_hash_object(bad_hash$fit_config_surface)
   expect_error(
     .adaptive_phase_a_validate_imported_artifact(bad_hash, state, set_id = 1L, controller = controller),
-    "config hash incompatibility"
+    "within-set fit incompatibility"
   )
 
   bad_sd_negative <- valid
@@ -358,24 +389,33 @@ test_that("phase A import hash rejects inference-setting mismatch and supports a
   )
 })
 
-test_that("phase A import hash rejects linking compatibility mismatch in required payload", {
+test_that("phase A import ignores Phase B-only legacy surface mismatches", {
   state <- make_phase_a_ready_state()
-  artifact <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  artifact <- make_legacy_phase_a_artifact(
+    .adaptive_phase_a_build_artifact(state, set_id = 1L),
+    link_refit_mode = "shift_only",
+    hub_lock_mode = "soft_lock",
+    hub_lock_kappa = 0.75
+  )
   artifact$quality_gate_accepted <- TRUE
 
   state_joint <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(link_refit_mode = "joint_refit")
+    adaptive_config = list(
+      link_estimation_mode = "transform",
+      link_refit_mode = "joint_refit",
+      hub_lock_mode = "soft_lock",
+      hub_lock_kappa = 0.6
+    )
   )
   controller_joint <- .adaptive_controller_resolve(state_joint)
-  expect_error(
+  expect_no_error(
     .adaptive_phase_a_validate_imported_artifact(
       artifact,
       state_joint,
       set_id = 1L,
       controller = controller_joint
-    ),
-    "link_refit_mode"
+    )
   )
 })
 
@@ -478,7 +518,9 @@ test_that("phase A mixed mode supports import and run per set", {
 test_that("phase A import fallback policy switches to run mode when configured", {
   state <- make_phase_a_ready_state()
   bad_import <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
-  bad_import$fit_config_hash <- "bad_hash"
+  bad_import$judge_param_mode <- "phase_specific"
+  bad_import$fit_config_surface$judge_param_mode <- "phase_specific"
+  bad_import$fit_config_hash <- .adaptive_phase_a_hash_object(bad_import$fit_config_surface)
   import_set2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
   import_set2$quality_gate_accepted <- TRUE
 

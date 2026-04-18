@@ -111,6 +111,7 @@ test_that("two-set linking recovers spoke offset from cross-set outcomes", {
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
     ),
@@ -156,14 +157,12 @@ test_that("joint_refit integration records joint mode and soft-lock runtime fiel
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_refit_mode = "joint_refit",
       hub_lock_mode = "soft_lock",
       hub_lock_kappa = 0.75,
       phase_a_mode = "import",
-      phase_a_artifacts = artifacts,
-      phase_a_compatible_config_hashes = vapply(artifacts, function(x) {
-        as.character(x$fit_config_hash)
-      }, character(1L))
+      phase_a_artifacts = artifacts
     ),
     btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none"
@@ -203,13 +202,11 @@ test_that("joint_refit integration supports free hub lock", {
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_refit_mode = "joint_refit",
       hub_lock_mode = "free",
       phase_a_mode = "import",
-      phase_a_artifacts = artifacts,
-      phase_a_compatible_config_hashes = vapply(artifacts, function(x) {
-        as.character(x$fit_config_hash)
-      }, character(1L))
+      phase_a_artifacts = artifacts
     ),
     btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none"
@@ -477,8 +474,7 @@ test_that("mixed run/import mode combines imported and in-run artifacts by set",
       hub_id = 1L,
       phase_a_mode = "mixed",
       phase_a_set_source = c(`1` = "import", `2` = "run"),
-      phase_a_artifacts = list(`1` = import_artifacts[["1"]]),
-      phase_a_compatible_config_hashes = import_artifacts[["1"]]$fit_config_hash
+      phase_a_artifacts = list(`1` = import_artifacts[["1"]])
     ),
     btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
@@ -950,7 +946,7 @@ test_that("judge parameter mode mismatch rejects incompatible imported Phase A a
       ),
       progress = "none"
     ),
-    "config hash incompatibility"
+    "within-set fit incompatibility"
   )
 })
 
@@ -983,6 +979,7 @@ test_that("single-set runs remain behaviorally equivalent when linking controls 
     adaptive_config = list(
       run_mode = "within_set",
       hub_id = 1L,
+      link_estimation_mode = "transform",
       link_transform_mode = "auto",
       link_refit_mode = "shift_only",
       phase_a_mode = "run"
@@ -1162,9 +1159,6 @@ test_that("anchored-joint linking run records accepted-state refits and NA trans
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts,
-      phase_a_compatible_config_hashes = vapply(artifacts, function(x) {
-        as.character(x$fit_config_hash)
-      }, character(1L)),
       link_estimation_mode = "anchored_joint",
       hub_lock_mode = "hard_lock"
     ),
@@ -1214,9 +1208,6 @@ test_that("concurrent anchored-joint linking stays spoke-separable and keeps esc
       min_cross_set_pairs_per_spoke_per_refit = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts,
-      phase_a_compatible_config_hashes = vapply(artifacts, function(x) {
-        as.character(x$fit_config_hash)
-      }, character(1L)),
       link_estimation_mode = "anchored_joint",
       hub_lock_mode = "hard_lock"
     ),

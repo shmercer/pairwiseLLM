@@ -305,9 +305,15 @@
     out$link_transform_state_by_spoke <- list()
     out$link_transform_mode_by_spoke <- NULL
   } else {
+    policy_value <- out$link_transform_policy %||% out$link_transform_mode %||% NULL
+    if (is.character(policy_value) &&
+      length(policy_value) == 1L &&
+      (is.na(policy_value) || policy_value == "")) {
+      policy_value <- NULL
+    }
     out$link_transform_policy <- .adaptive_normalize_link_transform_policy(
-      policy = out$link_transform_policy %||% NULL,
-      legacy_mode = out$link_transform_mode %||% NULL
+      policy = policy_value,
+      legacy_mode = NULL
     )
     out$link_transform_mode <- NULL
 
@@ -348,7 +354,18 @@
   if (identical(out$link_estimation_mode, "anchored_joint")) {
     out$shift_only_theta_treatment <- NA_character_
   } else {
+    out$link_refit_mode <- out$link_refit_mode %||% defaults$link_refit_mode
+    if (is.character(out$link_refit_mode) &&
+      length(out$link_refit_mode) == 1L &&
+      (is.na(out$link_refit_mode) || out$link_refit_mode == "")) {
+      out$link_refit_mode <- defaults$link_refit_mode
+    }
     theta_treatment <- out$shift_only_theta_treatment %||% defaults$shift_only_theta_treatment
+    if (is.character(theta_treatment) &&
+      length(theta_treatment) == 1L &&
+      (is.na(theta_treatment) || theta_treatment == "")) {
+      theta_treatment <- defaults$shift_only_theta_treatment
+    }
     if (identical(theta_treatment, "normal_prior")) {
       theta_treatment <- "fixed_eap_plugin_var"
     }
@@ -433,6 +450,11 @@
     out$link_refit_mode <- NA_character_
     out$shift_only_theta_treatment <- NA_character_
     out$hub_lock_kappa <- NA_real_
+  } else if (identical(out$hub_lock_mode %||% NA_character_, "soft_lock")) {
+    hub_lock_kappa <- suppressWarnings(as.double(out$hub_lock_kappa %||% NA_real_))
+    if (length(hub_lock_kappa) != 1L || is.na(hub_lock_kappa) || !is.finite(hub_lock_kappa)) {
+      out$hub_lock_kappa <- as.double(defaults$hub_lock_kappa)
+    }
   }
 
   out
@@ -491,13 +513,13 @@
     star_override_budget_per_round = as.integer(defaults$star_override_budget_per_round),
     run_mode = "within_set",
     hub_id = 1L,
-    link_estimation_mode = "transform",
+    link_estimation_mode = "anchored_joint",
     link_transform_policy = "auto",
     link_refit_mode = "shift_only",
     shift_only_theta_treatment = "fixed_eap_plugin_var",
     judge_param_mode = "global_shared",
     within_phase_b_within_set_steps_allowed = FALSE,
-    hub_lock_mode = "soft_lock",
+    hub_lock_mode = "hard_lock",
     hub_lock_kappa = 0.75,
     anchored_joint_spoke_prior_scale = 1.0,
     anchored_joint_sd_floor = 0.02,

@@ -171,29 +171,48 @@
   as.character(unname(tools::md5sum(tmp)))
 }
 
+.adaptive_phase_a_fit_contract_surface <- function(judge_param_mode,
+                                                   model_variant) {
+  judge_param_mode <- as.character(judge_param_mode %||% "global_shared")
+  model_variant <- as.character(model_variant %||% "btl_e_b")
+
+  if (length(judge_param_mode) != 1L || is.na(judge_param_mode) || !nzchar(judge_param_mode)) {
+    rlang::abort("Phase A fit contract surface requires a single non-empty `judge_param_mode`.")
+  }
+  if (length(model_variant) != 1L || is.na(model_variant) || !nzchar(model_variant)) {
+    rlang::abort("Phase A fit contract surface requires a single non-empty `model_variant`.")
+  }
+
+  list(
+    judge_param_mode = judge_param_mode,
+    model_variant = model_variant
+  )
+}
+
 .adaptive_phase_a_required_config_surface <- function(state, set_id) {
   controller <- .adaptive_controller_resolve(state)
   fit <- state$btl_fit %||% list()
-  hub_lock_mode <- as.character(controller$hub_lock_mode %||% NA_character_)
-  hub_lock_kappa <- as.double(controller$hub_lock_kappa %||% NA_real_)
-  if (!identical(hub_lock_mode, "soft_lock")) {
-    hub_lock_kappa <- NA_real_
-  }
-  list(
-    set_id = as.integer(set_id),
-    judge_param_mode = as.character(controller$judge_param_mode %||% NA_character_),
-    model_variant = as.character(fit$model_variant %||% "btl_e_b"),
-    link_refit_mode = as.character(controller$link_refit_mode %||% NA_character_),
-    shift_only_theta_treatment = as.character(controller$shift_only_theta_treatment %||% NA_character_),
-    link_transform_policy = as.character(controller$link_transform_policy %||% NA_character_),
-    hub_lock_mode = hub_lock_mode,
-    hub_lock_kappa = hub_lock_kappa,
-    cross_set_utility = as.character(controller$cross_set_utility %||% NA_character_)
+  .adaptive_phase_a_fit_contract_surface(
+    judge_param_mode = controller$judge_param_mode %||% "global_shared",
+    model_variant = fit$model_variant %||% "btl_e_b"
   )
 }
 
 .adaptive_phase_a_required_config_hash <- function(state, set_id) {
   .adaptive_phase_a_hash_object(.adaptive_phase_a_required_config_surface(state, set_id = set_id))
+}
+
+.adaptive_phase_a_artifact_fit_contract_surface <- function(artifact) {
+  artifact_surface <- artifact$fit_config_surface %||% list()
+  .adaptive_phase_a_fit_contract_surface(
+    judge_param_mode = artifact_surface$judge_param_mode %||%
+      artifact$judge_param_mode %||%
+      "global_shared",
+    model_variant = artifact_surface$model_variant %||%
+      artifact$fit_model_id %||%
+      artifact$model_variant %||%
+      "btl_e_b"
+  )
 }
 
 .adaptive_phase_a_latest_refit_row <- function(state, set_id) {
@@ -1023,12 +1042,16 @@
   fit_config_hash <- as.character(artifact$fit_config_hash %||% NA_character_)
   required_hash <- .adaptive_phase_a_required_config_hash(state, set_id = set_id)
   required_surface <- .adaptive_phase_a_required_config_surface(state, set_id = set_id)
+  artifact_surface <- .adaptive_phase_a_artifact_fit_contract_surface(artifact)
+  artifact_contract_hash <- .adaptive_phase_a_hash_object(artifact_surface)
   compatible_hashes <- as.character(controller$phase_a_compatible_config_hashes %||% character())
   if (is.na(fit_config_hash) || fit_config_hash == "") {
     rlang::abort(paste0("Phase A artifact missing fit_config_hash for set ", set_id, "."))
   }
-  if (!identical(fit_config_hash, required_hash) && !fit_config_hash %in% compatible_hashes) {
-    artifact_surface <- artifact$fit_config_surface %||% NULL
+  if (!identical(fit_config_hash, required_hash) &&
+    !identical(artifact_contract_hash, required_hash) &&
+    !fit_config_hash %in% compatible_hashes &&
+    !artifact_contract_hash %in% compatible_hashes) {
     mismatch_fields <- character()
     if (is.list(artifact_surface)) {
       common_fields <- intersect(names(required_surface), names(artifact_surface))
@@ -1042,13 +1065,16 @@
       ""
     }
     rlang::abort(paste0(
-      "Phase A artifact config hash incompatibility for set ",
+      "Phase A artifact within-set fit incompatibility for set ",
       set_id,
       ": artifact hash `",
       fit_config_hash,
       "` did not match required hash `",
       required_hash,
-      "` and was not found in `adaptive_config$phase_a_compatible_config_hashes`.",
+      "`, reconstructed fit-contract hash `",
+      artifact_contract_hash,
+      "` did not match the current within-set fit contract, and neither hash was found in ",
+      "`adaptive_config$phase_a_compatible_config_hashes`.",
       mismatch_msg
     ))
   }

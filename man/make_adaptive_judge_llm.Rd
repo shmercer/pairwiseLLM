@@ -55,8 +55,12 @@ Default is \code{"text"}.}
 or \code{include_thoughts}. Default is \code{list()}.}
 }
 \value{
-A function \code{judge(A, B, state, ...)} returning a list with fields
-\code{is_valid}, \code{Y}, and \code{invalid_reason}.
+A function \code{judge(A, B, state, ...)} returning a list with required
+fields \code{is_valid}, \code{Y}, and \code{invalid_reason}, plus optional canonical audit
+fields such as \code{judge_backend}, \code{judge_model}, \code{judge_endpoint},
+\code{llm_status_code}, \code{llm_error_message}, \code{llm_custom_id},
+\code{prompt_tokens}, \code{completion_tokens}, \code{total_tokens}, and
+\code{raw_response_json}.
 }
 \description{
 Creates a judge function compatible with \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}} by
@@ -68,7 +72,10 @@ The returned function has signature \code{judge(A, B, state, ...)} and enforces
 the adaptive transactional contract:
 it returns \code{is_valid = TRUE} with \code{Y} in \verb{\{0,1\}} when the model response
 identifies one of the two presented items, and returns \code{is_valid = FALSE}
-otherwise.
+otherwise. In addition to the required contract fields, the returned judge
+preserves canonical audit metadata from the first \code{llm_compare_pair()} row,
+including backend/model provenance, status/error fields, token counts, and a
+serialized \code{raw_response_json} payload when available.
 
 Model configuration is split into:
 \itemize{
