@@ -110,6 +110,28 @@ test_that("candidate generation from state validates state and ranks by trueskil
   expect_true(any(out$i == "2" | out$j == "2"))
 })
 
+test_that("large-N within-set candidate generation exposes report-only bounded counts", {
+  items <- make_test_items(320)
+  trueskill_state <- make_test_trueskill_state(items, mu = seq(320, 1))
+  state <- make_test_state(items, trueskill_state)
+  state$round$staged_active <- TRUE
+  state <- pairwiseLLM:::.adaptive_refresh_round_anchors(state)
+
+  out <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state = state,
+    stage_name = "local_link",
+    fallback_name = "global_safe",
+    C_max = 150L,
+    seed = 41L
+  )
+  counts <- attr(out, "candidate_filter_counts", exact = TRUE)
+
+  expect_equal(nrow(out), 150L)
+  expect_true(isTRUE(counts$bounded_direct_construction_used))
+  expect_true(counts$n_candidates_legal_domain_total > nrow(out))
+  expect_equal(counts$n_candidates_after_stage_filters, 150L)
+})
+
 test_that("ordered keys and seed helpers cover null/invalid branches", {
   key <- pairwiseLLM:::make_ordered_key(c(1, 2), c(3, 4))
   expect_identical(key, c("1:3", "2:4"))

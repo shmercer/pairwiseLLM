@@ -1331,106 +1331,230 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_within_set_stage_sorted_inputs <- function(ids,
+                                                     anchor_ids,
+                                                     rank_index,
+                                                     stratum_map,
+                                                     stage_name) {
+  ids <- unique(as.character(ids))
+  if (length(ids) < 2L) {
+    return(list(
+      sorted_ids = character(),
+      sorted_anchor = logical(),
+      sorted_strata = integer()
+    ))
+  }
+
+  item_rank <- as.integer(rank_index[ids])
+  if (any(!is.finite(item_rank))) {
+    rlang::abort(
+      "Within-set candidate construction invariant failed: ranked items must have finite ranks."
+    )
+  }
+  order_rank <- order(item_rank)
+  sorted_ids <- ids[order_rank]
+  sorted_anchor <- sorted_ids %in% intersect(unique(as.character(anchor_ids)), sorted_ids)
+
+  if (stage_name %in% c("long_link", "mid_link")) {
+    keep <- !sorted_anchor
+    sorted_ids <- sorted_ids[keep]
+    sorted_anchor <- sorted_anchor[keep]
+  }
+
+  if (length(sorted_ids) < 2L) {
+    return(list(
+      sorted_ids = character(),
+      sorted_anchor = logical(),
+      sorted_strata = integer()
+    ))
+  }
+
+  sorted_strata <- as.integer(stratum_map[sorted_ids])
+  if (any(!is.finite(sorted_strata))) {
+    rlang::abort(
+      "Within-set candidate construction invariant failed: ranked items must have finite strata."
+    )
+  }
+
+  list(
+    sorted_ids = as.character(sorted_ids),
+    sorted_anchor = as.logical(sorted_anchor),
+    sorted_strata = as.integer(sorted_strata)
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_within_set_stage_right_mask <- function(right_strata,
+                                                  right_anchor,
+                                                  left_stratum,
+                                                  left_anchor,
+                                                  stage_name,
+                                                  bounds) {
+  if (identical(stage_name, "anchor_link")) {
+    return(xor(as.logical(right_anchor), rep.int(as.logical(left_anchor), length(right_anchor))))
+  }
+
+  dist <- abs(as.integer(right_strata) - as.integer(left_stratum))
+  dist >= as.integer(bounds$min) & dist <= as.integer(bounds$max)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_within_set_direct_pairs_bounded <- function(ids,
+                                                      anchor_ids,
+                                                      rank_index,
+                                                      stratum_map,
+                                                      stage_name,
+                                                      bounds,
+                                                      C_max = NULL,
+                                                      seed = NULL) {
+  stage_inputs <- .adaptive_within_set_stage_sorted_inputs(
+    ids = ids,
+    anchor_ids = anchor_ids,
+    rank_index = rank_index,
+    stratum_map = stratum_map,
+    stage_name = stage_name
+  )
+  sorted_ids <- as.character(stage_inputs$sorted_ids)
+  sorted_anchor <- as.logical(stage_inputs$sorted_anchor)
+  sorted_strata <- as.integer(stage_inputs$sorted_strata)
+
+  if (length(sorted_ids) < 2L) {
+    return(list(
+      candidates = tibble::tibble(
+        i = character(),
+        j = character(),
+        dist_stratum_global = integer()
+      ),
+      total_legal = 0L,
+      bounded_used = FALSE
+    ))
+  }
+
+  counts_by_left <- integer(length(sorted_ids) - 1L)
+  total_legal <- 0L
+  for (left_idx in seq_len(length(sorted_ids) - 1L)) {
+    right_idx <- seq.int(left_idx + 1L, length(sorted_ids))
+    right_mask <- .adaptive_within_set_stage_right_mask(
+      right_strata = sorted_strata[right_idx],
+      right_anchor = sorted_anchor[right_idx],
+      left_stratum = sorted_strata[[left_idx]],
+      left_anchor = sorted_anchor[[left_idx]],
+      stage_name = stage_name,
+      bounds = bounds
+    )
+    counts_by_left[[left_idx]] <- as.integer(sum(right_mask))
+    total_legal <- total_legal + counts_by_left[[left_idx]]
+  }
+
+  if (total_legal < 1L) {
+    return(list(
+      candidates = tibble::tibble(
+        i = character(),
+        j = character(),
+        dist_stratum_global = integer()
+      ),
+      total_legal = 0L,
+      bounded_used = FALSE
+    ))
+  }
+
+  C_max <- as.integer(C_max %||% NA_integer_)
+  bounded_used <- is.finite(C_max) && total_legal > C_max
+  keep_positions_raw <- if (isTRUE(bounded_used)) {
+    withr::with_seed(as.integer(seed), {
+      sample.int(total_legal, size = C_max, replace = FALSE)
+    })
+  } else {
+    seq_len(total_legal)
+  }
+  keep_sort_order <- order(keep_positions_raw)
+  keep_positions <- keep_positions_raw[keep_sort_order]
+
+  out_n <- length(keep_positions)
+  out_i <- character(out_n)
+  out_j <- character(out_n)
+  out_dist <- integer(out_n)
+  out_idx <- 1L
+  keep_idx <- 1L
+  offset <- 0L
+
+  for (left_idx in seq_len(length(sorted_ids) - 1L)) {
+    count_left <- as.integer(counts_by_left[[left_idx]])
+    if (count_left < 1L) {
+      next
+    }
+    block_end <- offset + count_left
+    if (keep_idx > out_n || keep_positions[[keep_idx]] > block_end) {
+      offset <- block_end
+      next
+    }
+    block_keep_end <- keep_idx
+    while (block_keep_end <= out_n && keep_positions[[block_keep_end]] <= block_end) {
+      block_keep_end <- block_keep_end + 1L
+    }
+    local_positions <- keep_positions[keep_idx:(block_keep_end - 1L)] - offset
+    right_idx <- seq.int(left_idx + 1L, length(sorted_ids))
+    right_mask <- .adaptive_within_set_stage_right_mask(
+      right_strata = sorted_strata[right_idx],
+      right_anchor = sorted_anchor[right_idx],
+      left_stratum = sorted_strata[[left_idx]],
+      left_anchor = sorted_anchor[[left_idx]],
+      stage_name = stage_name,
+      bounds = bounds
+    )
+    legal_right_idx <- right_idx[right_mask]
+    selected_right_idx <- legal_right_idx[local_positions]
+    write_n <- length(selected_right_idx)
+    write_range <- out_idx:(out_idx + write_n - 1L)
+    out_i[write_range] <- sorted_ids[[left_idx]]
+    out_j[write_range] <- sorted_ids[selected_right_idx]
+    out_dist[write_range] <- abs(sorted_strata[selected_right_idx] - sorted_strata[[left_idx]])
+    out_idx <- out_idx + write_n
+    keep_idx <- block_keep_end
+    offset <- block_end
+    if (keep_idx > out_n) {
+      break
+    }
+  }
+
+  cand <- tibble::tibble(
+    i = as.character(out_i),
+    j = as.character(out_j),
+    dist_stratum_global = as.integer(out_dist)
+  )
+  if (isTRUE(bounded_used)) {
+    cand <- cand[order(keep_sort_order), , drop = FALSE]
+  }
+
+  list(
+    candidates = cand,
+    total_legal = as.integer(total_legal),
+    bounded_used = as.logical(bounded_used)
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_within_set_direct_pairs <- function(ids,
                                               anchor_ids,
                                               rank_index,
                                               stratum_map,
                                               stage_name,
-                                              bounds) {
-  ids <- unique(as.character(ids))
-  if (length(ids) < 2L) {
-    return(tibble::tibble(
-      i = character(),
-      j = character(),
-      dist_stratum_global = integer()
-    ))
-  }
-
-  anchor_ids <- intersect(unique(as.character(anchor_ids)), ids)
-  if (identical(stage_name, "anchor_link")) {
-    return(.adaptive_within_set_cross_group_pairs(
-      left_ids = anchor_ids,
-      right_ids = setdiff(ids, anchor_ids),
-      rank_index = rank_index,
-      stratum_map = stratum_map
-    ))
-  }
-
-  candidate_ids <- if (stage_name %in% c("long_link", "mid_link")) {
-    setdiff(ids, anchor_ids)
-  } else {
-    ids
-  }
-  if (length(candidate_ids) < 2L) {
-    return(tibble::tibble(
-      i = character(),
-      j = character(),
-      dist_stratum_global = integer()
-    ))
-  }
-
-  candidate_strata <- as.integer(stratum_map[candidate_ids])
-  if (any(!is.finite(candidate_strata))) {
-    rlang::abort(
-      "Within-set candidate construction invariant failed: ranked items must have finite strata."
-    )
-  }
-  strata_groups <- split(candidate_ids, candidate_strata)
-  strata_values <- as.integer(names(strata_groups))
-  pair_grid <- expand.grid(
-    left_stratum = strata_values,
-    right_stratum = strata_values,
-    KEEP.OUT.ATTRS = FALSE,
-    stringsAsFactors = FALSE
-  )
-  pair_grid <- pair_grid[as.integer(pair_grid$left_stratum) <= as.integer(pair_grid$right_stratum), , drop = FALSE]
-  pair_grid$dist_stratum_global <-
-    as.integer(pair_grid$right_stratum) - as.integer(pair_grid$left_stratum)
-  pair_grid <- pair_grid[
-    as.integer(pair_grid$dist_stratum_global) >= as.integer(bounds$min) &
-      as.integer(pair_grid$dist_stratum_global) <= as.integer(bounds$max),
-    ,
-    drop = FALSE
-  ]
-  if (nrow(pair_grid) < 1L) {
-    return(tibble::tibble(
-      i = character(),
-      j = character(),
-      dist_stratum_global = integer()
-    ))
-  }
-
-  chunks <- vector("list", nrow(pair_grid))
-  for (idx in seq_len(nrow(pair_grid))) {
-    left_stratum <- as.character(pair_grid$left_stratum[[idx]])
-    right_stratum <- as.character(pair_grid$right_stratum[[idx]])
-    dist_stratum_global <- as.integer(pair_grid$dist_stratum_global[[idx]])
-    left_ids <- as.character(strata_groups[[left_stratum]])
-    right_ids <- as.character(strata_groups[[right_stratum]])
-    chunks[[idx]] <- if (identical(left_stratum, right_stratum)) {
-      .adaptive_within_set_same_group_pairs(
-        item_ids = left_ids,
-        rank_index = rank_index,
-        dist_stratum_global = dist_stratum_global
-      )
-    } else {
-      .adaptive_within_set_cross_group_pairs(
-        left_ids = left_ids,
-        right_ids = right_ids,
-        rank_index = rank_index,
-        stratum_map = stratum_map
-      )
-    }
-  }
-
-  cand <- dplyr::bind_rows(chunks)
-  if (nrow(cand) < 1L) {
-    return(cand)
-  }
-
-  i_rank <- as.integer(rank_index[as.character(cand$i)])
-  j_rank <- as.integer(rank_index[as.character(cand$j)])
-  cand[order(i_rank, j_rank), , drop = FALSE]
+                                              bounds,
+                                              C_max = NULL,
+                                              seed = NULL) {
+  .adaptive_within_set_direct_pairs_bounded(
+    ids = ids,
+    anchor_ids = anchor_ids,
+    rank_index = rank_index,
+    stratum_map = stratum_map,
+    stage_name = stage_name,
+    bounds = bounds,
+    C_max = C_max,
+    seed = seed
+  )$candidates
 }
 
 #' @keywords internal
@@ -1772,32 +1896,39 @@ generate_stage_candidates_from_state <- function(state,
     ))
   }
 
-  cand <- .adaptive_within_set_direct_pairs(
+  direct_pairs <- .adaptive_within_set_direct_pairs_bounded(
     ids = ids,
     anchor_ids = anchor_ids,
     rank_index = rank_index,
     stratum_map = stratum_map,
     stage_name = stage_name,
-    bounds = bounds
+    bounds = bounds,
+    C_max = as.integer(C_max),
+    seed = as.integer(seed)
   )
+  cand <- tibble::as_tibble(direct_pairs$candidates)
+  n_after_stage_filters <- as.integer(direct_pairs$total_legal)
   if (nrow(cand) < 1L) {
     return(.adaptive_set_candidate_filter_counts(
       tibble::tibble(i = character(), j = character()),
       list(
         n_candidates_after_route_filters = as.integer(n_after_route_filters %||% NA_integer_),
         n_candidates_after_active_domain = as.integer(n_after_active_domain %||% NA_integer_),
-        n_candidates_after_stage_filters = as.integer(n_after_stage_filters %||% NA_integer_)
+        n_candidates_after_stage_filters = as.integer(n_after_stage_filters %||% NA_integer_),
+        n_candidates_legal_domain_total = as.integer(direct_pairs$total_legal),
+        bounded_direct_construction_used = isTRUE(direct_pairs$bounded_used)
       )
     ))
   }
 
-  cand <- .adaptive_uniform_subsample_pairs(cand, C_max = as.integer(C_max), seed = as.integer(seed))
   .adaptive_set_candidate_filter_counts(
     cand,
     list(
       n_candidates_after_route_filters = as.integer(n_after_route_filters %||% NA_integer_),
       n_candidates_after_active_domain = as.integer(n_after_active_domain %||% NA_integer_),
-      n_candidates_after_stage_filters = as.integer(nrow(cand))
+      n_candidates_after_stage_filters = as.integer(nrow(cand)),
+      n_candidates_legal_domain_total = as.integer(direct_pairs$total_legal),
+      bounded_direct_construction_used = isTRUE(direct_pairs$bounded_used)
     )
   )
 }
