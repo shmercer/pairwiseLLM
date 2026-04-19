@@ -171,6 +171,54 @@
   as.character(unname(tools::md5sum(tmp)))
 }
 
+.adaptive_phase_a_artifact_memo_surface <- function(artifact) {
+  if (!is.list(artifact)) {
+    return(NULL)
+  }
+
+  evidence_hash <- as.character(artifact$phase_a_within_set_evidence_hash %||% NA_character_)
+  evidence <- NULL
+  if (is.na(evidence_hash) || !nzchar(evidence_hash)) {
+    evidence <- tibble::as_tibble(
+      artifact$phase_a_within_set_evidence %||%
+        artifact$within_set_evidence %||%
+        .adaptive_phase_a_empty_within_set_evidence()
+    )
+    evidence_hash <- .adaptive_phase_a_hash_object(evidence)
+  }
+
+  list(
+    set_id = as.integer(artifact$set_id %||% NA_integer_),
+    fit_model_id = as.character(artifact$fit_model_id %||% NA_character_),
+    fit_config_surface = artifact$fit_config_surface %||% list(),
+    fit_config_hash = as.character(artifact$fit_config_hash %||% NA_character_),
+    n_items = as.integer(artifact$n_items %||% NA_integer_),
+    n_pairs_committed = as.integer(artifact$n_pairs_committed %||% NA_integer_),
+    refit_id = as.integer(artifact$refit_id %||% NA_integer_),
+    round_id_at_refit = as.integer(artifact$round_id_at_refit %||% NA_integer_),
+    step_id_at_refit = as.integer(artifact$step_id_at_refit %||% NA_integer_),
+    phase_scope = as.character(artifact$phase_scope %||% NA_character_),
+    phase_scope_set_id = as.integer(artifact$phase_scope_set_id %||% NA_integer_),
+    items = tibble::as_tibble(artifact$items %||% tibble::tibble()),
+    diagnostics = artifact$diagnostics %||% list(),
+    quality_gate_accepted = as.logical(artifact$quality_gate_accepted %||% FALSE),
+    phase_a_within_set_evidence_hash = evidence_hash,
+    phase_a_within_set_evidence_source = as.character(
+      artifact$phase_a_within_set_evidence_source %||% NA_character_
+    ),
+    phase_a_within_set_evidence = evidence,
+    judge_param_mode = as.character(artifact$judge_param_mode %||% NA_character_)
+  )
+}
+
+.adaptive_phase_a_artifact_memo_hash <- function(artifact) {
+  surface <- .adaptive_phase_a_artifact_memo_surface(artifact)
+  if (is.null(surface)) {
+    return(NA_character_)
+  }
+  .adaptive_phase_a_hash_object(surface)
+}
+
 .adaptive_phase_a_fit_contract_surface <- function(judge_param_mode,
                                                    model_variant) {
   judge_param_mode <- as.character(judge_param_mode %||% "global_shared")
@@ -200,6 +248,332 @@
 
 .adaptive_phase_a_required_config_hash <- function(state, set_id) {
   .adaptive_phase_a_hash_object(.adaptive_phase_a_required_config_surface(state, set_id = set_id))
+}
+
+.adaptive_phase_a_round_diagnostics_surface <- function(state) {
+  round_log <- tibble::as_tibble(state$round_log %||% tibble::tibble())
+  if (nrow(round_log) < 1L) {
+    return(list(
+      has_round_log = FALSE,
+      diagnostics_pass = NA,
+      ts_btl_rank_spearman = NA_real_
+    ))
+  }
+
+  list(
+    has_round_log = TRUE,
+    diagnostics_pass = if ("diagnostics_pass" %in% names(round_log)) {
+      as.logical(round_log$diagnostics_pass[[nrow(round_log)]])
+    } else {
+      NA
+    },
+    ts_btl_rank_spearman = if ("ts_btl_rank_spearman" %in% names(round_log)) {
+      as.double(round_log$ts_btl_rank_spearman[[nrow(round_log)]])
+    } else {
+      NA_real_
+    }
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_empty <- function(set_ids = integer()) {
+  set_ids <- as.integer(sort(unique(set_ids[!is.na(set_ids)])))
+  stats::setNames(rep.int(0L, length(set_ids)), as.character(set_ids))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_validate <- function(cache,
+                                                       set_ids,
+                                                       context = "runtime") {
+  expected_names <- as.character(sort(unique(as.integer(set_ids[!is.na(set_ids)]))))
+  cache <- cache %||% integer()
+
+  if (!is.integer(cache)) {
+    rlang::abort(
+      paste0(
+        "Adaptive Phase A committed-pair cache invariant failed during ",
+        context,
+        ": `refit_meta$phase_a_committed_pairs_by_set` must be an integer vector."
+      )
+    )
+  }
+
+  cache_names <- names(cache) %||% character()
+  if (!identical(cache_names, expected_names)) {
+    rlang::abort(
+      paste0(
+        "Adaptive Phase A committed-pair cache invariant failed during ",
+        context,
+        ": set-id names must exactly match `state$items$set_id`."
+      )
+    )
+  }
+
+  if (any(is.na(cache)) || any(cache < 0L)) {
+    rlang::abort(
+      paste0(
+        "Adaptive Phase A committed-pair cache invariant failed during ",
+        context,
+        ": cached counts must be non-missing and non-negative."
+      )
+    )
+  }
+
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_rebuild <- function(state) {
+  set_ids <- as.integer(sort(unique(state$items$set_id)))
+  cache <- .adaptive_phase_a_committed_pairs_empty(set_ids)
+  history <- .adaptive_history_tbl(state)
+
+  if (nrow(history) < 1L) {
+    return(cache)
+  }
+
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  a_set <- as.integer(set_map[as.character(history$A_id)])
+  b_set <- as.integer(set_map[as.character(history$B_id)])
+  within_set <- !is.na(a_set) & !is.na(b_set) & a_set == b_set
+  if (!any(within_set)) {
+    return(cache)
+  }
+
+  within_counts <- table(a_set[within_set])
+  for (set_key in names(within_counts)) {
+    cache[[set_key]] <- as.integer(within_counts[[set_key]])
+  }
+
+  cache
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_equivalent <- function(cache, rebuilt) {
+  cache_names <- names(cache) %||% character()
+  rebuilt_names <- names(rebuilt) %||% character()
+
+  identical(cache_names, rebuilt_names) &&
+    identical(as.integer(cache), as.integer(rebuilt))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_reconcile <- function(cache,
+                                                        state,
+                                                        context = "runtime") {
+  set_ids <- as.integer(sort(unique(state$items$set_id)))
+  .adaptive_phase_a_committed_pairs_validate(cache, set_ids = set_ids, context = context)
+  rebuilt <- .adaptive_phase_a_committed_pairs_rebuild(state)
+  if (!isTRUE(.adaptive_phase_a_committed_pairs_equivalent(cache, rebuilt))) {
+    rlang::abort(
+      paste0(
+        "Adaptive Phase A committed-pair cache invariant failed during ",
+        context,
+        ": cached set-local counts diverged from canonical committed history."
+      )
+    )
+  }
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_resolve <- function(state,
+                                                      validate_existing = FALSE,
+                                                      context = "runtime") {
+  set_ids <- as.integer(sort(unique(state$items$set_id)))
+  cache <- (state$refit_meta %||% list())$phase_a_committed_pairs_by_set %||% NULL
+  if (is.null(cache)) {
+    return(.adaptive_phase_a_committed_pairs_rebuild(state))
+  }
+
+  cache_ok <- tryCatch(
+    {
+      .adaptive_phase_a_committed_pairs_validate(cache, set_ids = set_ids, context = context)
+      TRUE
+    },
+    error = function(e) {
+      if (isTRUE(validate_existing)) {
+        stop(e)
+      }
+      FALSE
+    }
+  )
+
+  if (!isTRUE(cache_ok)) {
+    return(.adaptive_phase_a_committed_pairs_rebuild(state))
+  }
+
+  expected_history_n <- as.integer(nrow(.adaptive_history_tbl(state)))
+  cache_history_n <- as.integer(
+    (state$refit_meta %||% list())$phase_a_committed_pairs_history_n %||% NA_integer_
+  )
+  if (length(cache_history_n) != 1L ||
+    is.na(cache_history_n) ||
+    !identical(cache_history_n, expected_history_n)) {
+    return(.adaptive_phase_a_committed_pairs_rebuild(state))
+  }
+
+  if (isTRUE(validate_existing)) {
+    .adaptive_phase_a_committed_pairs_reconcile(cache, state = state, context = context)
+  }
+
+  cache
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_update <- function(cache, state, A_id, B_id) {
+  set_ids <- as.integer(sort(unique(state$items$set_id)))
+  cache <- cache %||% .adaptive_phase_a_committed_pairs_empty(set_ids)
+  .adaptive_phase_a_committed_pairs_validate(cache, set_ids = set_ids, context = "commit update")
+
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  A_id <- as.character(A_id %||% NA_character_)
+  B_id <- as.character(B_id %||% NA_character_)
+  a_set <- as.integer(set_map[[A_id]] %||% NA_integer_)
+  b_set <- as.integer(set_map[[B_id]] %||% NA_integer_)
+  if (is.na(a_set) || is.na(b_set) || !identical(a_set, b_set)) {
+    return(cache)
+  }
+
+  key <- as.character(a_set)
+  cache[[key]] <- as.integer(cache[[key]] %||% 0L) + 1L
+  cache
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_rebuild_state <- function(state,
+                                                            validate_existing = FALSE,
+                                                            context = "runtime") {
+  state$refit_meta <- state$refit_meta %||% list()
+  state$refit_meta$phase_a_committed_pairs_by_set <- .adaptive_phase_a_committed_pairs_resolve(
+    state,
+    validate_existing = validate_existing,
+    context = context
+  )
+  state$refit_meta$phase_a_committed_pairs_history_n <- as.integer(nrow(.adaptive_history_tbl(state)))
+  state
+}
+
+.adaptive_phase_a_within_set_pair_count <- function(state, set_id) {
+  cache <- .adaptive_phase_a_committed_pairs_resolve(state)
+  as.integer(cache[[as.character(set_id)]] %||% 0L)
+}
+
+.adaptive_phase_a_summary_surface_stamp <- function(state, set_id) {
+  items_set <- state$items[state$items$set_id == as.integer(set_id), , drop = FALSE]
+  ids <- as.character(items_set$item_id)
+
+  latest_item_log <- NULL
+  if (is.list(state$item_log) && length(state$item_log) > 0L) {
+    latest_item_log <- tibble::as_tibble(state$item_log[[length(state$item_log)]])
+  }
+
+  if (!is.null(latest_item_log) &&
+    nrow(latest_item_log) > 0L &&
+    all(c("item_id", "theta_raw_eap", "theta_raw_sd") %in% names(latest_item_log))) {
+    idx <- match(ids, as.character(latest_item_log$item_id))
+    if (all(!is.na(idx))) {
+      theta_mean <- as.double(latest_item_log$theta_raw_eap[idx])
+      theta_sd <- as.double(latest_item_log$theta_raw_sd[idx])
+      rank_mu_raw <- if ("rank_raw" %in% names(latest_item_log)) {
+        as.double(latest_item_log$rank_raw[idx])
+      } else {
+        rep(NA_real_, length(idx))
+      }
+      if (all(is.finite(theta_mean)) &&
+        all(is.finite(theta_sd)) &&
+        all(theta_sd >= 0)) {
+        surface <- tibble::tibble(
+          item_id = ids,
+          theta_raw_eap = theta_mean,
+          theta_raw_sd = theta_sd,
+          rank_raw = rank_mu_raw
+        )
+        return(list(
+          source = "item_log",
+          hash = .adaptive_phase_a_hash_object(surface)
+        ))
+      }
+    }
+  }
+
+  draws <- .adaptive_phase_a_extract_set_draws(state, set_id = set_id)
+  if (!is.null(draws)) {
+    return(list(
+      source = "posterior_draws",
+      hash = .adaptive_phase_a_hash_object(list(
+        colnames = colnames(draws),
+        draws = unclass(draws)
+      ))
+    ))
+  }
+
+  list(source = "missing", hash = NA_character_)
+}
+
+.adaptive_phase_a_prepare_context_hash <- function(state,
+                                                   set_id,
+                                                   requested_source,
+                                                   controller,
+                                                   prior_status = NA_character_,
+                                                   persisted_artifact = NULL,
+                                                   import_artifact = NULL) {
+  requested_source <- as.character(requested_source %||% NA_character_)
+  policy <- as.character(controller$phase_a_import_failure_policy %||% "fail_fast")
+  reliability_min <- as.double(controller$phase_a_required_reliability_min %||% 0.80)
+
+  context <- list(
+    set_id = as.integer(set_id),
+    requested_source = requested_source,
+    link_estimation_mode = as.character(controller$link_estimation_mode %||% "transform"),
+    phase_a_import_failure_policy = policy,
+    phase_a_required_reliability_min = reliability_min,
+    phase_a_compatible_model_ids = sort(unique(as.character(
+      controller$phase_a_compatible_model_ids %||% "btl_e_b"
+    ))),
+    phase_a_compatible_config_hashes = sort(unique(as.character(
+      controller$phase_a_compatible_config_hashes %||% character()
+    ))),
+    required_config_hash = .adaptive_phase_a_required_config_hash(state, set_id = set_id)
+  )
+  if (identical(requested_source, "import")) {
+    context$import_artifact_hash <- .adaptive_phase_a_artifact_memo_hash(import_artifact)
+  }
+
+  include_run_surface <- identical(requested_source, "run") ||
+    identical(policy, "fallback_to_run")
+  if (isTRUE(include_run_surface)) {
+    within_set_evidence <- .adaptive_phase_a_within_set_evidence_from_state(state, set_id = set_id)
+    context$run_surface <- list(
+      latest_refit_row = tibble::as_tibble(
+        .adaptive_phase_a_latest_refit_row(state, set_id = set_id) %||% tibble::tibble()
+      ),
+      round_diagnostics = .adaptive_phase_a_round_diagnostics_surface(state),
+      n_pairs_committed = .adaptive_phase_a_within_set_pair_count(state, set_id = set_id),
+      within_set_evidence_hash = .adaptive_phase_a_within_set_evidence_hash(within_set_evidence),
+      summary_surface = .adaptive_phase_a_summary_surface_stamp(state, set_id = set_id)
+    )
+  }
+
+  .adaptive_phase_a_hash_object(context)
+}
+
+.adaptive_phase_a_strip_runtime_prepare_memo <- function(state) {
+  out <- state
+  phase_a <- out$linking$phase_a %||% NULL
+  if (is.list(phase_a)) {
+    phase_a$prepare_context_by_set <- NULL
+    out$linking$phase_a <- phase_a
+  }
+  out
 }
 
 .adaptive_phase_a_artifact_fit_contract_surface <- function(artifact) {
@@ -1295,6 +1669,8 @@
   set_ids <- as.integer(sort(unique(out$items$set_id)))
   persisted_status_tbl <- tibble::as_tibble(out$linking$phase_a$set_status %||% tibble::tibble())
   prior_phase_a <- out$linking$phase_a %||% list()
+  prior_prepare_context_by_set <- prior_phase_a$prepare_context_by_set %||% list()
+  prior_stop_pass_map <- prior_phase_a$set_stop_pass_by_set %||% list()
   prior_warm_start_scope_set <- as.integer(prior_phase_a$warm_start_scope_set %||% NA_integer_)
   status_cols <- c("set_id", "source", "status", "validation_message")
   if (!all(status_cols %in% names(persisted_status_tbl))) {
@@ -1323,11 +1699,14 @@
 
   statuses <- .adaptive_phase_a_empty_state(set_ids = set_ids)
   artifacts <- list()
+  set_stop_pass_map <- list()
+  prepare_context_by_set <- list()
 
   for (idx in seq_along(set_ids)) {
     set_id <- as.integer(set_ids[[idx]])
     set_key <- as.character(set_id)
-    source <- as.character(sources[[set_key]] %||% "run")
+    requested_source <- as.character(sources[[set_key]] %||% "run")
+    source <- requested_source
     persisted_row <- persisted_status_tbl[persisted_status_tbl$set_id == set_id, , drop = FALSE]
     prior_status <- if (nrow(persisted_row) > 0L) {
       as.character(persisted_row$status[[1L]] %||% NA_character_)
@@ -1338,6 +1717,41 @@
     status <- "pending_finalization"
     message <- NA_character_
     persisted <- persisted_map[[set_key]] %||% NULL
+    import_artifact <- import_map[[set_key]] %||% NULL
+    current_context_hash <- .adaptive_phase_a_prepare_context_hash(
+      state = out,
+      set_id = set_id,
+      requested_source = requested_source,
+      controller = controller,
+      prior_status = prior_status,
+      persisted_artifact = persisted,
+      import_artifact = import_artifact
+    )
+    prepare_context_by_set[[set_key]] <- current_context_hash
+
+    can_reuse <- nrow(persisted_row) > 0L &&
+      identical(as.character(prior_prepare_context_by_set[[set_key]] %||% NA_character_), current_context_hash)
+    if (isTRUE(can_reuse)) {
+      reused_source <- as.character(persisted_row$source[[1L]] %||% source)
+      statuses$source[[idx]] <- reused_source
+      statuses$status[[idx]] <- as.character(persisted_row$status[[1L]] %||% NA_character_)
+      statuses$validation_message[[idx]] <- as.character(
+        persisted_row$validation_message[[1L]] %||% NA_character_
+      )
+      if (!is.null(persisted)) {
+        artifacts[[set_key]] <- persisted
+      }
+      if (!is.null(prior_stop_pass_map[[set_key]])) {
+        set_stop_pass_map[[set_key]] <- isTRUE(prior_stop_pass_map[[set_key]])
+      } else {
+        set_stop_pass_map[[set_key]] <- isTRUE(.adaptive_phase_a_set_stop_passed(
+          artifact = artifacts[[set_key]] %||% NULL,
+          source = reused_source,
+          controller = controller
+        ))
+      }
+      next
+    }
 
     if (!is.null(persisted)) {
       persisted_ok <- tryCatch(
@@ -1495,27 +1909,17 @@
     statuses$source[[idx]] <- source
     statuses$status[[idx]] <- status
     statuses$validation_message[[idx]] <- message
+    set_stop_pass_map[[set_key]] <- isTRUE(.adaptive_phase_a_set_stop_passed(
+      artifact = artifacts[[set_key]] %||% NULL,
+      source = source,
+      controller = controller
+    ))
   }
 
   run_mode <- as.character(controller$run_mode %||% "within_set")
   is_link_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
   ready_for_phase_b <- isTRUE(all(statuses$status == "ready"))
   required_sets <- .adaptive_phase_a_required_sets(out, controller = controller)
-  set_stop_pass_map <- list()
-  for (idx in seq_len(nrow(statuses))) {
-    set_id <- as.integer(statuses$set_id[[idx]] %||% NA_integer_)
-    if (is.na(set_id)) {
-      next
-    }
-    set_key <- as.character(set_id)
-    artifact <- artifacts[[set_key]] %||% NULL
-    source <- statuses$source[[idx]] %||% NA_character_
-    set_stop_pass_map[[set_key]] <- isTRUE(.adaptive_phase_a_set_stop_passed(
-      artifact = artifact,
-      source = source,
-      controller = controller
-    ))
-  }
   strict_ready_for_phase_b <- length(required_sets) > 0L &&
     all(vapply(as.character(required_sets), function(key) isTRUE(set_stop_pass_map[[key]]), logical(1L)))
   ready_spokes <- integer()
@@ -1562,7 +1966,8 @@
     ready_spokes = as.integer(ready_spokes),
     active_phase_a_set = as.integer(active_phase_a_set),
     phase_b_started_at_step = as.integer(phase_b_start),
-    warm_start_scope_set = prior_warm_start_scope_set
+    warm_start_scope_set = prior_warm_start_scope_set,
+    prepare_context_by_set = prepare_context_by_set
   )
 
   .adaptive_anchored_joint_sync_scaffolding(out)
@@ -1583,7 +1988,10 @@
   }
 
   set_stop_pass_map <- phase_a$set_stop_pass_by_set %||% list()
-  for (set_id in required_sets) {
+  missing_stop_sets <- required_sets[!vapply(as.character(required_sets), function(key) {
+    !is.null(set_stop_pass_map[[key]]) && !is.na(set_stop_pass_map[[key]])
+  }, logical(1L))]
+  for (set_id in missing_stop_sets) {
     set_key <- as.character(set_id)
     source <- NA_character_
     if (nrow(status_tbl) > 0L && set_id %in% as.integer(status_tbl$set_id)) {

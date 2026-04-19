@@ -226,6 +226,63 @@ test_that("maybe_refit_btl validates fit_fn and fit contract", {
   )
 })
 
+test_that("Phase A committed-pair cache rebuilds, updates, and reconciles exactly", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s1", "s2"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs1", "gs2")
+  )
+  state <- pairwiseLLM:::new_adaptive_state(items)
+  state$history_pairs <- tibble::tibble(
+    A_id = c("h1", "h2", "h1", "s1"),
+    B_id = c("h2", "h1", "s1", "s2")
+  )
+
+  rebuilt <- pairwiseLLM:::.adaptive_phase_a_committed_pairs_rebuild(state)
+  expect_identical(rebuilt, c(`1` = 2L, `2` = 1L))
+
+  state$refit_meta$phase_a_committed_pairs_by_set <- rebuilt
+  state$refit_meta$phase_a_committed_pairs_history_n <- nrow(state$history_pairs)
+  resolved <- pairwiseLLM:::.adaptive_phase_a_committed_pairs_resolve(
+    state,
+    validate_existing = TRUE,
+    context = "test"
+  )
+  expect_identical(resolved, rebuilt)
+
+  updated_same_set <- pairwiseLLM:::.adaptive_phase_a_committed_pairs_update(
+    cache = rebuilt,
+    state = state,
+    A_id = "s1",
+    B_id = "s2"
+  )
+  expect_identical(updated_same_set, c(`1` = 2L, `2` = 2L))
+
+  updated_cross_set <- pairwiseLLM:::.adaptive_phase_a_committed_pairs_update(
+    cache = rebuilt,
+    state = state,
+    A_id = "h1",
+    B_id = "s1"
+  )
+  expect_identical(updated_cross_set, rebuilt)
+
+  state$refit_meta$phase_a_committed_pairs_by_set <- c(`1` = 99L, `2` = 1L)
+  state$refit_meta$phase_a_committed_pairs_history_n <- 0L
+  expect_identical(
+    pairwiseLLM:::.adaptive_phase_a_committed_pairs_resolve(state),
+    rebuilt
+  )
+  state$refit_meta$phase_a_committed_pairs_history_n <- nrow(state$history_pairs)
+  expect_error(
+    pairwiseLLM:::.adaptive_phase_a_committed_pairs_resolve(
+      state,
+      validate_existing = TRUE,
+      context = "test"
+    ),
+    "diverged from canonical committed history"
+  )
+})
+
 test_that("compute_stop_metrics validates state and draw matrix shape", {
   expect_error(pairwiseLLM:::compute_stop_metrics(list(), list()), "adaptive_state")
 

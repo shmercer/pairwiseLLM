@@ -348,7 +348,13 @@ test_that("adaptive_rank_run_live validates inputs", {
     "must be TRUE or FALSE"
   )
   expect_error(
-    pairwiseLLM::adaptive_rank_run_live(state, judge_invalid, n_steps = 1L, checkpoint_every_steps = 0L, progress = "none"),
+    pairwiseLLM::adaptive_rank_run_live(
+      state,
+      judge_invalid,
+      n_steps = 1L,
+      checkpoint_every_steps = 0L,
+      progress = "none"
+    ),
     "positive integer"
   )
 })

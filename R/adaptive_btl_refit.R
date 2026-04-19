@@ -90,14 +90,7 @@
   }
 
   set_id <- as.integer(phase_scope$set_id)
-  history <- .adaptive_history_tbl(state)
-  M_done <- 0L
-  if (nrow(history) > 0L) {
-    set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
-    a_set <- as.integer(set_map[as.character(history$A_id)])
-    b_set <- as.integer(set_map[as.character(history$B_id)])
-    M_done <- as.integer(sum(a_set == set_id & b_set == set_id, na.rm = TRUE))
-  }
+  M_done <- .adaptive_phase_a_within_set_pair_count(state, set_id = set_id)
 
   key <- as.character(set_id)
   last_refit_M_done_map <- state$refit_meta$last_refit_M_done_by_phase_a_set %||% list()
