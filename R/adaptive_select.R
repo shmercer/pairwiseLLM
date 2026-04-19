@@ -1916,9 +1916,11 @@ adaptive_defaults <- function(N) {
   candidates <- dplyr::filter(candidates, .data$i != .data$j)
   if (nrow(candidates) > 0L) {
     candidates <- score_candidates_u0(candidates, state$trueskill_state)
-    candidates$p <- vapply(seq_len(nrow(candidates)), function(idx) {
-      trueskill_win_probability(candidates$i[[idx]], candidates$j[[idx]], state$trueskill_state)
-    }, numeric(1L))
+    if (!"p" %in% names(candidates)) {
+      candidates$p <- vapply(seq_len(nrow(candidates)), function(idx) {
+        trueskill_win_probability(candidates$i[[idx]], candidates$j[[idx]], state$trueskill_state)
+      }, numeric(1L))
+    }
   }
   if (nrow(candidates) > 0L) {
     unordered_key <- make_unordered_key(candidates$i, candidates$j)
