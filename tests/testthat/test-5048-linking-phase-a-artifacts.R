@@ -471,6 +471,202 @@ test_that("phase A run artifacts prefer the latest available refit for the set",
   )
 })
 
+test_that("phase A prepare memo reuses unchanged run-set preparation results", {
+  state <- make_phase_a_ready_state_with_evidence()
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "run",
+      phase_a_required_reliability_min = 0
+    )
+  )
+  state <- .adaptive_phase_a_prepare(state)
+
+  ns <- asNamespace("pairwiseLLM")
+  orig_build <- get(".adaptive_phase_a_build_artifact", envir = ns, inherits = FALSE)
+  build_calls <- 0L
+  reused <- testthat::with_mocked_bindings(
+    .adaptive_phase_a_build_artifact = function(...) {
+      build_calls <<- build_calls + 1L
+      orig_build(...)
+    },
+    .env = ns,
+    {
+      .adaptive_phase_a_prepare(state)
+    }
+  )
+
+  expect_identical(build_calls, 0L)
+  expect_equal(
+    tibble::as_tibble(reused$linking$phase_a$set_status),
+    tibble::as_tibble(state$linking$phase_a$set_status)
+  )
+  expect_identical(
+    reused$linking$phase_a$prepare_context_by_set,
+    state$linking$phase_a$prepare_context_by_set
+  )
+})
+
+test_that("phase A prepare invalidates memo on committed within-set evidence changes", {
+  state <- make_phase_a_ready_state_with_evidence()
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "run",
+      phase_a_required_reliability_min = 0
+    )
+  )
+  state <- .adaptive_phase_a_prepare(state)
+
+  state$step_log <- pairwiseLLM:::append_step_log(
+    state$step_log,
+    list(
+      step_id = 3L,
+      timestamp = as.POSIXct("2026-01-01 00:00:02", tz = "UTC"),
+      pair_id = 3L,
+      A = 1L,
+      B = 2L,
+      Y = 0L,
+      set_i = 1L,
+      set_j = 1L,
+      is_cross_set = FALSE,
+      run_mode = "within_set"
+    )
+  )
+  state$history_pairs <- tibble::add_row(state$history_pairs, A_id = "a1", B_id = "a2")
+
+  ns <- asNamespace("pairwiseLLM")
+  orig_build <- get(".adaptive_phase_a_build_artifact", envir = ns, inherits = FALSE)
+  build_calls <- 0L
+  updated <- testthat::with_mocked_bindings(
+    .adaptive_phase_a_build_artifact = function(...) {
+      build_calls <<- build_calls + 1L
+      orig_build(...)
+    },
+    .env = ns,
+    {
+      .adaptive_phase_a_prepare(state)
+    }
+  )
+
+  expect_identical(build_calls, 1L)
+  expect_equal(updated$linking$phase_a$artifacts[["1"]]$n_pairs_committed, 2L)
+  expect_equal(updated$linking$phase_a$artifacts[["2"]]$n_pairs_committed, 1L)
+})
+
+test_that("phase A prepare invalidates memo on set-local refit changes", {
+  state <- make_phase_a_ready_state_with_evidence()
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "run",
+      phase_a_required_reliability_min = 0
+    )
+  )
+  state <- .adaptive_phase_a_prepare(state)
+  state$round_log <- pairwiseLLM:::append_round_log(
+    state$round_log,
+    list(
+      refit_id = 3L,
+      round_id_at_refit = 4L,
+      step_id_at_refit = 20L,
+      diagnostics_pass = TRUE,
+      phase_scope = "phase_a_set",
+      phase_scope_set_id = 1L
+    )
+  )
+
+  ns <- asNamespace("pairwiseLLM")
+  orig_build <- get(".adaptive_phase_a_build_artifact", envir = ns, inherits = FALSE)
+  build_calls <- 0L
+  updated <- testthat::with_mocked_bindings(
+    .adaptive_phase_a_build_artifact = function(...) {
+      build_calls <<- build_calls + 1L
+      orig_build(...)
+    },
+    .env = ns,
+    {
+      .adaptive_phase_a_prepare(state)
+    }
+  )
+
+  expect_identical(build_calls, 1L)
+  expect_equal(as.integer(updated$linking$phase_a$artifacts[["1"]]$refit_id), 3L)
+  expect_equal(as.integer(updated$linking$phase_a$artifacts[["2"]]$refit_id), 2L)
+})
+
+test_that("phase A prepare invalidates memo on imported artifact replacement", {
+  state <- make_phase_a_ready_state_with_evidence()
+  art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
+  art1$quality_gate_accepted <- TRUE
+  art2$quality_gate_accepted <- TRUE
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_required_reliability_min = 0,
+      phase_a_artifacts = list(`1` = art1, `2` = art2)
+    )
+  )
+  state <- .adaptive_phase_a_prepare(state)
+
+  replacement <- art1
+  replacement$diagnostics$ts_btl_rank_spearman <- 0.99
+  state$controller$phase_a_artifacts[["1"]] <- replacement
+
+  ns <- asNamespace("pairwiseLLM")
+  orig_validate <- get(".adaptive_phase_a_validate_imported_artifact", envir = ns, inherits = FALSE)
+  validate_calls <- 0L
+  updated <- testthat::with_mocked_bindings(
+    .adaptive_phase_a_validate_imported_artifact = function(...) {
+      validate_calls <<- validate_calls + 1L
+      orig_validate(...)
+    },
+    .env = ns,
+    {
+      .adaptive_phase_a_prepare(state)
+    }
+  )
+
+  expect_gte(validate_calls, 1L)
+  status <- tibble::as_tibble(updated$linking$phase_a$set_status)
+  expect_true(all(status$status == "ready"))
+})
+
+test_that("phase A prepare invalidates memo on config changes that affect acceptance", {
+  state <- make_phase_a_ready_state_with_evidence()
+  art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
+  art1$quality_gate_accepted <- TRUE
+  art2$quality_gate_accepted <- TRUE
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_required_reliability_min = 0,
+      phase_a_artifacts = list(`1` = art1, `2` = art2)
+    )
+  )
+  state <- .adaptive_phase_a_prepare(state)
+  state$controller$judge_param_mode <- "phase_specific"
+
+  updated <- .adaptive_phase_a_prepare(state)
+  status <- tibble::as_tibble(updated$linking$phase_a$set_status)
+  expect_true(all(status$status == "failed"))
+  expect_true(all(grepl("fit incompatibility", status$validation_message, fixed = TRUE)))
+})
+
 test_that("phase A import hash is stable for fresh sessions without local btl_fit", {
   state_built <- make_phase_a_ready_state()
   artifact <- .adaptive_phase_a_build_artifact(state_built, set_id = 1L)
@@ -839,6 +1035,30 @@ test_that("resume preserves persisted phase A artifacts for linking gate", {
   expect_true(all(status$status == "ready"))
 })
 
+test_that("phase A prepare memo is runtime-only across save and load", {
+  state <- make_phase_a_ready_state_with_evidence()
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "run",
+      phase_a_required_reliability_min = 0
+    )
+  )
+  state <- .adaptive_phase_a_prepare(state)
+  expect_true(length(state$linking$phase_a$prepare_context_by_set) > 0L)
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir = session_dir, overwrite = TRUE)
+  raw_state <- readRDS(file.path(session_dir, "state.rds"))
+  expect_null(raw_state$linking$phase_a$prepare_context_by_set)
+  restored <- load_adaptive_session(session_dir)
+
+  restored <- .adaptive_phase_a_prepare(restored)
+  expect_true(length(restored$linking$phase_a$prepare_context_by_set) > 0L)
+})
+
 test_that("resume preserves Phase A pending/ready semantics and warm-start state", {
   state <- make_phase_a_ready_state_with_evidence()
   art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
@@ -1187,6 +1407,35 @@ test_that("phase A prepare preserves warm-start scope metadata", {
   synced <- pairwiseLLM:::.adaptive_link_sync_warm_start(prepared)
   expect_identical(synced$linking$phase_a$warm_start_scope_set, 1L)
   expect_identical(synced$warm_start_idx, 2L)
+})
+
+test_that("phase A finalize reuses prepared stop-pass state when complete", {
+  state <- make_phase_a_ready_state_with_evidence()
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "run",
+      phase_a_required_reliability_min = 0
+    )
+  )
+  prepared <- .adaptive_phase_a_prepare(state)
+  ns <- asNamespace("pairwiseLLM")
+  orig_stop_pass <- get(".adaptive_phase_a_set_stop_passed", envir = ns, inherits = FALSE)
+  stop_pass_calls <- 0L
+
+  testthat::with_mocked_bindings(
+    .adaptive_phase_a_set_stop_passed = function(...) {
+      stop_pass_calls <<- stop_pass_calls + 1L
+      orig_stop_pass(...)
+    },
+    .env = ns,
+    {
+      expect_no_error(.adaptive_phase_a_finalize_if_ready(prepared))
+    }
+  )
+  expect_identical(stop_pass_calls, 0L)
 })
 
 test_that("phase A helpers cover non-link mode and stale-summary fallback behavior", {

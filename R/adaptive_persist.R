@@ -1186,6 +1186,7 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
     validate_existing = FALSE
   )
   state <- .adaptive_history_state_rebuild_state(state, validate_existing = TRUE, context = "save")
+  state <- .adaptive_phase_a_strip_runtime_prepare_memo(state)
 
   metadata <- list(
     schema_version = as.character(state$meta$schema_version %||% "adaptive-session"),
@@ -1259,6 +1260,7 @@ load_adaptive_session <- function(session_dir) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state.rds` does not contain an adaptive_state object.")
   }
+  state <- .adaptive_phase_a_strip_runtime_prepare_memo(state)
 
   state <- .adaptive_validate_state_for_resume(state)
   state$meta$schema_version <- metadata$schema_version
