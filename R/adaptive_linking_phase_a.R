@@ -275,16 +275,196 @@
   )
 }
 
-.adaptive_phase_a_within_set_pair_count <- function(state, set_id) {
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_empty <- function(set_ids = integer()) {
+  set_ids <- as.integer(sort(unique(set_ids[!is.na(set_ids)])))
+  stats::setNames(rep.int(0L, length(set_ids)), as.character(set_ids))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_validate <- function(cache,
+                                                       set_ids,
+                                                       context = "runtime") {
+  expected_names <- as.character(sort(unique(as.integer(set_ids[!is.na(set_ids)]))))
+  cache <- cache %||% integer()
+
+  if (!is.integer(cache)) {
+    rlang::abort(
+      paste0(
+        "Adaptive Phase A committed-pair cache invariant failed during ",
+        context,
+        ": `refit_meta$phase_a_committed_pairs_by_set` must be an integer vector."
+      )
+    )
+  }
+
+  cache_names <- names(cache) %||% character()
+  if (!identical(cache_names, expected_names)) {
+    rlang::abort(
+      paste0(
+        "Adaptive Phase A committed-pair cache invariant failed during ",
+        context,
+        ": set-id names must exactly match `state$items$set_id`."
+      )
+    )
+  }
+
+  if (any(is.na(cache)) || any(cache < 0L)) {
+    rlang::abort(
+      paste0(
+        "Adaptive Phase A committed-pair cache invariant failed during ",
+        context,
+        ": cached counts must be non-missing and non-negative."
+      )
+    )
+  }
+
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_rebuild <- function(state) {
+  set_ids <- as.integer(sort(unique(state$items$set_id)))
+  cache <- .adaptive_phase_a_committed_pairs_empty(set_ids)
   history <- .adaptive_history_tbl(state)
+
   if (nrow(history) < 1L) {
-    return(0L)
+    return(cache)
   }
 
   set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
-  a_set <- set_map[as.character(history$A_id)]
-  b_set <- set_map[as.character(history$B_id)]
-  as.integer(sum(a_set == set_id & b_set == set_id, na.rm = TRUE))
+  a_set <- as.integer(set_map[as.character(history$A_id)])
+  b_set <- as.integer(set_map[as.character(history$B_id)])
+  within_set <- !is.na(a_set) & !is.na(b_set) & a_set == b_set
+  if (!any(within_set)) {
+    return(cache)
+  }
+
+  within_counts <- table(a_set[within_set])
+  for (set_key in names(within_counts)) {
+    cache[[set_key]] <- as.integer(within_counts[[set_key]])
+  }
+
+  cache
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_equivalent <- function(cache, rebuilt) {
+  cache_names <- names(cache) %||% character()
+  rebuilt_names <- names(rebuilt) %||% character()
+
+  identical(cache_names, rebuilt_names) &&
+    identical(as.integer(cache), as.integer(rebuilt))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_reconcile <- function(cache,
+                                                        state,
+                                                        context = "runtime") {
+  set_ids <- as.integer(sort(unique(state$items$set_id)))
+  .adaptive_phase_a_committed_pairs_validate(cache, set_ids = set_ids, context = context)
+  rebuilt <- .adaptive_phase_a_committed_pairs_rebuild(state)
+  if (!isTRUE(.adaptive_phase_a_committed_pairs_equivalent(cache, rebuilt))) {
+    rlang::abort(
+      paste0(
+        "Adaptive Phase A committed-pair cache invariant failed during ",
+        context,
+        ": cached set-local counts diverged from canonical committed history."
+      )
+    )
+  }
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_resolve <- function(state,
+                                                      validate_existing = FALSE,
+                                                      context = "runtime") {
+  set_ids <- as.integer(sort(unique(state$items$set_id)))
+  cache <- (state$refit_meta %||% list())$phase_a_committed_pairs_by_set %||% NULL
+  if (is.null(cache)) {
+    return(.adaptive_phase_a_committed_pairs_rebuild(state))
+  }
+
+  cache_ok <- tryCatch(
+    {
+      .adaptive_phase_a_committed_pairs_validate(cache, set_ids = set_ids, context = context)
+      TRUE
+    },
+    error = function(e) {
+      if (isTRUE(validate_existing)) {
+        stop(e)
+      }
+      FALSE
+    }
+  )
+
+  if (!isTRUE(cache_ok)) {
+    return(.adaptive_phase_a_committed_pairs_rebuild(state))
+  }
+
+  expected_history_n <- as.integer(nrow(.adaptive_history_tbl(state)))
+  cache_history_n <- as.integer(
+    (state$refit_meta %||% list())$phase_a_committed_pairs_history_n %||% NA_integer_
+  )
+  if (length(cache_history_n) != 1L ||
+    is.na(cache_history_n) ||
+    !identical(cache_history_n, expected_history_n)) {
+    return(.adaptive_phase_a_committed_pairs_rebuild(state))
+  }
+
+  if (isTRUE(validate_existing)) {
+    .adaptive_phase_a_committed_pairs_reconcile(cache, state = state, context = context)
+  }
+
+  cache
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_update <- function(cache, state, A_id, B_id) {
+  set_ids <- as.integer(sort(unique(state$items$set_id)))
+  cache <- cache %||% .adaptive_phase_a_committed_pairs_empty(set_ids)
+  .adaptive_phase_a_committed_pairs_validate(cache, set_ids = set_ids, context = "commit update")
+
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  A_id <- as.character(A_id %||% NA_character_)
+  B_id <- as.character(B_id %||% NA_character_)
+  a_set <- as.integer(set_map[[A_id]] %||% NA_integer_)
+  b_set <- as.integer(set_map[[B_id]] %||% NA_integer_)
+  if (is.na(a_set) || is.na(b_set) || !identical(a_set, b_set)) {
+    return(cache)
+  }
+
+  key <- as.character(a_set)
+  cache[[key]] <- as.integer(cache[[key]] %||% 0L) + 1L
+  cache
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_phase_a_committed_pairs_rebuild_state <- function(state,
+                                                            validate_existing = FALSE,
+                                                            context = "runtime") {
+  state$refit_meta <- state$refit_meta %||% list()
+  state$refit_meta$phase_a_committed_pairs_by_set <- .adaptive_phase_a_committed_pairs_resolve(
+    state,
+    validate_existing = validate_existing,
+    context = context
+  )
+  state$refit_meta$phase_a_committed_pairs_history_n <- as.integer(nrow(.adaptive_history_tbl(state)))
+  state
+}
+
+.adaptive_phase_a_within_set_pair_count <- function(state, set_id) {
+  cache <- .adaptive_phase_a_committed_pairs_resolve(state)
+  as.integer(cache[[as.character(set_id)]] %||% 0L)
 }
 
 .adaptive_phase_a_summary_surface_stamp <- function(state, set_id) {

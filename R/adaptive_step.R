@@ -933,6 +933,13 @@ apply_step_update <- function(state, step) {
   )
   out$history_pairs <- dplyr::bind_rows(out$history_pairs, new_history)
   out$history_state <- .adaptive_history_state_update(history_state, step$A_id, step$B_id)
+  out$refit_meta$phase_a_committed_pairs_by_set <- .adaptive_phase_a_committed_pairs_update(
+    cache = out$refit_meta$phase_a_committed_pairs_by_set %||% NULL,
+    state = out,
+    A_id = step$A_id,
+    B_id = step$B_id
+  )
+  out$refit_meta$phase_a_committed_pairs_history_n <- as.integer(nrow(out$history_pairs))
 
   winner_id <- if (step$Y == 1L) step$A_id else step$B_id
   loser_id <- if (step$Y == 1L) step$B_id else step$A_id

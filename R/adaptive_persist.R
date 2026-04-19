@@ -566,6 +566,11 @@ read_log <- function(path) {
   round_log <- tibble::as_tibble(round_log %||% tibble::tibble())
   state$history_pairs <- .adaptive_resume_history_pairs_from_step_log(state, step_log)
   state <- .adaptive_history_state_rebuild_state(state, validate_existing = TRUE, context = "resume")
+  state <- .adaptive_phase_a_committed_pairs_rebuild_state(
+    state,
+    validate_existing = FALSE,
+    context = "resume"
+  )
 
   refit_meta <- state$refit_meta %||% list()
   if (nrow(round_log) < 1L) {
@@ -1186,6 +1191,11 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
     validate_existing = FALSE
   )
   state <- .adaptive_history_state_rebuild_state(state, validate_existing = TRUE, context = "save")
+  state <- .adaptive_phase_a_committed_pairs_rebuild_state(
+    state,
+    validate_existing = FALSE,
+    context = "save"
+  )
   state <- .adaptive_phase_a_strip_runtime_prepare_memo(state)
 
   metadata <- list(
@@ -1349,6 +1359,11 @@ load_adaptive_session <- function(session_dir) {
     round_log = state$round_log
   )
   state <- .adaptive_history_state_rebuild_state(state, validate_existing = TRUE, context = "load")
+  state <- .adaptive_phase_a_committed_pairs_rebuild_state(
+    state,
+    validate_existing = FALSE,
+    context = "load"
+  )
   state <- .adaptive_link_refit_summary_rebuild_current(state)
   state <- .adaptive_link_probe_realized_index_rebuild_state(
     state,

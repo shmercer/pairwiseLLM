@@ -191,6 +191,17 @@ test_that("save_adaptive_session and load_adaptive_session round-trip adaptive a
   )
 })
 
+test_that("save/load rebuilds the Phase A committed-pair cache from canonical history", {
+  state <- make_anchored_joint_resume_state()
+  state$refit_meta$phase_a_committed_pairs_by_set <- c(`1` = 99L, `2` = 0L)
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+  restored <- load_adaptive_session(session_dir)
+
+  expect_identical(restored$refit_meta$phase_a_committed_pairs_by_set, c(`1` = 1L, `2` = 1L))
+})
+
 test_that("save/load preserves tasklist 01 step_log audit fields exactly", {
   items <- make_test_items(3)
   state <- adaptive_rank_start(items)

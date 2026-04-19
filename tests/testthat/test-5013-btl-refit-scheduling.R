@@ -99,6 +99,7 @@ test_that("linking phase A refit cadence is tracked per active set", {
     fit_fn = stub$fit_fn
   )
   expect_true(refit_1$refit_performed)
+  expect_identical(refit_1$state$refit_meta$phase_a_committed_pairs_by_set, c(`1` = 2L, `2` = 0L))
   expect_identical(refit_1$state$refit_meta$last_refit_M_done_by_phase_a_set[["1"]], 2L)
   expect_identical(refit_1$state$refit_meta$last_refit_M_done, 0L)
 
@@ -120,6 +121,7 @@ test_that("linking phase A refit cadence is tracked per active set", {
     fit_fn = stub$fit_fn
   )
   expect_true(refit_2$refit_performed)
+  expect_identical(refit_2$state$refit_meta$phase_a_committed_pairs_by_set, c(`1` = 2L, `2` = 2L))
   expect_identical(refit_2$state$refit_meta$last_refit_M_done_by_phase_a_set[["2"]], 2L)
   expect_equal(stub$get_calls(), 2L)
 })
