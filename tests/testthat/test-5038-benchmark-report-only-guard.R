@@ -55,3 +55,72 @@ test_that("benchmark helpers do not alter stopping decisions", {
   expect_identical(decision_before, decision_after)
   expect_equal(metrics_before, metrics_after)
 })
+
+test_that("benchmark helpers can include report-only efficiency attribution rows", {
+  state <- adaptive_rank_start(make_test_items(4), seed = 11L)
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$step_log <- tibble::tibble(
+    step_id = 1L,
+    pair_id = NA_integer_,
+    status = "starved",
+    round_id = 1L,
+    pair_type = "anchor_link",
+    stage_quota = 1L,
+    candidate_starved = TRUE,
+    round_stage = "anchor_link",
+    fallback_used = "global_safe",
+    starvation_reason = "few_candidates_generated"
+  )
+
+  metrics <- pairwiseLLM:::.adaptive_benchmark_metrics(
+    state,
+    include_efficiency_profile = TRUE
+  )
+
+  expect_true(nrow(metrics) > 0L)
+  expect_true(all(metrics$report_only))
+  expect_true(any(metrics$metric_group == "efficiency_timing"))
+  expect_true(any(metrics$metric_group == "efficiency_context"))
+  expect_true(any(metrics$metric == "elapsed_seconds:select_next_pair"))
+  expect_true(any(metrics$metric == "elapsed_seconds:phase_a_prepare"))
+  expect_true(any(metrics$metric == "elapsed_seconds:phase_a_finalize_if_ready"))
+  expect_true(any(metrics$metric == "elapsed_seconds:maybe_refit_btl"))
+  expect_true(any(metrics$metric == "elapsed_seconds:round_starvation"))
+  expect_true(any(metrics$metric == "latest_step_candidate_starved"))
+  expect_true(any(grepl("^latest_step_round_stage:anchor_link$", metrics$metric)))
+})
+
+test_that("efficiency attribution benchmarking does not mutate state", {
+  state <- adaptive_rank_start(make_test_items(4), seed = 19L)
+  state$warm_start_done <- TRUE
+  state$round$staged_active <- TRUE
+  state$step_log <- tibble::tibble(
+    step_id = 1L,
+    pair_id = NA_integer_,
+    status = "starved",
+    round_id = 1L,
+    pair_type = "anchor_link",
+    stage_quota = 1L,
+    candidate_starved = TRUE,
+    round_stage = "anchor_link",
+    fallback_used = "global_safe",
+    starvation_reason = "few_candidates_generated"
+  )
+
+  step_log_before <- state$step_log
+  round_before <- state$round
+  phase_a_before <- state$linking$phase_a
+  meta_before <- state$meta
+
+  bench <- pairwiseLLM:::.adaptive_benchmark_metrics(
+    state,
+    include_efficiency_profile = TRUE
+  )
+
+  expect_true(all(bench$report_only))
+  expect_equal(state$step_log, step_log_before)
+  expect_equal(state$round, round_before)
+  expect_equal(state$linking$phase_a, phase_a_before)
+  expect_equal(state$meta, meta_before)
+})
