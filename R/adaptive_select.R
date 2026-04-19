@@ -2200,6 +2200,46 @@ adaptive_defaults <- function(N) {
 
 #' @keywords internal
 #' @noRd
+.adaptive_selector_anchor_generation_memo_key <- function(generation_stage,
+                                                          link_phase_b = FALSE,
+                                                          spoke_id = NA_integer_,
+                                                          external_candidates = FALSE) {
+  if (isTRUE(external_candidates) ||
+    isTRUE(link_phase_b) ||
+    !identical(as.character(generation_stage %||% NA_character_), "anchor_link")) {
+    return(NA_character_)
+  }
+
+  paste(
+    "within_set_anchor",
+    if (is.na(as.integer(spoke_id))) "na" else as.character(as.integer(spoke_id)),
+    sep = "::"
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_selector_anchor_stage_memo_key <- function(generation_stage,
+                                                     dup_policy,
+                                                     link_phase_b = FALSE,
+                                                     spoke_id = NA_integer_,
+                                                     external_candidates = FALSE) {
+  if (isTRUE(external_candidates) ||
+    isTRUE(link_phase_b) ||
+    !identical(as.character(generation_stage %||% NA_character_), "anchor_link")) {
+    return(NA_character_)
+  }
+
+  paste(
+    "within_set_anchor",
+    as.character(dup_policy %||% "default"),
+    if (is.na(as.integer(spoke_id))) "na" else as.character(as.integer(spoke_id)),
+    sep = "::"
+  )
+}
+
+#' @keywords internal
+#' @noRd
 select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
@@ -2281,6 +2321,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     }
   }
   stage_context_memo <- new.env(parent = emptyenv())
+  stage_generation_memo <- new.env(parent = emptyenv())
+  stage_filter_memo <- new.env(parent = emptyenv())
   .resolve_link_stage_context <- function(spoke_id = NA_integer_) {
     memo_key <- if (isTRUE(link_phase_b) && !is.na(as.integer(spoke_id))) {
       paste0("spoke::", as.integer(spoke_id))
@@ -2505,34 +2547,49 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         stage$idx,
         offset = 11L + ifelse(is.na(spoke_attempt), 0L, as.integer(spoke_attempt))
       )
-      stage_candidates <- if (isTRUE(link_phase_b) && isTRUE(attempt_backfill_active)) {
-        .adaptive_link_candidate_pool(
-          state = state,
-          controller = link_controller,
-          spoke_id = ifelse(is.na(spoke_attempt), active_link_spoke, as.integer(spoke_attempt)),
-          include_utility = TRUE,
-          C_max = defaults$C_max,
-          seed = stage_seed
-        )
-      } else if (idx == 1L && !is.null(candidates)) {
-        tibble::as_tibble(candidates)
-      } else if (isTRUE(link_phase_b_concurrent)) {
-        generate_stage_candidates_from_state(
-          state = state,
-          stage_name = attempt_generation_stage,
-          fallback_name = stage$name,
-          C_max = defaults$C_max,
-          seed = stage_seed,
-          link_spoke_id = ifelse(is.na(spoke_attempt), NA_integer_, as.integer(spoke_attempt))
-        )
+      uses_external_candidates <- idx == 1L && !is.null(candidates)
+      generation_memo_key <- .adaptive_selector_anchor_generation_memo_key(
+        generation_stage = attempt_generation_stage,
+        link_phase_b = link_phase_b,
+        spoke_id = ctx_spoke_id,
+        external_candidates = uses_external_candidates
+      )
+      if (!is.na(generation_memo_key) &&
+        exists(generation_memo_key, envir = stage_generation_memo, inherits = FALSE)) {
+        stage_candidates <- stage_generation_memo[[generation_memo_key]]
       } else {
-        generate_stage_candidates_from_state(
-          state = state,
-          stage_name = attempt_generation_stage,
-          fallback_name = stage$name,
-          C_max = defaults$C_max,
-          seed = stage_seed
-        )
+        stage_candidates <- if (isTRUE(link_phase_b) && isTRUE(attempt_backfill_active)) {
+          .adaptive_link_candidate_pool(
+            state = state,
+            controller = link_controller,
+            spoke_id = ifelse(is.na(spoke_attempt), active_link_spoke, as.integer(spoke_attempt)),
+            include_utility = TRUE,
+            C_max = defaults$C_max,
+            seed = stage_seed
+          )
+        } else if (uses_external_candidates) {
+          tibble::as_tibble(candidates)
+        } else if (isTRUE(link_phase_b_concurrent)) {
+          generate_stage_candidates_from_state(
+            state = state,
+            stage_name = attempt_generation_stage,
+            fallback_name = stage$name,
+            C_max = defaults$C_max,
+            seed = stage_seed,
+            link_spoke_id = ifelse(is.na(spoke_attempt), NA_integer_, as.integer(spoke_attempt))
+          )
+        } else {
+          generate_stage_candidates_from_state(
+            state = state,
+            stage_name = attempt_generation_stage,
+            fallback_name = stage$name,
+            C_max = defaults$C_max,
+            seed = stage_seed
+          )
+        }
+        if (!is.na(generation_memo_key)) {
+          stage_generation_memo[[generation_memo_key]] <- stage_candidates
+        }
       }
 
       if (isTRUE(link_phase_b) && isTRUE(attempt_backfill_active)) {
@@ -2586,19 +2643,34 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         break
       }
 
-      stage_out <- .adaptive_select_stage(
-        stage = stage,
-        state = state,
-        config = defaults,
-        controller = controller,
+      stage_filter_memo_key <- .adaptive_selector_anchor_stage_memo_key(
         generation_stage = attempt_generation_stage,
-        round = round,
-        history_state = history_state,
-        counts = counts,
-        step_id = step_id,
-        seed_base = seed_base,
-        candidates = stage_candidates
+        dup_policy = stage$dup_policy,
+        link_phase_b = link_phase_b,
+        spoke_id = ctx_spoke_id,
+        external_candidates = uses_external_candidates
       )
+      if (!is.na(stage_filter_memo_key) &&
+        exists(stage_filter_memo_key, envir = stage_filter_memo, inherits = FALSE)) {
+        stage_out <- stage_filter_memo[[stage_filter_memo_key]]
+      } else {
+        stage_out <- .adaptive_select_stage(
+          stage = stage,
+          state = state,
+          config = defaults,
+          controller = controller,
+          generation_stage = attempt_generation_stage,
+          round = round,
+          history_state = history_state,
+          counts = counts,
+          step_id = step_id,
+          seed_base = seed_base,
+          candidates = stage_candidates
+        )
+        if (!is.na(stage_filter_memo_key)) {
+          stage_filter_memo[[stage_filter_memo_key]] <- stage_out
+        }
+      }
       last_counts <- stage_out$counts
       last_star_caps <- stage_out$star_caps
       if (!is.na(stage_out$long_gate_pass %||% NA)) {
