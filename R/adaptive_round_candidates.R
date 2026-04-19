@@ -1401,6 +1401,141 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_within_set_anchor_pairs_bounded <- function(sorted_ids,
+                                                      sorted_anchor,
+                                                      sorted_strata,
+                                                      C_max = NULL,
+                                                      seed = NULL) {
+  sorted_ids <- as.character(sorted_ids)
+  sorted_anchor <- as.logical(sorted_anchor)
+  sorted_strata <- as.integer(sorted_strata)
+
+  if (length(sorted_ids) < 2L) {
+    return(list(
+      candidates = tibble::tibble(
+        i = character(),
+        j = character(),
+        dist_stratum_global = integer()
+      ),
+      total_legal = 0L,
+      bounded_used = FALSE
+    ))
+  }
+
+  anchor_positions <- which(sorted_anchor)
+  nonanchor_positions <- which(!sorted_anchor)
+  if (length(anchor_positions) < 1L || length(nonanchor_positions) < 1L) {
+    return(list(
+      candidates = tibble::tibble(
+        i = character(),
+        j = character(),
+        dist_stratum_global = integer()
+      ),
+      total_legal = 0L,
+      bounded_used = FALSE
+    ))
+  }
+
+  n <- length(sorted_ids)
+  anchor_suffix <- rev(cumsum(rev(as.integer(sorted_anchor))))
+  nonanchor_suffix <- rev(cumsum(rev(as.integer(!sorted_anchor))))
+  counts_by_left <- ifelse(
+    sorted_anchor[seq_len(n - 1L)],
+    nonanchor_suffix[seq.int(2L, n)],
+    anchor_suffix[seq.int(2L, n)]
+  )
+  total_legal <- as.integer(sum(counts_by_left))
+
+  if (total_legal < 1L) {
+    return(list(
+      candidates = tibble::tibble(
+        i = character(),
+        j = character(),
+        dist_stratum_global = integer()
+      ),
+      total_legal = 0L,
+      bounded_used = FALSE
+    ))
+  }
+
+  C_max <- as.integer(C_max %||% NA_integer_)
+  bounded_used <- is.finite(C_max) && total_legal > C_max
+  keep_positions_raw <- if (isTRUE(bounded_used)) {
+    withr::with_seed(as.integer(seed), {
+      sample.int(total_legal, size = C_max, replace = FALSE)
+    })
+  } else {
+    seq_len(total_legal)
+  }
+  keep_sort_order <- order(keep_positions_raw)
+  keep_positions <- keep_positions_raw[keep_sort_order]
+
+  anchor_cum <- cumsum(as.integer(sorted_anchor))
+  nonanchor_cum <- cumsum(as.integer(!sorted_anchor))
+  out_n <- length(keep_positions)
+  out_i <- character(out_n)
+  out_j <- character(out_n)
+  out_dist <- integer(out_n)
+  out_idx <- 1L
+  keep_idx <- 1L
+  offset <- 0L
+
+  for (left_idx in seq_len(n - 1L)) {
+    count_left <- as.integer(counts_by_left[[left_idx]])
+    if (count_left < 1L) {
+      next
+    }
+    block_end <- offset + count_left
+    if (keep_idx > out_n || keep_positions[[keep_idx]] > block_end) {
+      offset <- block_end
+      next
+    }
+
+    block_keep_end <- keep_idx
+    while (block_keep_end <= out_n && keep_positions[[block_keep_end]] <= block_end) {
+      block_keep_end <- block_keep_end + 1L
+    }
+
+    local_positions <- keep_positions[keep_idx:(block_keep_end - 1L)] - offset
+    selected_right_idx <- if (isTRUE(sorted_anchor[[left_idx]])) {
+      nonanchor_offset <- as.integer(nonanchor_cum[[left_idx]] %||% 0L)
+      nonanchor_positions[nonanchor_offset + local_positions]
+    } else {
+      anchor_offset <- as.integer(anchor_cum[[left_idx]] %||% 0L)
+      anchor_positions[anchor_offset + local_positions]
+    }
+
+    write_n <- length(selected_right_idx)
+    write_range <- out_idx:(out_idx + write_n - 1L)
+    out_i[write_range] <- sorted_ids[[left_idx]]
+    out_j[write_range] <- sorted_ids[selected_right_idx]
+    out_dist[write_range] <- abs(sorted_strata[selected_right_idx] - sorted_strata[[left_idx]])
+    out_idx <- out_idx + write_n
+    keep_idx <- block_keep_end
+    offset <- block_end
+    if (keep_idx > out_n) {
+      break
+    }
+  }
+
+  cand <- tibble::tibble(
+    i = as.character(out_i),
+    j = as.character(out_j),
+    dist_stratum_global = as.integer(out_dist)
+  )
+  if (isTRUE(bounded_used)) {
+    cand <- cand[order(keep_sort_order), , drop = FALSE]
+  }
+
+  list(
+    candidates = cand,
+    total_legal = as.integer(total_legal),
+    bounded_used = as.logical(bounded_used)
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_within_set_direct_pairs_bounded <- function(ids,
                                                       anchor_ids,
                                                       rank_index,
@@ -1429,6 +1564,16 @@
       ),
       total_legal = 0L,
       bounded_used = FALSE
+    ))
+  }
+
+  if (identical(stage_name, "anchor_link")) {
+    return(.adaptive_within_set_anchor_pairs_bounded(
+      sorted_ids = sorted_ids,
+      sorted_anchor = sorted_anchor,
+      sorted_strata = sorted_strata,
+      C_max = C_max,
+      seed = seed
     ))
   }
 
