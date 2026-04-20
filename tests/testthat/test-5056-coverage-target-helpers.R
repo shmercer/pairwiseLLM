@@ -1107,6 +1107,41 @@ test_that("adaptive select posterior and predictive helpers cover remaining edge
     j_id = "b"
   )
   expect_true(is.finite(prob))
+  probs_vec <- .adaptive_long_link_gate_posterior_prob_vec(
+    state = list(
+      item_ids = c("a", "b"),
+      btl_fit = list(
+        btl_posterior_draws = matrix(c(0.2, -0.2, 0.1, -0.1), ncol = 2, byrow = TRUE),
+        beta_draws = c(0.1, -0.2),
+        epsilon_draws = c(0.25, 0.10)
+      )
+    ),
+    i_id = c("a", "a"),
+    j_id = c("b", "b"),
+    block_size = 1L
+  )
+  expect_length(probs_vec, 2L)
+  expect_equal(probs_vec[[1L]], probs_vec[[2L]])
+  expect_error(
+    .adaptive_long_link_gate_posterior_prob_vec(
+      state = list(
+        item_ids = c("a", "b"),
+        btl_fit = list(btl_posterior_draws = matrix(c(0.2, -0.2), ncol = 2))
+      ),
+      i_id = c("a", "b"),
+      j_id = "b"
+    ),
+    "same length"
+  )
+
+  expect_identical(
+    .adaptive_repeat_pair_has_order(
+      unordered_key = c("a:b", "b:c", "c:d"),
+      pair_count = c(0L, 1L, 2L),
+      pair_last_order = list(`b:c` = c("b", "c"))
+    ),
+    c(TRUE, TRUE, FALSE)
+  )
 
   theta_map <- testthat::with_mocked_bindings(
     .adaptive_link_phase_a_theta_map = function(...) c(h1 = 0.3),

@@ -1081,34 +1081,24 @@ adaptive_defaults <- function(N) {
   nrow(accepted) > 0L
 }
 
-.adaptive_long_link_gate_posterior_prob <- function(state, i_id, j_id) {
+#' @keywords internal
+#' @noRd
+.adaptive_long_link_gate_draws_payload <- function(state) {
   fit <- state$btl_fit %||% list()
   draws <- fit$btl_posterior_draws %||% NULL
   if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 1L || ncol(draws) < 1L) {
-    return(NA_real_)
+    return(NULL)
   }
   draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "btl_posterior_draws")
   if (is.null(colnames(draws))) {
     item_ids <- as.character(state$item_ids %||% character())
     if (length(item_ids) != ncol(draws)) {
-      return(NA_real_)
+      return(NULL)
     }
     colnames(draws) <- item_ids
   }
 
-  i_id <- as.character(i_id)
-  j_id <- as.character(j_id)
-  if (!all(c(i_id, j_id) %in% colnames(draws))) {
-    return(NA_real_)
-  }
-
-  theta_i <- as.double(draws[, i_id, drop = TRUE])
-  theta_j <- as.double(draws[, j_id, drop = TRUE])
-  n_draws <- length(theta_i)
-  if (length(theta_j) != n_draws || n_draws < 1L) {
-    return(NA_real_)
-  }
-
+  n_draws <- nrow(draws)
   beta_draws <- fit$beta_draws %||% NULL
   if (is.null(beta_draws)) {
     beta_draws <- rep_len(as.double(fit$beta_mean %||% 0), n_draws)
@@ -1130,13 +1120,113 @@ adaptive_defaults <- function(N) {
   epsilon_draws[!is.finite(epsilon_draws)] <- 0
   epsilon_draws <- pmin(pmax(epsilon_draws, 0), 1)
 
-  p_draws <- (1 - epsilon_draws) * stats::plogis(theta_i - theta_j + beta_draws) +
-    epsilon_draws * 0.5
+  list(
+    draws = draws,
+    beta_draws = beta_draws,
+    epsilon_draws = epsilon_draws
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_long_link_gate_posterior_prob_vec <- function(state,
+                                                        i_id,
+                                                        j_id,
+                                                        block_size = 2048L) {
+  i_id <- as.character(i_id)
+  j_id <- as.character(j_id)
+  if (length(i_id) != length(j_id)) {
+    rlang::abort("`i_id` and `j_id` must have the same length.")
+  }
+  if (length(i_id) < 1L) {
+    return(numeric())
+  }
+  if (length(i_id) <= 32L) {
+    return(vapply(seq_along(i_id), function(idx) {
+      .adaptive_long_link_gate_posterior_prob(
+        state = state,
+        i_id = i_id[[idx]],
+        j_id = j_id[[idx]]
+      )
+    }, numeric(1L)))
+  }
+
+  payload <- .adaptive_long_link_gate_draws_payload(state)
+  if (is.null(payload)) {
+    return(rep_len(NA_real_, length(i_id)))
+  }
+
+  draws <- payload$draws
+  draw_names <- colnames(draws)
+  i_pos <- match(i_id, draw_names)
+  j_pos <- match(j_id, draw_names)
+  out <- rep_len(NA_real_, length(i_id))
+  valid <- !is.na(i_pos) & !is.na(j_pos)
+  if (!any(valid)) {
+    return(out)
+  }
+
+  block_size <- max(1L, as.integer(block_size %||% 2048L))
+  beta_draws <- as.double(payload$beta_draws)
+  epsilon_draws <- as.double(payload$epsilon_draws)
+  valid_idx <- which(valid)
+
+  for (start in seq.int(1L, length(valid_idx), by = block_size)) {
+    stop_idx <- min(start + block_size - 1L, length(valid_idx))
+    idx <- valid_idx[start:stop_idx]
+    theta_i <- draws[, i_pos[idx], drop = FALSE]
+    theta_j <- draws[, j_pos[idx], drop = FALSE]
+    eta <- sweep(theta_i - theta_j, 1L, beta_draws, "+")
+    p_draws <- stats::plogis(eta)
+    p_draws <- sweep(p_draws, 1L, 1 - epsilon_draws, "*")
+    p_draws <- sweep(p_draws, 1L, epsilon_draws * 0.5, "+")
+    finite_cols <- colSums(!is.finite(p_draws)) == 0L
+    if (any(finite_cols)) {
+      out[idx[finite_cols]] <- as.double(colMeans(p_draws[, finite_cols, drop = FALSE]))
+    }
+  }
+
+  out
+}
+
+.adaptive_long_link_gate_posterior_prob <- function(state, i_id, j_id) {
+  i_id <- as.character(i_id)
+  j_id <- as.character(j_id)
+  payload <- .adaptive_long_link_gate_draws_payload(state)
+  if (is.null(payload)) {
+    return(NA_real_)
+  }
+  if (!all(c(i_id, j_id) %in% colnames(payload$draws))) {
+    return(NA_real_)
+  }
+
+  theta_i <- as.double(payload$draws[, i_id, drop = TRUE])
+  theta_j <- as.double(payload$draws[, j_id, drop = TRUE])
+  if (length(theta_i) != length(theta_j) || length(theta_i) < 1L) {
+    return(NA_real_)
+  }
+
+  p_draws <- (1 - payload$epsilon_draws) *
+    stats::plogis(theta_i - theta_j + payload$beta_draws) +
+    payload$epsilon_draws * 0.5
   p_draws <- p_draws[is.finite(p_draws)]
   if (length(p_draws) < 1L) {
     return(NA_real_)
   }
   as.double(mean(p_draws))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_repeat_pair_has_order <- function(unordered_key, pair_count, pair_last_order) {
+  pair_count <- as.integer(pair_count)
+  pair_count[is.na(pair_count)] <- 0L
+  out <- pair_count < 1L
+  if (all(out)) {
+    return(out)
+  }
+  stored_keys <- names(pair_last_order %||% list()) %||% character()
+  out | (unordered_key %in% stored_keys)
 }
 
 .adaptive_local_priority_select <- function(cand, state, round, stage_committed_so_far, stage_quota, defaults) {
@@ -1925,14 +2015,11 @@ adaptive_defaults <- function(N) {
   if (nrow(candidates) > 0L) {
     unordered_key <- make_unordered_key(candidates$i, candidates$j)
     pair_count <- counts$pair_count[unordered_key]
-    pair_count[is.na(pair_count)] <- 0L
-    has_order <- vapply(seq_along(unordered_key), function(idx) {
-      if (pair_count[[idx]] < 1L) {
-        return(TRUE)
-      }
-      last_order <- counts$pair_last_order[[unordered_key[[idx]]]]
-      !is.null(last_order) && length(last_order) == 2L
-    }, logical(1L))
+    has_order <- .adaptive_repeat_pair_has_order(
+      unordered_key = unordered_key,
+      pair_count = pair_count,
+      pair_last_order = counts$pair_last_order
+    )
     candidates <- candidates[has_order, , drop = FALSE]
   }
 
@@ -1942,13 +2029,11 @@ adaptive_defaults <- function(N) {
     p_long_high <- as.double(controller$p_long_high)
     posterior_available <- isTRUE(.adaptive_long_link_gate_has_posterior(state))
     if (isTRUE(posterior_available)) {
-      p_gate <- vapply(seq_len(nrow(candidates)), function(idx) {
-        .adaptive_long_link_gate_posterior_prob(
-          state = state,
-          i_id = as.character(candidates$i[[idx]]),
-          j_id = as.character(candidates$j[[idx]])
-        )
-      }, numeric(1L))
+      p_gate <- .adaptive_long_link_gate_posterior_prob_vec(
+        state = state,
+        i_id = as.character(candidates$i),
+        j_id = as.character(candidates$j)
+      )
     } else {
       p_gate <- as.double(candidates$p)
     }
