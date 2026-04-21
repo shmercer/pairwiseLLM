@@ -990,6 +990,49 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
   expect_identical(restored$controller$link_escalation_recent_pass_window_by_spoke[["2"]], c(TRUE))
 })
 
+test_that("save/load strips runtime-only refit caches from persisted state", {
+  state <- make_probe_resume_state()
+  state$refit_meta$committed_results_cache <- tibble::tibble(
+    pair_id = 1L,
+    step_id = 1L,
+    A_id = "h1",
+    B_id = "h2",
+    Y = 1L,
+    timestamp = as.POSIXct("2026-01-02 00:00:00", tz = "UTC"),
+    is_cross_set = FALSE
+  )
+  state$refit_meta$committed_results_cache_built <- TRUE
+  state$refit_meta$link_cross_edges_by_spoke <- list(
+    `2` = tibble::tibble(
+      spoke_item = "s21",
+      hub_item = "h1",
+      y_spoke = 1L,
+      step_id = 2L,
+      spoke_in_A = FALSE,
+      run_mode = "link_probe_holdout",
+      is_probe_step = TRUE,
+      link_stage = "anchor_link",
+      fallback_used = "probe_panel_acceleration"
+    )
+  )
+  state$refit_meta$link_cross_edges_cache_built <- TRUE
+
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir)
+
+  persisted_state <- readRDS(file.path(session_dir, "state.rds"))
+  expect_null(persisted_state$refit_meta[["committed_results_cache", exact = TRUE]])
+  expect_false(isTRUE(persisted_state$refit_meta$committed_results_cache_built))
+  expect_null(persisted_state$refit_meta[["link_cross_edges_by_spoke", exact = TRUE]])
+  expect_false(isTRUE(persisted_state$refit_meta$link_cross_edges_cache_built))
+
+  restored <- load_adaptive_session(session_dir)
+  expect_null(restored$refit_meta[["committed_results_cache", exact = TRUE]])
+  expect_false(isTRUE(restored$refit_meta$committed_results_cache_built))
+  expect_null(restored$refit_meta[["link_cross_edges_by_spoke", exact = TRUE]])
+  expect_false(isTRUE(restored$refit_meta$link_cross_edges_cache_built))
+})
+
 test_that("load_adaptive_session normalizes legacy controller freeze fields into canonical state", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22", "s23"),

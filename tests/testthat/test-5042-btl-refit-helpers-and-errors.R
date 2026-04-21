@@ -84,6 +84,29 @@ test_that("adaptive results extraction handles empty and committed-only logs", {
   expect_identical(out$winner_pos[[1L]], 2L)
 })
 
+test_that("adaptive results extraction reuses the committed-results runtime cache", {
+  items <- make_test_items(3)
+  state <- pairwiseLLM:::new_adaptive_state(items)
+  state$step_log <- tibble::tibble()
+  state$refit_meta$committed_results_cache <- tibble::tibble(
+    pair_id = 9L,
+    step_id = 4L,
+    A_id = "1",
+    B_id = "3",
+    Y = 1L,
+    timestamp = as.POSIXct("2026-01-01 00:04:00", tz = "UTC"),
+    is_cross_set = FALSE
+  )
+  state$refit_meta$committed_results_cache_built <- TRUE
+
+  out <- pairwiseLLM:::.adaptive_results_from_step_log(state)
+
+  expect_identical(nrow(out), 1L)
+  expect_identical(out$pair_uid[[1L]], "pair_9")
+  expect_identical(out$better_id[[1L]], "1")
+  expect_identical(out$winner_pos[[1L]], 1L)
+})
+
 test_that("adaptive results extraction maps linking phase and judge scope", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s1"),

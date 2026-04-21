@@ -598,6 +598,11 @@
     phase_a$within_set_evidence_by_set <- NULL
     out$linking$phase_a <- phase_a
   }
+  out$refit_meta <- out$refit_meta %||% list()
+  out$refit_meta$committed_results_cache <- NULL
+  out$refit_meta$committed_results_cache_built <- FALSE
+  out$refit_meta$link_cross_edges_by_spoke <- NULL
+  out$refit_meta$link_cross_edges_cache_built <- FALSE
   out
 }
 

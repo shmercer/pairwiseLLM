@@ -2108,6 +2108,25 @@ test_that("low-coverage early adaptive_btl_refit helpers cover remaining guard b
   cross_edges <- pairwiseLLM:::.adaptive_link_cross_edges(cross_state, spoke_id = 2L)
   expect_identical(cross_edges$hub_item[[1L]], "h1")
   expect_identical(cross_edges$spoke_item[[1L]], "s21")
+  cache_only_cross <- state
+  cache_only_cross$step_log <- tibble::tibble()
+  cache_only_cross$refit_meta$link_cross_edges_by_spoke <- list(
+    `2` = tibble::tibble(
+      spoke_item = "s22",
+      hub_item = "h2",
+      y_spoke = 1L,
+      step_id = 7L,
+      spoke_in_A = FALSE,
+      run_mode = "link_probe_holdout",
+      is_probe_step = TRUE,
+      link_stage = "anchor_link",
+      fallback_used = "probe_panel_acceleration"
+    )
+  )
+  cache_only_cross$refit_meta$link_cross_edges_cache_built <- TRUE
+  cached_cross <- pairwiseLLM:::.adaptive_link_cross_edges(cache_only_cross, spoke_id = 2L)
+  expect_identical(cached_cross$hub_item[[1L]], "h2")
+  expect_identical(cached_cross$fallback_used[[1L]], "probe_panel_acceleration")
 
   empty_within <- pairwiseLLM:::.adaptive_link_within_edges(missing_cols_state, set_id = 1L)
   expect_identical(nrow(empty_within), 0L)
@@ -2126,6 +2145,23 @@ test_that("low-coverage early adaptive_btl_refit helpers cover remaining guard b
     )
   )
   expect_identical(nrow(pairwiseLLM:::.adaptive_link_within_edges(invalid_within, set_id = 1L)), 0L)
+  cache_only_within <- state
+  cache_only_within$step_log <- tibble::tibble()
+  cache_only_within$history_pairs <- tibble::tibble(A_id = "h1", B_id = "h2")
+  cache_only_within$refit_meta$phase_a_committed_pairs_by_set <- list(`1` = 1L, `2` = 0L, `3` = 0L)
+  cache_only_within$refit_meta$phase_a_committed_pairs_history_n <- 1L
+  cache_only_within$linking$phase_a$within_set_evidence_by_set <- list(
+    `1` = tibble::tibble(
+      pair_id = 8L,
+      step_id = 8L,
+      A_item = "h1",
+      B_item = "h2",
+      y_A = 1L
+    )
+  )
+  cached_within <- pairwiseLLM:::.adaptive_link_within_edges(cache_only_within, set_id = 1L)
+  expect_identical(cached_within$A_item[[1L]], "h1")
+  expect_identical(cached_within$y_A[[1L]], 1L)
 })
 
 test_that("low-coverage late adaptive_btl_refit helper notes and score guards are covered", {

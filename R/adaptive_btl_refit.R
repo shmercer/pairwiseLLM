@@ -103,6 +103,98 @@
   )
 }
 
+.adaptive_committed_results_empty <- function() {
+  tibble::tibble(
+    pair_id = integer(),
+    step_id = integer(),
+    A_id = character(),
+    B_id = character(),
+    Y = integer(),
+    timestamp = as.POSIXct(character()),
+    is_cross_set = logical()
+  )
+}
+
+.adaptive_committed_results_rebuild <- function(state) {
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  required <- c("pair_id", "step_id", "A", "B", "Y", "timestamp")
+  if (nrow(step_log) < 1L || !all(required %in% names(step_log))) {
+    return(.adaptive_committed_results_empty())
+  }
+
+  rows <- step_log[!is.na(step_log$pair_id), , drop = FALSE]
+  if (nrow(rows) < 1L) {
+    return(.adaptive_committed_results_empty())
+  }
+
+  ids <- as.character(state$item_ids %||% character())
+  out <- tibble::tibble(
+    pair_id = as.integer(rows$pair_id),
+    step_id = as.integer(rows$step_id),
+    A_id = as.character(ids[as.integer(rows$A)]),
+    B_id = as.character(ids[as.integer(rows$B)]),
+    Y = as.integer(rows$Y),
+    timestamp = rows$timestamp,
+    is_cross_set = if ("is_cross_set" %in% names(rows)) {
+      as.logical(rows$is_cross_set %in% TRUE)
+    } else {
+      rep(FALSE, nrow(rows))
+    }
+  )
+  out[order(out$step_id, out$pair_id), , drop = FALSE]
+}
+
+.adaptive_committed_results_cache <- function(state) {
+  refit_meta <- state$refit_meta %||% list()
+  cache <- refit_meta$committed_results_cache %||% NULL
+  if (is.null(cache)) {
+    return(NULL)
+  }
+  cache <- tibble::as_tibble(cache)
+  required <- names(.adaptive_committed_results_empty())
+  if (!all(required %in% names(cache))) {
+    return(NULL)
+  }
+  cache[, required, drop = FALSE]
+}
+
+.adaptive_committed_results_resolve <- function(state) {
+  refit_meta <- state$refit_meta %||% list()
+  cache_built <- isTRUE(refit_meta$committed_results_cache_built %||% FALSE)
+  cache <- .adaptive_committed_results_cache(state)
+  if (isTRUE(cache_built) && !is.null(cache)) {
+    return(cache)
+  }
+  .adaptive_committed_results_rebuild(state)
+}
+
+.adaptive_committed_results_update <- function(cache, step_row, A_id, B_id, Y) {
+  step_row <- tibble::as_tibble(step_row)
+  if (nrow(step_row) != 1L) {
+    return(cache %||% .adaptive_committed_results_empty())
+  }
+
+  pair_id <- as.integer(step_row$pair_id[[1L]] %||% NA_integer_)
+  if (is.na(pair_id)) {
+    return(cache %||% .adaptive_committed_results_empty())
+  }
+
+  cache <- tibble::as_tibble(cache %||% .adaptive_committed_results_empty())
+  out <- dplyr::bind_rows(
+    cache,
+    tibble::tibble(
+      pair_id = pair_id,
+      step_id = as.integer(step_row$step_id[[1L]] %||% NA_integer_),
+      A_id = as.character(A_id),
+      B_id = as.character(B_id),
+      Y = as.integer(Y %||% NA_integer_),
+      timestamp = step_row$timestamp[[1L]] %||% as.POSIXct(NA),
+      is_cross_set = as.logical(step_row$is_cross_set[[1L]] %||% FALSE)
+    )
+  )
+  out[, names(.adaptive_committed_results_empty()), drop = FALSE]
+}
+
 .adaptive_stop_metric_scope <- function(state, ids = NULL) {
   ids <- as.character(ids %||% state$item_ids)
   phase_scope <- .adaptive_refit_phase_a_scope(state)
@@ -624,67 +716,59 @@
 }
 
 .adaptive_results_from_step_log <- function(state, scope_ids = NULL) {
-  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  if (nrow(step_log) == 0L) {
+  results_cache <- .adaptive_committed_results_resolve(state)
+  if (nrow(results_cache) == 0L) {
     return(tibble::tibble())
   }
-  ok <- !is.na(step_log$pair_id)
-  step_log <- step_log[ok, , drop = FALSE]
-  if (nrow(step_log) == 0L) {
-    return(tibble::tibble())
-  }
-
-  ids <- as.character(state$item_ids)
-  A_id <- ids[step_log$A]
-  B_id <- ids[step_log$B]
+  A_id <- as.character(results_cache$A_id)
+  B_id <- as.character(results_cache$B_id)
   if (!is.null(scope_ids)) {
     scope_ids <- as.character(scope_ids)
     in_scope <- A_id %in% scope_ids & B_id %in% scope_ids
-    step_log <- step_log[in_scope, , drop = FALSE]
+    results_cache <- results_cache[in_scope, , drop = FALSE]
     A_id <- A_id[in_scope]
     B_id <- B_id[in_scope]
-    if (nrow(step_log) == 0L) {
+    if (nrow(results_cache) == 0L) {
       return(tibble::tibble())
     }
   }
-  y_vals <- as.integer(step_log$Y)
+  y_vals <- as.integer(results_cache$Y)
   if (any(is.na(y_vals) | !y_vals %in% c(0L, 1L))) {
     rlang::abort(
       "Adaptive refit invariant failed: committed step rows must encode Y in {0,1} with Y=1 meaning A wins."
     )
   }
-  winner_pos <- ifelse(step_log$Y == 1L, 1L, 2L)
-  better_id <- ifelse(step_log$Y == 1L, A_id, B_id)
+  winner_pos <- ifelse(results_cache$Y == 1L, 1L, 2L)
+  better_id <- ifelse(results_cache$Y == 1L, A_id, B_id)
   controller <- .adaptive_controller_resolve(state)
   run_mode <- as.character(controller$run_mode %||% "within_set")
   is_link_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
   phase_a <- state$linking$phase_a %||% list()
   phase_b_ready <- isTRUE(phase_a$ready_for_phase_b %||% FALSE)
   phase_b_start_step <- as.integer(phase_a$phase_b_started_at_step %||% NA_integer_)
-  has_cross <- "is_cross_set" %in% names(step_log)
-  is_cross <- if (isTRUE(has_cross)) step_log$is_cross_set %in% TRUE else rep(FALSE, nrow(step_log))
-  phase_is_b <- rep(FALSE, nrow(step_log))
-  if (isTRUE(is_link_mode) && isTRUE(has_cross) && is.finite(phase_b_start_step)) {
+  is_cross <- as.logical(results_cache$is_cross_set %in% TRUE)
+  phase_is_b <- rep(FALSE, nrow(results_cache))
+  if (isTRUE(is_link_mode) && is.finite(phase_b_start_step)) {
     # Prefer explicit phase metadata when available.
-    phase_is_b <- as.integer(step_log$step_id) >= phase_b_start_step
-  } else if (isTRUE(is_link_mode) && isTRUE(has_cross)) {
+    phase_is_b <- as.integer(results_cache$step_id) >= phase_b_start_step
+  } else if (isTRUE(is_link_mode) && any(is_cross)) {
     # Guarded legacy fallback for resumed sessions without explicit boundary metadata.
     phase_is_b <- cumsum(is_cross) > 0L
   } else if (isTRUE(is_link_mode) && isTRUE(phase_b_ready)) {
-    phase_is_b <- rep(TRUE, nrow(step_log))
+    phase_is_b <- rep(TRUE, nrow(results_cache))
   }
-  phase <- rep("phase2", nrow(step_log))
+  phase <- rep("phase2", nrow(results_cache))
   if (isTRUE(is_link_mode)) {
     phase <- ifelse(phase_is_b, "phase3", "phase2")
   }
   judge_mode <- as.character(controller$judge_param_mode %||% "global_shared")
-  judge_scope <- rep("shared", nrow(step_log))
+  judge_scope <- rep("shared", nrow(results_cache))
   if (identical(judge_mode, "phase_specific")) {
     judge_scope <- ifelse(phase_is_b, "link", "within")
   }
 
   tibble::tibble(
-    pair_uid = paste0("pair_", step_log$pair_id),
+    pair_uid = paste0("pair_", results_cache$pair_id),
     unordered_key = make_unordered_key(A_id, B_id),
     ordered_key = make_ordered_key(A_id, B_id),
     A_id = as.character(A_id),
@@ -693,10 +777,10 @@
     winner_pos = as.integer(winner_pos),
     phase = as.character(phase),
     judge_scope = as.character(judge_scope),
-    iter = as.integer(step_log$step_id),
-    received_at = step_log$timestamp,
-    backend = rep("adaptive", nrow(step_log)),
-    model = rep("adaptive", nrow(step_log))
+    iter = as.integer(results_cache$step_id),
+    received_at = results_cache$timestamp,
+    backend = rep("adaptive", nrow(results_cache)),
+    model = rep("adaptive", nrow(results_cache))
   )
 }
 
@@ -838,36 +922,9 @@
 
 .adaptive_link_active_item_ids <- function(state, spoke_id, hub_id) {
   spoke_items <- as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(spoke_id)])
-  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  hub_active_cross <- character()
-  if (nrow(step_log) > 0L &&
-    all(
-      c("pair_id", "is_cross_set", "link_spoke_id", "set_i", "set_j", "i", "j", "is_probe_step") %in%
-        names(step_log)
-    )) {
-    link_spoke <- as.integer(step_log$link_spoke_id)
-    cumulative <- step_log[
-      !is.na(step_log$pair_id) &
-        step_log$is_cross_set %in% TRUE &
-        !is.na(link_spoke) &
-        link_spoke == as.integer(spoke_id) &
-        !(step_log$is_probe_step %in% TRUE),
-      ,
-      drop = FALSE
-    ]
-    if (nrow(cumulative) > 0L) {
-      hub_active_cross <- unique(vapply(seq_len(nrow(cumulative)), function(k) {
-        if (as.integer(cumulative$set_i[[k]]) == as.integer(hub_id)) {
-          state$item_ids[[as.integer(cumulative$i[[k]])]]
-        } else if (as.integer(cumulative$set_j[[k]]) == as.integer(hub_id)) {
-          state$item_ids[[as.integer(cumulative$j[[k]])]]
-        } else {
-          NA_character_
-        }
-      }, character(1L)))
-      hub_active_cross <- hub_active_cross[!is.na(hub_active_cross)]
-    }
-  }
+  cumulative <- .adaptive_link_cross_edges(state, spoke_id = as.integer(spoke_id), last_refit_step = NULL)
+  hub_active_cross <- unique(as.character(cumulative$hub_item[!(cumulative$is_probe_step %in% TRUE)]))
+  hub_active_cross <- hub_active_cross[!is.na(hub_active_cross)]
   active_hub <- unique(hub_active_cross)
   active_all <- unique(c(spoke_items, active_hub))
 
@@ -885,20 +942,10 @@
     return(as.integer(phase_b_start))
   }
 
-  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  if (nrow(step_log) > 0L &&
-    all(c("pair_id", "step_id", "is_cross_set", "link_spoke_id", "is_probe_step") %in% names(step_log))) {
-    rows <- step_log[
-      !is.na(step_log$pair_id) &
-        step_log$is_cross_set %in% TRUE &
-        as.integer(step_log$link_spoke_id) == as.integer(spoke_id) &
-        !(step_log$is_probe_step %in% TRUE),
-      ,
-      drop = FALSE
-    ]
-    if (nrow(rows) > 0L) {
-      return(as.integer(min(as.integer(rows$step_id), na.rm = TRUE)))
-    }
+  rows <- .adaptive_link_cross_edges(state, spoke_id = as.integer(spoke_id), last_refit_step = NULL)
+  rows <- rows[!(rows$is_probe_step %in% TRUE), , drop = FALSE]
+  if (nrow(rows) > 0L) {
+    return(as.integer(min(as.integer(rows$step_id), na.rm = TRUE)))
   }
 
   1L
@@ -2384,6 +2431,15 @@
 }
 
 .adaptive_link_cross_edges <- function(state, spoke_id, last_refit_step = NULL) {
+  cross_cache <- .adaptive_link_cross_edges_resolve(state)
+  cross <- tibble::as_tibble(cross_cache[[as.character(spoke_id)]] %||% .adaptive_link_cross_edges_empty())
+  if (!is.null(last_refit_step) && nrow(cross) > 0L) {
+    cross <- cross[as.integer(cross$step_id) > as.integer(last_refit_step), , drop = FALSE]
+  }
+  cross
+}
+
+.adaptive_link_cross_edges_empty <- function() {
   empty <- tibble::tibble(
     spoke_item = character(),
     hub_item = character(),
@@ -2391,93 +2447,238 @@
     step_id = integer(),
     spoke_in_A = logical(),
     run_mode = character(),
-    is_probe_step = logical()
+    is_probe_step = logical(),
+    link_stage = character(),
+    fallback_used = character()
   )
+  empty
+}
+
+.adaptive_link_cross_edges_rebuild <- function(state) {
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   if (nrow(step_log) < 1L) {
-    return(empty)
+    return(list())
   }
-  required <- c("pair_id", "step_id", "is_cross_set", "link_spoke_id", "A", "B", "Y", "run_mode", "is_probe_step")
+  required <- c("pair_id", "step_id", "is_cross_set", "link_spoke_id")
   if (!all(required %in% names(step_log))) {
-    return(empty)
+    return(list())
   }
-  hub_id <- as.integer(.adaptive_controller_resolve(state)$hub_id %||% 1L)
-  set_by_item <- stats::setNames(as.integer(state$set_ids), as.character(state$item_ids))
+  controller <- tryCatch(
+    .adaptive_controller_resolve(state),
+    error = function(e) (state$controller %||% list())
+  )
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  item_ids <- as.character(state$item_ids %||% character())
+  set_ids <- as.integer(state$set_ids %||% integer())
+  set_by_item <- if (length(item_ids) > 0L && length(set_ids) == length(item_ids)) {
+    stats::setNames(set_ids, item_ids)
+  } else {
+    NULL
+  }
   link_spoke <- as.integer(step_log$link_spoke_id)
   cross <- step_log[
     !is.na(step_log$pair_id) &
       step_log$is_cross_set %in% TRUE &
-      !is.na(link_spoke) &
-      link_spoke == as.integer(spoke_id),
+      !is.na(link_spoke),
     ,
     drop = FALSE
   ]
-  if (!is.null(last_refit_step)) {
-    cross <- cross[as.integer(cross$step_id) > as.integer(last_refit_step), , drop = FALSE]
-  }
   if (nrow(cross) < 1L) {
-    return(empty)
+    return(list())
   }
-  ids <- as.character(state$item_ids)
-  A_id <- ids[as.integer(cross$A)]
-  B_id <- ids[as.integer(cross$B)]
-  A_set <- as.integer(set_by_item[A_id])
-  B_set <- as.integer(set_by_item[B_id])
-  y <- as.integer(cross$Y)
-  spoke_is_A <- A_set == as.integer(spoke_id) & B_set == hub_id
-  spoke_is_B <- B_set == as.integer(spoke_id) & A_set == hub_id
-  keep <- spoke_is_A | spoke_is_B
-  if (!any(keep)) {
-    return(empty)
+  link_spoke <- as.integer(cross$link_spoke_id)
+  spoke_item <- rep(NA_character_, nrow(cross))
+  hub_item <- rep(NA_character_, nrow(cross))
+  y_spoke <- rep(NA_integer_, nrow(cross))
+  spoke_in_A <- rep(NA, nrow(cross))
+  idx_a_col <- if ("A" %in% names(cross) && any(!is.na(cross$A))) {
+    "A"
+  } else if ("i" %in% names(cross) && any(!is.na(cross$i))) {
+    "i"
+  } else {
+    NA_character_
   }
-  cross <- cross[keep, , drop = FALSE]
-  A_id <- A_id[keep]
-  B_id <- B_id[keep]
-  y <- y[keep]
-  spoke_is_A <- spoke_is_A[keep]
-  tibble::tibble(
-    spoke_item = ifelse(spoke_is_A, A_id, B_id),
-    hub_item = ifelse(spoke_is_A, B_id, A_id),
-    y_spoke = as.integer(ifelse(spoke_is_A, y, 1L - y)),
+  idx_b_col <- if ("B" %in% names(cross) && any(!is.na(cross$B))) {
+    "B"
+  } else if ("j" %in% names(cross) && any(!is.na(cross$j))) {
+    "j"
+  } else {
+    NA_character_
+  }
+  if (!is.na(idx_a_col) && !is.na(idx_b_col)) {
+    A_id <- item_ids[as.integer(cross[[idx_a_col]])]
+    B_id <- item_ids[as.integer(cross[[idx_b_col]])]
+    if (!is.null(set_by_item)) {
+      A_set <- as.integer(set_by_item[A_id])
+      B_set <- as.integer(set_by_item[B_id])
+      spoke_is_A <- (A_set == link_spoke) & (B_set == hub_id)
+      spoke_is_B <- (B_set == link_spoke) & (A_set == hub_id)
+      keep <- (spoke_is_A %in% TRUE) | (spoke_is_B %in% TRUE)
+      if (!any(keep)) {
+        return(list())
+      }
+      cross <- cross[keep, , drop = FALSE]
+      A_id <- A_id[keep]
+      B_id <- B_id[keep]
+      link_spoke <- link_spoke[keep]
+      spoke_is_A <- spoke_is_A[keep] %in% TRUE
+      spoke_item <- ifelse(spoke_is_A, A_id, B_id)
+      hub_item <- ifelse(spoke_is_A, B_id, A_id)
+      spoke_in_A <- as.logical(spoke_is_A)
+      if ("Y" %in% names(cross)) {
+        y <- as.integer(cross$Y)
+        y_spoke <- as.integer(ifelse(spoke_is_A, y, 1L - y))
+      } else {
+        y_spoke <- rep(NA_integer_, nrow(cross))
+      }
+    } else {
+      hub_item <- as.character(A_id)
+      spoke_item <- as.character(B_id)
+      spoke_in_A <- rep(FALSE, nrow(cross))
+      if ("Y" %in% names(cross)) {
+        y_spoke <- as.integer(1L - as.integer(cross$Y))
+      } else {
+        y_spoke <- rep(NA_integer_, nrow(cross))
+      }
+    }
+  }
+  link_stage <- if ("link_stage" %in% names(cross)) {
+    as.character(cross$link_stage)
+  } else if ("round_stage" %in% names(cross)) {
+    as.character(cross$round_stage)
+  } else {
+    rep(NA_character_, nrow(cross))
+  }
+  out <- tibble::tibble(
+    link_spoke_id = as.integer(link_spoke),
+    spoke_item = as.character(spoke_item),
+    hub_item = as.character(hub_item),
+    y_spoke = as.integer(y_spoke),
     step_id = as.integer(cross$step_id),
-    spoke_in_A = as.logical(spoke_is_A),
-    run_mode = as.character(cross$run_mode),
-    is_probe_step = as.logical(cross$is_probe_step %||% FALSE)
+    spoke_in_A = as.logical(spoke_in_A),
+    run_mode = if ("run_mode" %in% names(cross)) {
+      as.character(cross$run_mode)
+    } else {
+      rep(NA_character_, nrow(cross))
+    },
+    is_probe_step = if ("is_probe_step" %in% names(cross)) {
+      as.logical(cross$is_probe_step %||% FALSE)
+    } else {
+      rep(FALSE, nrow(cross))
+    },
+    link_stage = as.character(link_stage),
+    fallback_used = if ("fallback_used" %in% names(cross)) {
+      as.character(cross$fallback_used)
+    } else {
+      rep(NA_character_, nrow(cross))
+    }
   )
+  split_out <- split(out, as.character(out$link_spoke_id))
+  lapply(split_out, function(x) {
+    x <- tibble::as_tibble(x)
+    x[, names(.adaptive_link_cross_edges_empty()), drop = FALSE]
+  })
+}
+
+.adaptive_link_cross_edges_cache <- function(state) {
+  refit_meta <- state$refit_meta %||% list()
+  cache <- refit_meta$link_cross_edges_by_spoke %||% NULL
+  if (!is.list(cache)) {
+    return(NULL)
+  }
+  required <- names(.adaptive_link_cross_edges_empty())
+  valid <- vapply(cache, function(x) {
+    tbl <- tibble::as_tibble(x)
+    all(required %in% names(tbl))
+  }, logical(1))
+  if (!all(valid)) {
+    return(NULL)
+  }
+  lapply(cache, function(x) {
+    tbl <- tibble::as_tibble(x)
+    tbl[, required, drop = FALSE]
+  })
+}
+
+.adaptive_link_cross_edges_resolve <- function(state) {
+  refit_meta <- state$refit_meta %||% list()
+  cache_built <- isTRUE(refit_meta$link_cross_edges_cache_built %||% FALSE)
+  cache <- .adaptive_link_cross_edges_cache(state)
+  if (isTRUE(cache_built) && !is.null(cache)) {
+    return(cache)
+  }
+  .adaptive_link_cross_edges_rebuild(state)
+}
+
+.adaptive_link_cross_edges_update <- function(cache, state, step_row, A_id, B_id, Y) {
+  step_row <- tibble::as_tibble(step_row)
+  if (nrow(step_row) != 1L) {
+    return(cache %||% list())
+  }
+
+  pair_id <- as.integer(step_row$pair_id[[1L]] %||% NA_integer_)
+  spoke_id <- if ("link_spoke_id" %in% names(step_row)) {
+    as.integer(step_row$link_spoke_id[[1L]] %||% NA_integer_)
+  } else {
+    NA_integer_
+  }
+  if (is.na(pair_id) || !isTRUE(step_row$is_cross_set[[1L]] %||% FALSE) || is.na(spoke_id)) {
+    return(cache %||% list())
+  }
+
+  hub_id <- as.integer(.adaptive_controller_resolve(state)$hub_id %||% 1L)
+  set_by_item <- stats::setNames(as.integer(state$set_ids), as.character(state$item_ids))
+  A_set <- as.integer(set_by_item[as.character(A_id)] %||% NA_integer_)
+  B_set <- as.integer(set_by_item[as.character(B_id)] %||% NA_integer_)
+  spoke_is_A <- identical(A_set, spoke_id) && identical(B_set, hub_id)
+  spoke_is_B <- identical(B_set, spoke_id) && identical(A_set, hub_id)
+  if (!(isTRUE(spoke_is_A) || isTRUE(spoke_is_B))) {
+    return(cache %||% list())
+  }
+
+  cache <- cache %||% list()
+  set_key <- as.character(spoke_id)
+  existing <- tibble::as_tibble(cache[[set_key]] %||% .adaptive_link_cross_edges_empty())
+  link_stage <- if ("link_stage" %in% names(step_row)) {
+    as.character(step_row$link_stage[[1L]] %||% NA_character_)
+  } else if ("round_stage" %in% names(step_row)) {
+    as.character(step_row$round_stage[[1L]] %||% NA_character_)
+  } else {
+    NA_character_
+  }
+  fallback_used <- if ("fallback_used" %in% names(step_row)) {
+    as.character(step_row$fallback_used[[1L]] %||% NA_character_)
+  } else {
+    NA_character_
+  }
+  updated <- dplyr::bind_rows(
+    existing,
+    tibble::tibble(
+      spoke_item = if (isTRUE(spoke_is_A)) as.character(A_id) else as.character(B_id),
+      hub_item = if (isTRUE(spoke_is_A)) as.character(B_id) else as.character(A_id),
+      y_spoke = as.integer(if (isTRUE(spoke_is_A)) Y else 1L - as.integer(Y)),
+      step_id = as.integer(step_row$step_id[[1L]] %||% NA_integer_),
+      spoke_in_A = as.logical(spoke_is_A),
+      run_mode = as.character(step_row$run_mode[[1L]] %||% NA_character_),
+      is_probe_step = as.logical(step_row$is_probe_step[[1L]] %||% FALSE),
+      link_stage = as.character(link_stage),
+      fallback_used = as.character(fallback_used)
+    )
+  )
+  cache[[set_key]] <- updated[order(updated$step_id), names(.adaptive_link_cross_edges_empty()), drop = FALSE]
+  cache
 }
 
 .adaptive_link_within_edges <- function(state, set_id) {
-  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  if (nrow(step_log) < 1L) {
-    return(tibble::tibble(A_item = character(), B_item = character(), y_A = integer(), step_id = integer()))
-  }
-  required <- c("pair_id", "A", "B", "Y", "set_i", "set_j", "step_id")
-  if (!all(required %in% names(step_log))) {
-    return(tibble::tibble(A_item = character(), B_item = character(), y_A = integer(), step_id = integer()))
-  }
-  rows <- step_log[
-    !is.na(step_log$pair_id) &
-      as.integer(step_log$set_i) == as.integer(set_id) &
-      as.integer(step_log$set_j) == as.integer(set_id),
-    ,
-    drop = FALSE
-  ]
-  if (nrow(rows) < 1L) {
-    return(tibble::tibble(A_item = character(), B_item = character(), y_A = integer(), step_id = integer()))
-  }
-  ids <- as.character(state$item_ids)
-  A_item <- ids[as.integer(rows$A)]
-  B_item <- ids[as.integer(rows$B)]
-  y_A <- as.integer(rows$Y)
-  keep <- !is.na(A_item) & !is.na(B_item) & y_A %in% c(0L, 1L)
-  if (!any(keep)) {
+  evidence <- .adaptive_phase_a_within_set_evidence_resolve(state, set_id = as.integer(set_id))
+  if (nrow(evidence) < 1L) {
     return(tibble::tibble(A_item = character(), B_item = character(), y_A = integer(), step_id = integer()))
   }
   tibble::tibble(
-    A_item = as.character(A_item[keep]),
-    B_item = as.character(B_item[keep]),
-    y_A = as.integer(y_A[keep]),
-    step_id = as.integer(rows$step_id[keep])
+    A_item = as.character(evidence$A_item),
+    B_item = as.character(evidence$B_item),
+    y_A = as.integer(evidence$y_A),
+    step_id = as.integer(evidence$step_id)
   )
 }
 

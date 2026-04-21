@@ -1896,6 +1896,10 @@ new_adaptive_state <- function(items, now_fn = function() Sys.time()) {
         link_refit_summary_cache_by_refit_spoke = list(),
         link_refit_local_memo_env = new.env(parent = emptyenv()),
         link_unique_cross_pair_keys_by_spoke = list(),
+        committed_results_cache = NULL,
+        committed_results_cache_built = FALSE,
+        link_cross_edges_by_spoke = NULL,
+        link_cross_edges_cache_built = FALSE,
         last_completed_round_summary = list(
           round_id = NA_integer_,
           global_identified = NA,

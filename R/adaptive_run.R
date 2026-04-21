@@ -548,19 +548,7 @@
 #' @noRd
 .adaptive_link_refit_summary_from_step_log <- function(state, refit_id, spoke_id, refit_context) {
   out <- .adaptive_link_refit_summary_empty(refit_id = refit_id, spoke_id = spoke_id)
-  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  required <- c("pair_id", "is_cross_set", "link_spoke_id", "step_id")
-  if (nrow(step_log) < 1L || !all(required %in% names(step_log))) {
-    return(out)
-  }
-
-  cross <- step_log[
-    !is.na(step_log$pair_id) &
-      step_log$is_cross_set %in% TRUE &
-      as.integer(step_log$link_spoke_id) == as.integer(spoke_id),
-    ,
-    drop = FALSE
-  ]
+  cross <- .adaptive_link_cross_edges(state, spoke_id = as.integer(spoke_id), last_refit_step = NULL)
   if (nrow(cross) < 1L) {
     return(out)
   }
@@ -569,18 +557,13 @@
   out$n_pairs_cross_set_done <- as.integer(nrow(cross))
   out$n_pairs_cross_set_probe_done <- as.integer(sum(probe_flag, na.rm = TRUE))
   out$n_pairs_cross_set_active_done <- as.integer(sum(!probe_flag, na.rm = TRUE))
-
-  if (all(c("A", "B") %in% names(cross))) {
-    ids <- as.character(state$item_ids %||% character())
-    a_idx <- as.integer(cross$A)
-    b_idx <- as.integer(cross$B)
-    valid_items <- !is.na(a_idx) & !is.na(b_idx) &
-      a_idx >= 1L & a_idx <= length(ids) &
-      b_idx >= 1L & b_idx <= length(ids)
-    if (any(valid_items)) {
-      pair_keys <- make_unordered_key(ids[a_idx[valid_items]], ids[b_idx[valid_items]])
-      out$n_unique_cross_pairs_seen <- as.integer(length(unique(pair_keys)))
-    }
+  valid_pairs <- !is.na(cross$hub_item) & !is.na(cross$spoke_item)
+  pair_keys <- make_unordered_key(
+    as.character(cross$hub_item[valid_pairs]),
+    as.character(cross$spoke_item[valid_pairs])
+  )
+  if (length(pair_keys) > 0L) {
+    out$n_unique_cross_pairs_seen <- as.integer(length(unique(pair_keys)))
   }
 
   last_refit_step <- as.integer(refit_context$last_refit_step %||% 0L)
@@ -608,17 +591,19 @@
   } else {
     NA_character_
   }
+  active_rows <- since_last[!since_probe_flag, , drop = FALSE]
   if (!is.na(stage_col)) {
-    active_rows <- since_last[!since_probe_flag, , drop = FALSE]
     active_rows <- active_rows[
       as.character(active_rows[[stage_col]]) %in% stage_order,
       ,
       drop = FALSE
     ]
-    if (nrow(active_rows) > 0L) {
-      tab <- table(factor(as.character(active_rows[[stage_col]]), levels = stage_order))
-      out$stage_realized[names(tab)] <- as.integer(tab)
-    }
+  } else {
+    active_rows <- active_rows[0, , drop = FALSE]
+  }
+  if (nrow(active_rows) > 0L) {
+    tab <- table(factor(as.character(active_rows[[stage_col]]), levels = stage_order))
+    out$stage_realized[names(tab)] <- as.integer(tab)
   }
 
   .adaptive_link_refit_summary_validate(out, refit_id, spoke_id, context = "canonical")
@@ -2824,6 +2809,7 @@
 .adaptive_link_probe_cache_predictions <- function(state, refit_id, spoke_id) {
   out <- state
   probe <- .adaptive_link_probe_state(out)
+  controller <- .adaptive_controller_resolve(out)
   epoch_id <- .adaptive_link_probe_epoch_for_spoke(out, spoke_id = spoke_id)
   panel <- .adaptive_link_probe_panel_for_spoke(
     out,
@@ -2855,27 +2841,27 @@
     out$linking$probe <- probe
     return(out)
   }
-  cache_rows <- lapply(seq_len(nrow(panel)), function(idx) {
-    p <- .adaptive_link_predictive_prob_oriented(
-      state = out,
-      controller = .adaptive_controller_resolve(out),
-      spoke_id = as.integer(spoke_id),
-      A_id = as.character(panel$hub_item_id[[idx]]),
-      B_id = as.character(panel$spoke_item_id[[idx]])
-    )
-    tibble::tibble(
-      refit_id = as.integer(refit_id),
-      spoke_id = as.integer(spoke_id),
-      link_epoch_id = as.integer(panel$link_epoch_id[[idx]] %||% 1L),
-      probe_panel_id = as.character(panel$probe_panel_id[[idx]] %||% NA_character_),
-      hub_item_id = as.character(panel$hub_item_id[[idx]]),
-      spoke_item_id = as.character(panel$spoke_item_id[[idx]]),
-      pred_prob = as.double(p)
-    )
-  })
+  scored <- .adaptive_link_attach_predictive_utility(
+    candidates = tibble::tibble(
+      i = as.character(panel$hub_item_id),
+      j = as.character(panel$spoke_item_id)
+    ),
+    state = out,
+    controller = controller,
+    spoke_id = as.integer(spoke_id)
+  )
+  cache_rows <- tibble::tibble(
+    refit_id = as.integer(refit_id),
+    spoke_id = as.integer(spoke_id),
+    link_epoch_id = as.integer(panel$link_epoch_id %||% 1L),
+    probe_panel_id = as.character(panel$probe_panel_id %||% NA_character_),
+    hub_item_id = as.character(panel$hub_item_id),
+    spoke_item_id = as.character(panel$spoke_item_id),
+    pred_prob = as.double(scored$link_p)
+  )
   probe$prediction_cache <- dplyr::bind_rows(
     probe$prediction_cache,
-    dplyr::bind_rows(cache_rows)
+    cache_rows
   )
   out$linking$probe <- probe
   out

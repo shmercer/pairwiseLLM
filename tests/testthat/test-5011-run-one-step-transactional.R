@@ -176,7 +176,8 @@ test_that("held-out probe commits do not mutate the shared history-state cache",
           is_cross_set = TRUE,
           is_probe_step = TRUE,
           run_mode = "link_probe_holdout",
-          link_spoke_id = 2L
+          link_spoke_id = 2L,
+          fallback_used = "probe_panel_acceleration"
         ),
         is_valid = TRUE,
         A_id = "h1",
@@ -190,6 +191,14 @@ test_that("held-out probe commits do not mutate the shared history-state cache",
   expect_identical(out$history_pairs, before_history)
   expect_identical(out$history_state, before_cache)
   expect_identical(nrow(out$linking$probe$realized_edges), 1L)
+  expect_true(isTRUE(out$refit_meta$committed_results_cache_built))
+  expect_identical(nrow(out$refit_meta$committed_results_cache), 1L)
+  expect_identical(out$refit_meta$committed_results_cache$A_id[[1L]], "h1")
+  expect_true(isTRUE(out$refit_meta$link_cross_edges_cache_built))
+  expect_identical(
+    out$refit_meta$link_cross_edges_by_spoke[["2"]]$fallback_used[[1L]],
+    "probe_panel_acceleration"
+  )
   expect_history_state_matches_history(out)
 })
 
@@ -257,6 +266,11 @@ test_that("apply_step_update updates history-state from the pre-commit cache", {
       y_A = 1L
     )
   )
+  expect_true(isTRUE(out$refit_meta$committed_results_cache_built))
+  expect_identical(nrow(out$refit_meta$committed_results_cache), 1L)
+  expect_identical(out$refit_meta$committed_results_cache$A_id[[1L]], "1")
+  expect_true(isTRUE(out$refit_meta$link_cross_edges_cache_built))
+  expect_identical(length(out$refit_meta$link_cross_edges_by_spoke), 0L)
   expect_history_state_matches_history(out)
 })
 

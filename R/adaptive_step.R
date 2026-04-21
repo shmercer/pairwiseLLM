@@ -916,9 +916,29 @@ apply_step_update <- function(state, step) {
     B_id = as.character(step$B_id),
     is_probe_step = FALSE
   )
+  committed_results_cache <- .adaptive_committed_results_resolve(state)
+  cross_edges_cache <- .adaptive_link_cross_edges_resolve(state)
 
   if (isTRUE(step$row$is_probe_step %||% FALSE)) {
     out <- .adaptive_link_probe_register_commit(out, step$row)
+    out$refit_meta <- out$refit_meta %||% list()
+    out$refit_meta$committed_results_cache <- .adaptive_committed_results_update(
+      cache = committed_results_cache,
+      step_row = step$row,
+      A_id = step$A_id,
+      B_id = step$B_id,
+      Y = step$Y
+    )
+    out$refit_meta$committed_results_cache_built <- TRUE
+    out$refit_meta$link_cross_edges_by_spoke <- .adaptive_link_cross_edges_update(
+      cache = cross_edges_cache,
+      state = out,
+      step_row = step$row,
+      A_id = step$A_id,
+      B_id = step$B_id,
+      Y = step$Y
+    )
+    out$refit_meta$link_cross_edges_cache_built <- TRUE
     out <- .adaptive_link_refit_summary_update_after_commit(
       state_before = state,
       state_after = out,
@@ -950,6 +970,23 @@ apply_step_update <- function(state, step) {
     B_id = step$B_id,
     Y = step$Y
   )
+  out$refit_meta$committed_results_cache <- .adaptive_committed_results_update(
+    cache = committed_results_cache,
+    step_row = step$row,
+    A_id = step$A_id,
+    B_id = step$B_id,
+    Y = step$Y
+  )
+  out$refit_meta$committed_results_cache_built <- TRUE
+  out$refit_meta$link_cross_edges_by_spoke <- .adaptive_link_cross_edges_update(
+    cache = cross_edges_cache,
+    state = out,
+    step_row = step$row,
+    A_id = step$A_id,
+    B_id = step$B_id,
+    Y = step$Y
+  )
+  out$refit_meta$link_cross_edges_cache_built <- TRUE
 
   winner_id <- if (step$Y == 1L) step$A_id else step$B_id
   loser_id <- if (step$Y == 1L) step$B_id else step$A_id
