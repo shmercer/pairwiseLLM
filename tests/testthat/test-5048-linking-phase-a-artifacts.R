@@ -1048,15 +1048,46 @@ test_that("phase A prepare memo is runtime-only across save and load", {
   )
   state <- .adaptive_phase_a_prepare(state)
   expect_true(length(state$linking$phase_a$prepare_context_by_set) > 0L)
+  state$linking$phase_a$within_set_evidence_by_set <- list(
+    `1` = tibble::tibble(
+      pair_id = 1L,
+      step_id = 1L,
+      A_item = "a1",
+      B_item = "a2",
+      y_A = 1L
+    )
+  )
 
   session_dir <- withr::local_tempdir()
   save_adaptive_session(state, session_dir = session_dir, overwrite = TRUE)
   raw_state <- readRDS(file.path(session_dir, "state.rds"))
   expect_null(raw_state$linking$phase_a$prepare_context_by_set)
+  expect_null(raw_state$linking$phase_a$within_set_evidence_by_set)
   restored <- load_adaptive_session(session_dir)
 
   restored <- .adaptive_phase_a_prepare(restored)
   expect_true(length(restored$linking$phase_a$prepare_context_by_set) > 0L)
+})
+
+test_that("phase A within-set evidence resolver reuses runtime cache when counts match", {
+  state <- make_phase_a_ready_state_with_evidence()
+  cached_evidence <- list(
+    `1` = tibble::tibble(
+      pair_id = 1L,
+      step_id = 1L,
+      A_item = "a1",
+      B_item = "a2",
+      y_A = 1L
+    )
+  )
+  state$linking$phase_a$within_set_evidence_by_set <- cached_evidence
+  state$refit_meta$phase_a_committed_pairs_by_set <- c(`1` = 1L, `2` = 1L)
+  state$refit_meta$phase_a_committed_pairs_history_n <- 2L
+
+  resolved <- .adaptive_phase_a_within_set_evidence_resolve(state, set_id = 1L)
+
+  expect_equal(resolved, cached_evidence[["1"]])
+  expect_identical(as.integer(nrow(resolved)), 1L)
 })
 
 test_that("resume preserves Phase A pending/ready semantics and warm-start state", {

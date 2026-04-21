@@ -940,6 +940,16 @@ apply_step_update <- function(state, step) {
     B_id = step$B_id
   )
   out$refit_meta$phase_a_committed_pairs_history_n <- as.integer(nrow(out$history_pairs))
+  out$linking <- out$linking %||% list()
+  out$linking$phase_a <- out$linking$phase_a %||% list()
+  out$linking$phase_a$within_set_evidence_by_set <- .adaptive_phase_a_within_set_evidence_update(
+    cache = out$linking$phase_a$within_set_evidence_by_set %||% NULL,
+    state = out,
+    step_row = step$row,
+    A_id = step$A_id,
+    B_id = step$B_id,
+    Y = step$Y
+  )
 
   winner_id <- if (step$Y == 1L) step$A_id else step$B_id
   loser_id <- if (step$Y == 1L) step$B_id else step$A_id

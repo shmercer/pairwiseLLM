@@ -595,6 +595,7 @@
   phase_a <- out$linking$phase_a %||% NULL
   if (is.list(phase_a)) {
     phase_a$prepare_context_by_set <- NULL
+    phase_a$within_set_evidence_by_set <- NULL
     out$linking$phase_a <- phase_a
   }
   out
@@ -683,6 +684,15 @@
   )
 }
 
+.adaptive_phase_a_runtime_evidence_cache <- function(state) {
+  phase_a <- (state$linking %||% list())$phase_a %||% list()
+  cache <- phase_a$within_set_evidence_by_set %||% list()
+  if (!is.list(cache)) {
+    cache <- list()
+  }
+  cache
+}
+
 .adaptive_phase_a_within_set_evidence_from_state <- function(state, set_id) {
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
   if (nrow(step_log) < 1L) {
@@ -718,6 +728,71 @@
     y_A = as.integer(y_A[keep])
   )
   out[order(out$step_id, out$pair_id), , drop = FALSE]
+}
+
+.adaptive_phase_a_within_set_evidence_resolve <- function(state, set_id) {
+  set_id <- as.integer(set_id)
+  set_key <- as.character(set_id)
+  expected_n <- as.integer(.adaptive_phase_a_within_set_pair_count(state, set_id = set_id))
+  cache <- .adaptive_phase_a_runtime_evidence_cache(state)
+  cached <- tibble::as_tibble(cache[[set_key]] %||% tibble::tibble())
+  required <- c("pair_id", "step_id", "A_item", "B_item", "y_A")
+  if (all(required %in% names(cached)) && nrow(cached) == expected_n) {
+    cached <- cached[, required, drop = FALSE]
+    cached$pair_id <- as.integer(cached$pair_id)
+    cached$step_id <- as.integer(cached$step_id)
+    cached$A_item <- as.character(cached$A_item)
+    cached$B_item <- as.character(cached$B_item)
+    cached$y_A <- as.integer(cached$y_A)
+    return(cached[order(cached$step_id, cached$pair_id), , drop = FALSE])
+  }
+  .adaptive_phase_a_within_set_evidence_from_state(state, set_id = set_id)
+}
+
+.adaptive_phase_a_within_set_evidence_update <- function(cache,
+                                                         state,
+                                                         step_row,
+                                                         A_id,
+                                                         B_id,
+                                                         Y) {
+  cache <- cache %||% list()
+  if (!is.list(cache)) {
+    cache <- list()
+  }
+
+  step_row <- tibble::as_tibble(step_row)
+  if (nrow(step_row) != 1L) {
+    return(cache)
+  }
+
+  set_i <- as.integer(step_row$set_i[[1L]] %||% NA_integer_)
+  set_j <- as.integer(step_row$set_j[[1L]] %||% NA_integer_)
+  pair_id <- as.integer(step_row$pair_id[[1L]] %||% NA_integer_)
+  step_id <- as.integer(step_row$step_id[[1L]] %||% NA_integer_)
+  Y <- as.integer(Y %||% NA_integer_)
+  if (is.na(set_i) || is.na(set_j) || !identical(set_i, set_j)) {
+    return(cache)
+  }
+  if (!isTRUE(Y %in% c(0L, 1L)) || !isTRUE(is.finite(pair_id) && pair_id >= 1L) ||
+    !isTRUE(is.finite(step_id) && step_id >= 1L)) {
+    return(cache)
+  }
+
+  set_key <- as.character(set_i)
+  existing <- tibble::as_tibble(cache[[set_key]] %||% .adaptive_phase_a_empty_within_set_evidence())
+  existing <- existing[, c("pair_id", "step_id", "A_item", "B_item", "y_A"), drop = FALSE]
+  updated <- dplyr::bind_rows(
+    existing,
+    tibble::tibble(
+      pair_id = pair_id,
+      step_id = step_id,
+      A_item = as.character(A_id),
+      B_item = as.character(B_id),
+      y_A = Y
+    )
+  )
+  cache[[set_key]] <- updated[order(updated$step_id, updated$pair_id), , drop = FALSE]
+  cache
 }
 
 .adaptive_phase_a_validate_within_set_evidence <- function(evidence,
@@ -1306,27 +1381,13 @@
     rank_mu_raw <- as.double(rank(-theta_mean, ties.method = "average"))
   }
 
-  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
-  history <- .adaptive_history_tbl(state)
-  n_pairs_committed <- 0L
-  if (nrow(history) > 0L) {
-    a_set <- set_map[as.character(history$A_id)]
-    b_set <- set_map[as.character(history$B_id)]
-    n_pairs_committed <- as.integer(sum(a_set == set_id & b_set == set_id, na.rm = TRUE))
-  }
+  n_pairs_committed <- .adaptive_phase_a_within_set_pair_count(state, set_id = set_id)
+  within_set_evidence <- .adaptive_phase_a_within_set_evidence_resolve(state, set_id = set_id)
 
   controller <- .adaptive_controller_resolve(state)
-  round_log <- tibble::as_tibble(state$round_log %||% tibble::tibble())
-  diagnostics_pass <- if (nrow(round_log) > 0L && "diagnostics_pass" %in% names(round_log)) {
-    as.logical(round_log$diagnostics_pass[[nrow(round_log)]])
-  } else {
-    NA
-  }
-  ts_rank <- if (nrow(round_log) > 0L && "ts_btl_rank_spearman" %in% names(round_log)) {
-    as.double(round_log$ts_btl_rank_spearman[[nrow(round_log)]])
-  } else {
-    NA_real_
-  }
+  round_diag <- .adaptive_phase_a_round_diagnostics_surface(state)
+  diagnostics_pass <- as.logical(round_diag$diagnostics_pass %||% NA)
+  ts_rank <- as.double(round_diag$ts_btl_rank_spearman %||% NA_real_)
   reliability <- if (!is.null(draws)) {
     as.double(compute_reliability_EAP(draws))
   } else {
@@ -1363,8 +1424,6 @@
   } else {
     NA_integer_
   }
-  within_set_evidence <- .adaptive_phase_a_within_set_evidence_from_state(state, set_id = set_id)
-
   list(
     set_id = set_id,
     fit_model_id = fit_model_id,

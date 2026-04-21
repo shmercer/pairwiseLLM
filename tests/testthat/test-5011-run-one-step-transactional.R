@@ -247,6 +247,16 @@ test_that("apply_step_update updates history-state from the pre-commit cache", {
   expect_identical(resolve_rows_seen, nrow(before_history))
   expect_identical(nrow(out$history_pairs), nrow(before_history) + 1L)
   expect_identical(as.integer(out$history_state$n_pairs), as.integer(nrow(before_history) + 1L))
+  expect_equal(
+    out$linking$phase_a$within_set_evidence_by_set[["1"]],
+    tibble::tibble(
+      pair_id = 2L,
+      step_id = 2L,
+      A_item = "1",
+      B_item = "3",
+      y_A = 1L
+    )
+  )
   expect_history_state_matches_history(out)
 })
 

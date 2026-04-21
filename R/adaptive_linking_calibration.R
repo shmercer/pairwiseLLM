@@ -2,7 +2,31 @@
 # Offline linking calibration helpers.
 # -------------------------------------------------------------------------
 
+.adaptive_calibration_function_surface <- function(fn) {
+  env <- environment(fn)
+  env_label <- "closure"
+  if (identical(env, emptyenv())) {
+    env_label <- "emptyenv"
+  } else if (identical(env, baseenv())) {
+    env_label <- "baseenv"
+  } else if (identical(env, globalenv())) {
+    env_label <- "globalenv"
+  } else if (isNamespace(env)) {
+    env_label <- paste0("namespace:", getNamespaceName(env))
+  }
+
+  list(
+    kind = "function",
+    formals = .adaptive_calibration_canonicalize(as.list(formals(fn))),
+    body = paste(deparse(body(fn), width.cutoff = 500L), collapse = "\n"),
+    environment = env_label
+  )
+}
+
 .adaptive_calibration_canonicalize <- function(x) {
+  if (is.function(x)) {
+    return(.adaptive_calibration_function_surface(x))
+  }
   if (is.list(x) && !is.data.frame(x)) {
     nm <- names(x)
     if (is.null(nm)) {
