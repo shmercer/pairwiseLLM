@@ -171,7 +171,12 @@
   as.character(unname(tools::md5sum(tmp)))
 }
 
-.adaptive_phase_a_artifact_memo_surface <- function(artifact) {
+.adaptive_runtime_hash_object <- function(x) {
+  as.character(rlang::hash(x))
+}
+
+.adaptive_phase_a_artifact_memo_surface <- function(artifact,
+                                                    hash_fn = .adaptive_phase_a_hash_object) {
   if (!is.list(artifact)) {
     return(NULL)
   }
@@ -184,7 +189,7 @@
         artifact$within_set_evidence %||%
         .adaptive_phase_a_empty_within_set_evidence()
     )
-    evidence_hash <- .adaptive_phase_a_hash_object(evidence)
+    evidence_hash <- hash_fn(evidence)
   }
 
   list(
@@ -211,12 +216,13 @@
   )
 }
 
-.adaptive_phase_a_artifact_memo_hash <- function(artifact) {
-  surface <- .adaptive_phase_a_artifact_memo_surface(artifact)
+.adaptive_phase_a_artifact_memo_hash <- function(artifact,
+                                                 hash_fn = .adaptive_phase_a_hash_object) {
+  surface <- .adaptive_phase_a_artifact_memo_surface(artifact, hash_fn = hash_fn)
   if (is.null(surface)) {
     return(NA_character_)
   }
-  .adaptive_phase_a_hash_object(surface)
+  hash_fn(surface)
 }
 
 .adaptive_phase_a_fit_contract_surface <- function(judge_param_mode,
@@ -246,8 +252,10 @@
   )
 }
 
-.adaptive_phase_a_required_config_hash <- function(state, set_id) {
-  .adaptive_phase_a_hash_object(.adaptive_phase_a_required_config_surface(state, set_id = set_id))
+.adaptive_phase_a_required_config_hash <- function(state,
+                                                   set_id,
+                                                   hash_fn = .adaptive_phase_a_hash_object) {
+  hash_fn(.adaptive_phase_a_required_config_surface(state, set_id = set_id))
 }
 
 .adaptive_phase_a_round_diagnostics_surface <- function(state) {
@@ -467,7 +475,9 @@
   as.integer(cache[[as.character(set_id)]] %||% 0L)
 }
 
-.adaptive_phase_a_summary_surface_stamp <- function(state, set_id) {
+.adaptive_phase_a_summary_surface_stamp <- function(state,
+                                                    set_id,
+                                                    hash_fn = .adaptive_phase_a_hash_object) {
   items_set <- state$items[state$items$set_id == as.integer(set_id), , drop = FALSE]
   ids <- as.character(items_set$item_id)
 
@@ -499,7 +509,7 @@
         )
         return(list(
           source = "item_log",
-          hash = .adaptive_phase_a_hash_object(surface)
+          hash = hash_fn(surface)
         ))
       }
     }
@@ -509,7 +519,7 @@
   if (!is.null(draws)) {
     return(list(
       source = "posterior_draws",
-      hash = .adaptive_phase_a_hash_object(list(
+      hash = hash_fn(list(
         colnames = colnames(draws),
         draws = unclass(draws)
       ))
@@ -542,28 +552,42 @@
     phase_a_compatible_config_hashes = sort(unique(as.character(
       controller$phase_a_compatible_config_hashes %||% character()
     ))),
-    required_config_hash = .adaptive_phase_a_required_config_hash(state, set_id = set_id)
+    required_config_hash = .adaptive_phase_a_required_config_hash(
+      state,
+      set_id = set_id,
+      hash_fn = .adaptive_runtime_hash_object
+    )
   )
   if (identical(requested_source, "import")) {
-    context$import_artifact_hash <- .adaptive_phase_a_artifact_memo_hash(import_artifact)
+    context$import_artifact_hash <- .adaptive_phase_a_artifact_memo_hash(
+      import_artifact,
+      hash_fn = .adaptive_runtime_hash_object
+    )
   }
 
   include_run_surface <- identical(requested_source, "run") ||
     identical(policy, "fallback_to_run")
   if (isTRUE(include_run_surface)) {
-    within_set_evidence <- .adaptive_phase_a_within_set_evidence_from_state(state, set_id = set_id)
+    n_pairs_committed <- .adaptive_phase_a_within_set_pair_count(state, set_id = set_id)
     context$run_surface <- list(
       latest_refit_row = tibble::as_tibble(
         .adaptive_phase_a_latest_refit_row(state, set_id = set_id) %||% tibble::tibble()
       ),
       round_diagnostics = .adaptive_phase_a_round_diagnostics_surface(state),
-      n_pairs_committed = .adaptive_phase_a_within_set_pair_count(state, set_id = set_id),
-      within_set_evidence_hash = .adaptive_phase_a_within_set_evidence_hash(within_set_evidence),
-      summary_surface = .adaptive_phase_a_summary_surface_stamp(state, set_id = set_id)
+      n_pairs_committed = n_pairs_committed,
+      # Runtime prepare invalidation only needs the exact set-local committed
+      # evidence version. The canonical evidence and summary surfaces remain
+      # authoritative for artifact construction and validation.
+      within_set_evidence_version = as.integer(n_pairs_committed),
+      summary_surface = .adaptive_phase_a_summary_surface_stamp(
+        state,
+        set_id = set_id,
+        hash_fn = .adaptive_runtime_hash_object
+      )
     )
   }
 
-  .adaptive_phase_a_hash_object(context)
+  .adaptive_runtime_hash_object(context)
 }
 
 .adaptive_phase_a_strip_runtime_prepare_memo <- function(state) {
@@ -807,8 +831,9 @@
   evidence[order(evidence$step_id, evidence$pair_id), , drop = FALSE]
 }
 
-.adaptive_phase_a_within_set_evidence_hash <- function(evidence) {
-  .adaptive_phase_a_hash_object(tibble::as_tibble(evidence %||% .adaptive_phase_a_empty_within_set_evidence()))
+.adaptive_phase_a_within_set_evidence_hash <- function(evidence,
+                                                       hash_fn = .adaptive_phase_a_hash_object) {
+  hash_fn(tibble::as_tibble(evidence %||% .adaptive_phase_a_empty_within_set_evidence()))
 }
 
 .adaptive_phase_a_artifact_resolve_within_set_evidence <- function(artifact,
