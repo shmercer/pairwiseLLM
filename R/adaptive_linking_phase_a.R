@@ -359,6 +359,10 @@
   cache
 }
 
+.adaptive_phase_a_committed_pairs_history_n <- function(state) {
+  as.integer(nrow(tibble::as_tibble(state$history_pairs %||% tibble::tibble())))
+}
+
 #' @keywords internal
 #' @noRd
 .adaptive_phase_a_committed_pairs_equivalent <- function(cache, rebuilt) {
@@ -417,7 +421,7 @@
     return(.adaptive_phase_a_committed_pairs_rebuild(state))
   }
 
-  expected_history_n <- as.integer(nrow(.adaptive_history_tbl(state)))
+  expected_history_n <- .adaptive_phase_a_committed_pairs_history_n(state)
   cache_history_n <- as.integer(
     (state$refit_meta %||% list())$phase_a_committed_pairs_history_n %||% NA_integer_
   )
@@ -466,7 +470,7 @@
     validate_existing = validate_existing,
     context = context
   )
-  state$refit_meta$phase_a_committed_pairs_history_n <- as.integer(nrow(.adaptive_history_tbl(state)))
+  state$refit_meta$phase_a_committed_pairs_history_n <- .adaptive_phase_a_committed_pairs_history_n(state)
   state
 }
 
