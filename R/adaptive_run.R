@@ -787,8 +787,16 @@
 #' @noRd
 .adaptive_link_refit_local_step_id <- function(state) {
   step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  if (nrow(step_log) < 1L || !"step_id" %in% names(step_log)) {
+  if (nrow(step_log) < 1L) {
     return(0L)
+  }
+  if (!"step_id" %in% names(step_log)) {
+    return(0L)
+  }
+  canonical_step_id <- as.integer(nrow(step_log))
+  latest_step_id <- as.integer(utils::tail(step_log$step_id, 1L) %||% NA_integer_)
+  if (is.finite(latest_step_id) && !is.na(latest_step_id) && latest_step_id == canonical_step_id) {
+    return(canonical_step_id)
   }
   step_ids <- as.integer(step_log$step_id)
   step_ids <- step_ids[is.finite(step_ids) & !is.na(step_ids)]
@@ -1860,12 +1868,8 @@
 #' @noRd
 .adaptive_link_probe_holdout_total_since_last_refit <- function(state) {
   refit_id <- as.integer(.adaptive_link_refit_window_id(state))
-  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
-  spoke_ids <- integer()
-  if (nrow(step_log) > 0L && "link_spoke_id" %in% names(step_log)) {
-    spoke_ids <- as.integer(step_log$link_spoke_id)
-    spoke_ids <- spoke_ids[is.finite(spoke_ids) & !is.na(spoke_ids)]
-  }
+  cross_cache <- .adaptive_link_cross_edges_resolve(state)
+  spoke_ids <- suppressWarnings(as.integer(names(cross_cache)))
   cache <- .adaptive_link_refit_summary_cache(state)
   if (length(cache) > 0L) {
     cache_spokes <- vapply(cache, function(x) as.integer(x$spoke_id %||% NA_integer_), integer(1L))
