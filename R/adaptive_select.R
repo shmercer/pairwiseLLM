@@ -2650,7 +2650,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
             state = state,
             controller = link_controller,
             spoke_id = ifelse(is.na(spoke_attempt), active_link_spoke, as.integer(spoke_attempt)),
-            include_utility = TRUE,
+            include_utility = FALSE,
             C_max = defaults$C_max,
             seed = stage_seed
           )
@@ -2703,14 +2703,20 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         if (nrow(stage_candidates) == 0L) {
           next
         }
+        stage_candidates <- .adaptive_link_attach_predictive_utility(
+          candidates = stage_candidates,
+          state = state,
+          controller = link_controller,
+          spoke_id = blocker_spoke_id
+        )
         set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
-          order_idx <- .adaptive_link_backfill_order(
-            stage_candidates,
-            hub_id = as.integer(link_controller$hub_id %||% 1L),
-            set_map = set_map,
-            blocker_stage_weights = blocker_stage_weights,
-            spoke_id = blocker_spoke_id
-          )
+        order_idx <- .adaptive_link_backfill_order(
+          stage_candidates,
+          hub_id = as.integer(link_controller$hub_id %||% 1L),
+          set_map = set_map,
+          blocker_stage_weights = blocker_stage_weights,
+          spoke_id = blocker_spoke_id
+        )
         if (length(order_idx) < 1L) {
           next
         }
