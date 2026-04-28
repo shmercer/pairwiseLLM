@@ -417,18 +417,44 @@
 .adaptive_build_item_log_refit <- function(state, refit_id) {
   fit <- state$btl_fit %||% list()
   draws <- fit$btl_posterior_draws %||% NULL
-  if (!is.matrix(draws) || !is.numeric(draws)) {
+  has_draws <- is.matrix(draws) && is.numeric(draws)
+  has_theta_summary <- is.numeric(fit$theta_mean %||% NULL) &&
+    is.numeric(fit$theta_sd %||% NULL) &&
+    is.numeric(fit$theta_p2.5 %||% NULL) &&
+    is.numeric(fit$theta_p5 %||% NULL) &&
+    is.numeric(fit$theta_p50 %||% NULL) &&
+    is.numeric(fit$theta_p95 %||% NULL) &&
+    is.numeric(fit$theta_p97.5 %||% NULL)
+  if (!isTRUE(has_draws) && !isTRUE(has_theta_summary)) {
     return(.adaptive_empty_item_log_tbl())
   }
 
   ids <- as.character(state$item_ids)
   set_id <- as.integer(state$items$set_id[match(ids, as.character(state$items$item_id))])
-  if (is.null(colnames(draws))) {
+  if (isTRUE(has_draws) && is.null(colnames(draws))) {
     if (ncol(draws) == length(ids)) {
       colnames(draws) <- ids
     }
   }
-  draw_ids <- intersect(ids, as.character(colnames(draws)))
+  summary_ids <- if (isTRUE(has_theta_summary) && !is.null(names(fit$theta_mean))) {
+    Reduce(intersect, list(
+      ids,
+      as.character(names(fit$theta_mean)),
+      as.character(names(fit$theta_sd)),
+      as.character(names(fit$theta_p2.5)),
+      as.character(names(fit$theta_p5)),
+      as.character(names(fit$theta_p50)),
+      as.character(names(fit$theta_p95)),
+      as.character(names(fit$theta_p97.5))
+    ))
+  } else {
+    character()
+  }
+  draw_ids <- if (isTRUE(has_draws)) {
+    intersect(ids, as.character(colnames(draws)))
+  } else {
+    character()
+  }
   theta_raw_eap <- rep_len(NA_real_, length(ids))
   theta_raw_sd <- rep_len(NA_real_, length(ids))
   names(theta_raw_eap) <- ids
@@ -437,21 +463,29 @@
   rownames(theta_raw_quantiles) <- c("q2.5", "q5", "q50", "q95", "q97.5")
   colnames(theta_raw_quantiles) <- ids
 
-  if (length(draw_ids) > 0L) {
-    draws <- draws[, draw_ids, drop = FALSE]
+  if (length(summary_ids) > 0L) {
+    theta_raw_eap[summary_ids] <- as.double(fit$theta_mean[summary_ids])
+    theta_raw_sd[summary_ids] <- as.double(fit$theta_sd[summary_ids])
+    theta_raw_quantiles[, summary_ids] <- rbind(
+      as.double(fit$theta_p2.5[summary_ids]),
+      as.double(fit$theta_p5[summary_ids]),
+      as.double(fit$theta_p50[summary_ids]),
+      as.double(fit$theta_p95[summary_ids]),
+      as.double(fit$theta_p97.5[summary_ids])
+    )
+  }
+  missing_summary_ids <- setdiff(draw_ids, summary_ids)
+  if (length(missing_summary_ids) > 0L) {
+    draws <- draws[, missing_summary_ids, drop = FALSE]
     draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "btl_posterior_draws")
 
     probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)
     theta_mean_vals <- as.double(colMeans(draws))
-    theta_sd_vals <- as.double(apply(draws, 2, stats::sd))
-    theta_quantile_vals <- vapply(
-      seq_len(ncol(draws)),
-      function(idx) stats::quantile(draws[, idx], probs = probs, names = FALSE),
-      numeric(length(probs))
-    )
-    theta_raw_eap[draw_ids] <- theta_mean_vals
-    theta_raw_sd[draw_ids] <- theta_sd_vals
-    theta_raw_quantiles[, draw_ids] <- theta_quantile_vals
+    theta_sd_vals <- as.double(.pairwiseLLM_col_sds(draws, center = theta_mean_vals))
+    theta_quantile_vals <- .pairwiseLLM_col_quantiles(draws, probs = probs, names = FALSE)
+    theta_raw_eap[missing_summary_ids] <- theta_mean_vals
+    theta_raw_sd[missing_summary_ids] <- theta_sd_vals
+    theta_raw_quantiles[, missing_summary_ids] <- theta_quantile_vals
   }
   controller <- .adaptive_controller_resolve(state)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)

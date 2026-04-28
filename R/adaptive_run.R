@@ -4540,12 +4540,30 @@ adaptive_rank_run_live <- function(state,
         state = state,
         refit_context = refit_out$refit_context
       )
+      controller_after_link_refit <- .adaptive_controller_resolve(state)
+      phase_b_global_draws <- if (isTRUE(.adaptive_link_phase_b_active(
+        state,
+        controller = controller_after_link_refit
+      ))) {
+        .adaptive_phase_b_global_metric_draws(state, controller = controller_after_link_refit)
+      } else {
+        NULL
+      }
       state <- .adaptive_phase_b_global_metric_history_update(
         state = state,
-        refit_id = as.integer(nrow(state$round_log %||% tibble::tibble()) + 1L)
+        refit_id = as.integer(nrow(state$round_log %||% tibble::tibble()) + 1L),
+        draws = phase_b_global_draws
       )
       cfg$stop_thresholds <- refit_out$config
-      metrics <- compute_stop_metrics(state, config = refit_out$config)
+      metrics <- if (is.null(phase_b_global_draws)) {
+        compute_stop_metrics(state, config = refit_out$config)
+      } else {
+        compute_stop_metrics(
+          state,
+          config = refit_out$config,
+          phase_b_global_draws = phase_b_global_draws
+        )
+      }
       state$stop_metrics <- metrics
       state <- .adaptive_maybe_enter_phase3(state, metrics, refit_out$config)
       stop_decision <- should_stop(metrics, config = refit_out$config)

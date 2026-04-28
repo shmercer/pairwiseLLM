@@ -438,7 +438,7 @@ compute_reliability_EAP <- function(draws) {
   }
 
   theta_mean <- colMeans(draws)
-  theta_var <- apply(draws, 2, stats::var)
+  theta_var <- .pairwiseLLM_col_sds(draws, center = theta_mean)^2
   mean_var <- mean(theta_var)
   var_mean <- stats::var(theta_mean)
 
@@ -942,13 +942,9 @@ build_item_log <- function(state, fit = NULL) {
   theta_draws <- theta_draws[, state$ids, drop = FALSE]
   theta_draws <- .pairwiseLLM_sanitize_draws_matrix(theta_draws, name = "theta_draws")
   theta_mean <- as.double(colMeans(theta_draws))
-  theta_sd <- as.double(apply(theta_draws, 2, stats::sd))
+  theta_sd <- as.double(.pairwiseLLM_col_sds(theta_draws, center = theta_mean))
   probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)
-  theta_quantiles <- vapply(
-    seq_len(ncol(theta_draws)),
-    function(idx) stats::quantile(theta_draws[, idx], probs = probs, names = FALSE),
-    numeric(length(probs))
-  )
+  theta_quantiles <- .pairwiseLLM_col_quantiles(theta_draws, probs = probs, names = FALSE)
   theta_p2.5 <- as.double(theta_quantiles[1L, ])
   theta_p5 <- as.double(theta_quantiles[2L, ])
   theta_p50 <- as.double(theta_quantiles[3L, ])
@@ -958,12 +954,8 @@ build_item_log <- function(state, fit = NULL) {
   rank_mat <- t(apply(theta_draws, 1, function(row) rank(-row, ties.method = "average")))
   colnames(rank_mat) <- state$ids
   rank_mean <- as.double(colMeans(rank_mat))
-  rank_sd <- as.double(apply(rank_mat, 2, stats::sd))
-  rank_quantiles <- vapply(
-    seq_len(ncol(rank_mat)),
-    function(idx) stats::quantile(rank_mat[, idx], probs = probs, names = FALSE),
-    numeric(length(probs))
-  )
+  rank_sd <- as.double(.pairwiseLLM_col_sds(rank_mat, center = rank_mean))
+  rank_quantiles <- .pairwiseLLM_col_quantiles(rank_mat, probs = probs, names = FALSE)
   rank_p2.5 <- as.double(rank_quantiles[1L, ])
   rank_p5 <- as.double(rank_quantiles[2L, ])
   rank_p50 <- as.double(rank_quantiles[3L, ])

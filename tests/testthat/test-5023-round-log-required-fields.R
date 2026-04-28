@@ -181,12 +181,16 @@ test_that("round_log defers heavy audit-only summaries unless reconstruction is 
   round_log_live <- adaptive_round_log(out)
   round_log_reconstructed <- adaptive_round_log(out, reconstruct_deferred = TRUE)
   deferred_cols <- pairwiseLLM:::.adaptive_round_log_deferred_audit_columns()
+  payloads <- out$refit_meta$round_log_deferred_audit_payloads
 
   expect_true(all(vapply(
     deferred_cols,
     function(col) all(is.na(round_log_live[[col]])),
     logical(1)
   )))
+  expect_true(length(payloads) > 0L)
+  expect_true(all(vapply(payloads, function(payload) is.null(payload$draws), logical(1))))
+  expect_true(all(vapply(payloads, function(payload) is.list(payload$summary), logical(1))))
   expect_true(all(is.finite(round_log_reconstructed$cov_trace_theta)))
   expect_true(all(is.finite(round_log_reconstructed$ci95_theta_width_mean)))
   expect_true(all(is.finite(round_log_reconstructed$top20_boundary_entropy_mean)))

@@ -24,15 +24,21 @@ NULL
 summarize_theta <- function(theta_draws) {
   ids <- .btl_mcmc_validate_draws(theta_draws)
   theta_draws <- .pairwiseLLM_sanitize_draws_matrix(theta_draws, name = "theta_draws")
+  theta_mean <- as.double(colMeans(theta_draws))
+  theta_quantiles <- .pairwiseLLM_col_quantiles(
+    theta_draws,
+    probs = c(0.5, 0.05, 0.95, 0.025, 0.975),
+    names = FALSE
+  )
   tibble::tibble(
     ID = ids,
-    mean = as.double(colMeans(theta_draws)),
-    sd = as.double(apply(theta_draws, 2, stats::sd)),
-    median = as.double(apply(theta_draws, 2, stats::median)),
-    q05 = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.05, names = FALSE)),
-    q95 = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.95, names = FALSE)),
-    q025 = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.025, names = FALSE)),
-    q975 = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.975, names = FALSE))
+    mean = theta_mean,
+    sd = as.double(.pairwiseLLM_col_sds(theta_draws, center = theta_mean)),
+    median = as.double(theta_quantiles[1L, ]),
+    q05 = as.double(theta_quantiles[2L, ]),
+    q95 = as.double(theta_quantiles[3L, ]),
+    q025 = as.double(theta_quantiles[4L, ]),
+    q975 = as.double(theta_quantiles[5L, ])
   )
 }
 
@@ -43,16 +49,22 @@ summarize_ranks <- function(theta_draws) {
   theta_draws <- .pairwiseLLM_sanitize_draws_matrix(theta_draws, name = "theta_draws")
   rank_mat <- t(apply(theta_draws, 1, function(row) rank(-row, ties.method = "average")))
   colnames(rank_mat) <- ids
+  rank_mean <- as.double(colMeans(rank_mat))
+  rank_quantiles <- .pairwiseLLM_col_quantiles(
+    rank_mat,
+    probs = c(0.5, 0.05, 0.95, 0.025, 0.975),
+    names = FALSE
+  )
 
   tibble::tibble(
     ID = ids,
-    rank_mean = as.double(colMeans(rank_mat)),
-    rank_sd = as.double(apply(rank_mat, 2, stats::sd)),
-    rank_median = as.double(apply(rank_mat, 2, stats::median)),
-    rank_q05 = as.double(apply(rank_mat, 2, stats::quantile, probs = 0.05, names = FALSE)),
-    rank_q95 = as.double(apply(rank_mat, 2, stats::quantile, probs = 0.95, names = FALSE)),
-    rank_q025 = as.double(apply(rank_mat, 2, stats::quantile, probs = 0.025, names = FALSE)),
-    rank_q975 = as.double(apply(rank_mat, 2, stats::quantile, probs = 0.975, names = FALSE))
+    rank_mean = rank_mean,
+    rank_sd = as.double(.pairwiseLLM_col_sds(rank_mat, center = rank_mean)),
+    rank_median = as.double(rank_quantiles[1L, ]),
+    rank_q05 = as.double(rank_quantiles[2L, ]),
+    rank_q95 = as.double(rank_quantiles[3L, ]),
+    rank_q025 = as.double(rank_quantiles[4L, ]),
+    rank_q975 = as.double(rank_quantiles[5L, ])
   )
 }
 

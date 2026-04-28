@@ -26,6 +26,8 @@ make_fit_contract_fixture <- function() {
 
 test_that("fit contract validator catches missing and malformed fields", {
   fit <- make_fit_contract_fixture()
+  expect_true(all(c("theta_p2.5", "theta_p5", "theta_p50", "theta_p95", "theta_p97.5") %in% names(fit)))
+  expect_equal(fit$theta_p50, stats::setNames(c(0.15, 0.35), c("A", "B")))
 
   missing <- fit
   missing$diagnostics <- NULL
@@ -541,6 +543,29 @@ test_that("build_item_log covers draw-matrix colname fallback branch", {
   out <- pairwiseLLM:::build_item_log(state, fit = fit)
   expect_identical(nrow(out), 2L)
   expect_true(all(c("ID", "theta_mean", "rank_mean") %in% names(out)))
+})
+
+test_that("adaptive item log can reuse fit-contract theta summaries", {
+  state <- adaptive_rank_start(make_test_items(3), seed = 1L)
+  ids <- as.character(state$item_ids)
+  theta_mean <- stats::setNames(c(0.3, 0.1, -0.2), ids)
+  state$btl_fit <- list(
+    theta_mean = theta_mean,
+    theta_sd = stats::setNames(c(0.11, 0.12, 0.13), ids),
+    theta_p2.5 = stats::setNames(theta_mean - 0.2, ids),
+    theta_p5 = stats::setNames(theta_mean - 0.1, ids),
+    theta_p50 = stats::setNames(theta_mean, ids),
+    theta_p95 = stats::setNames(theta_mean + 0.1, ids),
+    theta_p97.5 = stats::setNames(theta_mean + 0.2, ids)
+  )
+
+  item_log <- pairwiseLLM:::.adaptive_build_item_log_refit(state, refit_id = 1L)
+
+  expect_equal(item_log$item_id, ids)
+  expect_equal(item_log$theta_raw_eap, unname(theta_mean))
+  expect_equal(item_log$theta_raw_sd, c(0.11, 0.12, 0.13))
+  expect_equal(item_log$`theta_raw_p2.5`, unname(theta_mean - 0.2))
+  expect_equal(item_log$`theta_raw_p97.5`, unname(theta_mean + 0.2))
 })
 
 test_that("mcmc draw unpacking, diagnostics notes, and fit-contract conversion cover additional error branches", {

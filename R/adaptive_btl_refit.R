@@ -682,13 +682,13 @@
 
 #' @keywords internal
 #' @noRd
-.adaptive_phase_b_global_metric_history_update <- function(state, refit_id = NULL) {
+.adaptive_phase_b_global_metric_history_update <- function(state, refit_id = NULL, draws = NULL) {
   controller <- .adaptive_controller_resolve(state)
   if (!isTRUE(.adaptive_link_phase_b_active(state, controller = controller))) {
     return(state)
   }
 
-  draws <- .adaptive_phase_b_global_metric_draws(state, controller = controller)
+  draws <- draws %||% .adaptive_phase_b_global_metric_draws(state, controller = controller)
   theta_mean <- stats::setNames(as.double(colMeans(draws)), as.character(colnames(draws)))
   history <- state$refit_meta$phase_b_global_theta_mean_history %||% list()
   refit_id <- as.integer(refit_id %||% (nrow(state$round_log %||% tibble::tibble()) + 1L))
@@ -6560,29 +6560,28 @@
   if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 2L || ncol(draws) < 1L) {
     return(NULL)
   }
-  draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "round_log_deferred_audit_draws")
   list(
-    draws = draws,
+    summary = .adaptive_round_log_deferred_audit_from_draws(
+      draws = draws,
+      near_tie_p_low = near_tie_p_low,
+      near_tie_p_high = near_tie_p_high
+    ),
     near_tie_p_low = as.double(near_tie_p_low),
     near_tie_p_high = as.double(near_tie_p_high)
   )
 }
 
-.adaptive_round_log_deferred_audit_from_payload <- function(payload) {
+.adaptive_round_log_deferred_audit_from_draws <- function(draws,
+                                                          near_tie_p_low,
+                                                          near_tie_p_high) {
   out <- .adaptive_round_log_deferred_audit_na_values()
-  if (!is.list(payload)) {
-    return(out)
-  }
-
-  draws <- payload$draws %||% NULL
   if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 2L || ncol(draws) < 1L) {
     return(out)
   }
+  draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "round_log_deferred_audit_draws")
 
-  ci_bounds <- apply(
+  ci_bounds <- .pairwiseLLM_col_quantiles(
     draws,
-    2,
-    stats::quantile,
     probs = c(0.025, 0.975),
     names = FALSE
   )
@@ -6592,8 +6591,8 @@
   out$ci95_theta_width_p90 <- stats::quantile(ci_widths, probs = 0.90, names = FALSE)
   out$ci95_theta_width_max <- max(ci_widths)
 
-  cov_theta <- stats::cov(draws)
-  cov_diag <- diag(cov_theta)
+  theta_for_draws <- as.double(colMeans(draws))
+  cov_diag <- .pairwiseLLM_col_sds(draws, center = theta_for_draws)^2
   out$cov_trace_theta <- sum(cov_diag)
   out$cov_logdet_diag_theta <- sum(log(pmax(cov_diag, .Machine$double.eps)))
   post_sd <- sqrt(pmax(cov_diag, 0))
@@ -6619,17 +6618,14 @@
     )
   }
 
-  theta_for_draws <- as.double(colMeans(draws))
   draw_ids <- as.character(colnames(draws) %||% seq_len(ncol(draws)))
   if (length(theta_for_draws) >= 2L) {
     rank_order <- order(-theta_for_draws, draw_ids)
-    p_adj <- vapply(seq_len(length(rank_order) - 1L), function(k) {
-      lhs <- rank_order[[k]]
-      rhs <- rank_order[[k + 1L]]
-      mean(draws[, lhs] > draws[, rhs])
-    }, numeric(1L))
-    near_low <- as.double(payload$near_tie_p_low %||% 0.40)
-    near_high <- as.double(payload$near_tie_p_high %||% 0.60)
+    lhs <- rank_order[-length(rank_order)]
+    rhs <- rank_order[-1L]
+    p_adj <- as.double(colMeans(draws[, lhs, drop = FALSE] > draws[, rhs, drop = FALSE]))
+    near_low <- as.double(near_tie_p_low %||% 0.40)
+    near_high <- as.double(near_tie_p_high %||% 0.60)
     near_tie <- p_adj >= near_low & p_adj <= near_high
     out$near_tie_adj_frac <- mean(near_tie)
     out$near_tie_adj_count <- as.integer(sum(near_tie))
@@ -6637,12 +6633,33 @@
 
     nn_diff_draws <- draws[, rank_order[-length(rank_order)], drop = FALSE] -
       draws[, rank_order[-1L], drop = FALSE]
-    nn_diff_sd <- apply(nn_diff_draws, 2, stats::sd)
+    nn_diff_sd <- .pairwiseLLM_col_sds(nn_diff_draws)
     out$nn_diff_sd_mean <- mean(nn_diff_sd)
     out$nn_diff_sd_p90 <- stats::quantile(nn_diff_sd, probs = 0.90, names = FALSE)
   }
 
   out
+}
+
+.adaptive_round_log_deferred_audit_from_payload <- function(payload) {
+  out <- .adaptive_round_log_deferred_audit_na_values()
+  if (!is.list(payload)) {
+    return(out)
+  }
+
+  summary <- payload$summary %||% NULL
+  if (is.list(summary)) {
+    for (nm in intersect(names(out), names(summary))) {
+      out[[nm]] <- summary[[nm]]
+    }
+    return(out)
+  }
+
+  .adaptive_round_log_deferred_audit_from_draws(
+    draws = payload$draws %||% NULL,
+    near_tie_p_low = payload$near_tie_p_low %||% 0.40,
+    near_tie_p_high = payload$near_tie_p_high %||% 0.60
+  )
 }
 
 .adaptive_btl_refit_context <- function(state, last_refit_M_done, last_refit_step) {
@@ -7154,7 +7171,7 @@ maybe_refit_btl <- function(state, config, fit_fn = NULL) {
 
 #' @keywords internal
 #' @noRd
-compute_stop_metrics <- function(state, config) {
+compute_stop_metrics <- function(state, config, phase_b_global_draws = NULL) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
@@ -7178,7 +7195,8 @@ compute_stop_metrics <- function(state, config) {
   theta_history <- state$refit_meta$theta_mean_history %||% list()
   controller <- .adaptive_controller_resolve(state)
   if (isTRUE(.adaptive_link_phase_b_active(state, controller = controller))) {
-    combined_draws <- .adaptive_phase_b_global_metric_draws(state, controller = controller)
+    combined_draws <- phase_b_global_draws %||%
+      .adaptive_phase_b_global_metric_draws(state, controller = controller)
     if (is.matrix(combined_draws) && is.numeric(combined_draws)) {
       draws <- combined_draws
       theta_mean_named <- stats::setNames(as.double(colMeans(draws)), as.character(colnames(draws)))

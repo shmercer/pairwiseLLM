@@ -416,14 +416,19 @@ summarize_draws <- function(draws, model_variant = NULL) {
     item_id <- as.character(seq_len(ncol(theta_draws)))
   }
 
+  theta_mean <- as.double(colMeans(theta_draws))
+  theta_quantiles <- .pairwiseLLM_col_quantiles(
+    theta_draws,
+    probs = c(0.05, 0.95, 0.025, 0.975)
+  )
   theta_summary <- tibble::tibble(
     item_id = as.character(item_id),
-    theta_mean = as.double(colMeans(theta_draws)),
-    theta_sd = as.double(apply(theta_draws, 2, stats::sd)),
-    theta_ci90_low = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.05, names = FALSE)),
-    theta_ci90_high = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.95, names = FALSE)),
-    theta_ci95_low = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.025, names = FALSE)),
-    theta_ci95_high = as.double(apply(theta_draws, 2, stats::quantile, probs = 0.975, names = FALSE))
+    theta_mean = theta_mean,
+    theta_sd = as.double(.pairwiseLLM_col_sds(theta_draws, center = theta_mean)),
+    theta_ci90_low = as.double(theta_quantiles[1L, ]),
+    theta_ci90_high = as.double(theta_quantiles[2L, ]),
+    theta_ci95_low = as.double(theta_quantiles[3L, ]),
+    theta_ci95_high = as.double(theta_quantiles[4L, ])
   )
 
   if (model_has_e(model_variant)) {

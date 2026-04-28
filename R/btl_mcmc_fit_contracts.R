@@ -46,7 +46,13 @@ build_btl_fit_contract <- function(theta_draws,
 
   probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)
   theta_mean <- stats::setNames(as.double(colMeans(theta_draws)), ids)
-  theta_sd <- stats::setNames(as.double(apply(theta_draws, 2, stats::sd)), ids)
+  theta_sd <- stats::setNames(as.double(.pairwiseLLM_col_sds(theta_draws, theta_mean)), ids)
+  theta_quantiles <- .pairwiseLLM_col_quantiles(theta_draws, probs = probs, names = FALSE)
+  theta_p2.5 <- stats::setNames(as.double(theta_quantiles[1L, ]), ids)
+  theta_p5 <- stats::setNames(as.double(theta_quantiles[2L, ]), ids)
+  theta_p50 <- stats::setNames(as.double(theta_quantiles[3L, ]), ids)
+  theta_p95 <- stats::setNames(as.double(theta_quantiles[4L, ]), ids)
+  theta_p97.5 <- stats::setNames(as.double(theta_quantiles[5L, ]), ids)
 
   epsilon_summary <- .btl_contract_vector_summary(
     draws = epsilon_draws,
@@ -77,6 +83,11 @@ build_btl_fit_contract <- function(theta_draws,
     epsilon_draws = epsilon_summary$draws,
     beta_draws = beta_summary$draws,
     theta_mean = theta_mean,
+    theta_p2.5 = theta_p2.5,
+    theta_p5 = theta_p5,
+    theta_p50 = theta_p50,
+    theta_p95 = theta_p95,
+    theta_p97.5 = theta_p97.5,
     theta_sd = theta_sd,
     epsilon_mean = epsilon_summary$mean,
     epsilon_p2.5 = epsilon_summary$p2.5,
@@ -352,6 +363,28 @@ validate_btl_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
   }
   if (any(!is.finite(theta_sd))) {
     rlang::abort("`fit$theta_sd` must be finite.", call = where)
+  }
+
+  .btl_contract_validate_named_theta_vector <- function(value, name) {
+    if (is.null(value)) {
+      return(invisible(TRUE))
+    }
+    if (!is.numeric(value) || length(value) != length(ids)) {
+      rlang::abort(paste0("`fit$", name, "` must be a numeric vector of length `ids`."), call = where)
+    }
+    if (is.null(names(value))) {
+      rlang::abort(paste0("`fit$", name, "` must be named."), call = where)
+    }
+    if (!identical(names(value), ids)) {
+      rlang::abort(paste0("`fit$", name, "` names must match `ids`."), call = where)
+    }
+    if (any(!is.finite(value))) {
+      rlang::abort(paste0("`fit$", name, "` must be finite."), call = where)
+    }
+    invisible(TRUE)
+  }
+  for (nm in c("theta_p2.5", "theta_p5", "theta_p50", "theta_p95", "theta_p97.5")) {
+    .btl_contract_validate_named_theta_vector(fit[[nm]] %||% NULL, nm)
   }
 
   n_items <- fit$n_items
