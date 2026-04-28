@@ -2827,16 +2827,14 @@
     panel = panel
   )
   if (nrow(realized_log) > 0L) {
-    panel <- dplyr::inner_join(
-      panel,
-      realized_log[, c("pair_key", "probe_panel_id"), drop = FALSE],
-      by = "pair_key",
-      suffix = c("", "_realized")
-    )
-    if ("probe_panel_id_realized" %in% names(panel)) {
-      use_realized_id <- !is.na(panel$probe_panel_id_realized) & nzchar(panel$probe_panel_id_realized)
-      panel$probe_panel_id[use_realized_id] <- panel$probe_panel_id_realized[use_realized_id]
-      panel$probe_panel_id_realized <- NULL
+    realized_idx <- match(as.character(panel$pair_key), as.character(realized_log$pair_key))
+    keep <- !is.na(realized_idx)
+    panel <- panel[keep, , drop = FALSE]
+    realized_idx <- realized_idx[keep]
+    if (nrow(panel) > 0L && "probe_panel_id" %in% names(realized_log)) {
+      realized_panel_id <- as.character(realized_log$probe_panel_id[realized_idx])
+      use_realized_id <- !is.na(realized_panel_id) & nzchar(realized_panel_id)
+      panel$probe_panel_id[use_realized_id] <- realized_panel_id[use_realized_id]
     }
   } else {
     panel <- panel[0, , drop = FALSE]

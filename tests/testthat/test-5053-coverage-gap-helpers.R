@@ -2103,6 +2103,42 @@ test_that("probe panel construction keeps the normative target auditable when fe
   expect_identical(nrow(panel), 4L)
 })
 
+test_that("large probe cell sampler avoids full-grid construction and respects exclusions", {
+  hub_ids <- paste0("h", seq_len(80L))
+  spoke_ids <- paste0("s", seq_len(80L))
+  excluded <- pairwiseLLM:::make_unordered_key(
+    c("h1", "h1", "h2"),
+    c("s1", "s2", "s1")
+  )
+
+  first_rows <- pairwiseLLM:::.adaptive_link_probe_sample_cell_pairs(
+    hub_ids = hub_ids,
+    spoke_ids = spoke_ids,
+    excluded_keys = excluded,
+    take = 5L,
+    random = FALSE,
+    materialize_limit = 1L
+  )
+  expect_identical(nrow(first_rows), 5L)
+  expect_false(any(first_rows$pair_key %in% excluded))
+  expect_identical(anyDuplicated(first_rows$pair_key), 0L)
+  expect_identical(as.character(first_rows$hub_item_id[[1L]]), "h1")
+  expect_identical(as.character(first_rows$spoke_item_id[[1L]]), "s10")
+
+  sampled_rows <- pairwiseLLM:::.adaptive_link_probe_sample_cell_pairs(
+    hub_ids = hub_ids,
+    spoke_ids = spoke_ids,
+    excluded_keys = c(excluded, first_rows$pair_key),
+    take = 12L,
+    seed = 101L,
+    random = TRUE,
+    materialize_limit = 1L
+  )
+  expect_identical(nrow(sampled_rows), 12L)
+  expect_false(any(sampled_rows$pair_key %in% c(excluded, first_rows$pair_key)))
+  expect_identical(anyDuplicated(sampled_rows$pair_key), 0L)
+})
+
 test_that("remaining candidate-generation and budget helpers cover edge branches", {
   state <- make_link_probe_state()
 

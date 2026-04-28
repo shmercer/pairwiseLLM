@@ -722,6 +722,170 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_link_probe_empty_pair_rows <- function() {
+  tibble::tibble(
+    hub_item_id = character(),
+    spoke_item_id = character(),
+    pair_key = character()
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_materialize_cell_pairs <- function(hub_ids,
+                                                        spoke_ids,
+                                                        excluded_keys,
+                                                        take,
+                                                        seed = NULL,
+                                                        random = TRUE) {
+  hub_ids <- sort(as.character(hub_ids))
+  spoke_ids <- sort(as.character(spoke_ids))
+  take <- as.integer(take %||% 0L)
+  if (take < 1L || length(hub_ids) < 1L || length(spoke_ids) < 1L) {
+    return(.adaptive_link_probe_empty_pair_rows())
+  }
+
+  cell_pairs <- expand.grid(
+    hub_item_id = hub_ids,
+    spoke_item_id = spoke_ids,
+    stringsAsFactors = FALSE
+  )
+  cell_pairs$pair_key <- make_unordered_key(cell_pairs$hub_item_id, cell_pairs$spoke_item_id)
+  cell_pairs <- cell_pairs[!cell_pairs$pair_key %in% excluded_keys, , drop = FALSE]
+  if (nrow(cell_pairs) < 1L) {
+    return(.adaptive_link_probe_empty_pair_rows())
+  }
+  if (isTRUE(random)) {
+    picked_idx <- withr::with_seed(
+      as.integer(seed %||% 1L),
+      sample.int(nrow(cell_pairs), size = min(take, nrow(cell_pairs)), replace = FALSE)
+    )
+    cell_pairs <- cell_pairs[picked_idx, , drop = FALSE]
+  } else {
+    cell_pairs <- cell_pairs[
+      order(as.character(cell_pairs$hub_item_id), as.character(cell_pairs$spoke_item_id)),
+      ,
+      drop = FALSE
+    ]
+    cell_pairs <- cell_pairs[seq_len(min(take, nrow(cell_pairs))), , drop = FALSE]
+  }
+  cell_pairs[order(cell_pairs$hub_item_id, cell_pairs$spoke_item_id), , drop = FALSE]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_pairs_from_linear_index <- function(idx, hub_ids, spoke_ids) {
+  n_spoke <- length(spoke_ids)
+  hub_idx <- ((idx - 1L) %/% n_spoke) + 1L
+  spoke_idx <- ((idx - 1L) %% n_spoke) + 1L
+  tibble::tibble(
+    hub_item_id = as.character(hub_ids[hub_idx]),
+    spoke_item_id = as.character(spoke_ids[spoke_idx])
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_sample_cell_pairs <- function(hub_ids,
+                                                   spoke_ids,
+                                                   excluded_keys,
+                                                   take,
+                                                   seed = NULL,
+                                                   random = TRUE,
+                                                   materialize_limit = 50000L) {
+  hub_ids <- sort(as.character(hub_ids))
+  spoke_ids <- sort(as.character(spoke_ids))
+  excluded_keys <- unique(as.character(excluded_keys %||% character()))
+  take <- as.integer(take %||% 0L)
+  total_pairs <- as.double(length(hub_ids)) * as.double(length(spoke_ids))
+  if (take < 1L || total_pairs < 1L) {
+    return(.adaptive_link_probe_empty_pair_rows())
+  }
+
+  if (total_pairs <= as.double(materialize_limit)) {
+    return(.adaptive_link_probe_materialize_cell_pairs(
+      hub_ids = hub_ids,
+      spoke_ids = spoke_ids,
+      excluded_keys = excluded_keys,
+      take = take,
+      seed = seed,
+      random = random
+    ))
+  }
+
+  picked <- .adaptive_link_probe_empty_pair_rows()
+  picked_keys <- character()
+  if (isTRUE(random)) {
+    draw_n <- min(as.integer(total_pairs), max(1024L, take * 8L))
+    for (attempt in seq_len(25L)) {
+      if (nrow(picked) >= take) {
+        break
+      }
+      idx <- withr::with_seed(
+        as.integer((seed %||% 1L) + attempt - 1L),
+        sample.int(as.integer(total_pairs), size = draw_n, replace = FALSE)
+      )
+      cand <- .adaptive_link_probe_pairs_from_linear_index(idx, hub_ids, spoke_ids)
+      cand$pair_key <- make_unordered_key(cand$hub_item_id, cand$spoke_item_id)
+      keep <- !cand$pair_key %in% excluded_keys & !cand$pair_key %in% picked_keys
+      cand <- cand[keep, , drop = FALSE]
+      if (nrow(cand) > 0L) {
+        need <- take - nrow(picked)
+        cand <- cand[seq_len(min(need, nrow(cand))), , drop = FALSE]
+        picked <- dplyr::bind_rows(picked, cand)
+        picked_keys <- c(picked_keys, cand$pair_key)
+      }
+    }
+  } else {
+    chunk_size <- 50000L
+    start <- 1L
+    while (start <= total_pairs && nrow(picked) < take) {
+      end <- min(as.integer(total_pairs), start + chunk_size - 1L)
+      cand <- .adaptive_link_probe_pairs_from_linear_index(seq.int(start, end), hub_ids, spoke_ids)
+      cand$pair_key <- make_unordered_key(cand$hub_item_id, cand$spoke_item_id)
+      cand <- cand[!cand$pair_key %in% excluded_keys, , drop = FALSE]
+      if (nrow(cand) > 0L) {
+        need <- take - nrow(picked)
+        cand <- cand[seq_len(min(need, nrow(cand))), , drop = FALSE]
+        picked <- dplyr::bind_rows(picked, cand)
+      }
+      start <- end + 1L
+    }
+  }
+
+  if (nrow(picked) < 1L) {
+    return(.adaptive_link_probe_empty_pair_rows())
+  }
+  picked[order(picked$hub_item_id, picked$spoke_item_id), , drop = FALSE]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_probe_add_panel_fields <- function(picked, epoch_id, spoke_id, spoke_bin, hub_bin) {
+  if (nrow(picked) < 1L) {
+    return(tibble::tibble(
+      link_epoch_id = integer(),
+      spoke_id = integer(),
+      hub_item_id = character(),
+      spoke_item_id = character(),
+      spoke_bin = integer(),
+      hub_bin = integer(),
+      pair_key = character()
+    ))
+  }
+  tibble::tibble(
+    link_epoch_id = rep.int(as.integer(epoch_id), nrow(picked)),
+    spoke_id = rep.int(as.integer(spoke_id), nrow(picked)),
+    hub_item_id = as.character(picked$hub_item_id),
+    spoke_item_id = as.character(picked$spoke_item_id),
+    spoke_bin = rep.int(as.integer(spoke_bin), nrow(picked)),
+    hub_bin = rep.int(as.integer(hub_bin), nrow(picked)),
+    pair_key = as.character(picked$pair_key)
+  )
+}
+
+#' @keywords internal
+#' @noRd
 .adaptive_link_probe_construct_panel <- function(state, controller, spoke_id) {
   spoke_id <- as.integer(spoke_id)
   hub_id <- as.integer(controller$hub_id %||% 1L)
@@ -806,30 +970,30 @@
       cross_rows <- cross_rows[!.adaptive_link_is_holdout_probe_rows(cross_rows), , drop = FALSE]
     }
     if (nrow(cross_rows) > 0L) {
-      observed_keys <- vapply(seq_len(nrow(cross_rows)), function(idx) {
-        make_unordered_key(
-          ids_all[[as.integer(cross_rows$A[[idx]])]],
-          ids_all[[as.integer(cross_rows$B[[idx]])]]
-        )
-      }, character(1L))
+      a_idx <- as.integer(cross_rows$A)
+      b_idx <- as.integer(cross_rows$B)
+      valid_idx <- !is.na(a_idx) & !is.na(b_idx) &
+        a_idx >= 1L & b_idx >= 1L &
+        a_idx <= length(ids_all) & b_idx <= length(ids_all)
+      a_id <- ids_all[a_idx[valid_idx]]
+      b_id <- ids_all[b_idx[valid_idx]]
+      in_domain <- (a_id %in% hub_pool & b_id %in% spoke_ids) |
+        (b_id %in% hub_pool & a_id %in% spoke_ids)
+      observed_keys <- unique(make_unordered_key(a_id[in_domain], b_id[in_domain]))
     }
   }
 
-  legal_pairs <- expand.grid(
-    hub_item_id = sort(hub_pool),
-    spoke_item_id = sort(spoke_ids),
-    stringsAsFactors = FALSE
+  n_available_pairs <- as.integer(
+    max(0, as.double(length(unique(hub_pool))) * as.double(length(unique(spoke_ids))) -
+      length(unique(observed_keys)))
   )
-  legal_pairs$pair_key <- vapply(seq_len(nrow(legal_pairs)), function(idx) {
-    make_unordered_key(legal_pairs$hub_item_id[[idx]], legal_pairs$spoke_item_id[[idx]])
-  }, character(1L))
-  legal_pairs <- legal_pairs[!legal_pairs$pair_key %in% observed_keys, , drop = FALSE]
   feasible_target_edges <- .adaptive_link_probe_panel_feasible_size(
     target_edges = target_edges,
-    n_available_pairs = as.integer(nrow(legal_pairs))
+    n_available_pairs = n_available_pairs
   )
 
   planned <- vector("list", length = 0L)
+  planned_n <- 0L
   seen_keys <- observed_keys
   spoke_q_targets <- rep.int(as.integer(target_edges %/% q_bins), q_bins)
   if ((target_edges %% q_bins) > 0L) {
@@ -854,76 +1018,78 @@
         }
         next
       }
-      cell_pairs <- legal_pairs[
-        as.character(legal_pairs$hub_item_id) %in% hub_bin_ids &
-          as.character(legal_pairs$spoke_item_id) %in% spoke_bin_ids &
-          !as.character(legal_pairs$pair_key) %in% seen_keys,
-        ,
-        drop = FALSE
-      ]
-      if (nrow(cell_pairs) < 1L) {
+      seed <- as.integer((state$meta$seed %||% 1L) + (spoke_id * 1009L) + (q * 101L) + h)
+      picked <- .adaptive_link_probe_sample_cell_pairs(
+        hub_ids = hub_bin_ids,
+        spoke_ids = spoke_bin_ids,
+        excluded_keys = seen_keys,
+        take = cell_target,
+        seed = seed,
+        random = TRUE
+      )
+      if (nrow(picked) < 1L) {
         cell_shortfall_detected <- TRUE
         next
       }
-      seed <- as.integer((state$meta$seed %||% 1L) + (spoke_id * 1009L) + (q * 101L) + h)
-      take <- min(cell_target, nrow(cell_pairs))
-      if (take < cell_target) {
+      if (nrow(picked) < cell_target) {
         cell_shortfall_detected <- TRUE
       }
-      picked_idx <- withr::with_seed(seed, sample.int(nrow(cell_pairs), size = take, replace = FALSE))
-      picked <- cell_pairs[picked_idx, , drop = FALSE]
-      picked <- picked[order(picked$hub_item_id, picked$spoke_item_id), , drop = FALSE]
       seen_keys <- c(seen_keys, picked$pair_key)
-      planned <- c(planned, lapply(seq_len(nrow(picked)), function(idx) {
-        list(
-          link_epoch_id = as.integer(epoch_id),
-          spoke_id = as.integer(spoke_id),
-          hub_item_id = as.character(picked$hub_item_id[[idx]]),
-          spoke_item_id = as.character(picked$spoke_item_id[[idx]]),
-          spoke_bin = as.integer(q),
-          hub_bin = as.integer(h),
-          pair_key = as.character(picked$pair_key[[idx]])
-        )
-      }))
+      planned[[length(planned) + 1L]] <- .adaptive_link_probe_add_panel_fields(
+        picked = picked,
+        epoch_id = epoch_id,
+        spoke_id = spoke_id,
+        spoke_bin = q,
+        hub_bin = h
+      )
+      planned_n <- planned_n + nrow(picked)
     }
   }
 
   fallback_reallocation_count <- 0L
-  if (length(planned) < feasible_target_edges) {
-    existing_keys <- unique(c(seen_keys, vapply(planned, function(x) x$pair_key, character(1L))))
-    fallback_pairs <- legal_pairs[!as.character(legal_pairs$pair_key) %in% existing_keys, , drop = FALSE]
-    if (nrow(fallback_pairs) > 0L) {
-      fallback_pairs$spoke_bin <- as.integer(spoke_bin_map[fallback_pairs$spoke_item_id])
-      fallback_pairs$hub_bin <- as.integer(hub_bin_map[fallback_pairs$hub_item_id])
-      fallback_pairs <- fallback_pairs[
-        order(
-          as.integer(fallback_pairs$spoke_bin),
-          as.integer(fallback_pairs$hub_bin),
-          as.character(fallback_pairs$hub_item_id),
-          as.character(fallback_pairs$spoke_item_id)
-        ),
-        ,
-        drop = FALSE
-      ]
-      take <- min(feasible_target_edges - length(planned), nrow(fallback_pairs))
-      picked <- fallback_pairs[seq_len(take), , drop = FALSE]
-      fallback_reallocation_count <- as.integer(nrow(picked))
-      planned <- c(planned, lapply(seq_len(nrow(picked)), function(idx) {
-        list(
-          link_epoch_id = as.integer(epoch_id),
-          spoke_id = as.integer(spoke_id),
-          hub_item_id = as.character(picked$hub_item_id[[idx]]),
-          spoke_item_id = as.character(picked$spoke_item_id[[idx]]),
-          spoke_bin = as.integer(picked$spoke_bin[[idx]] %||% NA_integer_),
-          hub_bin = as.integer(picked$hub_bin[[idx]] %||% NA_integer_),
-          pair_key = as.character(picked$pair_key[[idx]])
+  if (planned_n < feasible_target_edges) {
+    for (q in seq_len(q_bins)) {
+      if (planned_n >= feasible_target_edges) {
+        break
+      }
+      spoke_bin_ids <- names(spoke_bin_map)[as.integer(spoke_bin_map) == q]
+      if (length(spoke_bin_ids) < 1L) {
+        next
+      }
+      for (h in seq_len(h_bins)) {
+        if (planned_n >= feasible_target_edges) {
+          break
+        }
+        hub_bin_ids <- names(hub_bin_map)[as.integer(hub_bin_map) == h]
+        if (length(hub_bin_ids) < 1L) {
+          next
+        }
+        picked <- .adaptive_link_probe_sample_cell_pairs(
+          hub_ids = hub_bin_ids,
+          spoke_ids = spoke_bin_ids,
+          excluded_keys = seen_keys,
+          take = feasible_target_edges - planned_n,
+          random = FALSE
         )
-      }))
+        if (nrow(picked) < 1L) {
+          next
+        }
+        seen_keys <- c(seen_keys, picked$pair_key)
+        fallback_reallocation_count <- fallback_reallocation_count + as.integer(nrow(picked))
+        planned[[length(planned) + 1L]] <- .adaptive_link_probe_add_panel_fields(
+          picked = picked,
+          epoch_id = epoch_id,
+          spoke_id = spoke_id,
+          spoke_bin = q,
+          hub_bin = h
+        )
+        planned_n <- planned_n + nrow(picked)
+      }
     }
   }
 
-  if (length(planned) < 1L) {
-    if (nrow(legal_pairs) > 0L) {
+  if (planned_n < 1L) {
+    if (n_available_pairs > 0L) {
       rlang::abort(
         paste0(
           "Phase B probe-panel invariant failed: legal held-out probe candidates exist for spoke_id=",
@@ -937,7 +1103,7 @@
     return(.adaptive_link_probe_empty_panel())
   }
 
-  panel <- tibble::as_tibble(do.call(rbind, lapply(planned, as.data.frame, stringsAsFactors = FALSE)))
+  panel <- dplyr::bind_rows(planned)
   panel$probe_edges_planned <- as.integer(target_edges)
   panel$probe_panel_reallocation_used <- isTRUE(cell_shortfall_detected) &&
     as.integer(fallback_reallocation_count) > 0L

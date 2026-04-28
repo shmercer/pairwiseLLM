@@ -474,45 +474,42 @@
   if (any(!mean_names %in% names(theta_sd))) {
     rlang::abort(paste0("`", name, "` is missing required theta SD values."))
   }
+  theta_sd <- as.double(theta_sd[mean_names])
+  names(theta_sd) <- mean_names
+  bad_mu <- which(!is.finite(theta_mean))
+  if (length(bad_mu) > 0L) {
+    item_id <- mean_names[[bad_mu[[1L]]]]
+    rlang::abort(paste0("`", name, "` requires finite theta means for item `", item_id, "`."))
+  }
+  bad_sd <- which(!is.finite(theta_sd))
+  if (length(bad_sd) > 0L) {
+    item_id <- mean_names[[bad_sd[[1L]]]]
+    rlang::abort(paste0("`", name, "` requires finite theta SD values for item `", item_id, "`."))
+  }
+  neg_sd <- which(theta_sd < 0)
+  if (length(neg_sd) > 0L) {
+    item_id <- mean_names[[neg_sd[[1L]]]]
+    rlang::abort(paste0("`", name, "` requires non-negative theta SD values for item `", item_id, "`."))
+  }
 
-  out <- matrix(
-    NA_real_,
-    nrow = n_draws,
-    ncol = length(theta_mean),
-    dimnames = list(NULL, mean_names)
-  )
   base_probs <- (seq_len(n_draws) - 0.5) / n_draws
   phi_shift <- 0.6180339887498949
-
-  for (idx in seq_along(theta_mean)) {
-    item_id <- mean_names[[idx]]
-    mu <- theta_mean[[idx]]
-    sd_i <- as.double(theta_sd[[item_id]])
-    if (!is.finite(mu)) {
-      rlang::abort(paste0("`", name, "` requires finite theta means for item `", item_id, "`."))
-    }
-    if (!is.finite(sd_i)) {
-      rlang::abort(paste0("`", name, "` requires finite theta SD values for item `", item_id, "`."))
-    }
-    if (sd_i < 0) {
-      rlang::abort(paste0("`", name, "` requires non-negative theta SD values for item `", item_id, "`."))
-    }
-    if (sd_i == 0) {
-      out[, idx] <- rep(mu, n_draws)
-      next
-    }
-
-    probs <- (base_probs + ((idx - 1L) * phi_shift)) %% 1
-    probs[probs <= 0] <- .Machine$double.eps
-    probs[probs >= 1] <- 1 - .Machine$double.eps
-    z <- stats::qnorm(probs)
-    z <- z - mean(z)
-    z_sd <- stats::sd(z)
-    if (!is.finite(z_sd) || z_sd <= 0) {
-      rlang::abort(paste0("`", name, "` could not construct deterministic draws for item `", item_id, "`."))
-    }
-    out[, idx] <- mu + sd_i * (z / z_sd)
+  shifts <- ((seq_along(theta_mean) - 1L) * phi_shift) %% 1
+  probs <- (outer(base_probs, shifts, `+`)) %% 1
+  probs[probs <= 0] <- .Machine$double.eps
+  probs[probs >= 1] <- 1 - .Machine$double.eps
+  z <- stats::qnorm(probs)
+  z <- sweep(z, 2L, colMeans(z), "-")
+  z_sd <- .pairwiseLLM_col_sds(z)
+  bad_z_sd <- which(!is.finite(z_sd) | z_sd <= 0)
+  if (length(bad_z_sd) > 0L) {
+    item_id <- mean_names[[bad_z_sd[[1L]]]]
+    rlang::abort(paste0("`", name, "` could not construct deterministic draws for item `", item_id, "`."))
   }
+  out <- sweep(z, 2L, z_sd, "/")
+  out <- sweep(out, 2L, theta_sd, "*")
+  out <- sweep(out, 2L, theta_mean, "+")
+  dimnames(out) <- list(NULL, mean_names)
 
   .pairwiseLLM_sanitize_draws_matrix(out, name = name)
 }
@@ -1159,14 +1156,16 @@
     if (!identical(as.character(hub_lock_mode), "hard_lock")) {
       hub_mu <- fit$theta_hub_post %||% hub_mu
       if (is.matrix(fit_post$theta_hub) && !is.null(colnames(fit_post$theta_hub))) {
-        hub_sd_draw <- apply(fit_post$theta_hub, 2L, stats::sd)
+        hub_sd_draw <- .pairwiseLLM_col_sds(fit_post$theta_hub)
+        names(hub_sd_draw) <- colnames(fit_post$theta_hub)
         hub_sd <- as.double(hub_sd_draw)
         names(hub_sd) <- names(hub_sd_draw)
       }
     }
     spoke_mu <- fit$theta_spoke_post %||% spoke_mu
     if (is.matrix(fit_post$theta_spoke) && !is.null(colnames(fit_post$theta_spoke))) {
-      spoke_sd_draw <- apply(fit_post$theta_spoke, 2L, stats::sd)
+      spoke_sd_draw <- .pairwiseLLM_col_sds(fit_post$theta_spoke)
+      names(spoke_sd_draw) <- colnames(fit_post$theta_spoke)
       spoke_sd <- as.double(spoke_sd_draw)
       names(spoke_sd) <- names(spoke_sd_draw)
     }
