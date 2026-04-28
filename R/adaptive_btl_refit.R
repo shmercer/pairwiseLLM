@@ -23,7 +23,10 @@
     theta_sd_rel_change_max = 0.10,
     rank_spearman_min = 0.95,
     near_tie_p_low = 0.40,
-    near_tie_p_high = 0.60
+    near_tie_p_high = 0.60,
+    deferred_audit_max_draws = 400L,
+    phase_b_refit_parallel = FALSE,
+    phase_b_refit_workers = 1L
   )
 }
 
@@ -35,7 +38,29 @@
   if (!is.list(config)) {
     rlang::abort("`config` must be a list when provided.")
   }
-  utils::modifyList(defaults, config)
+  resolved <- utils::modifyList(defaults, config)
+  if (!is.logical(resolved$phase_b_refit_parallel) ||
+    length(resolved$phase_b_refit_parallel) != 1L ||
+    is.na(resolved$phase_b_refit_parallel)) {
+    rlang::abort("`config$phase_b_refit_parallel` must be TRUE or FALSE.")
+  }
+  if (!.btl_mcmc_intish(resolved$phase_b_refit_workers) ||
+    as.integer(resolved$phase_b_refit_workers) < 1L) {
+    rlang::abort("`config$phase_b_refit_workers` must be a positive integer.")
+  }
+  if (!is.numeric(resolved$deferred_audit_max_draws) ||
+    length(resolved$deferred_audit_max_draws) != 1L ||
+    is.na(resolved$deferred_audit_max_draws) ||
+    (!is.infinite(resolved$deferred_audit_max_draws) &&
+      (!.btl_mcmc_intish(resolved$deferred_audit_max_draws) ||
+        as.integer(resolved$deferred_audit_max_draws) < 2L))) {
+    rlang::abort("`config$deferred_audit_max_draws` must be >= 2 or Inf.")
+  }
+  resolved$phase_b_refit_workers <- as.integer(resolved$phase_b_refit_workers)
+  if (!is.infinite(resolved$deferred_audit_max_draws)) {
+    resolved$deferred_audit_max_draws <- as.integer(resolved$deferred_audit_max_draws)
+  }
+  resolved
 }
 
 .adaptive_refit_pairs_target <- function(state, config) {
@@ -4316,7 +4341,172 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_phase_b_refit_parallel_requested <- function(state) {
+  btl_config <- state$config$btl_config %||% list()
+  isTRUE(btl_config$phase_b_refit_parallel %||% FALSE)
+}
+
+.adaptive_phase_b_refit_parallel_workers <- function(state, n_spokes) {
+  btl_config <- state$config$btl_config %||% list()
+  workers <- as.integer(btl_config$phase_b_refit_workers %||% 1L)
+  if (is.na(workers) || workers < 1L) {
+    rlang::abort("`btl_config$phase_b_refit_workers` must be a positive integer.")
+  }
+  as.integer(min(workers, as.integer(n_spokes)))
+}
+
+.adaptive_linking_refit_spoke_snapshot <- function(state, spoke_id) {
+  out <- state
+  spoke_id <- as.integer(spoke_id)
+  out$linking <- out$linking %||% list()
+  out$linking$phase_a <- out$linking$phase_a %||% list()
+  out$linking$phase_a$ready_spokes <- as.integer(spoke_id)
+  out$controller <- .adaptive_controller_resolve(out)
+  out$controller$current_link_spoke_id <- as.integer(spoke_id)
+  out
+}
+
+.adaptive_linking_refit_merge_spoke_state <- function(base_state, spoke_state, spoke_id) {
+  out <- base_state
+  key <- as.character(as.integer(spoke_id))
+  base_controller <- .adaptive_controller_resolve(out)
+  spoke_controller <- .adaptive_controller_resolve(spoke_state)
+  map_fields <- c(
+    "link_refit_stats_by_spoke",
+    "link_transform_state_by_spoke",
+    "link_transform_last_delta_by_spoke",
+    "link_transform_last_log_alpha_by_spoke",
+    "link_state_frozen_by_spoke",
+    "link_transform_frozen_by_spoke",
+    "link_transform_frozen_delta_by_spoke",
+    "link_transform_frozen_log_alpha_by_spoke",
+    "linking_identified_by_spoke",
+    "link_stop_recent_pass_window_by_spoke",
+    "link_escalation_recent_pass_window_by_spoke",
+    "link_epoch_id_by_spoke",
+    "link_epoch_signature_by_spoke",
+    "link_epoch_start_step_by_spoke",
+    "link_lag_domain_key_by_spoke",
+    "link_lag_domain_reset_refit_id_by_spoke"
+  )
+  for (field in map_fields) {
+    base_map <- base_controller[[field]] %||% list()
+    spoke_map <- spoke_controller[[field]] %||% list()
+    if (!is.null(spoke_map[[key]])) {
+      base_map[[key]] <- spoke_map[[key]]
+    }
+    base_controller[[field]] <- base_map
+  }
+  identified <- unlist(base_controller$linking_identified_by_spoke %||% list())
+  base_controller$linking_identified <- any(identified, na.rm = TRUE)
+  out$controller <- base_controller
+
+  out$linking <- out$linking %||% list()
+  out$linking$anchored_joint <- out$linking$anchored_joint %||% .adaptive_anchored_joint_empty_state()
+  out$linking$anchored_joint$accepted_state_by_spoke <-
+    out$linking$anchored_joint$accepted_state_by_spoke %||% list()
+  out$linking$anchored_joint$fisher_t0_by_spoke <-
+    out$linking$anchored_joint$fisher_t0_by_spoke %||% list()
+  out$linking$probe <- out$linking$probe %||% list()
+  out$linking$probe$panels_by_spoke <- out$linking$probe$panels_by_spoke %||% list()
+
+  if (!is.null(spoke_state$linking$anchored_joint$accepted_state_by_spoke[[key]])) {
+    out$linking$anchored_joint$accepted_state_by_spoke[[key]] <-
+      spoke_state$linking$anchored_joint$accepted_state_by_spoke[[key]]
+  }
+  if (!is.null(spoke_state$linking$anchored_joint$fisher_t0_by_spoke[[key]])) {
+    out$linking$anchored_joint$fisher_t0_by_spoke[[key]] <-
+      spoke_state$linking$anchored_joint$fisher_t0_by_spoke[[key]]
+  }
+  if (!is.null(spoke_state$linking$probe$panels_by_spoke[[key]])) {
+    out$linking$probe$panels_by_spoke[[key]] <- spoke_state$linking$probe$panels_by_spoke[[key]]
+  }
+
+  out
+}
+
+.adaptive_linking_refit_refresh_budget_fields <- function(state, spoke_ids) {
+  out <- state
+  controller <- .adaptive_controller_resolve(out)
+  budget_map <- .adaptive_link_budget_map_for_refit(
+    state = out,
+    controller = controller,
+    eligible_spoke_ids = as.integer(spoke_ids)
+  )
+  if (length(budget_map) < 1L) {
+    return(out)
+  }
+  link_stats <- controller$link_refit_stats_by_spoke %||% list()
+  concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
+  budget_fields <- if (isTRUE(concurrent_mode)) {
+    .adaptive_link_budget_fields()
+  } else {
+    c("B_spoke_refit_budget", "B_spoke_refit_budget_source")
+  }
+  for (key in names(budget_map)) {
+    stats_row <- link_stats[[key]] %||% list()
+    budget_row <- budget_map[[key]] %||% list()
+    for (field in budget_fields) {
+      stats_row[[field]] <- budget_row[[field]] %||% stats_row[[field]] %||% NULL
+    }
+    link_stats[[key]] <- stats_row
+  }
+  controller$link_refit_stats_by_spoke <- link_stats
+  out$controller <- controller
+  out
+}
+
 .adaptive_linking_refit_update_state <- function(state, refit_context) {
+  if (!isTRUE(.adaptive_phase_b_refit_parallel_requested(state))) {
+    return(.adaptive_linking_refit_update_state_impl(state, refit_context))
+  }
+
+  controller <- .adaptive_controller_resolve(state)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  spoke_ids <- .adaptive_link_spoke_ids(state, hub_id)
+  spoke_ids <- intersect(spoke_ids, as.integer(phase_ctx$active_spokes %||% integer()))
+  if (!run_mode %in% c("link_multi_spoke") ||
+    !identical(phase_ctx$phase, "phase_b") ||
+    length(spoke_ids) < 2L) {
+    return(.adaptive_linking_refit_update_state_impl(state, refit_context))
+  }
+
+  workers <- .adaptive_phase_b_refit_parallel_workers(state, length(spoke_ids))
+  if (workers < 2L) {
+    return(.adaptive_linking_refit_update_state_impl(state, refit_context))
+  }
+  if (!requireNamespace("future", quietly = TRUE) ||
+    !requireNamespace("future.apply", quietly = TRUE)) {
+    rlang::abort(
+      "Packages 'future' and 'future.apply' are required when `btl_config$phase_b_refit_parallel = TRUE`."
+    )
+  }
+
+  old_plan <- future::plan("multisession", workers = workers)
+  on.exit(future::plan(old_plan), add = TRUE)
+  spoke_states <- future.apply::future_lapply(
+    as.integer(spoke_ids),
+    function(spoke_id) {
+      spoke_state <- .adaptive_linking_refit_spoke_snapshot(state, spoke_id)
+      .adaptive_linking_refit_update_state_impl(spoke_state, refit_context)
+    },
+    future.seed = TRUE
+  )
+
+  out <- state
+  for (idx in seq_along(spoke_ids)) {
+    out <- .adaptive_linking_refit_merge_spoke_state(
+      base_state = out,
+      spoke_state = spoke_states[[idx]],
+      spoke_id = as.integer(spoke_ids[[idx]])
+    )
+  }
+  .adaptive_linking_refit_refresh_budget_fields(out, spoke_ids = spoke_ids)
+}
+
+.adaptive_linking_refit_update_state_impl <- function(state, refit_context) {
   out <- state
   controller <- .adaptive_controller_resolve(out)
   run_mode <- as.character(controller$run_mode %||% "within_set")
@@ -6555,9 +6745,18 @@
 
 .adaptive_round_log_deferred_audit_payload <- function(draws,
                                                        near_tie_p_low,
-                                                       near_tie_p_high) {
+                                                       near_tie_p_high,
+                                                       max_draws = 400L) {
   if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 2L || ncol(draws) < 1L) {
     return(NULL)
+  }
+  n_draws_total <- nrow(draws)
+  draw_idx <- .adaptive_deferred_audit_draw_index(nrow(draws), max_draws = max_draws)
+  draws <- draws[draw_idx, , drop = FALSE]
+  max_draws_logged <- if (is.null(max_draws) || is.infinite(max_draws)) {
+    NA_integer_
+  } else {
+    as.integer(max_draws)
   }
   list(
     summary = .adaptive_round_log_deferred_audit_from_draws(
@@ -6566,8 +6765,32 @@
       near_tie_p_high = near_tie_p_high
     ),
     near_tie_p_low = as.double(near_tie_p_low),
-    near_tie_p_high = as.double(near_tie_p_high)
+    near_tie_p_high = as.double(near_tie_p_high),
+    max_draws = as.integer(max_draws_logged),
+    n_draws_total = as.integer(n_draws_total),
+    n_draws_used = as.integer(nrow(draws))
   )
+}
+
+.adaptive_deferred_audit_draw_index <- function(n_draws, max_draws = 400L) {
+  n_draws <- as.integer(n_draws %||% NA_integer_)
+  if (!is.finite(n_draws) || is.na(n_draws) || n_draws < 2L) {
+    rlang::abort("Deferred audit draw indexing requires at least two draws.")
+  }
+  if (is.null(max_draws) || is.infinite(max_draws)) {
+    return(seq_len(n_draws))
+  }
+  if (!is.numeric(max_draws) || length(max_draws) != 1L || is.na(max_draws)) {
+    rlang::abort("`deferred_audit_max_draws` must be a positive integer or Inf.")
+  }
+  max_draws <- as.integer(max_draws)
+  if (!is.finite(max_draws) || max_draws < 2L) {
+    rlang::abort("`deferred_audit_max_draws` must be >= 2 or Inf.")
+  }
+  if (n_draws <= max_draws) {
+    return(seq_len(n_draws))
+  }
+  unique(as.integer(round(seq(1L, n_draws, length.out = max_draws))))
 }
 
 .adaptive_round_log_deferred_audit_from_draws <- function(draws,
@@ -7380,7 +7603,8 @@ compute_stop_metrics <- function(state, config, phase_b_global_draws = NULL) {
     round_log_deferred_audit_payload = .adaptive_round_log_deferred_audit_payload(
       draws = draws_scope,
       near_tie_p_low = config$near_tie_p_low %||% 0.40,
-      near_tie_p_high = config$near_tie_p_high %||% 0.60
+      near_tie_p_high = config$near_tie_p_high %||% 0.60,
+      max_draws = config$deferred_audit_max_draws %||% 400L
     ),
     diagnostics_pass = diagnostics_pass,
     diagnostics_divergences_pass = diagnostics_divergences_pass,

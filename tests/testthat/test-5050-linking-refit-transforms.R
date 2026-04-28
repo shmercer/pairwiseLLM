@@ -5429,3 +5429,69 @@ test_that("anchored-joint fit keeps the hub fixed and records prior-SD fallback"
   expect_true(isTRUE(fit$fit_contract$priors$prior_sd_fallback_used))
   expect_true("s21" %in% fit$fit_contract$priors$prior_sd_fallback_items)
 })
+
+test_that("deferred audit draw cap uses deterministic evenly spaced draws", {
+  idx <- pairwiseLLM:::.adaptive_deferred_audit_draw_index(1000L, max_draws = 10L)
+
+  expect_identical(length(idx), 10L)
+  expect_identical(idx[[1L]], 1L)
+  expect_identical(idx[[length(idx)]], 1000L)
+  expect_true(all(diff(idx) > 0L))
+  expect_identical(
+    pairwiseLLM:::.adaptive_deferred_audit_draw_index(4L, max_draws = 10L),
+    1:4
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_deferred_audit_draw_index(10L, max_draws = 1L),
+    "deferred_audit_max_draws"
+  )
+})
+
+test_that("parallel spoke merge preserves spoke-keyed updates serially", {
+  base <- make_linking_refit_state()
+  spoke_2 <- base
+  spoke_3 <- base
+
+  spoke_2$controller$link_refit_stats_by_spoke[["2"]] <- list(delta_spoke_mean = 2)
+  spoke_2$controller$linking_identified_by_spoke[["2"]] <- TRUE
+  if (is.null(spoke_2$linking$probe)) {
+    spoke_2$linking$probe <- list()
+  }
+  spoke_2$linking$probe$panels_by_spoke <- list(`2` = tibble::tibble(pair_key = "h1:s21"))
+
+  spoke_3$controller$link_refit_stats_by_spoke[["3"]] <- list(delta_spoke_mean = 3)
+  spoke_3$controller$linking_identified_by_spoke[["3"]] <- FALSE
+  if (is.null(spoke_3$linking$probe)) {
+    spoke_3$linking$probe <- list()
+  }
+  spoke_3$linking$probe$panels_by_spoke <- list(`3` = tibble::tibble(pair_key = "h1:s31"))
+
+  merged <- pairwiseLLM:::.adaptive_linking_refit_merge_spoke_state(base, spoke_2, 2L)
+  merged <- pairwiseLLM:::.adaptive_linking_refit_merge_spoke_state(merged, spoke_3, 3L)
+
+  expect_equal(merged$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean, 2)
+  expect_equal(merged$controller$link_refit_stats_by_spoke[["3"]]$delta_spoke_mean, 3)
+  expect_true(merged$controller$linking_identified)
+  expect_equal(merged$linking$probe$panels_by_spoke[["2"]]$pair_key, "h1:s21")
+  expect_equal(merged$linking$probe$panels_by_spoke[["3"]]$pair_key, "h1:s31")
+})
+
+test_that("Phase B parallel wrapper falls back to sequential when worker count is one", {
+  state <- make_linking_refit_state()
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+  state <- append_cross_step(state, 3L, "s31", "h1", 1L, spoke_id = 3L)
+  state <- append_cross_step(state, 4L, "h2", "s32", 0L, spoke_id = 3L)
+  refit_context <- list(last_refit_step = 0L)
+
+  sequential <- pairwiseLLM:::.adaptive_linking_refit_update_state_impl(state, refit_context)
+  state$config$btl_config$phase_b_refit_parallel <- TRUE
+  state$config$btl_config$phase_b_refit_workers <- 1L
+  fallback <- pairwiseLLM:::.adaptive_linking_refit_update_state(state, refit_context)
+
+  expect_equal(
+    fallback$controller$link_refit_stats_by_spoke,
+    sequential$controller$link_refit_stats_by_spoke,
+    tolerance = 1e-8
+  )
+})

@@ -4090,6 +4090,14 @@ adaptive_rank_start <- function(items,
 #'   \item{`near_tie_p_low`, `near_tie_p_high`}{Probability band used only for
 #'   near-tie diagnostics in round logging (not used for stopping decisions).
 #'   Defaults are `0.40` and `0.60`.}
+#'   \item{`deferred_audit_max_draws`}{Maximum posterior draws used for
+#'   report-only deferred round-log audit metrics such as near-tie and
+#'   credible-interval width summaries. This does not affect CmdStan
+#'   diagnostics or stop gates. Default is `400L`; use `Inf` to use all draws.}
+#'   \item{`phase_b_refit_parallel`, `phase_b_refit_workers`}{Opt-in
+#'   parallel execution for spoke-separable Phase B post-refit updates after
+#'   the main BTL refit. Requires suggested packages `future` and
+#'   `future.apply`. Defaults are `FALSE` and `1L`.}
 #'   }
 #'   Defaults are resolved from the current item count `N`, then merged with
 #'   user overrides.

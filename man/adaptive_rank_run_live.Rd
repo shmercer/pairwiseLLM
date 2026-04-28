@@ -70,6 +70,14 @@ Default is \code{0.95}.}
 \item{\code{near_tie_p_low}, \code{near_tie_p_high}}{Probability band used only for
 near-tie diagnostics in round logging (not used for stopping decisions).
 Defaults are \code{0.40} and \code{0.60}.}
+\item{\code{deferred_audit_max_draws}}{Maximum posterior draws used for
+report-only deferred round-log audit metrics such as near-tie and
+credible-interval width summaries. This does not affect CmdStan
+diagnostics or stop gates. Default is \code{400L}; use \code{Inf} to use all draws.}
+\item{\code{phase_b_refit_parallel}, \code{phase_b_refit_workers}}{Opt-in
+parallel execution for spoke-separable Phase B post-refit updates after
+the main BTL refit. Requires suggested packages \code{future} and
+\code{future.apply}. Defaults are \code{FALSE} and \code{1L}.}
 }
 Defaults are resolved from the current item count \code{N}, then merged with
 user overrides.}
