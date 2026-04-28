@@ -76,8 +76,8 @@ credible-interval width summaries. This does not affect CmdStan
 diagnostics or stop gates. Default is \code{400L}; use \code{Inf} to use all draws.}
 \item{\code{phase_b_refit_parallel}, \code{phase_b_refit_workers}}{Opt-in
 parallel execution for spoke-separable Phase B post-refit updates after
-the main BTL refit. Requires suggested packages \code{future} and
-\code{future.apply}. Defaults are \code{FALSE} and \code{1L}.}
+the main BTL refit. Uses forked local workers and is only supported on
+Unix-like platforms. Defaults are \code{FALSE} and \code{1L}.}
 }
 Defaults are resolved from the current item count \code{N}, then merged with
 user overrides.}

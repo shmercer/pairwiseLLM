@@ -4477,23 +4477,33 @@
   if (workers < 2L) {
     return(.adaptive_linking_refit_update_state_impl(state, refit_context))
   }
-  if (!requireNamespace("future", quietly = TRUE) ||
-    !requireNamespace("future.apply", quietly = TRUE)) {
+  if (identical(.Platform$OS.type, "windows")) {
     rlang::abort(
-      "Packages 'future' and 'future.apply' are required when `btl_config$phase_b_refit_parallel = TRUE`."
+      paste(
+        "`btl_config$phase_b_refit_parallel = TRUE` requires forked workers",
+        "and is only supported on Unix-like platforms."
+      )
     )
   }
 
-  old_plan <- future::plan("multisession", workers = workers)
-  on.exit(future::plan(old_plan), add = TRUE)
-  spoke_states <- future.apply::future_lapply(
+  spoke_states <- parallel::mclapply(
     as.integer(spoke_ids),
     function(spoke_id) {
       spoke_state <- .adaptive_linking_refit_spoke_snapshot(state, spoke_id)
       .adaptive_linking_refit_update_state_impl(spoke_state, refit_context)
     },
-    future.seed = TRUE
+    mc.cores = workers,
+    mc.set.seed = TRUE
   )
+  failed <- vapply(spoke_states, inherits, logical(1), what = "try-error")
+  if (any(failed)) {
+    rlang::abort(
+      paste(
+        "Phase B parallel post-refit update failed for spoke(s):",
+        paste(as.integer(spoke_ids)[failed], collapse = ", ")
+      )
+    )
+  }
 
   out <- state
   for (idx in seq_along(spoke_ids)) {

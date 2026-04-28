@@ -4096,8 +4096,8 @@ adaptive_rank_start <- function(items,
 #'   diagnostics or stop gates. Default is `400L`; use `Inf` to use all draws.}
 #'   \item{`phase_b_refit_parallel`, `phase_b_refit_workers`}{Opt-in
 #'   parallel execution for spoke-separable Phase B post-refit updates after
-#'   the main BTL refit. Requires suggested packages `future` and
-#'   `future.apply`. Defaults are `FALSE` and `1L`.}
+#'   the main BTL refit. Uses forked local workers and is only supported on
+#'   Unix-like platforms. Defaults are `FALSE` and `1L`.}
 #'   }
 #'   Defaults are resolved from the current item count `N`, then merged with
 #'   user overrides.
