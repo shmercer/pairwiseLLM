@@ -1755,7 +1755,74 @@ adaptive_defaults <- function(N) {
   )
 }
 
-.adaptive_link_attach_predictive_utility <- function(candidates, state, controller, spoke_id) {
+.adaptive_link_predictive_utility_context <- function(state, controller, spoke_id, candidates = NULL) {
+  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  out <- list(
+    link_estimation_mode = link_estimation_mode,
+    set_map = set_map,
+    hub_id = hub_id,
+    accepted_state = NULL,
+    judge_params = NULL,
+    theta_global = NULL
+  )
+  if (identical(link_estimation_mode, "anchored_joint")) {
+    out$accepted_state <- .adaptive_link_anchored_joint_resolve_state(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      controller = controller
+    )
+    out$judge_params <- .adaptive_link_anchored_joint_judge_params(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      controller = controller,
+      accepted_state = out$accepted_state
+    )
+    return(out)
+  }
+
+  item_ids <- if (is.null(candidates)) {
+    character()
+  } else {
+    unique(c(as.character(candidates$i), as.character(candidates$j)))
+  }
+  out$theta_global <- .adaptive_link_theta_global_map_for_items(
+    state = state,
+    controller = controller,
+    item_ids = item_ids
+  )
+  out
+}
+
+.adaptive_link_attach_predictive_utility_cached <- function(candidates,
+                                                            state,
+                                                            controller,
+                                                            spoke_id,
+                                                            utility_context) {
+  attach_fun <- .adaptive_link_attach_predictive_utility
+  if ("utility_context" %in% names(formals(attach_fun))) {
+    return(attach_fun(
+      candidates = candidates,
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      utility_context = utility_context
+    ))
+  }
+  attach_fun(
+    candidates = candidates,
+    state = state,
+    controller = controller,
+    spoke_id = as.integer(spoke_id)
+  )
+}
+
+.adaptive_link_attach_predictive_utility <- function(candidates,
+                                                     state,
+                                                     controller,
+                                                     spoke_id,
+                                                     utility_context = NULL) {
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) < 1L || is.na(spoke_id)) {
     return(cand)
@@ -1763,34 +1830,28 @@ adaptive_defaults <- function(N) {
   n_cand <- nrow(cand)
   i_id <- as.character(cand$i)
   j_id <- as.character(cand$j)
-  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
-  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
-  hub_id <- as.integer(controller$hub_id %||% 1L)
+  utility_context <- utility_context %||% .adaptive_link_predictive_utility_context(
+    state = state,
+    controller = controller,
+    spoke_id = as.integer(spoke_id),
+    candidates = cand
+  )
+  link_estimation_mode <- as.character(utility_context$link_estimation_mode %||%
+    controller$link_estimation_mode %||% "transform")
+  set_map <- utility_context$set_map %||%
+    stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  hub_id <- as.integer(utility_context$hub_id %||% controller$hub_id %||% 1L)
   endpoint_roles <- .adaptive_link_candidate_endpoint_roles(
     candidates = cand,
     set_map = set_map,
     hub_id = hub_id,
     spoke_id = as.integer(spoke_id)
   )
-  accepted_state <- NULL
   if (identical(link_estimation_mode, "anchored_joint")) {
-    accepted_state <- .adaptive_link_anchored_joint_resolve_state(
-      state = state,
-      spoke_id = as.integer(spoke_id),
-      controller = controller
-    )
-    judge_params <- .adaptive_link_anchored_joint_judge_params(
-      state = state,
-      spoke_id = as.integer(spoke_id),
-      controller = controller,
-      accepted_state = accepted_state
-    )
+    accepted_state <- utility_context$accepted_state
+    judge_params <- utility_context$judge_params
   } else {
-    theta_global <- .adaptive_link_theta_global_map_for_items(
-      state = state,
-      controller = controller,
-      item_ids = c(i_id, j_id)
-    )
+    theta_global <- utility_context$theta_global %||% stats::setNames(numeric(), character())
     if (length(theta_global) < 2L) {
       cand$link_p <- NA_real_
       cand$link_u <- NA_real_
@@ -1800,14 +1861,17 @@ adaptive_defaults <- function(N) {
     if (length(missing_theta_ids) > 0L) {
       theta_global[[missing_theta_ids[[1L]]]]
     }
-    startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(state, spoke_id = as.integer(spoke_id))
-    judge_params <- .adaptive_link_judge_params(
-      state,
-      controller,
-      scope = "link",
-      allow_cold_start_fallback = isTRUE(startup_gap),
-      expected_link_params = !isTRUE(startup_gap)
-    )
+    judge_params <- utility_context$judge_params
+    if (is.null(judge_params)) {
+      startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(state, spoke_id = as.integer(spoke_id))
+      judge_params <- .adaptive_link_judge_params(
+        state,
+        controller,
+        scope = "link",
+        allow_cold_start_fallback = isTRUE(startup_gap),
+        expected_link_params = !isTRUE(startup_gap)
+      )
+    }
   }
   epsilon <- as.double(judge_params$epsilon %||% 0)
   beta <- as.double(judge_params$beta %||% 0)

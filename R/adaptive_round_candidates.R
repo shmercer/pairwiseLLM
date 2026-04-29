@@ -1944,7 +1944,8 @@
                                                       active_hub_ids = character(),
                                                       reserved_keys = character(),
                                                       C_max = NULL,
-                                                      seed = NULL) {
+                                                      seed = NULL,
+                                                      return_candidates = TRUE) {
   hub_item_ids <- as.character(hub_item_ids)
   spoke_ids <- as.character(spoke_ids)
   if (length(hub_item_ids) < 1L || length(spoke_ids) < 1L) {
@@ -2018,6 +2019,15 @@
       n_after_route_filters = route_total,
       n_after_active_domain = active_total,
       total_legal = 0L,
+      bounded_used = FALSE
+    ))
+  }
+  if (!isTRUE(return_candidates)) {
+    return(list(
+      candidates = tibble::tibble(i = character(), j = character(), dist_stratum_global = integer()),
+      n_after_route_filters = route_total,
+      n_after_active_domain = active_total,
+      total_legal = as.integer(total_legal),
       bounded_used = FALSE
     ))
   }
@@ -2490,11 +2500,18 @@ generate_stage_candidates_from_state <- function(state,
     return(pool)
   }
   if (isTRUE(include_utility)) {
-    pool <- .adaptive_link_attach_predictive_utility(
+    utility_context <- .adaptive_link_predictive_utility_context(
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      candidates = pool
+    )
+    pool <- .adaptive_link_attach_predictive_utility_cached(
       candidates = pool,
       state = state,
       controller = controller,
-      spoke_id = as.integer(spoke_id)
+      spoke_id = as.integer(spoke_id),
+      utility_context = utility_context
     )
   }
   pool
@@ -2520,7 +2537,8 @@ generate_stage_candidates_from_state <- function(state,
       stage_order = stage_order,
       C_max = as.integer(C_max %||% defaults$C_max),
       seed_base = as.integer(seed),
-      seed_stride = 1L
+      seed_stride = 1L,
+      utility_top_k = as.integer(top_k)
     ),
     error = function(e) .adaptive_link_stage_feasibility_snapshot_empty(stage_order)
   )

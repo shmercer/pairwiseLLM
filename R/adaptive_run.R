@@ -1030,12 +1030,14 @@
 .adaptive_link_stage_feasibility_snapshot_key <- function(stage_order,
                                                           C_max,
                                                           seed_base,
-                                                          seed_stride) {
+                                                          seed_stride,
+                                                          utility_top_k = NULL) {
   paste(
     paste(as.character(stage_order %||% character()), collapse = ","),
     as.integer(C_max %||% NA_integer_),
     as.integer(seed_base %||% NA_integer_),
     as.integer(seed_stride %||% NA_integer_),
+    as.integer(utility_top_k %||% NA_integer_),
     sep = "::"
   )
 }
@@ -1054,6 +1056,85 @@
   )
 }
 
+.adaptive_link_stage_raw_feasibility_counts <- function(state,
+                                                        controller,
+                                                        spoke_id,
+                                                        stage_order,
+                                                        C_max = NULL,
+                                                        seed_base = NULL,
+                                                        seed_stride = 37L) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  spoke_id <- as.integer(spoke_id)
+  defaults <- adaptive_defaults(as.integer(state$n_items))
+  stage_order <- as.character(stage_order %||% .adaptive_stage_order())
+  local_inputs <- .adaptive_link_refit_local_inputs(
+    state = state,
+    controller = controller,
+    spoke_id = spoke_id,
+    defaults = defaults
+  )
+  hub_ids <- as.character(local_inputs$hub_ids %||% character())
+  spoke_ids <- as.character(local_inputs$spoke_ids %||% character())
+  active_items <- local_inputs$active_items %||% list()
+  active_hub_ids <- as.character(active_items$active_hub %||% character())
+  routing_scores <- as.double(local_inputs$routing_scores %||% numeric())
+  hub_anchor_ids <- as.character(local_inputs$hub_anchor_ids %||% character())
+  seed_base <- as.integer(seed_base %||% (1000L + (1009L * spoke_id)))
+  seed_stride <- as.integer(seed_stride %||% 37L)
+  C_max <- as.integer(C_max %||% defaults$C_max)
+  out <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
+  if (length(hub_ids) < 1L || length(spoke_ids) < 1L) {
+    return(out)
+  }
+
+  reserved_keys <- character()
+  if (!isTRUE(.adaptive_link_spoke_is_frozen(controller, spoke_id))) {
+    current_epoch_id <- .adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)
+    reserved_keys <- .adaptive_link_probe_reserved_keys(
+      state,
+      spoke_id = spoke_id,
+      epoch_id = current_epoch_id
+    )
+    if (length(reserved_keys) < 1L) {
+      fallback_panel <- .adaptive_link_probe_panel_for_spoke(
+        state,
+        spoke_id = spoke_id,
+        epoch_id = NULL
+      )
+      reserved_keys <- unique(as.character(fallback_panel$pair_key))
+    }
+  }
+
+  for (idx in seq_along(stage_order)) {
+    stage_name <- as.character(stage_order[[idx]])
+    routing_hub_ids <- if (identical(stage_name, "anchor_link")) hub_ids else active_hub_ids
+    active_ids <- unique(c(routing_hub_ids, spoke_ids))
+    if (length(active_ids) < 2L) {
+      next
+    }
+    active_scores <- as.double(routing_scores[active_ids])
+    names(active_scores) <- active_ids
+    strata <- .adaptive_assign_strata(active_scores, defaults)
+    bounds <- .adaptive_stage_distance_bounds(stage_name, "base", defaults)
+    counted <- .adaptive_link_direct_cross_pairs_bounded(
+      hub_item_ids = routing_hub_ids,
+      spoke_ids = spoke_ids,
+      rank_index = strata$rank_index,
+      stratum_map = strata$stratum_map,
+      stage_name = stage_name,
+      bounds = bounds,
+      hub_anchor_ids = hub_anchor_ids,
+      active_hub_ids = active_hub_ids,
+      reserved_keys = reserved_keys,
+      C_max = C_max,
+      seed = as.integer(seed_base + (seed_stride * idx)),
+      return_candidates = FALSE
+    )
+    out[[stage_name]] <- as.integer(counted$total_legal %||% 0L)
+  }
+  out
+}
+
 #' @keywords internal
 #' @noRd
 .adaptive_link_stage_feasibility_snapshot_build <- function(state,
@@ -1062,7 +1143,8 @@
                                                             stage_order,
                                                             C_max = NULL,
                                                             seed_base = NULL,
-                                                            seed_stride = 37L) {
+                                                            seed_stride = 37L,
+                                                            utility_top_k = NULL) {
   round <- state$round %||% list()
   defaults <- adaptive_defaults(as.integer(state$n_items))
   ids <- as.character(state$item_ids)
@@ -1076,9 +1158,23 @@
   C_max <- as.integer(C_max %||% defaults$C_max)
   seed_base <- as.integer(seed_base %||% (1000L + (1009L * as.integer(spoke_id))))
   seed_stride <- as.integer(seed_stride %||% 37L)
+  utility_top_k <- as.integer(utility_top_k %||% NA_integer_)
   feasible_counts <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
   feasible_utility_mass <- stats::setNames(rep.int(0, length(stage_order)), stage_order)
   utility_values_by_stage <- stats::setNames(vector("list", length(stage_order)), stage_order)
+  utility_count_by_stage <- stats::setNames(rep.int(0L, length(stage_order)), stage_order)
+  raw_feasible_counts <- tryCatch(
+    .adaptive_link_stage_raw_feasibility_counts(
+      state = state,
+      controller = link_controller,
+      spoke_id = as.integer(spoke_id),
+      stage_order = stage_order,
+      C_max = C_max,
+      seed_base = seed_base,
+      seed_stride = seed_stride
+    ),
+    error = function(e) stats::setNames(rep.int(NA_integer_, length(stage_order)), stage_order)
+  )
 
   for (idx in seq_along(stage_order)) {
     stage_name <- as.character(stage_order[[idx]])
@@ -1132,13 +1228,28 @@
     if (!"u0" %in% names(cand)) {
       cand$u0 <- rep(0, nrow(cand))
     }
+    utility_candidates <- cand
+    if (is.finite(utility_top_k) && !is.na(utility_top_k) && utility_top_k > 0L &&
+      nrow(utility_candidates) > utility_top_k) {
+      cheap_order <- order(-as.double(utility_candidates$u0), utility_candidates$i, utility_candidates$j)
+      utility_candidates <- utility_candidates[cheap_order[seq_len(utility_top_k)], , drop = FALSE]
+    }
     cand <- tryCatch(
-      .adaptive_link_attach_predictive_utility(
-        candidates = cand,
-        state = state,
-        controller = link_controller,
-        spoke_id = as.integer(spoke_id)
-      ),
+      {
+        utility_context <- .adaptive_link_predictive_utility_context(
+          state = state,
+          controller = link_controller,
+          spoke_id = as.integer(spoke_id),
+          candidates = utility_candidates
+        )
+        .adaptive_link_attach_predictive_utility_cached(
+          candidates = utility_candidates,
+          state = state,
+          controller = link_controller,
+          spoke_id = as.integer(spoke_id),
+          utility_context = utility_context
+        )
+      },
       error = function(e) {
         .adaptive_link_abort_feasibility_failure(
           refit_id = refit_id,
@@ -1160,12 +1271,15 @@
     utility_vals[!is.finite(utility_vals) | utility_vals < 0] <- 0
     feasible_utility_mass[[stage_name]] <- as.double(sum(utility_vals))
     utility_values_by_stage[[stage_name]] <- utility_vals
+    utility_count_by_stage[[stage_name]] <- as.integer(length(utility_vals))
   }
 
   list(
     feasible_counts = feasible_counts,
+    raw_feasible_counts = raw_feasible_counts,
     feasible_utility_mass = feasible_utility_mass,
     utility_values_by_stage = utility_values_by_stage,
+    utility_count_by_stage = utility_count_by_stage,
     candidate_count = as.integer(sum(feasible_counts, na.rm = TRUE))
   )
 }
@@ -1178,11 +1292,13 @@
                                                       stage_order,
                                                       C_max = NULL,
                                                       seed_base = NULL,
-                                                      seed_stride = 37L) {
+                                                      seed_stride = 37L,
+                                                      utility_top_k = NULL) {
   stage_order <- as.character(stage_order %||% .adaptive_stage_order())
   C_max <- as.integer(C_max %||% adaptive_defaults(as.integer(state$n_items))$C_max)
   seed_base <- as.integer(seed_base %||% (1000L + (1009L * as.integer(spoke_id))))
   seed_stride <- as.integer(seed_stride %||% 37L)
+  utility_top_k <- as.integer(utility_top_k %||% NA_integer_)
   memo <- .adaptive_link_refit_local_memo_entry(
     state = state,
     controller = controller,
@@ -1192,7 +1308,15 @@
     stage_order = stage_order,
     C_max = C_max,
     seed_base = seed_base,
-    seed_stride = seed_stride
+    seed_stride = seed_stride,
+    utility_top_k = utility_top_k
+  )
+  exact_summary_key <- .adaptive_link_stage_feasibility_snapshot_key(
+    stage_order = stage_order,
+    C_max = C_max,
+    seed_base = seed_base,
+    seed_stride = seed_stride,
+    utility_top_k = NA_integer_
   )
   if (is.environment(memo$env) &&
     is.list(memo$entry) &&
@@ -1200,6 +1324,10 @@
     summaries <- memo$entry$stage_feasibility_capacity_summaries %||% list()
     if (is.list(summaries) && !is.null(summaries[[summary_key]])) {
       return(summaries[[summary_key]])
+    }
+    if (is.finite(utility_top_k) && !is.na(utility_top_k) &&
+      is.list(summaries) && !is.null(summaries[[exact_summary_key]])) {
+      return(summaries[[exact_summary_key]])
     }
   }
 
@@ -1210,7 +1338,8 @@
     stage_order = stage_order,
     C_max = C_max,
     seed_base = seed_base,
-    seed_stride = seed_stride
+    seed_stride = seed_stride,
+    utility_top_k = utility_top_k
   )
   if (is.environment(memo$env)) {
     entry <- memo$env[[memo$key]] %||% list()

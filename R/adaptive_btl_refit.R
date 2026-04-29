@@ -2253,6 +2253,67 @@
   )
 }
 
+.adaptive_link_anchored_joint_refit_inputs <- function(state, spoke_id, controller) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  spoke_id <- as.integer(spoke_id)
+  memo <- .adaptive_link_refit_local_memo_entry(
+    state = state,
+    controller = controller,
+    spoke_id = spoke_id
+  )
+  prior_key <- paste(
+    "anchored_joint_refit_inputs",
+    as.double(controller$anchored_joint_spoke_prior_scale %||% 1.0),
+    as.double(controller$anchored_joint_sd_floor %||% 0.02),
+    as.double(controller$anchored_joint_spoke_prior_fallback_sd %||% 1.0),
+    sep = "::"
+  )
+  if (is.environment(memo$env) &&
+    is.list(memo$entry) &&
+    .adaptive_link_refit_local_context_matches(memo$entry$context %||% list(), memo$context)) {
+    cached <- (memo$entry$anchored_joint_refit_inputs %||% list())[[prior_key]] %||% NULL
+    if (is.list(cached)) {
+      return(cached)
+    }
+  }
+
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  prior_mean <- .adaptive_phase_a_artifact_item_field_map(state, spoke_id, "theta_raw_mean")
+  prior_sd_info <- .adaptive_link_anchored_joint_prior_sd(
+    spoke_sd = .adaptive_phase_a_artifact_item_field_map(state, spoke_id, "theta_raw_sd"),
+    controller = controller
+  )
+  prior_sd <- prior_sd_info$prior_sd
+  names(prior_sd) <- names(prior_mean)
+  value <- list(
+    hub_evidence = .adaptive_phase_a_artifact_resolve_within_set_evidence(
+      artifact = state$linking$phase_a$artifacts[[as.character(hub_id)]],
+      state = state,
+      set_id = hub_id,
+      controller = controller
+    ),
+    spoke_evidence = .adaptive_phase_a_artifact_resolve_within_set_evidence(
+      artifact = state$linking$phase_a$artifacts[[as.character(spoke_id)]],
+      state = state,
+      set_id = spoke_id,
+      controller = controller
+    ),
+    prior_mean = prior_mean,
+    prior_sd = prior_sd,
+    prior_sd_info = prior_sd_info
+  )
+
+  if (is.environment(memo$env)) {
+    entry <- memo$env[[memo$key]] %||% list()
+    entry$context <- memo$context
+    cached_inputs <- entry$anchored_joint_refit_inputs %||% list()
+    cached_inputs[[prior_key]] <- value
+    entry$anchored_joint_refit_inputs <- cached_inputs
+    memo$env[[memo$key]] <- entry
+  }
+  value
+}
+
 .adaptive_link_fit_anchored_joint <- function(state,
                                               spoke_id,
                                               controller = NULL,
@@ -2263,7 +2324,6 @@
   if (!identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
     rlang::abort("Anchored-joint fitting requires `link_estimation_mode = anchored_joint`.")
   }
-  hub_id <- as.integer(controller$hub_id %||% 1L)
   accepted_state <- accepted_state %||% .adaptive_link_anchored_joint_resolve_state(
     state = state,
     spoke_id = as.integer(spoke_id),
@@ -2276,26 +2336,16 @@
     allow_cold_start_fallback = TRUE,
     expected_link_params = FALSE
   )
-  hub_evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
-    artifact = state$linking$phase_a$artifacts[[as.character(hub_id)]],
+  refit_inputs <- .adaptive_link_anchored_joint_refit_inputs(
     state = state,
-    set_id = hub_id,
+    spoke_id = as.integer(spoke_id),
     controller = controller
   )
-  spoke_evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
-    artifact = state$linking$phase_a$artifacts[[as.character(spoke_id)]],
-    state = state,
-    set_id = as.integer(spoke_id),
-    controller = controller
-  )
-
-  prior_mean <- .adaptive_phase_a_artifact_item_field_map(state, spoke_id, "theta_raw_mean")
-  prior_sd_info <- .adaptive_link_anchored_joint_prior_sd(
-    spoke_sd = .adaptive_phase_a_artifact_item_field_map(state, spoke_id, "theta_raw_sd"),
-    controller = controller
-  )
-  prior_sd <- prior_sd_info$prior_sd
-  names(prior_sd) <- names(prior_mean)
+  hub_evidence <- refit_inputs$hub_evidence
+  spoke_evidence <- refit_inputs$spoke_evidence
+  prior_mean <- refit_inputs$prior_mean
+  prior_sd <- refit_inputs$prior_sd
+  prior_sd_info <- refit_inputs$prior_sd_info
   if (any(prior_sd_info$fallback_used)) {
     rlang::warn(
       paste0(
@@ -2417,17 +2467,29 @@
       terms <- anchored_binom_terms(eta_within, within_y)
       a_idx <- as.integer(idx_map[within_a])
       b_idx <- as.integer(idx_map[within_b])
-      for (edge_idx in seq_along(terms$fisher_eta)) {
-        w <- as.double(terms$fisher_eta[[edge_idx]])
-        if (!is.finite(w) || w < 0) {
-          next
+      w <- as.double(terms$fisher_eta)
+      ok <- !is.na(a_idx) & !is.na(b_idx) & is.finite(w) & w >= 0
+      if (any(ok)) {
+        a_idx <- a_idx[ok]
+        b_idx <- b_idx[ok]
+        w <- w[ok]
+        diag(hessian) <- diag(hessian) +
+          anchored_accum(a_idx, w) +
+          anchored_accum(b_idx, w)
+        off_key <- paste(pmin(a_idx, b_idx), pmax(a_idx, b_idx), sep = "::")
+        off_w <- rowsum(w, group = off_key, reorder = FALSE)
+        off_parts <- strsplit(rownames(off_w), "::", fixed = TRUE)
+        off_a <- as.integer(vapply(off_parts, `[[`, character(1L), 1L))
+        off_b <- as.integer(vapply(off_parts, `[[`, character(1L), 2L))
+        off_val <- as.double(off_w[, 1L])
+        off_ok <- !is.na(off_a) & !is.na(off_b) & off_a != off_b & is.finite(off_val)
+        if (any(off_ok)) {
+          off_a <- off_a[off_ok]
+          off_b <- off_b[off_ok]
+          off_val <- off_val[off_ok]
+          hessian[cbind(off_a, off_b)] <- hessian[cbind(off_a, off_b)] - off_val
+          hessian[cbind(off_b, off_a)] <- hessian[cbind(off_b, off_a)] - off_val
         }
-        a <- a_idx[[edge_idx]]
-        b <- b_idx[[edge_idx]]
-        hessian[a, a] <- hessian[a, a] + w
-        hessian[b, b] <- hessian[b, b] + w
-        hessian[a, b] <- hessian[a, b] - w
-        hessian[b, a] <- hessian[b, a] - w
       }
     }
     (hessian + t(hessian)) / 2
@@ -2701,7 +2763,27 @@
   if (isTRUE(cache_built) && !is.null(cache)) {
     return(cache)
   }
-  .adaptive_link_cross_edges_rebuild(state)
+  memo_env <- tryCatch(.adaptive_link_refit_local_memo_env(state), error = function(e) NULL)
+  memo_key <- ".link_cross_edges_by_spoke"
+  step_id <- as.integer(.adaptive_link_refit_local_step_id(state))
+  refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+  if (is.environment(memo_env) && exists(memo_key, envir = memo_env, inherits = FALSE)) {
+    entry <- memo_env[[memo_key]] %||% list()
+    if (identical(as.integer(entry$step_id %||% NA_integer_), step_id) &&
+      identical(as.integer(entry$refit_id %||% NA_integer_), refit_id) &&
+      is.list(entry$value)) {
+      return(entry$value)
+    }
+  }
+  rebuilt <- .adaptive_link_cross_edges_rebuild(state)
+  if (is.environment(memo_env)) {
+    memo_env[[memo_key]] <- list(
+      step_id = as.integer(step_id),
+      refit_id = as.integer(refit_id),
+      value = rebuilt
+    )
+  }
+  rebuilt
 }
 
 .adaptive_link_cross_edges_update <- function(cache, state, step_row, A_id, B_id, Y) {
