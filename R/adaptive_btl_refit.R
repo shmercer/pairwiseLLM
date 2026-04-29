@@ -6400,7 +6400,7 @@
           as.integer(controller$probe_accel_bootstrap_target %||% 12L) &&
         as.integer(probe_edges_realized_before_refit) <
           as.integer(controller$probe_edges_min_for_stop %||% 30L) &&
-        as.integer(n_pairs_since_active) >= as.integer(probe_active_floor_used_logged) &&
+        isTRUE(probe_effort_plan$active_floor_met %||% FALSE) &&
         isTRUE(probe_effort_plan$anchor_progress_met %||% TRUE)
       bootstrap_acceleration_used_logged <- isTRUE(bootstrap_acceleration_logged) &&
         isTRUE(refit_summary$probe_panel_acceleration_used_since_last_refit %||% FALSE)

@@ -99,28 +99,29 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
   expect_true(any(grepl("stop_blockers=probe_pred_rmse_lagged,theta_global_rmse_lagged", output)))
 })
 
-test_that("print.adaptive_state reads acceleration details from live accelerated runtime rows", {
+test_that("print.adaptive_state uses current live probe acceleration details", {
   state <- make_positive_probe_acceleration_runtime_state()
   latest_rows <- pairwiseLLM:::.adaptive_latest_link_stage_rows(state)
-  expect_true(any(latest_rows$probe_acceleration_used %in% TRUE))
+  all_rows <- tibble::as_tibble(state$link_stage_log)
+  expect_true(any(all_rows$probe_acceleration_used %in% TRUE))
 
   probe_mode <- pairwiseLLM:::.adaptive_print_compact_values(
     latest_rows$probe_acceleration_mode_used
   )
-  probe_floor <- pairwiseLLM:::.adaptive_print_compact_values(
-    as.integer(latest_rows$probe_active_floor_used[latest_rows$probe_acceleration_used %in% TRUE])
-  )
-  probe_caps <- paste0(
-    as.integer(latest_rows$probe_effort_base_cap[latest_rows$probe_acceleration_used %in% TRUE]),
-    "->",
-    as.integer(latest_rows$probe_effort_effective_cap[latest_rows$probe_acceleration_used %in% TRUE])
-  )
-  probe_cap <- pairwiseLLM:::.adaptive_print_compact_values(probe_caps)
 
   output <- capture.output(print(state))
 
   expect_true(any(grepl("^link review: ", output)))
   expect_true(any(grepl(paste0("probe_accel=", probe_mode), output, fixed = TRUE)))
+  probe_floor <- pairwiseLLM:::.adaptive_print_compact_values(
+    as.integer(latest_rows$probe_active_floor_used)
+  )
+  probe_caps <- paste0(
+    as.integer(latest_rows$probe_effort_base_cap),
+    "->",
+    as.integer(latest_rows$probe_effort_effective_cap)
+  )
+  probe_cap <- pairwiseLLM:::.adaptive_print_compact_values(probe_caps)
   expect_true(any(grepl(paste0("probe_floor=", probe_floor), output, fixed = TRUE)))
   expect_true(any(grepl(paste0("probe_cap=", probe_cap), output, fixed = TRUE)))
 })

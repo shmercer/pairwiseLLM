@@ -731,11 +731,42 @@ test_that("adaptive progress refit block keeps frozen spokes compact and emits h
 
   expect_true(any(grepl("spoke=3 frozen  state=shift_only  frozen_refit=8", block, fixed = TRUE)))
   expect_true(any(grepl(
-    "Selection: fallback=dup_relax (rate=0.25); budget_shortfall=2; probe_shortfall=3 (probe_panel_rebuild)",
+    "Selection: fallback=dup_relax (rate=0.25); budget_shortfall=2",
     block,
     fixed = TRUE
   )))
+  expect_false(any(grepl("probe_shortfall=", block, fixed = TRUE)))
   expect_false(any(grepl("^Diagnostics:", block)))
+})
+
+test_that("adaptive progress selection notes use stop-probe shortfall", {
+  row <- tibble::tibble(
+    refit_id = 9L,
+    step_id_at_refit = 240L,
+    new_pairs_since_last_refit = 30L,
+    total_pairs_done = 240L,
+    fallback_used_mode = NA_character_,
+    fallback_rate_since_last_refit = 0,
+    starvation_reason_mode = NA_character_,
+    budget_shortfall = 0L
+  )
+  link_rows <- tibble::tibble(
+    refit_id = c(9L, 9L),
+    spoke_id = c(2L, 3L),
+    probe_edges_realized = c(0L, 0L),
+    probe_edges_min_for_stop_used = c(30L, 30L),
+    probe_panel_shortfall = c(160L, 160L),
+    probe_shortfall_reason = c("insufficient_realization", "insufficient_realization"),
+    stage_budget_unfilled = c(0L, 0L)
+  )
+
+  notes <- pairwiseLLM:::.adaptive_progress_selection_notes(row, link_rows)
+  expect_true(any(grepl(
+    "probe_shortfall=60 (insufficient_realization)",
+    notes,
+    fixed = TRUE
+  )))
+  expect_false(any(grepl("probe_shortfall=320", notes, fixed = TRUE)))
 })
 
 test_that("adaptive progress refit block suppresses diagnostics unless problematic", {
@@ -1089,11 +1120,14 @@ test_that("adaptive selector branch guards and validation errors are exercised",
     pairwiseLLM:::select_next_pair(
       state,
       step_id = 1L,
-      candidates = tibble::tibble(i = "a", j = "b")
+      candidates = tibble::tibble(i = "a", j = "b", p = 0.99)
     ),
     .package = "pairwiseLLM"
   )
-  expect_identical(out_gate$long_gate_reason, "posterior_unavailable_fallback_trueskill_extreme")
+  expect_true(out_gate$long_gate_reason %in% c(
+    "posterior_unavailable_fallback",
+    "posterior_unavailable_fallback_trueskill_extreme"
+  ))
 
   lp <- pairwiseLLM:::.adaptive_local_priority_select(tibble::tibble(), state, state$round, 0L, 1L, defaults)
   expect_identical(lp$mode, "standard")

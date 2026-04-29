@@ -2396,27 +2396,32 @@
   progress <- .adaptive_link_probe_window_progress(state, spoke_id = spoke_id)
   active_nonprobe <- as.integer(progress$active_nonprobe %||% 0L)
   anchor_active <- as.integer(progress$anchor_active %||% 0L)
+  stage_progress <- NULL
+  active_window_exhausted <- FALSE
+  if (phase_b_active && budget > 0L) {
+    quota_controller <- controller
+    quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+    quota_controller$B_spoke_refit_budget <- as.integer(budget)
+    quota_controller$B_spoke_refit_budget_source <-
+      as.character(budget_info$B_spoke_refit_budget_source)
+    stage_quotas <- .adaptive_round_compute_quotas(
+      round_id = as.integer(state$round$round_id %||% 1L),
+      n_items = as.integer(state$n_items),
+      controller = quota_controller
+    )
+    stage_progress <- .adaptive_link_stage_progress(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      stage_quotas = stage_quotas,
+      stage_order = .adaptive_stage_order(),
+      refit_id = .adaptive_link_refit_window_id(state)
+    )
+    active_window_exhausted <- as.integer(stage_progress$budget_remaining_actual %||% 0L) <= 0L
+  }
   anchor_progress_met <- TRUE
   if (isTRUE(controller$probe_active_floor_requires_anchor_progress)) {
     anchor_progress_met <- anchor_active > 0L
     if (!isTRUE(anchor_progress_met) && phase_b_active && budget > 0L) {
-      quota_controller <- controller
-      quota_controller$current_link_spoke_id <- as.integer(spoke_id)
-      quota_controller$B_spoke_refit_budget <- as.integer(budget)
-      quota_controller$B_spoke_refit_budget_source <-
-        as.character(budget_info$B_spoke_refit_budget_source)
-      stage_quotas <- .adaptive_round_compute_quotas(
-        round_id = as.integer(state$round$round_id %||% 1L),
-        n_items = as.integer(state$n_items),
-        controller = quota_controller
-      )
-      stage_progress <- .adaptive_link_stage_progress(
-        state = state,
-        spoke_id = as.integer(spoke_id),
-        stage_quotas = stage_quotas,
-        stage_order = .adaptive_stage_order(),
-        refit_id = .adaptive_link_refit_window_id(state)
-      )
       exhausted_map <- .adaptive_link_refit_exhausted_map(state)
       refit_key <- .adaptive_link_refit_spoke_key(
         refit_id = .adaptive_link_refit_window_id(state),
@@ -2446,6 +2451,7 @@
   } else {
     as.integer(bootstrap_active_floor)
   }
+  active_floor_met <- active_nonprobe >= active_floor_used || isTRUE(active_window_exhausted)
 
   bootstrap_gate_open <- !isTRUE(probe_only_blocker_trigger) &&
     isTRUE(controller$probe_active_floor_enabled) &&
@@ -2454,13 +2460,13 @@
     budget > 0L &&
     realized_total < as.integer(controller$probe_accel_bootstrap_target %||% 12L) &&
     realized_total < realized_min &&
-    active_nonprobe >= active_floor_used &&
+    isTRUE(active_floor_met) &&
     isTRUE(anchor_progress_met)
   sole_blocker_gate_open <- isTRUE(probe_only_blocker_trigger) &&
     phase_b_active &&
     !isTRUE(spoke_frozen) &&
     budget > 0L &&
-    active_nonprobe >= active_floor_used
+    isTRUE(active_floor_met)
   effective_cap <- if (isTRUE(sole_blocker_gate_open)) {
     min(
       as.integer(controller$probe_pairs_per_refit_per_spoke_sole_blocker_max %||% base_cap),
@@ -2490,7 +2496,7 @@
     link_stop_eligible = as.logical(link_stop_eligible),
     acceleration_mode_used = as.character(mode_used),
     active_floor_used = as.integer(active_floor_used),
-    active_floor_met = as.logical(active_nonprobe >= active_floor_used),
+    active_floor_met = as.logical(active_floor_met),
     active_nonprobe_since_refit = as.integer(active_nonprobe),
     anchor_progress_met = as.logical(anchor_progress_met),
     probe_only_blocker_trigger = as.logical(probe_only_blocker_trigger),
@@ -3269,6 +3275,15 @@
     controller = controller,
     eligible_spoke_ids = active_spokes
   )
+  pending_probe_spoke <- .adaptive_link_probe_next_holdout_spoke(
+    state = state,
+    controller = controller,
+    eligible_spoke_ids = active_spokes,
+    allow_when_active = FALSE
+  )
+  if (!is.na(pending_probe_spoke)) {
+    return(FALSE)
+  }
   stage_order <- .adaptive_stage_order()
   all(vapply(active_spokes, function(spoke_id) {
     budget_entry <- budget_map[[as.character(spoke_id)]] %||% list()

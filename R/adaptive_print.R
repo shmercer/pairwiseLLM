@@ -1474,13 +1474,21 @@ print.adaptive_state <- function(x, ...) {
       notes <- c(notes, paste0("budget_shortfall=", as.integer(budget_shortfall)))
     }
 
-    probe_shortfall <- sum(as.integer(
-      if ("probe_panel_shortfall" %in% names(link_stage_rows)) {
-        link_stage_rows$probe_panel_shortfall
-      } else {
-        0L
-      }
-    ), na.rm = TRUE)
+    probe_shortfall_vals <- if (all(c(
+      "probe_edges_min_for_stop_used",
+      "probe_edges_realized"
+    ) %in% names(link_stage_rows))) {
+      pmax(
+        0L,
+        as.integer(link_stage_rows$probe_edges_min_for_stop_used) -
+          as.integer(link_stage_rows$probe_edges_realized)
+      )
+    } else if ("probe_panel_shortfall" %in% names(link_stage_rows)) {
+      as.integer(link_stage_rows$probe_panel_shortfall)
+    } else {
+      0L
+    }
+    probe_shortfall <- sum(as.integer(probe_shortfall_vals), na.rm = TRUE)
     if (probe_shortfall > 0L) {
       probe_reasons <- if ("probe_shortfall_reason" %in% names(link_stage_rows)) {
         reasons <- as.character(link_stage_rows$probe_shortfall_reason)

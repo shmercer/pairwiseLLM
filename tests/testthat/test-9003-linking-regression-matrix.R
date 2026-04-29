@@ -144,7 +144,7 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
     second <- adaptive_rank_run_live(
       state = resumed,
       judge = judge,
-      n_steps = 4L,
+      n_steps = if (isTRUE(sc$linking)) 50L else 4L,
       fit_fn = fit_stub$fit_fn,
       adaptive_config = cfg,
       btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),

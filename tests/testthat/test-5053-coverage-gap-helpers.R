@@ -818,6 +818,60 @@ test_that("probe effort plan treats canonical anchor-stage exhaustion as anchor 
   expect_identical(plan$effective_cap, 6L)
 })
 
+test_that("probe effort opens when active-link budget is exhausted below floor", {
+  append_active_step <- function(state, step_id, A_id, B_id, spoke_id, stage_name) {
+    out <- append_cross_probe_step(
+      state = state,
+      step_id = step_id,
+      A_id = A_id,
+      B_id = B_id,
+      Y = 1L,
+      spoke_id = spoke_id,
+      is_probe_step = FALSE,
+      run_mode = "link_multi_spoke"
+    )
+    idx <- nrow(out$step_log)
+    out$step_log$round_stage[[idx]] <- as.character(stage_name)
+    out$step_log$link_stage[[idx]] <- as.character(stage_name)
+    out
+  }
+
+  state <- make_link_probe_state()
+  state$controller$probe_pairs_per_refit_per_spoke <- 2L
+  state$controller$probe_pairs_per_refit_per_spoke_bootstrap_max <- 6L
+  state$controller$probe_accel_bootstrap_target <- 12L
+  state$controller$probe_active_floor_frac <- 0.5
+  state$controller$probe_active_floor_min <- 20L
+  state$controller$probe_active_floor_requires_anchor_progress <- TRUE
+  state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
+  state$controller$link_budget_map <- list(
+    `2` = list(
+      B_spoke_refit_budget = 2L,
+      B_spoke_refit_budget_source = "single_spoke_controller"
+    )
+  )
+  state <- append_active_step(state, 41L, "h1", "s21", 2L, "anchor_link")
+  state <- append_active_step(state, 42L, "h2", "s22", 2L, "long_link")
+  state <- pairwiseLLM:::.adaptive_link_probe_ensure_panels(
+    state,
+    controller = state$controller,
+    spoke_ids = 2L
+  )
+
+  plan <- pairwiseLLM:::.adaptive_link_probe_effort_plan(
+    state = state,
+    controller = state$controller,
+    spoke_id = 2L
+  )
+  expect_true(isTRUE(plan$active_floor_met))
+  expect_true(isTRUE(plan$allow_when_active))
+  expect_identical(plan$effective_cap, 6L)
+  expect_false(pairwiseLLM:::.adaptive_link_phase_b_window_exhausted(
+    state,
+    controller = state$controller
+  ))
+})
+
 test_that("Phase B refit target scales for concurrent probe-active floors", {
   items <- tibble::tibble(
     item_id = c(
