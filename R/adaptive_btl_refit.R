@@ -3902,17 +3902,32 @@
   if (length(active_keys) < 1L || total_pairs <= 0L) {
     return(out)
   }
+  finite_capacity <- candidate_count[active_keys][!is.na(candidate_count[active_keys])]
+  if (length(finite_capacity) == length(active_keys)) {
+    total_capacity <- as.integer(sum(pmax(0L, finite_capacity), na.rm = TRUE))
+    total_pairs <- as.integer(min(total_pairs, total_capacity))
+    if (total_pairs <= 0L) {
+      return(out)
+    }
+  }
 
   if (total_pairs <= floor_pairs * length(active_keys)) {
     ord <- order(active_keys)
     cursor <- 1L
+    stalled_cycles <- 0L
     while (sum(out) < total_pairs) {
       key <- active_keys[[ord[[cursor]]]]
       cap <- candidate_count[[key]]
+      allocated <- FALSE
       if (is.na(cap) || out[[key]] < cap) {
         out[[key]] <- out[[key]] + 1L
+        allocated <- TRUE
       }
       cursor <- if (cursor >= length(ord)) 1L else cursor + 1L
+      stalled_cycles <- if (isTRUE(allocated)) 0L else stalled_cycles + 1L
+      if (stalled_cycles >= length(ord)) {
+        break
+      }
     }
     return(stats::setNames(as.integer(out), keys))
   }
@@ -3962,14 +3977,16 @@
             receiver_weights[] <- 1
           }
           ord <- order(-receiver_weights, as.integer(receivers))
+          allocated_unused <- 0L
           for (idx in seq_len(unused)) {
             receiver <- receivers[[ord[[(idx - 1L) %% length(ord) + 1L]]]]
             cap <- candidate_count[[receiver]]
             if (is.na(cap) || out[[receiver]] < cap) {
               out[[receiver]] <- out[[receiver]] + 1L
+              allocated_unused <- allocated_unused + 1L
             }
           }
-          redistribute <- TRUE
+          redistribute <- allocated_unused > 0L
         }
       }
     }
