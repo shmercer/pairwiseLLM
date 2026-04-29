@@ -2413,7 +2413,10 @@
     if (!any(ok)) {
       return(rep(0, length(spoke_items)))
     }
-    as.double(tabulate(index[ok], nbins = length(spoke_items), weights = value[ok]))
+    out <- numeric(length(spoke_items))
+    sums <- rowsum(value[ok], group = index[ok], reorder = FALSE)
+    out[as.integer(rownames(sums))] <- as.double(sums[, 1L])
+    out
   }
   neg_log_post <- function(par) {
     theta_spoke <- as.double(par)
@@ -2756,6 +2759,24 @@
   })
 }
 
+.adaptive_link_cross_edges_memo_signature <- function(state) {
+  step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+  n_rows <- nrow(step_log)
+  if (n_rows < 1L) {
+    return(list(n_rows = 0L))
+  }
+  cols <- intersect(
+    c("step_id", "pair_id", "i", "j", "A", "B", "Y", "is_cross_set", "link_spoke_id"),
+    names(step_log)
+  )
+  tail_row <- step_log[n_rows, cols, drop = FALSE]
+  list(
+    n_rows = as.integer(n_rows),
+    cols = as.character(cols),
+    tail = lapply(tail_row, function(x) x[[1L]])
+  )
+}
+
 .adaptive_link_cross_edges_resolve <- function(state) {
   refit_meta <- state$refit_meta %||% list()
   cache_built <- isTRUE(refit_meta$link_cross_edges_cache_built %||% FALSE)
@@ -2767,10 +2788,12 @@
   memo_key <- ".link_cross_edges_by_spoke"
   step_id <- as.integer(.adaptive_link_refit_local_step_id(state))
   refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+  step_signature <- .adaptive_link_cross_edges_memo_signature(state)
   if (is.environment(memo_env) && exists(memo_key, envir = memo_env, inherits = FALSE)) {
     entry <- memo_env[[memo_key]] %||% list()
     if (identical(as.integer(entry$step_id %||% NA_integer_), step_id) &&
       identical(as.integer(entry$refit_id %||% NA_integer_), refit_id) &&
+      identical(entry$step_signature %||% NULL, step_signature) &&
       is.list(entry$value)) {
       return(entry$value)
     }
@@ -2780,6 +2803,7 @@
     memo_env[[memo_key]] <- list(
       step_id = as.integer(step_id),
       refit_id = as.integer(refit_id),
+      step_signature = step_signature,
       value = rebuilt
     )
   }
