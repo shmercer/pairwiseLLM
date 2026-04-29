@@ -63,6 +63,52 @@
   resolved
 }
 
+.adaptive_phase_b_refit_pairs_target_floor <- function(state, controller, phase_ctx) {
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  concurrent_mode <- identical(run_mode, "link_multi_spoke") &&
+    identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
+  if (!isTRUE(concurrent_mode) ||
+    !identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")) {
+    return(0L)
+  }
+
+  active_spokes <- as.integer(phase_ctx$active_spokes %||% integer())
+  active_spokes <- sort(unique(active_spokes[!is.na(active_spokes)]))
+  if (length(active_spokes) < 2L) {
+    return(0L)
+  }
+
+  probe_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
+  active_floor_min <- if (isTRUE(controller$probe_active_floor_enabled)) {
+    max(0L, as.integer(controller$probe_active_floor_min %||% 20L))
+  } else {
+    0L
+  }
+  active_floor_frac <- if (isTRUE(controller$probe_active_floor_enabled)) {
+    as.double(controller$probe_active_floor_frac %||% 0.5)
+  } else {
+    0
+  }
+  if (!is.finite(active_floor_frac) || active_floor_frac < 0 || active_floor_frac > 1) {
+    rlang::abort("`adaptive_config$probe_active_floor_frac` must be in [0, 1].")
+  }
+
+  per_spoke_budget <- as.integer(active_floor_min + probe_cap)
+  for (unused in seq_len(10L)) {
+    active_floor <- max(
+      active_floor_min,
+      as.integer(ceiling(active_floor_frac * per_spoke_budget))
+    )
+    needed <- as.integer(active_floor + probe_cap)
+    if (needed <= per_spoke_budget) {
+      break
+    }
+    per_spoke_budget <- needed
+  }
+
+  as.integer(length(active_spokes) * per_spoke_budget)
+}
+
 .adaptive_refit_pairs_target <- function(state, config) {
   effective_n <- as.integer(state$n_items)
   controller <- .adaptive_controller_resolve(state)
@@ -78,11 +124,23 @@
       }
     }
   }
-  refit_pairs_target <- config$refit_pairs_target %||% .btl_mcmc_clamp(
+  item_scaled_target <- .btl_mcmc_clamp(
     20L,
     5000L,
     as.integer(ceiling(effective_n / 2))
   )
+  refit_pairs_target <- config$refit_pairs_target %||% item_scaled_target
+  if (.adaptive_link_mode_active(controller) &&
+    identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")) {
+    refit_pairs_target <- max(
+      as.integer(refit_pairs_target),
+      .adaptive_phase_b_refit_pairs_target_floor(
+        state = state,
+        controller = controller,
+        phase_ctx = phase_ctx
+      )
+    )
+  }
   as.integer(refit_pairs_target)
 }
 

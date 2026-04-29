@@ -818,6 +818,51 @@ test_that("probe effort plan treats canonical anchor-stage exhaustion as anchor 
   expect_identical(plan$effective_cap, 6L)
 })
 
+test_that("Phase B refit target scales for concurrent probe-active floors", {
+  items <- tibble::tibble(
+    item_id = c(
+      paste0("h", seq_len(10L)),
+      paste0("s2", seq_len(5L)),
+      paste0("s3", seq_len(5L))
+    ),
+    set_id = c(rep(1L, 10L), rep(2L, 5L), rep(3L, 5L)),
+    global_item_id = item_id
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      multi_spoke_mode = "concurrent",
+      hub_lock_mode = "soft_lock"
+    )
+  )
+  state$linking$phase_a <- list(
+    phase = "phase_b",
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    ready_spokes = c(2L, 3L),
+    required_sets = c(1L, 2L, 3L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE, `3` = TRUE),
+    phase_b_started_at_step = 1L
+  )
+  state$controller <- pairwiseLLM:::.adaptive_controller_with_phase_scope(
+    state,
+    controller = pairwiseLLM:::.adaptive_controller_resolve(state)
+  )
+
+  expect_identical(
+    pairwiseLLM:::.adaptive_refit_pairs_target(state, list(refit_pairs_target = 30L)),
+    44L
+  )
+
+  state$controller$multi_spoke_mode <- "independent"
+  expect_identical(
+    pairwiseLLM:::.adaptive_refit_pairs_target(state, list(refit_pairs_target = 30L)),
+    30L
+  )
+})
+
 make_probe_blocker_surface <- function(stop_blocker_codes,
                                        probe_edges_min_for_stop_used = 6L,
                                        hub_anchored = TRUE,

@@ -376,7 +376,10 @@ round-log diagnostics. Supported fields:
 \describe{
 \item{\code{refit_pairs_target}}{Minimum new committed comparisons required
 before the next BTL refit. Default is \code{ceiling(N / 2)} clamped to
-\verb{[20L, 5000L]}. In linking Phase A, \code{N} is the active Phase A set size.}
+\verb{[20L, 5000L]}. In linking Phase A, \code{N} is the active Phase A set size.
+In concurrent linking Phase B, the effective target is raised when
+needed so each active spoke can satisfy the configured active probe
+floor plus the base per-refit probe cap.}
 \item{\code{model_variant}}{BTL likelihood variant used for inference only.
 Choices are \code{"btl"} (no lapse, no position bias), \code{"btl_e"} (lapse),
 \code{"btl_b"} (position bias), and \code{"btl_e_b"} (lapse + position bias).

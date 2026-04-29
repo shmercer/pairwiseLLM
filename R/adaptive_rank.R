@@ -1182,7 +1182,10 @@ make_adaptive_judge_llm <- function(
 #'   \describe{
 #'   \item{`refit_pairs_target`}{Minimum new committed comparisons required
 #'     before the next BTL refit. Default is `ceiling(N / 2)` clamped to
-#'     `[20L, 5000L]`. In linking Phase A, `N` is the active Phase A set size.}
+#'     `[20L, 5000L]`. In linking Phase A, `N` is the active Phase A set size.
+#'     In concurrent linking Phase B, the effective target is raised when
+#'     needed so each active spoke can satisfy the configured active probe
+#'     floor plus the base per-refit probe cap.}
 #'   \item{`model_variant`}{BTL likelihood variant used for inference only.
 #'     Choices are `"btl"` (no lapse, no position bias), `"btl_e"` (lapse),
 #'     `"btl_b"` (position bias), and `"btl_e_b"` (lapse + position bias).
