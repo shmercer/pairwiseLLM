@@ -5293,7 +5293,8 @@ test_that("anchored-joint utility and Fisher updates use the accepted state", {
     )
   )
   d_opt_entry <- updated$controller$link_d_opt_it_by_spoke[[paste0("1::2")]]
-  expect_identical(dim(d_opt_entry$it), c(2L, 2L))
+  expect_identical(length(d_opt_entry$it_diag), 2L)
+  expect_true(d_opt_entry$it_diag[[1L]] > 0)
   expect_identical(d_opt_entry$it_n_pairs_accumulated, 1L)
 })
 

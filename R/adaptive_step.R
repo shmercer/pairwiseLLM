@@ -699,9 +699,7 @@ validate_judge_result <- function(result, A_id, B_id) {
     if (!is.finite(pbar)) {
       return(state_after)
     }
-    g <- matrix(0, nrow = length(spoke_items), ncol = 1L)
-    g[spoke_idx, 1L] <- 1
-    ipair <- as.matrix(as.double(pbar * (1 - pbar)) * (g %*% t(g)))
+    info_scale <- as.double(pbar * (1 - pbar))
     refit_id <- .adaptive_link_refit_window_id(state_after)
     d_opt_state <- .adaptive_link_d_opt_state_get(
       controller = controller,
@@ -711,7 +709,9 @@ validate_judge_result <- function(result, A_id, B_id) {
       link_estimation_mode = "anchored_joint",
       free_block_dim = length(spoke_items)
     )
-    if (!is.matrix(d_opt_state$it) || any(dim(d_opt_state$it) != dim(ipair))) {
+    uses_diag <- !is.null(d_opt_state$it_diag)
+    if (!isTRUE(uses_diag) &&
+      (!is.matrix(d_opt_state$it) || any(dim(d_opt_state$it) != c(length(spoke_items), length(spoke_items))))) {
       return(state_after)
     }
     d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
@@ -723,7 +723,12 @@ validate_judge_result <- function(result, A_id, B_id) {
       keep <- startsWith(as.character(map_names), current_prefix)
       d_opt_map <- d_opt_map[keep]
     }
-    d_opt_state$it <- as.matrix((d_opt_state$it + ipair + t(d_opt_state$it + ipair)) / 2)
+    if (isTRUE(uses_diag)) {
+      d_opt_state$it_diag[[spoke_idx]] <- as.double(d_opt_state$it_diag[[spoke_idx]] + info_scale)
+    } else {
+      d_opt_state$it[spoke_idx, spoke_idx] <- as.double(d_opt_state$it[spoke_idx, spoke_idx] + info_scale)
+      d_opt_state$it <- as.matrix((d_opt_state$it + t(d_opt_state$it)) / 2)
+    }
     d_opt_state$it_n_pairs_accumulated <- as.integer(d_opt_state$it_n_pairs_accumulated + 1L)
     d_opt_map[[d_opt_state$key]] <- d_opt_state
     controller$link_d_opt_it_by_spoke <- d_opt_map

@@ -2344,6 +2344,27 @@
 
   beta_val <- as.double(judge_params$beta %||% 0)
   epsilon_val <- max(0, min(1, as.double(judge_params$epsilon %||% 0)))
+  prior_mean_vec <- as.double(prior_mean[spoke_items])
+  prior_sd_vec <- as.double(prior_sd[spoke_items])
+  prior_var_vec <- prior_sd_vec^2
+  anchored_binom_terms <- function(eta, y) {
+    s <- stats::plogis(eta)
+    p <- (1 - epsilon_val) * s + epsilon_val * 0.5
+    p <- pmax(1e-10, pmin(1 - 1e-10, p))
+    p_prime <- (1 - epsilon_val) * s * (1 - s)
+    grad_eta <- p_prime * (p - y) / (p * (1 - p))
+    fisher_eta <- (p_prime^2) / (p * (1 - p))
+    list(p = p, grad_eta = grad_eta, fisher_eta = pmax(fisher_eta, 0))
+  }
+  anchored_accum <- function(index, value) {
+    index <- as.integer(index)
+    value <- as.double(value)
+    ok <- !is.na(index) & index >= 1L & index <= length(spoke_items) & is.finite(value)
+    if (!any(ok)) {
+      return(rep(0, length(spoke_items)))
+    }
+    as.double(tabulate(index[ok], nbins = length(spoke_items), weights = value[ok]))
+  }
   neg_log_post <- function(par) {
     theta_spoke <- as.double(par)
     names(theta_spoke) <- spoke_items
@@ -2360,17 +2381,66 @@
       p_within <- pmax(1e-10, pmin(1 - 1e-10, p_within))
       nll <- nll - sum(stats::dbinom(within_y, size = 1L, prob = p_within, log = TRUE))
     }
-    prior_z <- (theta_spoke - prior_mean[spoke_items]) / prior_sd[spoke_items]
-    nll + 0.5 * sum(prior_z^2 + log(2 * pi * prior_sd[spoke_items]^2))
+    prior_z <- (theta_spoke - prior_mean_vec) / prior_sd_vec
+    nll + 0.5 * sum(prior_z^2 + log(2 * pi * prior_var_vec))
+  }
+  neg_log_grad <- function(par) {
+    theta_spoke <- as.double(par)
+    names(theta_spoke) <- spoke_items
+    grad <- (theta_spoke - prior_mean_vec) / prior_var_vec
+    if (length(cross_y) > 0L) {
+      eta_cross <- theta_spoke[cross_x] - theta_hub_fixed[cross_h] + cross_beta_signed
+      terms <- anchored_binom_terms(eta_cross, cross_y)
+      grad <- grad + anchored_accum(idx_map[cross_x], terms$grad_eta)
+    }
+    if (length(within_y) > 0L) {
+      eta_within <- theta_spoke[within_a] - theta_spoke[within_b] + beta_val
+      terms <- anchored_binom_terms(eta_within, within_y)
+      grad <- grad +
+        anchored_accum(idx_map[within_a], terms$grad_eta) -
+        anchored_accum(idx_map[within_b], terms$grad_eta)
+    }
+    grad[!is.finite(grad)] <- 0
+    unname(as.double(grad))
+  }
+  anchored_hessian <- function(par) {
+    theta_spoke <- as.double(par)
+    names(theta_spoke) <- spoke_items
+    hessian <- diag(1 / prior_var_vec, nrow = length(spoke_items))
+    if (length(cross_y) > 0L) {
+      eta_cross <- theta_spoke[cross_x] - theta_hub_fixed[cross_h] + cross_beta_signed
+      terms <- anchored_binom_terms(eta_cross, cross_y)
+      diag(hessian) <- diag(hessian) + anchored_accum(idx_map[cross_x], terms$fisher_eta)
+    }
+    if (length(within_y) > 0L) {
+      eta_within <- theta_spoke[within_a] - theta_spoke[within_b] + beta_val
+      terms <- anchored_binom_terms(eta_within, within_y)
+      a_idx <- as.integer(idx_map[within_a])
+      b_idx <- as.integer(idx_map[within_b])
+      for (edge_idx in seq_along(terms$fisher_eta)) {
+        w <- as.double(terms$fisher_eta[[edge_idx]])
+        if (!is.finite(w) || w < 0) {
+          next
+        }
+        a <- a_idx[[edge_idx]]
+        b <- b_idx[[edge_idx]]
+        hessian[a, a] <- hessian[a, a] + w
+        hessian[b, b] <- hessian[b, b] + w
+        hessian[a, b] <- hessian[a, b] - w
+        hessian[b, a] <- hessian[b, a] - w
+      }
+    }
+    (hessian + t(hessian)) / 2
   }
 
   opt <- tryCatch(
     stats::optim(
       par = unname(par_init),
       fn = neg_log_post,
+      gr = neg_log_grad,
       method = "BFGS",
-      hessian = TRUE,
-      control = list(maxit = 500, reltol = 1e-10)
+      hessian = FALSE,
+      control = list(maxit = 300, reltol = 1e-10)
     ),
     error = function(e) NULL
   )
@@ -2380,7 +2450,7 @@
     hessian_posdef <- FALSE
   } else {
     theta_spoke_post <- stats::setNames(as.double(opt$par), spoke_items)
-    hessian <- opt$hessian %||% matrix(NA_real_, nrow = length(spoke_items), ncol = length(spoke_items))
+    hessian <- anchored_hessian(opt$par)
     vcov <- tryCatch(
       solve(hessian),
       error = function(e) matrix(NA_real_, nrow = length(spoke_items), ncol = length(spoke_items))
@@ -5959,13 +6029,20 @@
         NULL
       }
     )
-    d_opt_it <- as.matrix(d_opt_entry$it %||% matrix(0, nrow = d_opt_dim, ncol = d_opt_dim))
     d_opt_logdet_start <- as.double(d_opt_entry$it_logdet_start %||% NA_real_)
-    d_opt_logdet_end <- .adaptive_link_logdet_spd(d_opt_it, ridge = 1e-6)
-    d_opt_trace_end <- if (is.matrix(d_opt_it) && nrow(d_opt_it) == ncol(d_opt_it)) {
-      as.double(sum(diag(d_opt_it)))
+    if (!is.null(d_opt_entry$it_diag)) {
+      d_opt_diag <- as.double(d_opt_entry$it_diag)
+      diag_info <- .adaptive_link_d_opt_diag_prepare(d_opt_diag, ridge = 1e-6)
+      d_opt_logdet_end <- as.double(diag_info$logdet %||% NA_real_)
+      d_opt_trace_end <- as.double(diag_info$trace %||% NA_real_)
     } else {
-      NA_real_
+      d_opt_it <- as.matrix(d_opt_entry$it %||% matrix(0, nrow = d_opt_dim, ncol = d_opt_dim))
+      d_opt_logdet_end <- .adaptive_link_logdet_spd(d_opt_it, ridge = 1e-6)
+      d_opt_trace_end <- if (is.matrix(d_opt_it) && nrow(d_opt_it) == ncol(d_opt_it)) {
+        as.double(sum(diag(d_opt_it)))
+      } else {
+        NA_real_
+      }
     }
     d_opt_n_pairs <- as.integer(d_opt_entry$it_n_pairs_accumulated %||% 0L)
     reliability_stop_pass <- as.logical(stats_row$link_reliability_stop_pass %||% NA)

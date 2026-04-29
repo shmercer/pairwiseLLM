@@ -1371,6 +1371,32 @@ test_that("rank-one D-opt helpers stay numerically aligned with the legacy logde
   expect_equal(anchored_gain, anchored_legacy, tolerance = 1e-12)
 })
 
+test_that("anchored-joint diagonal D-opt helpers avoid dense state while matching logdet", {
+  it_diag <- c(1.2, 1.1)
+  info_scale <- c(0.24, 0.18)
+  diag_index <- c(1L, 2L)
+  diag_gain <- pairwiseLLM:::.adaptive_link_d_opt_gain_diag_state(
+    it_diag = it_diag,
+    info_scale = info_scale,
+    diag_index = diag_index,
+    ridge = 1e-6
+  )
+  legacy_gain <- vapply(seq_along(info_scale), function(idx) {
+    ipair <- matrix(0, nrow = 2L, ncol = 2L)
+    ipair[diag_index[[idx]], diag_index[[idx]]] <- info_scale[[idx]]
+    pairwiseLLM:::.adaptive_link_d_opt_gain_logdet(
+      it = diag(it_diag, nrow = 2L),
+      ipair = ipair,
+      ridge = 1e-6
+    )
+  }, numeric(1L))
+
+  expect_equal(diag_gain, legacy_gain, tolerance = 1e-12)
+  prepared <- pairwiseLLM:::.adaptive_link_d_opt_diag_prepare(it_diag, ridge = 1e-6)
+  expect_true(isTRUE(prepared$ok))
+  expect_equal(prepared$trace, sum(it_diag), tolerance = 0)
+})
+
 test_that("selection utility helpers cover additional fallback branches", {
   expect_identical(
     pairwiseLLM:::.adaptive_selection_utility_mode(
@@ -2706,6 +2732,35 @@ test_that("direct Phase B builders match reference stage domains and pooled back
     pairwiseLLM:::make_unordered_key(actual_pool$i[[idx]], actual_pool$j[[idx]])
   }, character(1L))
   expect_false(any(actual_pool_keys %in% reserved_keys))
+})
+
+test_that("bounded Phase B direct cross-pair construction limits large stage domains", {
+  hub_ids <- paste0("h", seq_len(60L))
+  spoke_ids <- paste0("s", seq_len(60L))
+  ids <- c(hub_ids, spoke_ids)
+  rank_index <- stats::setNames(seq_along(ids), ids)
+  stratum_map <- stats::setNames(rep(seq_len(12L), length.out = length(ids)), ids)
+  reserved <- pairwiseLLM:::make_unordered_key(hub_ids[[1L]], spoke_ids[[1L]])
+
+  bounded <- pairwiseLLM:::.adaptive_link_direct_cross_pairs_bounded(
+    hub_item_ids = hub_ids,
+    spoke_ids = spoke_ids,
+    rank_index = rank_index,
+    stratum_map = stratum_map,
+    stage_name = "local_link",
+    bounds = list(min = 0L, max = .Machine$integer.max),
+    active_hub_ids = hub_ids,
+    reserved_keys = reserved,
+    C_max = 25L,
+    seed = 99L
+  )
+
+  expect_true(isTRUE(bounded$bounded_used))
+  expect_identical(nrow(bounded$candidates), 25L)
+  expect_identical(bounded$n_after_route_filters, 3600L)
+  expect_identical(bounded$n_after_active_domain, 3600L)
+  expect_identical(bounded$total_legal, 3599L)
+  expect_false(any(as.character(bounded$candidates$pair_key) %in% reserved))
 })
 
 test_that("concurrent selector uses the direct Phase B candidate domain for the active spoke", {
