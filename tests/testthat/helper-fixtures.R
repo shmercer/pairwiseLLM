@@ -362,7 +362,8 @@ make_positive_probe_acceleration_runtime_state <- function() {
       probe_edges_min_for_stop = 12L,
       probe_active_floor_min = 1L,
       probe_active_floor_frac = 0,
-      probe_active_floor_requires_anchor_progress = FALSE
+      probe_active_floor_requires_anchor_progress = FALSE,
+      link_refit_pairs_per_spoke_rule = "fixed"
     )
     btl_config <- test_link_btl_config(list(refit_pairs_target = 4L))
 

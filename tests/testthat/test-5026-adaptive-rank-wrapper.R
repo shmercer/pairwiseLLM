@@ -1102,6 +1102,13 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
       multi_spoke_mode = "concurrent",
       hub_lock_mode = "soft_lock",
       min_cross_set_pairs_per_spoke_per_refit = 1L,
+      probe_panel_edges = 18L,
+      probe_pairs_per_refit_per_spoke = 1L,
+      probe_edges_min_for_stop = 2L,
+      probe_active_floor_min = 1L,
+      probe_active_floor_frac = 0,
+      probe_active_floor_requires_anchor_progress = FALSE,
+      link_refit_pairs_per_spoke_rule = "fixed",
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
     ),

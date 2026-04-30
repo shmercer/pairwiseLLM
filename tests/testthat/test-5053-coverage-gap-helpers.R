@@ -1601,6 +1601,7 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
 
   state$controller$probe_pairs_per_refit_per_spoke <- 1L
   state$controller$hub_anchor_required_phase_b <- FALSE
+  state$controller$probe_rank_bins <- 1L
   state$controller$spoke_quantile_coverage_bins <- 1L
   state$linking$probe$panels_by_spoke <- list(
     `2` = pairwiseLLM:::.adaptive_link_probe_construct_panel(state, state$controller, spoke_id = 2L)

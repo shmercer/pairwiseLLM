@@ -1717,13 +1717,30 @@
 
 #' @keywords internal
 #' @noRd
-.adaptive_link_probe_panel_feasible_size <- function(target_edges, n_available_pairs = NA_integer_) {
+.adaptive_link_probe_panel_feasible_size <- function(target_edges,
+                                                     n_available_pairs = NA_integer_,
+                                                     active_reserve_pairs = 0L,
+                                                     active_reserve_frac = 0) {
   target_edges <- max(0L, as.integer(target_edges %||% 0L))
   n_available_pairs <- as.integer(n_available_pairs %||% NA_integer_)
   if (is.na(n_available_pairs)) {
     return(as.integer(target_edges))
   }
   feasible_cap <- max(0L, as.integer(n_available_pairs))
+  active_reserve_pairs <- max(0L, as.integer(active_reserve_pairs %||% 0L))
+  active_reserve_frac <- as.double(active_reserve_frac %||% 0)
+  if (!is.finite(active_reserve_frac) || active_reserve_frac < 0) {
+    active_reserve_frac <- 0
+  }
+  if (target_edges >= feasible_cap && active_reserve_frac > 0) {
+    active_reserve_pairs <- max(
+      active_reserve_pairs,
+      as.integer(ceiling(active_reserve_frac * feasible_cap))
+    )
+  }
+  if (active_reserve_pairs > 0L && feasible_cap > active_reserve_pairs) {
+    feasible_cap <- max(0L, feasible_cap - active_reserve_pairs)
+  }
   as.integer(min(target_edges, feasible_cap))
 }
 
