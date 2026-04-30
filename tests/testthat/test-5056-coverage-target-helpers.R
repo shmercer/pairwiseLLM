@@ -271,35 +271,30 @@ test_that("adaptive run blocker-surface helpers cover fallback and trigger branc
   expect_identical(merged_surface$row$stage_only, 5L)
   expect_identical(merged_surface$row$stop_blocker_codes, "probe_edges_min_for_stop")
 
-  trigger <- testthat::with_mocked_bindings(
-    .adaptive_link_probe_validate_blocker_surface = function(...) "probe_edges_min_for_stop",
-    .adaptive_link_probe_sole_blocker_trigger(
-      surface_row = list(stop_blocker_codes = "probe_edges_min_for_stop"),
-      surface_source = "controller_stats",
-      controller = list(
-        probe_sole_blocker_acceleration_enabled = TRUE,
-        probe_sole_blocker_min_realized = 20L
-      ),
-      spoke_id = 2L,
-      realized_before_refit = 20L,
-      realized_min = 30L,
-      panel_shortfall_start = 1L
+  blockers <- .adaptive_link_probe_validate_blocker_surface(
+    surface_row = list(
+      stop_blocker_codes = "probe_edges_min_for_stop",
+      link_diagnostics_pass = TRUE,
+      link_lag_eligible = TRUE,
+      link_min_refit_eligible = TRUE,
+      reliability_link_global = 0.99,
+      link_stop_reliability_min_used = 0.90,
+      probe_brier = 0.01,
+      probe_brier_max_used = 0.10,
+      probe_pred_rmse_lagged = 0.01,
+      probe_pred_rmse_max_used = 0.10,
+      theta_global_rmse_lagged = 0.01,
+      theta_global_rmse_max_used = 0.10,
+      hub_anchored = TRUE,
+      probe_edges_min_for_stop_used = 30L,
+      probe_quality_pass = TRUE
     ),
-    .package = "pairwiseLLM"
-  )
-  expect_true(trigger)
-  expect_false(.adaptive_link_probe_sole_blocker_trigger(
-    surface_row = list(),
-    surface_source = "controller_stats",
-    controller = list(
-      probe_sole_blocker_acceleration_enabled = FALSE,
-      probe_sole_blocker_min_realized = 20L
-    ),
-    spoke_id = 2L,
     realized_before_refit = 20L,
     realized_min = 30L,
-    panel_shortfall_start = 1L
-  ))
+    spoke_id = 2L,
+    source = "controller_stats"
+  )
+  expect_identical(blockers, "probe_edges_min_for_stop")
 })
 
 test_that("adaptive select history-state validators and resolvers reject invalid cache variants", {

@@ -1418,7 +1418,7 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
   expect_identical(as.integer(restored_entry$last_realized_step_id), 99L)
 })
 
-test_that("save/load preserves probe acceleration controller fields and canonical log columns", {
+test_that("save/load preserves fixed probe controller fields and canonical log columns", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),
     set_id = c(1L, 1L, 2L, 2L),
@@ -1432,17 +1432,11 @@ test_that("save/load preserves probe acceleration controller fields and canonica
       hub_id = 1L,
       link_estimation_mode = "transform",
       hub_lock_mode = "soft_lock",
-      probe_acceleration_mode = "active_floor_plus_sole_blocker",
+      probe_acceleration_mode = "fixed_per_refit",
       probe_active_floor_enabled = TRUE,
-      probe_sole_blocker_acceleration_enabled = TRUE,
-      probe_pairs_per_refit_per_spoke_bootstrap_max = 6L,
-      probe_pairs_per_refit_per_spoke_sole_blocker_max = 12L,
-      probe_accel_bootstrap_target = 12L,
       probe_active_floor_frac = 0.5,
       probe_active_floor_min = 20L,
-      probe_active_floor_requires_anchor_progress = TRUE,
-      probe_sole_blocker_min_realized = 20L,
-      probe_sole_blocker_active_floor_min = 10L
+      probe_active_floor_requires_anchor_progress = TRUE
     )
   )
   state$controller$link_refit_stats_by_spoke <- list(
@@ -1468,10 +1462,10 @@ test_that("save/load preserves probe acceleration controller fields and canonica
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE,
-      probe_acceleration_mode_used = "active_floor_plus_sole_blocker",
+      probe_acceleration_mode_used = "fixed_per_refit",
       probe_active_floor_used = 10L,
-      probe_only_blocker_trigger = TRUE,
-      probe_acceleration_used = TRUE,
+      probe_only_blocker_trigger = FALSE,
+      probe_acceleration_used = FALSE,
       probe_effort_base_cap = 2L,
       probe_effort_effective_cap = 7L,
       probe_remaining_to_min_start = 9L
@@ -1484,18 +1478,18 @@ test_that("save/load preserves probe acceleration controller fields and canonica
 
   expect_identical(
     restored$controller$probe_acceleration_mode,
-    "active_floor_plus_sole_blocker"
+    "fixed_per_refit"
   )
   expect_true(isTRUE(restored$controller$probe_active_floor_enabled))
-  expect_true(isTRUE(restored$controller$probe_sole_blocker_acceleration_enabled))
-  expect_identical(restored$controller$probe_pairs_per_refit_per_spoke_bootstrap_max, 6L)
-  expect_identical(restored$controller$probe_pairs_per_refit_per_spoke_sole_blocker_max, 12L)
-  expect_identical(restored$controller$probe_accel_bootstrap_target, 12L)
+  expect_false(isTRUE(restored$controller$probe_sole_blocker_acceleration_enabled))
+  expect_true(is.na(restored$controller$probe_pairs_per_refit_per_spoke_bootstrap_max))
+  expect_true(is.na(restored$controller$probe_pairs_per_refit_per_spoke_sole_blocker_max))
+  expect_true(is.na(restored$controller$probe_accel_bootstrap_target))
   expect_identical(restored$controller$probe_active_floor_frac, 0.5)
   expect_identical(restored$controller$probe_active_floor_min, 20L)
   expect_true(isTRUE(restored$controller$probe_active_floor_requires_anchor_progress))
-  expect_identical(restored$controller$probe_sole_blocker_min_realized, 20L)
-  expect_identical(restored$controller$probe_sole_blocker_active_floor_min, 10L)
+  expect_true(is.na(restored$controller$probe_sole_blocker_min_realized))
+  expect_true(is.na(restored$controller$probe_sole_blocker_active_floor_min))
   expect_true(all(c(
     "probe_acceleration_mode_used",
     "probe_active_floor_used",
@@ -1507,11 +1501,11 @@ test_that("save/load preserves probe acceleration controller fields and canonica
   ) %in% names(restored$link_stage_log)))
   expect_identical(
     as.character(restored$link_stage_log$probe_acceleration_mode_used[[1L]]),
-    "active_floor_plus_sole_blocker"
+    "fixed_per_refit"
   )
   expect_identical(as.integer(restored$link_stage_log$probe_active_floor_used[[1L]]), 10L)
-  expect_true(isTRUE(restored$link_stage_log$probe_only_blocker_trigger[[1L]]))
-  expect_true(isTRUE(restored$link_stage_log$probe_acceleration_used[[1L]]))
+  expect_false(isTRUE(restored$link_stage_log$probe_only_blocker_trigger[[1L]]))
+  expect_false(isTRUE(restored$link_stage_log$probe_acceleration_used[[1L]]))
   expect_identical(as.integer(restored$link_stage_log$probe_effort_base_cap[[1L]]), 2L)
   expect_identical(as.integer(restored$link_stage_log$probe_effort_effective_cap[[1L]]), 7L)
   expect_identical(as.integer(restored$link_stage_log$probe_remaining_to_min_start[[1L]]), 9L)
@@ -1521,19 +1515,19 @@ test_that("save/load preserves probe acceleration controller fields and canonica
   )
 })
 
-test_that("save/load and resume preserve genuinely accelerated probe runtime state", {
+test_that("save/load and resume preserve fixed probe runtime state", {
   state <- make_positive_probe_acceleration_runtime_state()
-  accelerated_before <- state$link_stage_log[
-    state$link_stage_log$probe_acceleration_used %in% TRUE,
+  fixed_probe_before <- state$link_stage_log[
+    seq_len(nrow(state$link_stage_log)),
     ,
     drop = FALSE
   ]
-  expect_gte(nrow(accelerated_before), 1L)
+  expect_gte(nrow(fixed_probe_before), 1L)
 
-  spoke_id <- as.integer(accelerated_before$spoke_id[[1L]])
-  epoch_id <- as.integer(
-    state$controller$link_epoch_id_by_spoke[[as.character(spoke_id)]] %||% NA_integer_
-  )
+  realized_edges <- tibble::as_tibble(state$linking$probe$realized_edges)
+  expect_gte(nrow(realized_edges), 1L)
+  spoke_id <- as.integer(realized_edges$spoke_id[[1L]])
+  epoch_id <- as.integer(realized_edges$link_epoch_id[[1L]])
   expect_true(is.finite(epoch_id))
 
   panel_before <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(
@@ -1563,13 +1557,13 @@ test_that("save/load and resume preserve genuinely accelerated probe runtime sta
     "n_cross_edges_probe_since_last_refit"
   )
   restored_accelerated <- restored$link_stage_log[
-    restored$link_stage_log$probe_acceleration_used %in% TRUE,
+    seq_len(nrow(restored$link_stage_log)),
     accelerated_cols,
     drop = FALSE
   ]
   expect_equal(
     restored_accelerated,
-    accelerated_before[, accelerated_cols, drop = FALSE]
+    fixed_probe_before[, accelerated_cols, drop = FALSE]
   )
 
   restored_panel <- pairwiseLLM:::.adaptive_link_probe_panel_for_spoke(

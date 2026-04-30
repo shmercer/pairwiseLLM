@@ -1971,6 +1971,7 @@ test_that("link_stage_log rows expose feasibility and blocker explanations canon
           "probe_edges_min_for_stop",
           "reliability_link_global",
           "probe_brier",
+          "probe_quality",
           "probe_pred_rmse_lagged",
           "theta_global_rmse_lagged",
           "hub_not_anchored"
@@ -2026,14 +2027,14 @@ test_that("link_stage_log rows expose feasibility and blocker explanations canon
   expect_identical(as.integer(row$probe_edges_realized[[1L]]), 15L)
   expect_identical(
     as.character(row$probe_acceleration_mode_used[[1L]]),
-    "active_floor_plus_sole_blocker"
+    "fixed_per_refit"
   )
   expect_identical(as.integer(row$probe_active_floor_used[[1L]]), 20L)
   expect_false(isTRUE(row$probe_only_blocker_trigger[[1L]]))
   expect_false(isTRUE(row$probe_acceleration_used[[1L]]))
-  expect_identical(as.integer(row$probe_effort_base_cap[[1L]]), 2L)
-  expect_identical(as.integer(row$probe_effort_effective_cap[[1L]]), 2L)
-  expect_identical(as.integer(row$probe_remaining_to_min_start[[1L]]), 15L)
+  expect_identical(as.integer(row$probe_effort_base_cap[[1L]]), 4L)
+  expect_identical(as.integer(row$probe_effort_effective_cap[[1L]]), 4L)
+  expect_identical(as.integer(row$probe_remaining_to_min_start[[1L]]), 65L)
   expect_identical(as.character(row$stop_blocker_codes[[1L]]), paste(
     c(
       "diagnostics_failed",
@@ -2042,6 +2043,7 @@ test_that("link_stage_log rows expose feasibility and blocker explanations canon
       "probe_edges_min_for_stop",
       "reliability_link_global",
       "probe_brier",
+      "probe_quality",
       "probe_pred_rmse_lagged",
       "theta_global_rmse_lagged",
       "hub_not_anchored"
@@ -2054,7 +2056,7 @@ test_that("link_stage_log rows expose feasibility and blocker explanations canon
   expect_identical(as.character(row$lag_domain_reset_reason[[1L]]), "spoke_artifact_replaced")
 })
 
-test_that("link_stage_log probe sole-blocker audit uses refit-start blocker state", {
+test_that("link_stage_log fixed probe audit uses refit-start realized counts", {
   build_probe_audit_state <- function(realized_before_refit,
                                       realized_current_refit,
                                       current_stop_blocker_codes) {
@@ -2062,9 +2064,7 @@ test_that("link_stage_log probe sole-blocker audit uses refit-start blocker stat
     state <- make_linking_refit_state(list(
       multi_spoke_mode = "independent",
       probe_edges_min_for_stop = 30L,
-      probe_sole_blocker_min_realized = 20L,
-      probe_pairs_per_refit_per_spoke = 2L,
-      probe_pairs_per_refit_per_spoke_sole_blocker_max = 10L
+      probe_pairs_per_refit_per_spoke = 2L
     ))
     state$controller$linking_identified_by_spoke <- list(`2` = TRUE)
     state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
@@ -2243,10 +2243,10 @@ test_that("link_stage_log probe sole-blocker audit uses refit-start blocker stat
   row_at_threshold <- rows_at_threshold[rows_at_threshold$spoke_id == 2L, , drop = FALSE]
   expect_identical(as.character(row_at_threshold$stop_blocker_codes[[1L]]), "none")
   expect_identical(as.integer(row_at_threshold$probe_edges_realized_before_refit[[1L]]), 20L)
-  expect_true(isTRUE(row_at_threshold$probe_only_blocker_trigger[[1L]]))
-  expect_true(isTRUE(row_at_threshold$probe_acceleration_used[[1L]]))
-  expect_identical(as.integer(row_at_threshold$probe_active_floor_used[[1L]]), 10L)
-  expect_identical(as.integer(row_at_threshold$probe_effort_effective_cap[[1L]]), 10L)
+  expect_false(isTRUE(row_at_threshold$probe_only_blocker_trigger[[1L]]))
+  expect_false(isTRUE(row_at_threshold$probe_acceleration_used[[1L]]))
+  expect_identical(as.integer(row_at_threshold$probe_active_floor_used[[1L]]), 20L)
+  expect_identical(as.integer(row_at_threshold$probe_effort_effective_cap[[1L]]), 2L)
   expect_identical(as.integer(row_at_threshold$probe_remaining_to_min_start[[1L]]), 10L)
 })
 
@@ -4215,6 +4215,39 @@ test_that("anchored-joint deterministic diagnostics open stop gates and freeze t
       list(lag_eligible = TRUE, rho_rank_lagged = 0.99, rho_rank_lagged_pass = TRUE)
     },
     .adaptive_link_probe_brier_for_fit = function(...) 0.10,
+    .adaptive_link_probe_quality_metrics = function(...) {
+      list(
+        probe_near_boundary_frac = 1,
+        probe_near_boundary_min_frac_used = 0.35,
+        probe_near_boundary_pass = TRUE,
+        probe_extreme_frac = 0,
+        probe_extreme_max_frac_used = 0.30,
+        probe_extreme_frac_pass = TRUE,
+        probe_midrange_frac = 1,
+        probe_midrange_min_frac_used = 0.60,
+        probe_midrange_pass = TRUE,
+        probe_unique_hub_items = 2L,
+        probe_unique_hub_min_used = 2L,
+        probe_unique_hub_pass = TRUE,
+        probe_unique_spoke_items = 2L,
+        probe_unique_spoke_min_used = 2L,
+        probe_unique_spoke_pass = TRUE,
+        probe_rank_bins_hub_covered = 2L,
+        probe_rank_bins_hub_min_used = 2L,
+        probe_rank_bins_hub_pass = TRUE,
+        probe_rank_bins_spoke_covered = 2L,
+        probe_rank_bins_spoke_min_used = 2L,
+        probe_rank_bins_spoke_pass = TRUE,
+        probe_brier_near_boundary = 0.10,
+        probe_brier_near_boundary_max_used = 0.20,
+        probe_brier_near_boundary_pass = TRUE,
+        probe_ece = 0.01,
+        probe_ece_max_used = 0.10,
+        probe_ece_pass = TRUE,
+        probe_quality_pass = TRUE,
+        probe_quality_blocker_codes = "none"
+      )
+    },
     .adaptive_link_probe_edges_realized = function(...) {
       tibble::tibble(
         hub_item = c("h1", "h2"),
@@ -4909,46 +4942,31 @@ test_that("adaptive_state validation branches for linking controls are covered",
   probe_defaults <- pairwiseLLM:::.adaptive_controller_resolve(5L)
   expect_identical(
     probe_defaults$probe_acceleration_mode,
-    "active_floor_plus_sole_blocker"
+    "fixed_per_refit"
   )
   expect_true(isTRUE(probe_defaults$probe_active_floor_enabled))
-  expect_true(isTRUE(probe_defaults$probe_sole_blocker_acceleration_enabled))
-  expect_identical(probe_defaults$probe_pairs_per_refit_per_spoke_bootstrap_max, 6L)
-  expect_identical(probe_defaults$probe_pairs_per_refit_per_spoke_sole_blocker_max, 12L)
-  expect_identical(probe_defaults$probe_accel_bootstrap_target, 12L)
+  expect_false(isTRUE(probe_defaults$probe_sole_blocker_acceleration_enabled))
+  expect_true(is.na(probe_defaults$probe_pairs_per_refit_per_spoke_bootstrap_max))
+  expect_true(is.na(probe_defaults$probe_pairs_per_refit_per_spoke_sole_blocker_max))
+  expect_true(is.na(probe_defaults$probe_accel_bootstrap_target))
   expect_identical(probe_defaults$probe_active_floor_frac, 0.5)
   expect_identical(probe_defaults$probe_active_floor_min, 20L)
   expect_true(isTRUE(probe_defaults$probe_active_floor_requires_anchor_progress))
-  expect_identical(probe_defaults$probe_sole_blocker_min_realized, 20L)
-  expect_identical(probe_defaults$probe_sole_blocker_active_floor_min, 10L)
+  expect_true(is.na(probe_defaults$probe_sole_blocker_min_realized))
+  expect_true(is.na(probe_defaults$probe_sole_blocker_active_floor_min))
   probe_ok <- pairwiseLLM:::.adaptive_validate_controller_config(
     list(
-      probe_acceleration_mode = "active_floor_plus_sole_blocker",
+      probe_acceleration_mode = "fixed_per_refit",
       probe_pairs_per_refit_per_spoke = 2L,
-      probe_pairs_per_refit_per_spoke_bootstrap_max = 6L,
-      probe_pairs_per_refit_per_spoke_sole_blocker_max = 12L,
-      probe_accel_bootstrap_target = 12L,
       probe_active_floor_frac = 0.5,
       probe_active_floor_min = 20L,
-      probe_active_floor_requires_anchor_progress = TRUE,
-      probe_sole_blocker_min_realized = 20L,
-      probe_sole_blocker_active_floor_min = 10L
+      probe_active_floor_requires_anchor_progress = TRUE
     ),
     n_items = 5L
   )
   expect_identical(
     probe_ok$probe_acceleration_mode,
-    "active_floor_plus_sole_blocker"
-  )
-  expect_error(
-    pairwiseLLM:::.adaptive_validate_controller_config(
-      list(
-        probe_pairs_per_refit_per_spoke = 3L,
-        probe_pairs_per_refit_per_spoke_bootstrap_max = 2L
-      ),
-      n_items = 5L
-    ),
-    "bootstrap_max"
+    "fixed_per_refit"
   )
   q <- pairwiseLLM:::.adaptive_round_compute_quotas(
     round_id = 1L,

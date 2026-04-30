@@ -945,8 +945,8 @@
   names(spoke_theta) <- spoke_ids
   names(hub_theta) <- hub_pool
 
-  q_bins <- max(1L, as.integer(controller$spoke_quantile_coverage_bins %||% 3L))
-  h_bins <- 3L
+  q_bins <- max(1L, as.integer(controller$probe_rank_bins %||% controller$spoke_quantile_coverage_bins %||% 10L))
+  h_bins <- max(1L, as.integer(controller$probe_rank_bins %||% 10L))
   spoke_bin_map <- .adaptive_link_probe_quantile_bins(spoke_ids, spoke_theta, q_bins)
   hub_bin_map <- .adaptive_link_probe_quantile_bins(hub_pool, hub_theta, h_bins)
   target_edges <- .adaptive_link_probe_panel_size(

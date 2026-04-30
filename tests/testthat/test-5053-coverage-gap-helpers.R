@@ -711,8 +711,6 @@ test_that("probe effort plan opens active-floor routing only after floor and anc
 
   state <- make_link_probe_state()
   state$controller$probe_pairs_per_refit_per_spoke <- 2L
-  state$controller$probe_pairs_per_refit_per_spoke_bootstrap_max <- 6L
-  state$controller$probe_accel_bootstrap_target <- 12L
   state$controller$probe_active_floor_frac <- 0.5
   state$controller$probe_active_floor_min <- 2L
   state$controller$probe_active_floor_requires_anchor_progress <- TRUE
@@ -729,7 +727,7 @@ test_that("probe effort plan opens active-floor routing only after floor and anc
     controller = state$controller,
     spoke_id = 2L
   )
-  expect_identical(plan0$acceleration_mode_used, "active_floor_plus_sole_blocker")
+  expect_identical(plan0$acceleration_mode_used, "fixed_per_refit")
   expect_identical(plan0$active_floor_used, 2L)
   expect_false(isTRUE(plan0$allow_when_active))
   expect_identical(plan0$effective_cap, 2L)
@@ -756,8 +754,8 @@ test_that("probe effort plan opens active-floor routing only after floor and anc
   )
   expect_true(isTRUE(plan2$anchor_progress_met))
   expect_true(isTRUE(plan2$allow_when_active))
-  expect_true(isTRUE(plan2$acceleration_used))
-  expect_identical(plan2$effective_cap, 6L)
+  expect_false(isTRUE(plan2$acceleration_used))
+  expect_identical(plan2$effective_cap, 2L)
   expect_identical(pairwiseLLM:::.adaptive_link_probe_released_cap_when_active(plan2), 1L)
 
   state_with_anchor_more <- append_active_step(state_with_anchor, 23L, "h3", "s21", 2L, "mid_link")
@@ -789,8 +787,6 @@ test_that("probe effort plan treats canonical anchor-stage exhaustion as anchor 
 
   state <- make_link_probe_state()
   state$controller$probe_pairs_per_refit_per_spoke <- 2L
-  state$controller$probe_pairs_per_refit_per_spoke_bootstrap_max <- 6L
-  state$controller$probe_accel_bootstrap_target <- 12L
   state$controller$probe_active_floor_frac <- 0.5
   state$controller$probe_active_floor_min <- 1L
   state$controller$probe_active_floor_requires_anchor_progress <- TRUE
@@ -814,8 +810,8 @@ test_that("probe effort plan treats canonical anchor-stage exhaustion as anchor 
   expect_true(isTRUE(plan$active_floor_met))
   expect_true(isTRUE(plan$anchor_progress_met))
   expect_true(isTRUE(plan$allow_when_active))
-  expect_true(isTRUE(plan$acceleration_used))
-  expect_identical(plan$effective_cap, 6L)
+  expect_false(isTRUE(plan$acceleration_used))
+  expect_identical(plan$effective_cap, 2L)
 })
 
 test_that("probe effort opens when active-link budget is exhausted below floor", {
@@ -838,8 +834,6 @@ test_that("probe effort opens when active-link budget is exhausted below floor",
 
   state <- make_link_probe_state()
   state$controller$probe_pairs_per_refit_per_spoke <- 2L
-  state$controller$probe_pairs_per_refit_per_spoke_bootstrap_max <- 6L
-  state$controller$probe_accel_bootstrap_target <- 12L
   state$controller$probe_active_floor_frac <- 0.5
   state$controller$probe_active_floor_min <- 20L
   state$controller$probe_active_floor_requires_anchor_progress <- TRUE
@@ -865,7 +859,7 @@ test_that("probe effort opens when active-link budget is exhausted below floor",
   )
   expect_true(isTRUE(plan$active_floor_met))
   expect_true(isTRUE(plan$allow_when_active))
-  expect_identical(plan$effective_cap, 6L)
+  expect_identical(plan$effective_cap, 2L)
   expect_false(pairwiseLLM:::.adaptive_link_phase_b_window_exhausted(
     state,
     controller = state$controller
@@ -907,7 +901,7 @@ test_that("Phase B refit target scales for concurrent probe-active floors", {
 
   expect_identical(
     pairwiseLLM:::.adaptive_refit_pairs_target(state, list(refit_pairs_target = 30L)),
-    44L
+    88L
   )
 
   state$controller$multi_spoke_mode <- "independent"
@@ -942,7 +936,7 @@ make_probe_blocker_surface <- function(stop_blocker_codes,
   )
 }
 
-test_that("probe effort plan applies sole-blocker acceleration only when probe count is the only blocker", {
+test_that("probe effort plan uses a fixed per-refit cap independent of sole-blocker surfaces", {
   append_active_step <- function(state, step_id, A_id, B_id, spoke_id, stage_name) {
     out <- append_cross_probe_step(
       state = state,
@@ -962,13 +956,9 @@ test_that("probe effort plan applies sole-blocker acceleration only when probe c
 
   state <- make_link_probe_state()
   state$controller$probe_pairs_per_refit_per_spoke <- 1L
-  state$controller$probe_pairs_per_refit_per_spoke_bootstrap_max <- 2L
-  state$controller$probe_pairs_per_refit_per_spoke_sole_blocker_max <- 4L
   state$controller$probe_edges_min_for_stop <- 6L
-  state$controller$probe_sole_blocker_min_realized <- 3L
   state$controller$probe_active_floor_frac <- 0.5
   state$controller$probe_active_floor_min <- 4L
-  state$controller$probe_sole_blocker_active_floor_min <- 2L
   state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
   state$controller$link_budget_map <- list(
     `2` = list(
@@ -1038,11 +1028,11 @@ test_that("probe effort plan applies sole-blocker acceleration only when probe c
     surface_row = surface_ok,
     surface_source = "test_surface"
   )
-  expect_true(isTRUE(plan_ok$probe_only_blocker_trigger))
-  expect_identical(plan_ok$active_floor_used, 2L)
-  expect_true(isTRUE(plan_ok$allow_when_active))
-  expect_true(isTRUE(plan_ok$acceleration_used))
-  expect_identical(plan_ok$effective_cap, 3L)
+  expect_false(isTRUE(plan_ok$probe_only_blocker_trigger))
+  expect_identical(plan_ok$active_floor_used, 4L)
+  expect_false(isTRUE(plan_ok$allow_when_active))
+  expect_false(isTRUE(plan_ok$acceleration_used))
+  expect_identical(plan_ok$effective_cap, 1L)
 
   surface_blocked <- make_probe_blocker_surface(
     reliability_link_global = 0.80,
@@ -1062,11 +1052,64 @@ test_that("probe effort plan applies sole-blocker acceleration only when probe c
   expect_identical(plan_blocked$effective_cap, 1L)
 })
 
-test_that("probe effort plan blocks sole-blocker acceleration when hub anchoring is still a blocker", {
+test_that("probe quality metrics gate probability spread, item coverage, and calibration", {
+  hub_ids <- paste0("h", 1:3)
+  spoke_ids <- paste0("s", 1:4)
+  edges <- tibble::tibble(
+    hub_item = c("h1", "h2", "h3", "h1", "h2", "h3"),
+    spoke_item = c("s1", "s2", "s3", "s4", "s1", "s2"),
+    spoke_in_A = rep(TRUE, 6L),
+    y_spoke = c(0L, 1L, 0L, 1L, 0L, 1L)
+  )
+  panel <- tibble::tibble(
+    pair_key = make_unordered_key(edges$hub_item, edges$spoke_item),
+    hub_bin = c(1L, 2L, 3L, 1L, 2L, 3L),
+    spoke_bin = c(1L, 2L, 3L, 4L, 1L, 2L)
+  )
+  controller <- list(
+    probe_edges_min_for_stop = 6L,
+    probe_near_boundary_min_frac = 1,
+    probe_extreme_max_frac = 0,
+    probe_midrange_min_frac = 1,
+    probe_unique_hub_min_frac = 0.5,
+    probe_unique_spoke_min_frac = 0.5,
+    probe_rank_bins = 4L,
+    probe_rank_bins_hub_min = 3L,
+    probe_rank_bins_spoke_min = 3L,
+    probe_brier_near_boundary_max = 0.26,
+    probe_ece_max = 0.05
+  )
+
+  pass <- pairwiseLLM:::.adaptive_link_probe_quality_metrics(
+    edges = edges,
+    panel = panel,
+    hub_theta = stats::setNames(rep(0, length(hub_ids)), hub_ids),
+    spoke_theta = stats::setNames(rep(0, length(spoke_ids)), spoke_ids),
+    delta_mean = 0,
+    controller = controller
+  )
+  expect_true(isTRUE(pass$probe_quality_pass))
+  expect_identical(pass$probe_quality_blocker_codes, "none")
+  expect_identical(pass$probe_unique_hub_items, 3L)
+  expect_identical(pass$probe_rank_bins_spoke_covered, 4L)
+
+  fail <- pairwiseLLM:::.adaptive_link_probe_quality_metrics(
+    edges = edges,
+    panel = panel,
+    hub_theta = stats::setNames(rep(-4, length(hub_ids)), hub_ids),
+    spoke_theta = stats::setNames(rep(4, length(spoke_ids)), spoke_ids),
+    delta_mean = 0,
+    controller = controller
+  )
+  expect_false(isTRUE(fail$probe_quality_pass))
+  expect_true(grepl("probe_near_boundary", fail$probe_quality_blocker_codes, fixed = TRUE))
+  expect_true(grepl("probe_extreme_frac", fail$probe_quality_blocker_codes, fixed = TRUE))
+})
+
+test_that("probe effort plan requires fixed active-floor progress before probes", {
   state <- make_link_probe_state()
   state$controller$probe_pairs_per_refit_per_spoke <- 1L
   state$controller$probe_edges_min_for_stop <- 6L
-  state$controller$probe_sole_blocker_min_realized <- 3L
   state$controller$probe_active_floor_frac <- 0.5
   state$controller$probe_active_floor_min <- 4L
   state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
@@ -1128,11 +1171,10 @@ test_that("probe effort plan blocks sole-blocker acceleration when hub anchoring
   expect_false(isTRUE(plan$acceleration_used))
 })
 
-test_that("probe effort plan aborts when sole-blocker evaluation lacks canonical blocker state", {
+test_that("probe effort plan ignores missing blocker state under fixed scheduling", {
   state <- make_link_probe_state()
   state$controller$probe_pairs_per_refit_per_spoke <- 1L
   state$controller$probe_edges_min_for_stop <- 6L
-  state$controller$probe_sole_blocker_min_realized <- 3L
   state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
   state$controller$link_budget_map <- list(
     `2` = list(
@@ -1179,23 +1221,22 @@ test_that("probe effort plan aborts when sole-blocker evaluation lacks canonical
     stop_blocker_codes = NA_character_
   )
 
-  expect_error(
-    pairwiseLLM:::.adaptive_link_probe_effort_plan(
-      state = state,
-      controller = state$controller,
-      spoke_id = 2L,
-      surface_row = surface_missing,
-      surface_source = "test_surface"
-    ),
-    "canonical stop blockers are unavailable"
+  plan <- pairwiseLLM:::.adaptive_link_probe_effort_plan(
+    state = state,
+    controller = state$controller,
+    spoke_id = 2L,
+    surface_row = surface_missing,
+    surface_source = "test_surface"
   )
+  expect_false(isTRUE(plan$probe_only_blocker_trigger))
+  expect_false(isTRUE(plan$allow_when_active))
+  expect_identical(plan$effective_cap, 1L)
 })
 
-test_that("probe effort plan aborts when canonical blocker codes omit hub anchoring blockers", {
+test_that("probe effort plan does not validate obsolete sole-blocker hub codes", {
   state <- make_link_probe_state()
   state$controller$probe_pairs_per_refit_per_spoke <- 1L
   state$controller$probe_edges_min_for_stop <- 6L
-  state$controller$probe_sole_blocker_min_realized <- 3L
   state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
   state$controller$link_budget_map <- list(
     `2` = list(
@@ -1238,19 +1279,19 @@ test_that("probe effort plan aborts when canonical blocker codes omit hub anchor
   )
   state$refit_meta$last_refit_step <- 3L
 
-  expect_error(
-    pairwiseLLM:::.adaptive_link_probe_effort_plan(
-      state = state,
-      controller = state$controller,
-      spoke_id = 2L,
-      surface_row = make_probe_blocker_surface(
-        hub_anchored = FALSE,
-        stop_blocker_codes = "probe_edges_min_for_stop"
-      ),
-      surface_source = "test_surface"
+  plan <- pairwiseLLM:::.adaptive_link_probe_effort_plan(
+    state = state,
+    controller = state$controller,
+    spoke_id = 2L,
+    surface_row = make_probe_blocker_surface(
+      hub_anchored = FALSE,
+      stop_blocker_codes = "probe_edges_min_for_stop"
     ),
-    "hub_not_anchored"
+    surface_source = "test_surface"
   )
+  expect_false(isTRUE(plan$probe_only_blocker_trigger))
+  expect_false(isTRUE(plan$allow_when_active))
+  expect_identical(plan$effective_cap, 1L)
 })
 
 test_that("independent multi-spoke holdout routing ignores inactive spokes", {
@@ -2131,14 +2172,14 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
   expect_identical(nrow(empty_cross), 0L)
 })
 
-test_that("probe panel size uses the normative clamp target", {
+test_that("probe panel size uses the scaled normative target", {
   expect_identical(
     pairwiseLLM:::.adaptive_link_probe_panel_size(n_spoke_items = 3L),
-    40L
+    160L
   )
   expect_identical(
     pairwiseLLM:::.adaptive_link_probe_panel_size(n_spoke_items = 200L),
-    50L
+    160L
   )
   expect_identical(
     pairwiseLLM:::.adaptive_link_probe_panel_size(n_spoke_items = 1000L),
@@ -2193,12 +2234,12 @@ test_that("probe panel construction respects anchor-only HubEligible and legal h
   expect_identical(nrow(panel_full_hub), 6L)
 })
 
-test_that("probe panel construction keeps the normative target auditable when feasibility caps apply", {
+test_that("probe panel construction keeps the scaled target auditable when feasibility caps apply", {
   state <- make_link_probe_state()
   panel <- pairwiseLLM:::.adaptive_link_probe_construct_panel(state, state$controller, spoke_id = 2L)
 
-  expect_identical(pairwiseLLM:::.adaptive_link_probe_planned_edges(panel), 40L)
-  expect_identical(unique(as.integer(panel$probe_edges_planned)), 40L)
+  expect_identical(pairwiseLLM:::.adaptive_link_probe_planned_edges(panel), 160L)
+  expect_identical(unique(as.integer(panel$probe_edges_planned)), 160L)
   expect_identical(nrow(panel), 4L)
 })
 

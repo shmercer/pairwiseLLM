@@ -597,6 +597,35 @@ test_that("controller config exposes reviewed public Phase B fields", {
   expect_identical(validated$probe_panel_edges, 12L)
 })
 
+test_that("linking probe defaults scale with spoke set size", {
+  set_ids <- c(rep(1L, 20L), rep(2L, 1000L), rep(3L, 1200L))
+  items <- tibble::tibble(
+    item_id = paste0("item", seq_along(set_ids)),
+    set_id = set_ids,
+    global_item_id = paste0("g", seq_along(set_ids))
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 7L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  validated <- state$controller
+
+  expect_identical(validated$probe_acceleration_mode, "fixed_per_refit")
+  expect_identical(validated$probe_edges_min_for_stop, 90L)
+  expect_identical(validated$probe_panel_edges, 160L)
+  expect_identical(validated$probe_pairs_per_refit_per_spoke, 5L)
+
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(probe_acceleration_mode = "active_floor_plus_sole_blocker"),
+      n_items = 8L,
+      set_ids = c(1L, 1L, 2L, 2L, 2L, 2L, 2L, 2L)
+    ),
+    "probe_acceleration_mode"
+  )
+})
+
 test_that("controller config hard-gates unsupported Phase B public controls", {
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(

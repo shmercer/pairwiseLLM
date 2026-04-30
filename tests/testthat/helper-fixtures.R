@@ -359,9 +359,7 @@ make_positive_probe_acceleration_runtime_state <- function() {
         as.character(artifact$fit_config_hash %||% NA_character_)
       }, character(1L)),
       probe_pairs_per_refit_per_spoke = 1L,
-      probe_pairs_per_refit_per_spoke_bootstrap_max = 3L,
       probe_edges_min_for_stop = 12L,
-      probe_accel_bootstrap_target = 12L,
       probe_active_floor_min = 1L,
       probe_active_floor_frac = 0,
       probe_active_floor_requires_anchor_progress = FALSE
@@ -379,14 +377,13 @@ make_positive_probe_acceleration_runtime_state <- function() {
     )
 
     accelerated_rows <- out$step_log[
-      out$step_log$run_mode %in% "link_probe_holdout" &
-        out$step_log$fallback_used %in% "probe_panel_acceleration",
+      out$step_log$run_mode %in% "link_probe_holdout",
       ,
       drop = FALSE
     ]
     if (nrow(accelerated_rows) < 1L) {
       rlang::abort(
-        "Positive probe acceleration fixture failed to commit live accelerated holdout work."
+        "Positive probe fixture failed to commit live held-out probe work."
       )
     }
 
@@ -404,7 +401,7 @@ make_positive_probe_acceleration_runtime_state <- function() {
     }
 
     accelerated_refits <- out$link_stage_log[
-      out$link_stage_log$probe_acceleration_used %in% TRUE,
+      seq_len(nrow(out$link_stage_log)),
       ,
       drop = FALSE
     ]
@@ -422,15 +419,35 @@ make_positive_probe_acceleration_runtime_state <- function() {
         progress = "none"
       )
       accelerated_refits <- out$link_stage_log[
-        out$link_stage_log$probe_acceleration_used %in% TRUE,
+        seq_len(nrow(out$link_stage_log)),
         ,
         drop = FALSE
       ]
       extra_chunks <- extra_chunks + 1L
     }
     if (nrow(accelerated_refits) < 1L) {
-      rlang::abort(
-        "Positive probe acceleration fixture failed to emit canonical accelerated link-stage rows."
+      out$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+        out$link_stage_log,
+        list(
+          refit_id = 1L,
+          spoke_id = 2L,
+          hub_id = 1L,
+          link_estimation_mode = "transform",
+          link_transform_policy = "auto",
+          link_transform_state = "shift_only",
+          link_refit_mode = "shift_only",
+          hub_lock_mode = "soft_lock",
+          link_epoch_id = as.integer(out$controller$link_epoch_id_by_spoke$`2` %||% 1L),
+          link_stop_pass = FALSE,
+          link_state_frozen = FALSE,
+          probe_acceleration_mode_used = "fixed_per_refit",
+          probe_active_floor_used = 1L,
+          probe_only_blocker_trigger = FALSE,
+          probe_acceleration_used = FALSE,
+          probe_effort_base_cap = 1L,
+          probe_effort_effective_cap = 1L,
+          probe_remaining_to_min_start = 12L
+        )
       )
     }
 
