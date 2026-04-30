@@ -52,6 +52,9 @@ as_pairs_tbl <- function(...) {
     "dup_relax",
     "global_safe",
     "warm_start",
+    "probe_panel_fixed_refit",
+    "probe_panel_acceleration",
+    "probe_panel_after_active_unavailable",
     "FAILED"
   )
 }

@@ -169,7 +169,7 @@
 #' @keywords internal
 #' @noRd
 .adaptive_probe_acceleration_mode_levels <- function() {
-  "active_floor_plus_sole_blocker"
+  "fixed_per_refit"
 }
 
 #' @keywords internal
@@ -535,20 +535,48 @@
     link_transform_escalation_passes_required = 2L,
     link_transform_escalation_is_one_way = TRUE,
     max_pairs_after_stop = 0L,
-    probe_pairs_per_refit_per_spoke = 2L,
-    probe_acceleration_mode = "active_floor_plus_sole_blocker",
+    probe_pairs_per_refit_per_spoke = NA_integer_,
+    probe_pairs_per_refit_per_spoke_rule = "scaled",
+    probe_pairs_per_refit_per_spoke_min = 4L,
+    probe_pairs_per_refit_per_spoke_frac = 0.0035,
+    probe_acceleration_mode = "fixed_per_refit",
     probe_active_floor_enabled = TRUE,
-    probe_sole_blocker_acceleration_enabled = TRUE,
-    probe_pairs_per_refit_per_spoke_bootstrap_max = 6L,
-    probe_pairs_per_refit_per_spoke_sole_blocker_max = 12L,
-    probe_accel_bootstrap_target = 12L,
+    probe_sole_blocker_acceleration_enabled = FALSE,
+    probe_pairs_per_refit_per_spoke_bootstrap_max = NA_integer_,
+    probe_pairs_per_refit_per_spoke_sole_blocker_max = NA_integer_,
+    probe_accel_bootstrap_target = NA_integer_,
     probe_active_floor_frac = 0.50,
     probe_active_floor_min = 20L,
     probe_active_floor_requires_anchor_progress = TRUE,
-    probe_sole_blocker_min_realized = 20L,
-    probe_sole_blocker_active_floor_min = 10L,
+    probe_sole_blocker_min_realized = NA_integer_,
+    probe_sole_blocker_active_floor_min = NA_integer_,
     probe_panel_edges = NA_integer_,
-    probe_edges_min_for_stop = 30L,
+    probe_panel_edges_rule = "scaled",
+    probe_panel_edges_min = 160L,
+    probe_panel_edges_frac = 0.12,
+    probe_edges_min_for_stop = NA_integer_,
+    probe_edges_min_for_stop_rule = "scaled",
+    probe_edges_min_for_stop_min = 80L,
+    probe_edges_min_for_stop_frac = 0.075,
+    link_refit_pairs_per_spoke_rule = "scaled",
+    link_refit_pairs_per_spoke_min = 40L,
+    link_refit_pairs_per_spoke_frac = 0.035,
+    probe_near_boundary_low = 0.35,
+    probe_near_boundary_high = 0.65,
+    probe_near_boundary_min_frac = 0.35,
+    probe_extreme_low = 0.15,
+    probe_extreme_high = 0.85,
+    probe_extreme_max_frac = 0.30,
+    probe_midrange_low = 0.20,
+    probe_midrange_high = 0.80,
+    probe_midrange_min_frac = 0.60,
+    probe_unique_hub_min_frac = 0.60,
+    probe_unique_spoke_min_frac = 0.75,
+    probe_rank_bins = 10L,
+    probe_rank_bins_hub_min = 8L,
+    probe_rank_bins_spoke_min = 8L,
+    probe_brier_near_boundary_max = 0.20,
+    probe_ece_max = 0.10,
     probe_brier_delta_min = 0.005,
     probe_brier_max = 0.19,
     probe_pred_rmse_max = 0.015,
@@ -667,6 +695,9 @@
     "link_transform_escalation_is_one_way",
     "max_pairs_after_stop",
     "probe_pairs_per_refit_per_spoke",
+    "probe_pairs_per_refit_per_spoke_rule",
+    "probe_pairs_per_refit_per_spoke_min",
+    "probe_pairs_per_refit_per_spoke_frac",
     "probe_acceleration_mode",
     "probe_active_floor_enabled",
     "probe_sole_blocker_acceleration_enabled",
@@ -679,7 +710,32 @@
     "probe_sole_blocker_min_realized",
     "probe_sole_blocker_active_floor_min",
     "probe_panel_edges",
+    "probe_panel_edges_rule",
+    "probe_panel_edges_min",
+    "probe_panel_edges_frac",
     "probe_edges_min_for_stop",
+    "probe_edges_min_for_stop_rule",
+    "probe_edges_min_for_stop_min",
+    "probe_edges_min_for_stop_frac",
+    "link_refit_pairs_per_spoke_rule",
+    "link_refit_pairs_per_spoke_min",
+    "link_refit_pairs_per_spoke_frac",
+    "probe_near_boundary_low",
+    "probe_near_boundary_high",
+    "probe_near_boundary_min_frac",
+    "probe_extreme_low",
+    "probe_extreme_high",
+    "probe_extreme_max_frac",
+    "probe_midrange_low",
+    "probe_midrange_high",
+    "probe_midrange_min_frac",
+    "probe_unique_hub_min_frac",
+    "probe_unique_spoke_min_frac",
+    "probe_rank_bins",
+    "probe_rank_bins_hub_min",
+    "probe_rank_bins_spoke_min",
+    "probe_brier_near_boundary_max",
+    "probe_ece_max",
     "probe_brier_delta_min",
     "probe_brier_max",
     "probe_pred_rmse_max",
@@ -734,6 +790,86 @@
     " is not supported on the current normative Phase B path. ",
     detail
   ))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_spoke_size_summary <- function(set_ids, hub_id = 1L) {
+  set_ids <- as.integer(set_ids %||% integer())
+  set_ids <- set_ids[!is.na(set_ids)]
+  spoke_ids <- setdiff(sort(unique(set_ids)), as.integer(hub_id %||% 1L))
+  if (length(spoke_ids) < 1L) {
+    return(list(max_spoke_n = 0L, spoke_count = 0L))
+  }
+  counts <- vapply(spoke_ids, function(spoke_id) {
+    sum(set_ids == as.integer(spoke_id), na.rm = TRUE)
+  }, integer(1L))
+  list(
+    max_spoke_n = as.integer(max(counts, 0L)),
+    spoke_count = as.integer(length(spoke_ids))
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_scaled_count <- function(n, min_value, frac, lower = 0L) {
+  n <- max(0L, as.integer(n %||% 0L))
+  min_value <- max(as.integer(lower), as.integer(min_value %||% lower))
+  frac <- as.double(frac %||% 0)
+  if (!is.finite(frac) || frac < 0) {
+    rlang::abort("Scaled linking controller fractions must be finite and non-negative.")
+  }
+  as.integer(max(min_value, ceiling(frac * n)))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_controller_resolve_scaled_linking_defaults <- function(controller,
+                                                                 cfg_names,
+                                                                 set_ids) {
+  if (!as.character(controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(controller)
+  }
+  sizes <- .adaptive_link_spoke_size_summary(
+    set_ids = set_ids,
+    hub_id = controller$hub_id %||% 1L
+  )
+  max_spoke_n <- as.integer(sizes$max_spoke_n %||% 0L)
+  unresolved_value <- function(name) {
+    value <- controller[[name]]
+    is.null(value) || length(value) != 1L || is.na(value)
+  }
+
+  if ((!"probe_edges_min_for_stop" %in% cfg_names || unresolved_value("probe_edges_min_for_stop")) &&
+    identical(as.character(controller$probe_edges_min_for_stop_rule %||% "scaled"), "scaled")) {
+    controller$probe_edges_min_for_stop <- .adaptive_scaled_count(
+      max_spoke_n,
+      min_value = controller$probe_edges_min_for_stop_min %||% 80L,
+      frac = controller$probe_edges_min_for_stop_frac %||% 0.075,
+      lower = 1L
+    )
+  }
+  if ((!"probe_panel_edges" %in% cfg_names || unresolved_value("probe_panel_edges")) &&
+    identical(as.character(controller$probe_panel_edges_rule %||% "scaled"), "scaled")) {
+    controller$probe_panel_edges <- .adaptive_scaled_count(
+      max_spoke_n,
+      min_value = controller$probe_panel_edges_min %||% 160L,
+      frac = controller$probe_panel_edges_frac %||% 0.12,
+      lower = 1L
+    )
+  }
+  if ((!"probe_pairs_per_refit_per_spoke" %in% cfg_names ||
+    unresolved_value("probe_pairs_per_refit_per_spoke")) &&
+    identical(as.character(controller$probe_pairs_per_refit_per_spoke_rule %||% "scaled"), "scaled")) {
+    controller$probe_pairs_per_refit_per_spoke <- .adaptive_scaled_count(
+      max_spoke_n,
+      min_value = controller$probe_pairs_per_refit_per_spoke_min %||% 4L,
+      frac = controller$probe_pairs_per_refit_per_spoke_frac %||% 0.0035,
+      lower = 0L
+    )
+  }
+
+  controller
 }
 
 #' @keywords internal
@@ -910,6 +1046,20 @@
   out$link_transform_escalation_is_one_way <- read_logical("link_transform_escalation_is_one_way")
   out$max_pairs_after_stop <- read_integer("max_pairs_after_stop", 0L, Inf)
   out$probe_pairs_per_refit_per_spoke <- read_integer("probe_pairs_per_refit_per_spoke", 0L, Inf)
+  out$probe_pairs_per_refit_per_spoke_rule <- read_choice(
+    "probe_pairs_per_refit_per_spoke_rule",
+    c("scaled", "fixed")
+  )
+  out$probe_pairs_per_refit_per_spoke_min <- read_integer(
+    "probe_pairs_per_refit_per_spoke_min",
+    0L,
+    Inf
+  )
+  out$probe_pairs_per_refit_per_spoke_frac <- read_double(
+    "probe_pairs_per_refit_per_spoke_frac",
+    0,
+    Inf
+  )
   out$probe_acceleration_mode <- read_choice(
     "probe_acceleration_mode",
     .adaptive_probe_acceleration_mode_levels()
@@ -941,7 +1091,38 @@
     Inf
   )
   out$probe_panel_edges <- read_integer("probe_panel_edges", 1L, Inf)
+  out$probe_panel_edges_rule <- read_choice("probe_panel_edges_rule", c("scaled", "fixed"))
+  out$probe_panel_edges_min <- read_integer("probe_panel_edges_min", 1L, Inf)
+  out$probe_panel_edges_frac <- read_double("probe_panel_edges_frac", 0, Inf)
   out$probe_edges_min_for_stop <- read_integer("probe_edges_min_for_stop", 1L, Inf)
+  out$probe_edges_min_for_stop_rule <- read_choice(
+    "probe_edges_min_for_stop_rule",
+    c("scaled", "fixed")
+  )
+  out$probe_edges_min_for_stop_min <- read_integer("probe_edges_min_for_stop_min", 1L, Inf)
+  out$probe_edges_min_for_stop_frac <- read_double("probe_edges_min_for_stop_frac", 0, Inf)
+  out$link_refit_pairs_per_spoke_rule <- read_choice(
+    "link_refit_pairs_per_spoke_rule",
+    c("scaled", "fixed")
+  )
+  out$link_refit_pairs_per_spoke_min <- read_integer("link_refit_pairs_per_spoke_min", 1L, Inf)
+  out$link_refit_pairs_per_spoke_frac <- read_double("link_refit_pairs_per_spoke_frac", 0, Inf)
+  out$probe_near_boundary_low <- read_double("probe_near_boundary_low", 0, 1)
+  out$probe_near_boundary_high <- read_double("probe_near_boundary_high", 0, 1)
+  out$probe_near_boundary_min_frac <- read_double("probe_near_boundary_min_frac", 0, 1)
+  out$probe_extreme_low <- read_double("probe_extreme_low", 0, 1)
+  out$probe_extreme_high <- read_double("probe_extreme_high", 0, 1)
+  out$probe_extreme_max_frac <- read_double("probe_extreme_max_frac", 0, 1)
+  out$probe_midrange_low <- read_double("probe_midrange_low", 0, 1)
+  out$probe_midrange_high <- read_double("probe_midrange_high", 0, 1)
+  out$probe_midrange_min_frac <- read_double("probe_midrange_min_frac", 0, 1)
+  out$probe_unique_hub_min_frac <- read_double("probe_unique_hub_min_frac", 0, 1)
+  out$probe_unique_spoke_min_frac <- read_double("probe_unique_spoke_min_frac", 0, 1)
+  out$probe_rank_bins <- read_integer("probe_rank_bins", 1L, Inf)
+  out$probe_rank_bins_hub_min <- read_integer("probe_rank_bins_hub_min", 1L, Inf)
+  out$probe_rank_bins_spoke_min <- read_integer("probe_rank_bins_spoke_min", 1L, Inf)
+  out$probe_brier_near_boundary_max <- read_double("probe_brier_near_boundary_max", 0, 1)
+  out$probe_ece_max <- read_double("probe_ece_max", 0, 1)
   out$probe_brier_delta_min <- read_double("probe_brier_delta_min", 0, 1)
   out$probe_brier_max <- read_double("probe_brier_max", 0, 1)
   out$probe_pred_rmse_max <- read_double("probe_pred_rmse_max", 0, Inf)
@@ -1050,6 +1231,11 @@
 
   resolved <- utils::modifyList(.adaptive_controller_defaults(n_items), out)
   resolved <- .adaptive_controller_normalize_legacy_fields(resolved, n_items = n_items)
+  resolved <- .adaptive_controller_resolve_scaled_linking_defaults(
+    controller = resolved,
+    cfg_names = cfg_names,
+    set_ids = set_ids
+  )
   frac_sum <- sum(c(
     resolved$stage_quota_frac_anchor_link,
     resolved$stage_quota_frac_long_link,
@@ -1132,23 +1318,18 @@
       "`adaptive_config$stability_passes_required` must be <= `adaptive_config$stability_window_refits`."
     )
   }
-  if (resolved$probe_pairs_per_refit_per_spoke_bootstrap_max <
-    resolved$probe_pairs_per_refit_per_spoke) {
-    rlang::abort(
-      paste0(
-        "`adaptive_config$probe_pairs_per_refit_per_spoke_bootstrap_max` must be >= ",
-        "`adaptive_config$probe_pairs_per_refit_per_spoke`."
-      )
-    )
+  if (isTRUE(resolved$probe_near_boundary_low >= resolved$probe_near_boundary_high)) {
+    rlang::abort("`probe_near_boundary_low` must be less than `probe_near_boundary_high`.")
   }
-  if (resolved$probe_pairs_per_refit_per_spoke_sole_blocker_max <
-    resolved$probe_pairs_per_refit_per_spoke) {
-    rlang::abort(
-      paste0(
-        "`adaptive_config$probe_pairs_per_refit_per_spoke_sole_blocker_max` must be >= ",
-        "`adaptive_config$probe_pairs_per_refit_per_spoke`."
-      )
-    )
+  if (isTRUE(resolved$probe_extreme_low >= resolved$probe_extreme_high)) {
+    rlang::abort("`probe_extreme_low` must be less than `probe_extreme_high`.")
+  }
+  if (isTRUE(resolved$probe_midrange_low >= resolved$probe_midrange_high)) {
+    rlang::abort("`probe_midrange_low` must be less than `probe_midrange_high`.")
+  }
+  if (resolved$probe_rank_bins_hub_min > resolved$probe_rank_bins ||
+    resolved$probe_rank_bins_spoke_min > resolved$probe_rank_bins) {
+    rlang::abort("Probe rank-bin minimums must be <= `probe_rank_bins`.")
   }
   if (resolved$link_transform_escalation_passes_required >
     resolved$link_transform_escalation_window_refits) {
@@ -1268,6 +1449,11 @@
     utils::modifyList(.adaptive_controller_resolve(out), overrides),
     n_items = out$n_items
   )
+  out$controller <- .adaptive_controller_resolve_scaled_linking_defaults(
+    controller = out$controller,
+    cfg_names = names(adaptive_config %||% list()),
+    set_ids = out$items$set_id
+  )
   out <- .adaptive_sync_round_controller(out)
   .adaptive_sync_linking_meta(out)
 }
@@ -1278,13 +1464,20 @@
   if (inherits(state_or_n_items, "adaptive_state")) {
     n_items <- as.integer(state_or_n_items$n_items)
     controller <- state_or_n_items$controller %||% list()
+    set_ids <- state_or_n_items$items$set_id %||% NULL
   } else {
     n_items <- as.integer(state_or_n_items)
     controller <- list()
+    set_ids <- NULL
   }
   controller <- .adaptive_controller_normalize_legacy_fields(controller, n_items = n_items)
   defaults <- .adaptive_controller_defaults(n_items)
-  utils::modifyList(defaults, controller)
+  resolved <- utils::modifyList(defaults, controller)
+  .adaptive_controller_resolve_scaled_linking_defaults(
+    controller = resolved,
+    cfg_names = names(controller %||% list()),
+    set_ids = set_ids
+  )
 }
 
 #' @keywords internal
@@ -1299,7 +1492,12 @@
 
   n_items <- as.integer(state$n_items)
   controller <- .adaptive_controller_normalize_legacy_fields(controller, n_items = n_items)
-  utils::modifyList(.adaptive_controller_defaults(n_items), controller)
+  resolved <- utils::modifyList(.adaptive_controller_defaults(n_items), controller)
+  .adaptive_controller_resolve_scaled_linking_defaults(
+    controller = resolved,
+    cfg_names = names(controller %||% list()),
+    set_ids = state$items$set_id
+  )
 }
 
 #' @keywords internal

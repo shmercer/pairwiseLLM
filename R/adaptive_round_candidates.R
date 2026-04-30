@@ -945,8 +945,8 @@
   names(spoke_theta) <- spoke_ids
   names(hub_theta) <- hub_pool
 
-  q_bins <- max(1L, as.integer(controller$spoke_quantile_coverage_bins %||% 3L))
-  h_bins <- 3L
+  q_bins <- max(1L, as.integer(controller$probe_rank_bins %||% controller$spoke_quantile_coverage_bins %||% 10L))
+  h_bins <- max(1L, as.integer(controller$probe_rank_bins %||% 10L))
   spoke_bin_map <- .adaptive_link_probe_quantile_bins(spoke_ids, spoke_theta, q_bins)
   hub_bin_map <- .adaptive_link_probe_quantile_bins(hub_pool, hub_theta, h_bins)
   target_edges <- .adaptive_link_probe_panel_size(
@@ -987,18 +987,22 @@
     max(0, as.double(length(unique(hub_pool))) * as.double(length(unique(spoke_ids))) -
       length(unique(observed_keys)))
   )
+  active_reserve_pairs <- as.integer(controller$probe_panel_active_reserve_pairs %||% 0L)
+  active_reserve_frac <- as.double(controller$probe_panel_active_reserve_frac %||% 0)
   feasible_target_edges <- .adaptive_link_probe_panel_feasible_size(
     target_edges = target_edges,
-    n_available_pairs = n_available_pairs
+    n_available_pairs = n_available_pairs,
+    active_reserve_pairs = active_reserve_pairs,
+    active_reserve_frac = active_reserve_frac
   )
 
   planned <- vector("list", length = 0L)
   planned_n <- 0L
   seen_keys <- observed_keys
-  spoke_q_targets <- rep.int(as.integer(target_edges %/% q_bins), q_bins)
-  if ((target_edges %% q_bins) > 0L) {
-    spoke_q_targets[seq_len(target_edges %% q_bins)] <-
-      spoke_q_targets[seq_len(target_edges %% q_bins)] + 1L
+  spoke_q_targets <- rep.int(as.integer(feasible_target_edges %/% q_bins), q_bins)
+  if ((feasible_target_edges %% q_bins) > 0L) {
+    spoke_q_targets[seq_len(feasible_target_edges %% q_bins)] <-
+      spoke_q_targets[seq_len(feasible_target_edges %% q_bins)] + 1L
   }
   cell_shortfall_detected <- FALSE
 
@@ -1177,9 +1181,11 @@
       )
       if (.adaptive_is_resumed_session(out) &&
         (isTRUE(has_realized_epoch_evidence) || isTRUE(has_stage_probe_evidence))) {
+        panel_controller <- controller
+        panel_controller$probe_panel_active_reserve_pairs <- 0L
         built_panel <- .adaptive_link_probe_construct_panel(
           state = out,
-          controller = controller,
+          controller = panel_controller,
           spoke_id = spoke_id
         )
         built_panel <- tibble::as_tibble(built_panel)
@@ -1267,9 +1273,45 @@
         probe$panels_by_spoke[[as.character(spoke_id)]] <- built_panel
         next
       }
+      panel_controller <- controller
+      sizes <- .adaptive_link_spoke_size_summary(
+        set_ids = out$items$set_id,
+        hub_id = panel_controller$hub_id %||% 1L
+      )
+      scaled_probe_panel_edges <- .adaptive_scaled_count(
+        sizes$max_spoke_n,
+        min_value = panel_controller$probe_panel_edges_min %||% 160L,
+        frac = panel_controller$probe_panel_edges_frac %||% 0.12,
+        lower = 1L
+      )
+      scaled_default_panel <- identical(
+        as.integer(panel_controller$probe_panel_edges %||% NA_integer_),
+        as.integer(scaled_probe_panel_edges)
+      )
+      if (identical(as.character(panel_controller$probe_panel_edges_rule %||% "scaled"), "scaled") &&
+        isTRUE(scaled_default_panel)) {
+        concurrent_mode <- identical(
+          as.character(panel_controller$multi_spoke_mode %||% "independent"),
+          "concurrent"
+        )
+        concurrent_min_pairs <- if (isTRUE(concurrent_mode)) {
+          as.integer(panel_controller$min_cross_set_pairs_per_spoke_per_refit %||% 1L)
+        } else {
+          1L
+        }
+        panel_controller$probe_panel_active_reserve_pairs <- max(
+          1L,
+          as.integer(panel_controller$refit_pairs_target %||% 1L),
+          concurrent_min_pairs
+        )
+        panel_controller$probe_panel_active_reserve_frac <- 1 / 3
+      } else {
+        panel_controller$probe_panel_active_reserve_pairs <- 0L
+        panel_controller$probe_panel_active_reserve_frac <- 0
+      }
       built_panel <- .adaptive_link_probe_construct_panel(
         state = out,
-        controller = controller,
+        controller = panel_controller,
         spoke_id = spoke_id
       )
       built_panel <- tibble::as_tibble(built_panel)

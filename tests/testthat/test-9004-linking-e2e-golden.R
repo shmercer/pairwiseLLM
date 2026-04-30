@@ -146,10 +146,8 @@ run_golden_e2e_in_clean_r <- function() {
 test_that("deterministic linking e2e run preserves canonical golden logs", {
   run <- run_golden_e2e_in_clean_r()
 
-  # The prior golden only proved the acceleration audit columns existed while
-  # remaining inactive. The normative runtime now requires a deterministic
-  # trace with actual accelerated holdout work and canonical acceleration
-  # audit rows.
+  # The golden covers the fixed-per-refit held-out probe schedule and the
+  # canonical audit rows emitted by the current deterministic Phase B runtime.
   fixture_path <- testthat::test_path("fixtures", "linking-e2e-golden.rds")
   expect_true(file.exists(fixture_path))
   fixture <- readRDS(fixture_path)

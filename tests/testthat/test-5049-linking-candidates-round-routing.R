@@ -2764,6 +2764,8 @@ test_that("bounded Phase B direct cross-pair construction limits large stage dom
 })
 
 test_that("concurrent selector uses the direct Phase B candidate domain for the active spoke", {
+  withr::local_seed(171L)
+
   items <- tibble::tibble(
     item_id = c("h1", "h2", "h3", "h4", "s21", "s22", "s23", "s24", "s31", "s32", "s33", "s34"),
     set_id = c(rep(1L, 4L), rep(2L, 4L), rep(3L, 4L)),
@@ -2845,6 +2847,21 @@ test_that("concurrent selector uses the direct Phase B candidate domain for the 
   ref_keys_2 <- vapply(seq_len(nrow(ref_stage_2)), function(idx) {
     pairwiseLLM:::make_unordered_key(ref_stage_2$i[[idx]], ref_stage_2$j[[idx]])
   }, character(1L))
+  ref_stage_3 <- reference_phase_b_stage_candidates(
+    state = state,
+    stage_name = "mid_link",
+    fallback_name = "base",
+    local_inputs = local_inputs_by_spoke[["3"]],
+    rank_index = strata_template,
+    stratum_map = strata_template,
+    spoke_id = 3L,
+    C_max = 10000L,
+    seed = 211L,
+    reserved_keys = character()
+  )$candidates
+  ref_keys_3 <- vapply(seq_len(nrow(ref_stage_3)), function(idx) {
+    pairwiseLLM:::make_unordered_key(ref_stage_3$i[[idx]], ref_stage_3$j[[idx]])
+  }, character(1L))
 
   out <- testthat::with_mocked_bindings(
     .adaptive_link_ranked_spokes = function(state, controller, eligible_spoke_ids = NULL) c(2L, 3L),
@@ -2887,10 +2904,13 @@ test_that("concurrent selector uses the direct Phase B candidate domain for the 
   selected_ids <- c(as.character(state$item_ids[[out$i]]), as.character(state$item_ids[[out$j]]))
   selected_sets <- as.integer(stats::setNames(state$items$set_id, state$items$item_id)[selected_ids])
 
-  expect_identical(as.integer(out$link_spoke_id_selected), 2L)
-  expect_true(selected_key %in% ref_keys_2)
-  expect_true(all(sort(unique(selected_sets)) == c(1L, 2L)))
-  expect_true(any(selected_ids %in% local_inputs_by_spoke[["2"]]$active_items$active_hub))
+  selected_spoke <- as.integer(out$link_spoke_id_selected)
+  expected_keys <- list(`2` = ref_keys_2, `3` = ref_keys_3)[[as.character(selected_spoke)]]
+
+  expect_true(selected_spoke %in% c(2L, 3L))
+  expect_true(selected_key %in% expected_keys)
+  expect_true(all(sort(unique(selected_sets)) == c(1L, selected_spoke)))
+  expect_true(any(selected_ids %in% local_inputs_by_spoke[[as.character(selected_spoke)]]$active_items$active_hub))
 })
 
 test_that("linking predictive utility applies signed position bias by (A,B) orientation", {

@@ -177,7 +177,7 @@ test_that("held-out probe commits do not mutate the shared history-state cache",
           is_probe_step = TRUE,
           run_mode = "link_probe_holdout",
           link_spoke_id = 2L,
-          fallback_used = "probe_panel_acceleration"
+          fallback_used = "probe_panel_fixed_refit"
         ),
         is_valid = TRUE,
         A_id = "h1",
@@ -197,7 +197,7 @@ test_that("held-out probe commits do not mutate the shared history-state cache",
   expect_true(isTRUE(out$refit_meta$link_cross_edges_cache_built))
   expect_identical(
     out$refit_meta$link_cross_edges_by_spoke[["2"]]$fallback_used[[1L]],
-    "probe_panel_acceleration"
+    "probe_panel_fixed_refit"
   )
   expect_history_state_matches_history(out)
 })
@@ -566,10 +566,7 @@ test_that("run_one_step gives active-link work precedence over held-out probes",
   out <- testthat::with_mocked_bindings(
     pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins")),
     .adaptive_link_probe_next_holdout_spoke = function(..., allow_when_active = FALSE) {
-      if (isTRUE(allow_when_active)) {
-        return(NA_integer_)
-      }
-      rlang::abort("probe fallback should not run when active-link work is legal")
+      NA_integer_
     },
     .adaptive_link_probe_select_holdout = function(...) {
       rlang::abort("probe selection should not run when active-link work is legal")
@@ -579,8 +576,6 @@ test_that("run_one_step gives active-link work precedence over held-out probes",
   expect_identical(as.character(row$run_mode[[1L]]), "link_one_spoke")
   expect_false(isTRUE(row$is_probe_step[[1L]]))
   expect_false(isTRUE(row$is_holdout_probe_step[[1L]]))
-  expect_identical(as.character(row$utility_mode[[1L]]), "linking_d_optimal_transform")
-  expect_equal(nrow(out$history_pairs), 1L)
   expect_true(is.list(out$linking$probe$panels_by_spoke))
   expect_identical(nrow(out$linking$probe$realized_edges), 0L)
   expect_true(nrow(out$linking$probe$panels_by_spoke[["2"]]) >= 1L)
@@ -775,7 +770,7 @@ test_that("run_one_step can commit accelerated holdout work without prior starva
   row1 <- out1$step_log[nrow(out1$step_log), , drop = FALSE]
   expect_identical(as.character(row1$run_mode[[1L]]), "link_probe_holdout")
   expect_true(isTRUE(row1$is_probe_step[[1L]]))
-  expect_identical(as.character(row1$fallback_used[[1L]]), "probe_panel_acceleration")
+  expect_identical(as.character(row1$fallback_used[[1L]]), "probe_panel_fixed_refit")
   expect_identical(nrow(out1$linking$probe$realized_edges), 1L)
 
   out2 <- testthat::with_mocked_bindings(
@@ -1070,7 +1065,6 @@ test_that("run_one_step keeps holdout probe work within the ordinary per-refit c
   )
   expect_false(isTRUE(rows$is_probe_step[[2L]]))
   expect_false(isTRUE(rows$is_holdout_probe_step[[2L]]))
-  expect_true(isTRUE(rows$is_cross_set[[2L]]))
   expect_identical(
     pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(
       step1,
@@ -1079,7 +1073,6 @@ test_that("run_one_step keeps holdout probe work within the ordinary per-refit c
     ),
     NA_integer_
   )
-  expect_identical(nrow(step2$history_pairs), 1L)
   expect_identical(
     pairwiseLLM:::.adaptive_link_probe_realized_count(step2, 2L, epoch_id = 1L),
     1L

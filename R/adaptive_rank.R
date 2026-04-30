@@ -1027,34 +1027,30 @@ make_adaptive_judge_llm <- function(
 #'     stop boundary before deterministic termination. Default is `0L`.}
 #'
 #'   \item{`probe_panel_edges`}{Optional explicit planned held-out probe target
-#'     per spoke. When omitted, the normative default formula is used:
-#'     `clamp(40, 160, ceiling(0.25 * N_spoke_phase_b_start))`. When supplied,
-#'     the value must be a positive integer and becomes the canonical planned
-#'     target recorded in Phase B logs.}
+#'     per spoke. When omitted in linking modes, the default scales with the
+#'     largest spoke: `max(160L, ceiling(0.12 * max_spoke_items))`. When
+#'     supplied, the value must be a positive integer and becomes the canonical
+#'     planned target recorded in Phase B logs.}
 #'   \item{`probe_pairs_per_refit_per_spoke`}{Base held-out probe collection cap
-#'     per spoke per refit window while the spoke remains active in Phase B.
-#'     The controller may exceed this only through documented probe
-#'     acceleration/reallocation rules used to satisfy the held-out minimum.
-#'     Under the current normative design, no additional cross-set work is
-#'     scheduled after a spoke freezes. Default is `2L`.}
+#'     per spoke per refit window while the spoke remains active in Phase B. If
+#'     omitted in linking modes, the default scales with the largest spoke:
+#'     `max(4L, ceiling(0.0035 * max_spoke_items))`. The runtime uses this as a
+#'     fixed per-refit cap and does not apply bootstrap or sole-blocker probe
+#'     acceleration.}
 #'   \item{`probe_acceleration_mode`}{Held-out probe acceleration controller
-#'     family. The current normative runtime supports only
-#'     `"active_floor_plus_sole_blocker"`. Default is
-#'     `"active_floor_plus_sole_blocker"`.}
+#'     family. The current runtime supports only `"fixed_per_refit"`, a fixed
+#'     per-refit probe schedule. Default is `"fixed_per_refit"`.}
 #'   \item{`probe_active_floor_enabled`}{When `TRUE`, held-out probe effort may
-#'     rise above the base cap only after the current refit window reaches the
-#'     canonical active floor. Default is `TRUE`.}
-#'   \item{`probe_sole_blocker_acceleration_enabled`}{When `TRUE`, the runtime
-#'     enables the canonical sole-blocker acceleration path when probe count is
-#'     the only remaining stop blocker for the spoke. Default is `TRUE`.}
-#'   \item{`probe_pairs_per_refit_per_spoke_bootstrap_max`}{Maximum held-out
-#'     probe cap permitted by active-floor bootstrap acceleration. Must be at
-#'     least `probe_pairs_per_refit_per_spoke`. Default is `6L`.}
-#'   \item{`probe_pairs_per_refit_per_spoke_sole_blocker_max`}{Maximum held-out
-#'     probe cap permitted by sole-blocker acceleration. Must be at least
-#'     `probe_pairs_per_refit_per_spoke`. Default is `12L`.}
-#'   \item{`probe_accel_bootstrap_target`}{Bootstrap probe-realization target
-#'     used by active-floor acceleration. Default is `12L`.}
+#'     be interleaved only after the current refit window reaches the canonical
+#'     active floor. Default is `TRUE`.}
+#'   \item{`probe_sole_blocker_acceleration_enabled`,
+#'     `probe_pairs_per_refit_per_spoke_bootstrap_max`,
+#'     `probe_pairs_per_refit_per_spoke_sole_blocker_max`,
+#'     `probe_accel_bootstrap_target`,
+#'     `probe_sole_blocker_min_realized`,
+#'     `probe_sole_blocker_active_floor_min`}{Deprecated acceleration controls
+#'     retained for persisted-state compatibility. They are not used by the
+#'     fixed per-refit schedule.}
 #'   \item{`probe_active_floor_frac`}{Fraction of the current per-spoke
 #'     linking-active budget used to form the active-floor threshold for probe
 #'     acceleration. Default is `0.50`.}
@@ -1065,15 +1061,18 @@ make_adaptive_judge_llm <- function(
 #'     floor acceleration also requires either at least one committed
 #'     anchor-link edge in the current refit window or an exhausted anchor-link
 #'     stage. Default is `TRUE`.}
-#'   \item{`probe_sole_blocker_min_realized`}{Minimum realized held-out probe
-#'     count required before sole-blocker acceleration can be considered.
-#'     Default is `20L`.}
-#'   \item{`probe_sole_blocker_active_floor_min`}{Reduced positive active floor
-#'     used by sole-blocker acceleration when that controller path is active.
-#'     Default is `10L`.}
 #'   \item{`probe_edges_min_for_stop`}{Minimum realized held-out probe edges
-#'     required before Phase B stop or escalation can be evaluated. Default is
-#'     `30L`.}
+#'     required before Phase B stop or escalation can be evaluated. If omitted
+#'     in linking modes, the default scales with the largest spoke:
+#'     `max(80L, ceiling(0.075 * max_spoke_items))`.}
+#'   \item{`probe_near_boundary_min_frac`, `probe_extreme_max_frac`,
+#'     `probe_midrange_min_frac`, `probe_unique_hub_min_frac`,
+#'     `probe_unique_spoke_min_frac`, `probe_rank_bins`,
+#'     `probe_rank_bins_hub_min`, `probe_rank_bins_spoke_min`,
+#'     `probe_brier_near_boundary_max`, `probe_ece_max`}{Held-out probe quality
+#'     gates used by Phase B stop decisions to require useful probability
+#'     spread, hub/spoke item coverage, rank-bin coverage, near-boundary Brier
+#'     calibration, and calibration ECE.}
 #'   \item{`probe_brier_delta_min`}{Minimum held-out probe Brier improvement
 #'     required for auto escalation from shift-only to shift-scale. Default is
 #'     `0.005`.}

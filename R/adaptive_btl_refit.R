@@ -78,7 +78,21 @@
     return(0L)
   }
 
-  probe_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
+  probe_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 4L))
+  sizes <- .adaptive_link_spoke_size_summary(
+    set_ids = state$items$set_id,
+    hub_id = controller$hub_id %||% 1L
+  )
+  scaled_active <- if (identical(as.character(controller$link_refit_pairs_per_spoke_rule %||% "scaled"), "scaled")) {
+    .adaptive_scaled_count(
+      sizes$max_spoke_n,
+      min_value = controller$link_refit_pairs_per_spoke_min %||% 40L,
+      frac = controller$link_refit_pairs_per_spoke_frac %||% 0.035,
+      lower = 1L
+    )
+  } else {
+    0L
+  }
   active_floor_min <- if (isTRUE(controller$probe_active_floor_enabled)) {
     max(0L, as.integer(controller$probe_active_floor_min %||% 20L))
   } else {
@@ -93,7 +107,7 @@
     rlang::abort("`adaptive_config$probe_active_floor_frac` must be in [0, 1].")
   }
 
-  per_spoke_budget <- as.integer(active_floor_min + probe_cap)
+  per_spoke_budget <- as.integer(max(active_floor_min, scaled_active) + probe_cap)
   for (unused in seq_len(10L)) {
     active_floor <- max(
       active_floor_min,
@@ -1873,6 +1887,7 @@
                                          probe_pred_rmse_max,
                                          theta_global_rmse_lagged,
                                          theta_global_rmse_max,
+                                         probe_quality_pass,
                                          hub_anchored) {
   blocker_names <- c(
     "diagnostics_failed",
@@ -1881,6 +1896,7 @@
     "probe_edges_min_for_stop",
     "reliability_link_global",
     "probe_brier",
+    "probe_quality",
     "probe_pred_rmse_lagged",
     "theta_global_rmse_lagged",
     "hub_not_anchored"
@@ -1895,6 +1911,7 @@
       as.double(reliability_active) < as.double(link_stop_reliability_min %||% 0.90),
     probe_brier = !is.finite(as.double(probe_brier %||% NA_real_)) ||
       as.double(probe_brier) > as.double(probe_brier_max %||% 0.19),
+    probe_quality = !isTRUE(probe_quality_pass),
     probe_pred_rmse_lagged = !is.finite(as.double(probe_pred_rmse_lagged %||% NA_real_)) ||
       as.double(probe_pred_rmse_lagged) > as.double(probe_pred_rmse_max %||% 0.015),
     theta_global_rmse_lagged = !is.finite(as.double(theta_global_rmse_lagged %||% NA_real_)) ||
@@ -1968,21 +1985,28 @@
   } else {
     FALSE
   }
+  probe_quality_gate <- if ("probe_quality_pass" %in% names(row)) {
+    value <- row$probe_quality_pass[[1L]]
+    if (is.na(value)) TRUE else isTRUE(value)
+  } else {
+    TRUE
+  }
   probe_rmse_gate <- if ("probe_pred_rmse_lagged" %in% names(row)) {
     is.finite(as.double(row$probe_pred_rmse_lagged[[1L]] %||% NA_real_)) &&
       as.double(row$probe_pred_rmse_lagged[[1L]]) <= probe_pred_rmse_max
-    } else {
-      FALSE
-    }
+  } else {
+    FALSE
+  }
   theta_rmse_gate <- if ("theta_global_rmse_lagged" %in% names(row)) {
     is.finite(as.double(row$theta_global_rmse_lagged[[1L]] %||% NA_real_)) &&
       as.double(row$theta_global_rmse_lagged[[1L]]) <= theta_global_rmse_max
-    } else {
-      FALSE
-    }
+  } else {
+    FALSE
+  }
   isTRUE(rel_gate) &&
     isTRUE(hub_gate) &&
     isTRUE(probe_gate) &&
+    isTRUE(probe_quality_gate) &&
     isTRUE(probe_rmse_gate) &&
     isTRUE(theta_rmse_gate)
 }
@@ -3907,6 +3931,157 @@
   as.double(mean((y[keep] - p[keep])^2))
 }
 
+.adaptive_link_probe_calibration_ece <- function(p, y, n_bins = 5L) {
+  keep <- is.finite(p) & y %in% c(0L, 1L)
+  p <- as.double(p[keep])
+  y <- as.double(y[keep])
+  if (length(p) < 1L) {
+    return(NA_real_)
+  }
+  n_bins <- max(1L, as.integer(n_bins %||% 5L))
+  bins <- cut(p, breaks = seq(0, 1, length.out = n_bins + 1L), include.lowest = TRUE, labels = FALSE)
+  as.double(sum(vapply(seq_len(n_bins), function(bin_id) {
+    idx <- which(bins == bin_id)
+    if (length(idx) < 1L) {
+      return(0)
+    }
+    (length(idx) / length(p)) * abs(mean(y[idx]) - mean(p[idx]))
+  }, numeric(1L))))
+}
+
+.adaptive_link_probe_quality_metrics <- function(edges,
+                                                 panel,
+                                                 hub_theta,
+                                                 spoke_theta,
+                                                 delta_mean,
+                                                 log_alpha_mean = NA_real_,
+                                                 judge_params = list(beta = 0, epsilon = 0),
+                                                 controller = list()) {
+  controller <- controller %||% list()
+  edges <- tibble::as_tibble(edges %||% tibble::tibble())
+  panel <- tibble::as_tibble(panel %||% tibble::tibble())
+  min_required <- max(1L, as.integer(controller$probe_edges_min_for_stop %||% 80L))
+  unique_hub_min <- as.integer(ceiling(as.double(controller$probe_unique_hub_min_frac %||% 0.60) * min_required))
+  unique_spoke_min <- as.integer(ceiling(as.double(controller$probe_unique_spoke_min_frac %||% 0.75) * min_required))
+  rank_bins <- max(1L, as.integer(controller$probe_rank_bins %||% 10L))
+  rank_bins_hub_min <- min(
+    rank_bins,
+    min_required,
+    max(1L, as.integer(controller$probe_rank_bins_hub_min %||% 8L))
+  )
+  rank_bins_spoke_min <- min(
+    rank_bins,
+    min_required,
+    max(1L, as.integer(controller$probe_rank_bins_spoke_min %||% 8L))
+  )
+  out <- list(
+    probe_near_boundary_frac = NA_real_,
+    probe_near_boundary_min_frac_used = as.double(controller$probe_near_boundary_min_frac %||% 0.35),
+    probe_near_boundary_pass = FALSE,
+    probe_extreme_frac = NA_real_,
+    probe_extreme_max_frac_used = as.double(controller$probe_extreme_max_frac %||% 0.30),
+    probe_extreme_frac_pass = FALSE,
+    probe_midrange_frac = NA_real_,
+    probe_midrange_min_frac_used = as.double(controller$probe_midrange_min_frac %||% 0.60),
+    probe_midrange_pass = FALSE,
+    probe_unique_hub_items = 0L,
+    probe_unique_hub_min_used = as.integer(unique_hub_min),
+    probe_unique_hub_pass = FALSE,
+    probe_unique_spoke_items = 0L,
+    probe_unique_spoke_min_used = as.integer(unique_spoke_min),
+    probe_unique_spoke_pass = FALSE,
+    probe_rank_bins_hub_covered = 0L,
+    probe_rank_bins_hub_min_used = as.integer(rank_bins_hub_min),
+    probe_rank_bins_hub_pass = FALSE,
+    probe_rank_bins_spoke_covered = 0L,
+    probe_rank_bins_spoke_min_used = as.integer(rank_bins_spoke_min),
+    probe_rank_bins_spoke_pass = FALSE,
+    probe_brier_near_boundary = NA_real_,
+    probe_brier_near_boundary_max_used = as.double(controller$probe_brier_near_boundary_max %||% 0.20),
+    probe_brier_near_boundary_pass = FALSE,
+    probe_ece = NA_real_,
+    probe_ece_max_used = as.double(controller$probe_ece_max %||% 0.10),
+    probe_ece_pass = FALSE,
+    probe_quality_pass = FALSE,
+    probe_quality_blocker_codes = "probe_quality_unavailable"
+  )
+  if (nrow(edges) < 1L) {
+    return(out)
+  }
+  p <- .adaptive_link_cross_probabilities(
+    edges = edges,
+    hub_theta = hub_theta,
+    spoke_theta = spoke_theta,
+    delta_mean = delta_mean,
+    log_alpha_mean = log_alpha_mean,
+    judge_params = judge_params
+  )
+  y <- as.integer(edges$y_spoke)
+  keep <- y %in% c(0L, 1L) & is.finite(p)
+  if (!any(keep)) {
+    return(out)
+  }
+  p <- as.double(p[keep])
+  y <- as.integer(y[keep])
+  edge_ok <- edges[keep, , drop = FALSE]
+  near <- p >= as.double(controller$probe_near_boundary_low %||% 0.35) &
+    p <= as.double(controller$probe_near_boundary_high %||% 0.65)
+  extreme <- p < as.double(controller$probe_extreme_low %||% 0.15) |
+    p > as.double(controller$probe_extreme_high %||% 0.85)
+  midrange <- p >= as.double(controller$probe_midrange_low %||% 0.20) &
+    p <= as.double(controller$probe_midrange_high %||% 0.80)
+  pair_key <- make_unordered_key(edge_ok$hub_item, edge_ok$spoke_item)
+  panel_match <- if (nrow(panel) > 0L && "pair_key" %in% names(panel)) {
+    panel[match(pair_key, as.character(panel$pair_key)), , drop = FALSE]
+  } else {
+    tibble::tibble()
+  }
+  hub_bins <- if (nrow(panel_match) > 0L && "hub_bin" %in% names(panel_match)) {
+    unique(as.integer(panel_match$hub_bin[!is.na(panel_match$hub_bin)]))
+  } else {
+    integer()
+  }
+  spoke_bins <- if (nrow(panel_match) > 0L && "spoke_bin" %in% names(panel_match)) {
+    unique(as.integer(panel_match$spoke_bin[!is.na(panel_match$spoke_bin)]))
+  } else {
+    integer()
+  }
+  out$probe_near_boundary_frac <- mean(near)
+  out$probe_extreme_frac <- mean(extreme)
+  out$probe_midrange_frac <- mean(midrange)
+  out$probe_unique_hub_items <- length(unique(as.character(edge_ok$hub_item)))
+  out$probe_unique_spoke_items <- length(unique(as.character(edge_ok$spoke_item)))
+  out$probe_rank_bins_hub_covered <- length(hub_bins)
+  out$probe_rank_bins_spoke_covered <- length(spoke_bins)
+  out$probe_brier_near_boundary <- if (any(near)) mean((y[near] - p[near])^2) else NA_real_
+  out$probe_ece <- .adaptive_link_probe_calibration_ece(p, y, n_bins = 5L)
+  out$probe_near_boundary_pass <- out$probe_near_boundary_frac >= out$probe_near_boundary_min_frac_used
+  out$probe_extreme_frac_pass <- out$probe_extreme_frac <= out$probe_extreme_max_frac_used
+  out$probe_midrange_pass <- out$probe_midrange_frac >= out$probe_midrange_min_frac_used
+  out$probe_unique_hub_pass <- out$probe_unique_hub_items >= out$probe_unique_hub_min_used
+  out$probe_unique_spoke_pass <- out$probe_unique_spoke_items >= out$probe_unique_spoke_min_used
+  out$probe_rank_bins_hub_pass <- out$probe_rank_bins_hub_covered >= out$probe_rank_bins_hub_min_used
+  out$probe_rank_bins_spoke_pass <- out$probe_rank_bins_spoke_covered >= out$probe_rank_bins_spoke_min_used
+  out$probe_brier_near_boundary_pass <- is.finite(out$probe_brier_near_boundary) &&
+    out$probe_brier_near_boundary <= out$probe_brier_near_boundary_max_used
+  out$probe_ece_pass <- is.finite(out$probe_ece) && out$probe_ece <= out$probe_ece_max_used
+  passes <- c(
+    probe_near_boundary = out$probe_near_boundary_pass,
+    probe_extreme_frac = out$probe_extreme_frac_pass,
+    probe_midrange = out$probe_midrange_pass,
+    probe_unique_hub = out$probe_unique_hub_pass,
+    probe_unique_spoke = out$probe_unique_spoke_pass,
+    probe_rank_bins_hub = out$probe_rank_bins_hub_pass,
+    probe_rank_bins_spoke = out$probe_rank_bins_spoke_pass,
+    probe_brier_near_boundary = out$probe_brier_near_boundary_pass,
+    probe_ece = out$probe_ece_pass
+  )
+  blockers <- names(passes)[!as.logical(passes)]
+  out$probe_quality_pass <- length(blockers) < 1L
+  out$probe_quality_blocker_codes <- if (out$probe_quality_pass) "none" else paste(blockers, collapse = ",")
+  out
+}
+
 .adaptive_link_cross_probabilities <- function(edges,
                                                hub_theta,
                                                spoke_theta,
@@ -4200,6 +4375,35 @@
     link_stop_reliability_min_used = rep(NA_real_, nrow(rows)),
     probe_brier_max_used = rep(NA_real_, nrow(rows)),
     probe_brier_pass = rep(NA, nrow(rows)),
+    probe_near_boundary_frac = rep(NA_real_, nrow(rows)),
+    probe_near_boundary_min_frac_used = rep(NA_real_, nrow(rows)),
+    probe_near_boundary_pass = rep(NA, nrow(rows)),
+    probe_extreme_frac = rep(NA_real_, nrow(rows)),
+    probe_extreme_max_frac_used = rep(NA_real_, nrow(rows)),
+    probe_extreme_frac_pass = rep(NA, nrow(rows)),
+    probe_midrange_frac = rep(NA_real_, nrow(rows)),
+    probe_midrange_min_frac_used = rep(NA_real_, nrow(rows)),
+    probe_midrange_pass = rep(NA, nrow(rows)),
+    probe_unique_hub_items = rep(NA_integer_, nrow(rows)),
+    probe_unique_hub_min_used = rep(NA_integer_, nrow(rows)),
+    probe_unique_hub_pass = rep(NA, nrow(rows)),
+    probe_unique_spoke_items = rep(NA_integer_, nrow(rows)),
+    probe_unique_spoke_min_used = rep(NA_integer_, nrow(rows)),
+    probe_unique_spoke_pass = rep(NA, nrow(rows)),
+    probe_rank_bins_hub_covered = rep(NA_integer_, nrow(rows)),
+    probe_rank_bins_hub_min_used = rep(NA_integer_, nrow(rows)),
+    probe_rank_bins_hub_pass = rep(NA, nrow(rows)),
+    probe_rank_bins_spoke_covered = rep(NA_integer_, nrow(rows)),
+    probe_rank_bins_spoke_min_used = rep(NA_integer_, nrow(rows)),
+    probe_rank_bins_spoke_pass = rep(NA, nrow(rows)),
+    probe_brier_near_boundary = rep(NA_real_, nrow(rows)),
+    probe_brier_near_boundary_max_used = rep(NA_real_, nrow(rows)),
+    probe_brier_near_boundary_pass = rep(NA, nrow(rows)),
+    probe_ece = rep(NA_real_, nrow(rows)),
+    probe_ece_max_used = rep(NA_real_, nrow(rows)),
+    probe_ece_pass = rep(NA, nrow(rows)),
+    probe_quality_pass = rep(NA, nrow(rows)),
+    probe_quality_blocker_codes = rep(NA_character_, nrow(rows)),
     probe_pred_rmse_max_used = rep(NA_real_, nrow(rows)),
     probe_pred_rmse_pass = rep(NA, nrow(rows)),
     theta_global_rmse_max_used = rep(NA_real_, nrow(rows)),
@@ -5441,6 +5645,21 @@
       log_alpha_mean = fit$log_alpha_mean,
       judge_params = judge_params
     )
+    probe_panel_eval <- .adaptive_link_probe_panel_for_spoke(
+      state = out,
+      spoke_id = spoke_id,
+      epoch_id = eval_link_epoch_id
+    )
+    probe_quality <- .adaptive_link_probe_quality_metrics(
+      edges = probe_edges_realized_tbl,
+      panel = probe_panel_eval,
+      hub_theta = ppc_hub_theta,
+      spoke_theta = ppc_spoke_theta,
+      delta_mean = fit$delta_mean,
+      log_alpha_mean = fit$log_alpha_mean,
+      judge_params = judge_params,
+      controller = controller
+    )
     probe_pred_rmse_lagged <- if (identical(link_estimation_mode, "anchored_joint")) {
       .adaptive_link_probe_pred_rmse_lagged_anchored_joint(
         edges = probe_edges_realized_tbl,
@@ -5466,7 +5685,7 @@
     link_min_refit_eligible <- isTRUE(current_refit_id >= as.integer(controller$min_refits_in_phase_b %||% 3L))
     link_stop_gate_open <- isTRUE(link_diagnostics_pass) &&
       isTRUE(!is.na(reliability_active)) &&
-      isTRUE(nrow(probe_edges_realized_tbl) >= as.integer(controller$probe_edges_min_for_stop %||% 30L))
+      isTRUE(nrow(probe_edges_realized_tbl) >= as.integer(controller$probe_edges_min_for_stop %||% 80L))
     link_stop_eligible <- isTRUE(link_lag_eligible) &&
       isTRUE(link_min_refit_eligible) &&
       isTRUE(link_stop_gate_open)
@@ -5488,6 +5707,7 @@
       isTRUE(hub_anchored) &&
       isTRUE(reliability_stop_pass) &&
       isTRUE(probe_brier_pass) &&
+      isTRUE(probe_quality$probe_quality_pass) &&
       isTRUE(probe_pred_rmse_pass) &&
       isTRUE(theta_global_rmse_pass)
     stop_window <- .adaptive_link_result_window_normalize(
@@ -5579,7 +5799,7 @@
       identical(transform_state, "shift_only") &&
       isTRUE(link_stop_eligible) &&
       isTRUE(scale_ready) &&
-      nrow(probe_edges_realized_tbl) >= as.integer(controller$probe_edges_min_for_stop %||% 30L)) {
+      nrow(probe_edges_realized_tbl) >= as.integer(controller$probe_edges_min_for_stop %||% 80L)) {
       alt_fit <- .adaptive_link_fit_transform_alt_shift_scale(
         cross_edges = cross_active_epoch,
         hub_theta = hub_theta,
@@ -5671,7 +5891,7 @@
       link_lag_eligible = link_lag_eligible,
       link_min_refit_eligible = link_min_refit_eligible,
       probe_edges_realized = probe_edges_realized_eval,
-      probe_edges_min_for_stop = as.integer(controller$probe_edges_min_for_stop %||% 30L),
+      probe_edges_min_for_stop = as.integer(controller$probe_edges_min_for_stop %||% 80L),
       link_stop_reliability_min = reliability_min_used,
       reliability_active = reliability_active,
       probe_brier = probe_brier,
@@ -5680,6 +5900,7 @@
       probe_pred_rmse_max = probe_pred_rmse_max_used,
       theta_global_rmse_lagged = theta_global_rmse_lagged,
       theta_global_rmse_max = theta_global_rmse_max_used,
+      probe_quality_pass = probe_quality$probe_quality_pass,
       hub_anchored = hub_anchored
     )
 
@@ -5778,6 +5999,35 @@
       probe_brier = as.double(probe_brier),
       probe_brier_max_used = as.double(probe_brier_max_used),
       probe_brier_pass = as.logical(probe_brier_pass),
+      probe_near_boundary_frac = as.double(probe_quality$probe_near_boundary_frac),
+      probe_near_boundary_min_frac_used = as.double(probe_quality$probe_near_boundary_min_frac_used),
+      probe_near_boundary_pass = as.logical(probe_quality$probe_near_boundary_pass),
+      probe_extreme_frac = as.double(probe_quality$probe_extreme_frac),
+      probe_extreme_max_frac_used = as.double(probe_quality$probe_extreme_max_frac_used),
+      probe_extreme_frac_pass = as.logical(probe_quality$probe_extreme_frac_pass),
+      probe_midrange_frac = as.double(probe_quality$probe_midrange_frac),
+      probe_midrange_min_frac_used = as.double(probe_quality$probe_midrange_min_frac_used),
+      probe_midrange_pass = as.logical(probe_quality$probe_midrange_pass),
+      probe_unique_hub_items = as.integer(probe_quality$probe_unique_hub_items),
+      probe_unique_hub_min_used = as.integer(probe_quality$probe_unique_hub_min_used),
+      probe_unique_hub_pass = as.logical(probe_quality$probe_unique_hub_pass),
+      probe_unique_spoke_items = as.integer(probe_quality$probe_unique_spoke_items),
+      probe_unique_spoke_min_used = as.integer(probe_quality$probe_unique_spoke_min_used),
+      probe_unique_spoke_pass = as.logical(probe_quality$probe_unique_spoke_pass),
+      probe_rank_bins_hub_covered = as.integer(probe_quality$probe_rank_bins_hub_covered),
+      probe_rank_bins_hub_min_used = as.integer(probe_quality$probe_rank_bins_hub_min_used),
+      probe_rank_bins_hub_pass = as.logical(probe_quality$probe_rank_bins_hub_pass),
+      probe_rank_bins_spoke_covered = as.integer(probe_quality$probe_rank_bins_spoke_covered),
+      probe_rank_bins_spoke_min_used = as.integer(probe_quality$probe_rank_bins_spoke_min_used),
+      probe_rank_bins_spoke_pass = as.logical(probe_quality$probe_rank_bins_spoke_pass),
+      probe_brier_near_boundary = as.double(probe_quality$probe_brier_near_boundary),
+      probe_brier_near_boundary_max_used = as.double(probe_quality$probe_brier_near_boundary_max_used),
+      probe_brier_near_boundary_pass = as.logical(probe_quality$probe_brier_near_boundary_pass),
+      probe_ece = as.double(probe_quality$probe_ece),
+      probe_ece_max_used = as.double(probe_quality$probe_ece_max_used),
+      probe_ece_pass = as.logical(probe_quality$probe_ece_pass),
+      probe_quality_pass = as.logical(probe_quality$probe_quality_pass),
+      probe_quality_blocker_codes = as.character(probe_quality$probe_quality_blocker_codes),
       probe_pred_rmse_lagged = as.double(probe_pred_rmse_lagged),
       probe_pred_rmse_max_used = as.double(probe_pred_rmse_max_used),
       probe_pred_rmse_pass = as.logical(probe_pred_rmse_pass),
@@ -5822,7 +6072,7 @@
       } else {
         as.double(controller$logalpha_sd_guardrail %||% 0.10)
       },
-      probe_edges_min_for_stop_used = as.integer(controller$probe_edges_min_for_stop %||% 30L),
+      probe_edges_min_for_stop_used = as.integer(controller$probe_edges_min_for_stop %||% 80L),
       link_transform_escalation_window_refits_used = if (identical(link_estimation_mode, "anchored_joint")) {
         NA_integer_
       } else {
@@ -6337,37 +6587,21 @@
       surface_row = prior_surface_row,
       surface_source = prior_surface_source
     )
-    probe_effort_base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
+    probe_effort_base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 4L))
     probe_remaining_to_min_start_logged <- as.integer(
       probe_effort_plan$remaining_to_min_start %||% NA_integer_
     )
-    bootstrap_acceleration_used_logged <- FALSE
     probe_active_floor_used_logged <- as.integer(
       probe_effort_plan$active_floor_used %||% 0L
     )
-    probe_only_blocker_trigger_logged <- as.logical(
-      probe_effort_plan$probe_only_blocker_trigger %||% FALSE
-    )
+    probe_only_blocker_trigger_logged <- FALSE
     probe_effort_effective_cap_logged <- as.integer(
       probe_effort_plan$effective_cap %||% probe_effort_base_cap
     )
     if (nrow(prior_stage_row) > 0L) {
       probe_remaining_to_min_start_logged <- max(
         0L,
-        as.integer((controller$probe_edges_min_for_stop %||% 30L) - probe_edges_realized_before_refit)
-      )
-      probe_panel_shortfall_start_logged <- max(
-        0L,
-        as.integer(probe_edges_planned - probe_edges_realized_before_refit)
-      )
-      probe_only_blocker_trigger_logged <- .adaptive_link_probe_sole_blocker_trigger(
-        surface_row = prior_surface_row,
-        surface_source = prior_surface_source,
-        controller = controller,
-        spoke_id = as.integer(spoke_id),
-        realized_before_refit = as.integer(probe_edges_realized_before_refit),
-        realized_min = as.integer(controller$probe_edges_min_for_stop %||% 30L),
-        panel_shortfall_start = as.integer(probe_panel_shortfall_start_logged)
+        as.integer((controller$probe_edges_min_for_stop %||% 80L) - probe_edges_realized_before_refit)
       )
       bootstrap_active_floor_logged <- if (isTRUE(controller$probe_active_floor_enabled) &&
         !isTRUE(retired_spoke) &&
@@ -6383,51 +6617,13 @@
       } else {
         0L
       }
-      probe_active_floor_used_logged <- if (isTRUE(probe_only_blocker_trigger_logged) &&
-        as.integer(budget_info$B_spoke_refit_budget %||% 0L) > 0L) {
-        min(
-          as.integer(budget_info$B_spoke_refit_budget %||% 0L),
-          as.integer(controller$probe_sole_blocker_active_floor_min %||% 10L)
-        )
-      } else {
-        as.integer(bootstrap_active_floor_logged)
-      }
-      bootstrap_acceleration_logged <- !isTRUE(probe_only_blocker_trigger_logged) &&
-        isTRUE(controller$probe_active_floor_enabled) &&
-        !isTRUE(retired_spoke) &&
-        as.integer(budget_info$B_spoke_refit_budget %||% 0L) > 0L &&
-        as.integer(probe_edges_realized_before_refit) <
-          as.integer(controller$probe_accel_bootstrap_target %||% 12L) &&
-        as.integer(probe_edges_realized_before_refit) <
-          as.integer(controller$probe_edges_min_for_stop %||% 30L) &&
-        isTRUE(probe_effort_plan$active_floor_met %||% FALSE) &&
-        isTRUE(probe_effort_plan$anchor_progress_met %||% TRUE)
-      bootstrap_acceleration_used_logged <- isTRUE(bootstrap_acceleration_logged) &&
-        isTRUE(refit_summary$probe_panel_acceleration_used_since_last_refit %||% FALSE)
-      probe_effort_effective_cap_logged <- if (isTRUE(probe_only_blocker_trigger_logged)) {
-        min(
-          as.integer(controller$probe_pairs_per_refit_per_spoke_sole_blocker_max %||%
-            probe_effort_base_cap),
-          as.integer(probe_remaining_to_min_start_logged)
-        )
-      } else if (isTRUE(bootstrap_acceleration_used_logged)) {
-        min(
-          as.integer(controller$probe_pairs_per_refit_per_spoke_bootstrap_max %||%
-            probe_effort_base_cap),
-          as.integer(probe_remaining_to_min_start_logged)
-        )
-      } else {
-        as.integer(probe_effort_base_cap)
-      }
+      probe_active_floor_used_logged <- as.integer(bootstrap_active_floor_logged)
+      probe_effort_effective_cap_logged <- min(
+        as.integer(probe_effort_base_cap),
+        as.integer(probe_remaining_to_min_start_logged)
+      )
     }
-    probe_acceleration_used_logged <- as.logical(
-      (isTRUE(probe_only_blocker_trigger_logged) ||
-        isTRUE(bootstrap_acceleration_used_logged) ||
-        as.integer(probe_effort_effective_cap_logged) > as.integer(probe_effort_base_cap)) %||%
-        probe_effort_plan$acceleration_used %||%
-        (as.integer(probe_effort_effective_cap_logged) >
-          as.integer(probe_effort_base_cap))
-    )
+    probe_acceleration_used_logged <- FALSE
     probe_panel_reallocation_used <- .adaptive_link_probe_panel_reallocation_used(probe_panel)
     probe_cache <- tibble::as_tibble(.adaptive_link_probe_state(state)$prediction_cache)
     probe_pred_cache_used <- nrow(probe_cache[
@@ -6752,7 +6948,7 @@
       probe_acceleration_mode_used = as.character(
         probe_effort_plan$acceleration_mode_used %||%
           controller$probe_acceleration_mode %||%
-          "active_floor_plus_sole_blocker"
+          "fixed_per_refit"
       ),
       probe_active_floor_used = as.integer(probe_active_floor_used_logged),
       probe_only_blocker_trigger = as.logical(probe_only_blocker_trigger_logged),
@@ -6767,6 +6963,49 @@
         stats_row$probe_brier_max_used %||% controller$probe_brier_max %||% 0.19
       ),
       probe_brier_pass = as.logical(stats_row$probe_brier_pass %||% NA),
+      probe_near_boundary_frac = as.double(stats_row$probe_near_boundary_frac %||% NA_real_),
+      probe_near_boundary_min_frac_used = as.double(
+        stats_row$probe_near_boundary_min_frac_used %||% controller$probe_near_boundary_min_frac %||% 0.35
+      ),
+      probe_near_boundary_pass = as.logical(stats_row$probe_near_boundary_pass %||% NA),
+      probe_extreme_frac = as.double(stats_row$probe_extreme_frac %||% NA_real_),
+      probe_extreme_max_frac_used = as.double(
+        stats_row$probe_extreme_max_frac_used %||% controller$probe_extreme_max_frac %||% 0.30
+      ),
+      probe_extreme_frac_pass = as.logical(stats_row$probe_extreme_frac_pass %||% NA),
+      probe_midrange_frac = as.double(stats_row$probe_midrange_frac %||% NA_real_),
+      probe_midrange_min_frac_used = as.double(
+        stats_row$probe_midrange_min_frac_used %||% controller$probe_midrange_min_frac %||% 0.60
+      ),
+      probe_midrange_pass = as.logical(stats_row$probe_midrange_pass %||% NA),
+      probe_unique_hub_items = as.integer(stats_row$probe_unique_hub_items %||% NA_integer_),
+      probe_unique_hub_min_used = as.integer(stats_row$probe_unique_hub_min_used %||% NA_integer_),
+      probe_unique_hub_pass = as.logical(stats_row$probe_unique_hub_pass %||% NA),
+      probe_unique_spoke_items = as.integer(stats_row$probe_unique_spoke_items %||% NA_integer_),
+      probe_unique_spoke_min_used = as.integer(stats_row$probe_unique_spoke_min_used %||% NA_integer_),
+      probe_unique_spoke_pass = as.logical(stats_row$probe_unique_spoke_pass %||% NA),
+      probe_rank_bins_hub_covered = as.integer(stats_row$probe_rank_bins_hub_covered %||% NA_integer_),
+      probe_rank_bins_hub_min_used = as.integer(
+        stats_row$probe_rank_bins_hub_min_used %||% controller$probe_rank_bins_hub_min %||% 8L
+      ),
+      probe_rank_bins_hub_pass = as.logical(stats_row$probe_rank_bins_hub_pass %||% NA),
+      probe_rank_bins_spoke_covered = as.integer(stats_row$probe_rank_bins_spoke_covered %||% NA_integer_),
+      probe_rank_bins_spoke_min_used = as.integer(
+        stats_row$probe_rank_bins_spoke_min_used %||% controller$probe_rank_bins_spoke_min %||% 8L
+      ),
+      probe_rank_bins_spoke_pass = as.logical(stats_row$probe_rank_bins_spoke_pass %||% NA),
+      probe_brier_near_boundary = as.double(stats_row$probe_brier_near_boundary %||% NA_real_),
+      probe_brier_near_boundary_max_used = as.double(
+        stats_row$probe_brier_near_boundary_max_used %||%
+          controller$probe_brier_near_boundary_max %||%
+          0.20
+      ),
+      probe_brier_near_boundary_pass = as.logical(stats_row$probe_brier_near_boundary_pass %||% NA),
+      probe_ece = as.double(stats_row$probe_ece %||% NA_real_),
+      probe_ece_max_used = as.double(stats_row$probe_ece_max_used %||% controller$probe_ece_max %||% 0.10),
+      probe_ece_pass = as.logical(stats_row$probe_ece_pass %||% NA),
+      probe_quality_pass = as.logical(stats_row$probe_quality_pass %||% NA),
+      probe_quality_blocker_codes = as.character(stats_row$probe_quality_blocker_codes %||% NA_character_),
       probe_pred_rmse_lagged = as.double(stats_row$probe_pred_rmse_lagged %||% NA_real_),
       probe_pred_rmse_max_used = as.double(
         stats_row$probe_pred_rmse_max_used %||% controller$probe_pred_rmse_max %||% 0.015
@@ -6785,7 +7024,7 @@
       ),
       theta_global_rmse_pass = as.logical(stats_row$theta_global_rmse_pass %||% NA),
       probe_edges_min_for_stop_used = as.integer(
-        stats_row$probe_edges_min_for_stop_used %||% controller$probe_edges_min_for_stop %||% 30L
+        stats_row$probe_edges_min_for_stop_used %||% controller$probe_edges_min_for_stop %||% 80L
       ),
       anchored_joint_init_state_method = as.character(anchored_init_method),
       anchored_joint_spoke_prior_scale_used = as.double(anchored_prior_scale_used),
@@ -6866,6 +7105,17 @@
     "probe_edges_realized_before_refit", "probe_edges_realized_delta_since_last_refit",
     "probe_shortfall_reason",
     "probe_brier", "probe_brier_max_used", "probe_brier_pass",
+    "probe_near_boundary_frac", "probe_near_boundary_min_frac_used", "probe_near_boundary_pass",
+    "probe_extreme_frac", "probe_extreme_max_frac_used", "probe_extreme_frac_pass",
+    "probe_midrange_frac", "probe_midrange_min_frac_used", "probe_midrange_pass",
+    "probe_unique_hub_items", "probe_unique_hub_min_used", "probe_unique_hub_pass",
+    "probe_unique_spoke_items", "probe_unique_spoke_min_used", "probe_unique_spoke_pass",
+    "probe_rank_bins_hub_covered", "probe_rank_bins_hub_min_used", "probe_rank_bins_hub_pass",
+    "probe_rank_bins_spoke_covered", "probe_rank_bins_spoke_min_used", "probe_rank_bins_spoke_pass",
+    "probe_brier_near_boundary", "probe_brier_near_boundary_max_used",
+    "probe_brier_near_boundary_pass",
+    "probe_ece", "probe_ece_max_used", "probe_ece_pass",
+    "probe_quality_pass", "probe_quality_blocker_codes",
     "probe_pred_rmse_lagged", "probe_pred_rmse_max_used", "probe_pred_rmse_pass",
     "phase_a_within_edges_hub_used", "phase_a_within_edges_spoke_used",
     "phase_b_active_edges_used", "anchored_joint_hub_items_fixed_count",

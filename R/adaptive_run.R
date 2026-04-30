@@ -578,7 +578,7 @@
   out$n_cross_edges_total_since_last_refit <- as.integer(nrow(since_last))
   probe_rows <- since_last[since_probe_flag, , drop = FALSE]
   out$probe_panel_acceleration_used_since_last_refit <- if ("fallback_used" %in% names(probe_rows)) {
-    any(as.character(probe_rows$fallback_used) %in% "probe_panel_acceleration")
+    any(as.character(probe_rows$fallback_used) %in% c("probe_panel_fixed_refit", "probe_panel_acceleration"))
   } else {
     FALSE
   }
@@ -1707,19 +1707,40 @@
     return(as.integer(probe_panel_edges))
   }
   n_spoke_items <- as.integer(n_spoke_items)
-  base_target <- as.integer(ceiling(0.25 * n_spoke_items))
-  max(0L, as.integer(min(160L, max(40L, base_target))))
+  .adaptive_scaled_count(
+    n_spoke_items,
+    min_value = 160L,
+    frac = 0.12,
+    lower = 1L
+  )
 }
 
 #' @keywords internal
 #' @noRd
-.adaptive_link_probe_panel_feasible_size <- function(target_edges, n_available_pairs = NA_integer_) {
+.adaptive_link_probe_panel_feasible_size <- function(target_edges,
+                                                     n_available_pairs = NA_integer_,
+                                                     active_reserve_pairs = 0L,
+                                                     active_reserve_frac = 0) {
   target_edges <- max(0L, as.integer(target_edges %||% 0L))
   n_available_pairs <- as.integer(n_available_pairs %||% NA_integer_)
   if (is.na(n_available_pairs)) {
     return(as.integer(target_edges))
   }
   feasible_cap <- max(0L, as.integer(n_available_pairs))
+  active_reserve_pairs <- max(0L, as.integer(active_reserve_pairs %||% 0L))
+  active_reserve_frac <- as.double(active_reserve_frac %||% 0)
+  if (!is.finite(active_reserve_frac) || active_reserve_frac < 0) {
+    active_reserve_frac <- 0
+  }
+  if (target_edges >= feasible_cap && active_reserve_frac > 0) {
+    active_reserve_pairs <- max(
+      active_reserve_pairs,
+      as.integer(ceiling(active_reserve_frac * feasible_cap))
+    )
+  }
+  if (active_reserve_pairs > 0L && feasible_cap > active_reserve_pairs) {
+    feasible_cap <- max(0L, feasible_cap - active_reserve_pairs)
+  }
   as.integer(min(target_edges, feasible_cap))
 }
 
@@ -2214,6 +2235,9 @@
     theta_global_rmse_max = as.double(
       .adaptive_link_probe_surface_value(surface_row, "theta_global_rmse_max_used", default = NA_real_)
     ),
+    probe_quality_pass = as.logical(
+      .adaptive_link_probe_surface_value(surface_row, "probe_quality_pass", default = TRUE)
+    ),
     hub_anchored = as.logical(
       .adaptive_link_probe_surface_value(surface_row, "hub_anchored", default = NA)
     )
@@ -2236,44 +2260,6 @@
   }
 
   canonical_active
-}
-
-#' @keywords internal
-#' @noRd
-.adaptive_link_probe_sole_blocker_trigger <- function(surface_row,
-                                                      surface_source,
-                                                      controller,
-                                                      spoke_id,
-                                                      realized_before_refit,
-                                                      realized_min,
-                                                      panel_shortfall_start) {
-  if (!isTRUE(controller$probe_sole_blocker_acceleration_enabled)) {
-    return(FALSE)
-  }
-  if (is.null(surface_row) || length(surface_row) < 1L) {
-    return(FALSE)
-  }
-
-  prelim_conditions <- c(
-    as.integer(realized_before_refit) >= as.integer(controller$probe_sole_blocker_min_realized %||% 20L),
-    as.integer(realized_before_refit) < as.integer(realized_min),
-    as.integer(panel_shortfall_start) > 0L
-  )
-  if (!isTRUE(all(prelim_conditions))) {
-    return(FALSE)
-  }
-
-  blockers <- .adaptive_link_probe_validate_blocker_surface(
-    surface_row = surface_row,
-    realized_before_refit = realized_before_refit,
-    realized_min = realized_min,
-    spoke_id = spoke_id,
-    source = surface_source
-  )
-
-  isTRUE(all(prelim_conditions)) &&
-    identical(length(blockers), 1L) &&
-    identical(blockers[[1L]], "probe_edges_min_for_stop")
 }
 
 #' @keywords internal
@@ -2342,10 +2328,10 @@
                                              surface_source = NULL) {
   controller <- .adaptive_runtime_controller_resolve(state, controller)
   spoke_id <- as.integer(spoke_id %||% NA_integer_)
-  base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
-  realized_min <- max(1L, as.integer(controller$probe_edges_min_for_stop %||% 30L))
+  base_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 4L))
+  realized_min <- max(1L, as.integer(controller$probe_edges_min_for_stop %||% 80L))
   mode_used <- as.character(
-    controller$probe_acceleration_mode %||% "active_floor_plus_sole_blocker"
+    controller$probe_acceleration_mode %||% "fixed_per_refit"
   )
   epoch_id <- .adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id)
   panel <- .adaptive_link_probe_panel_for_spoke(state, spoke_id = spoke_id, epoch_id = epoch_id)
@@ -2434,53 +2420,19 @@
     }
   }
 
-  probe_only_blocker_trigger <- .adaptive_link_probe_sole_blocker_trigger(
-    surface_row = surface_row,
-    surface_source = surface_source,
-    controller = controller,
-    spoke_id = spoke_id,
-    realized_before_refit = realized_before_refit,
-    realized_min = realized_min,
-    panel_shortfall_start = panel_shortfall_start
-  )
-  active_floor_used <- if (isTRUE(probe_only_blocker_trigger) && budget > 0L) {
-    min(
-      as.integer(budget),
-      as.integer(controller$probe_sole_blocker_active_floor_min %||% 10L)
-    )
-  } else {
-    as.integer(bootstrap_active_floor)
-  }
+  probe_only_blocker_trigger <- FALSE
+  active_floor_used <- as.integer(bootstrap_active_floor)
   active_floor_met <- active_nonprobe >= active_floor_used || isTRUE(active_window_exhausted)
 
-  bootstrap_gate_open <- !isTRUE(probe_only_blocker_trigger) &&
-    isTRUE(controller$probe_active_floor_enabled) &&
+  fixed_gate_open <- isTRUE(controller$probe_active_floor_enabled) &&
     phase_b_active &&
     !isTRUE(spoke_frozen) &&
     budget > 0L &&
-    realized_total < as.integer(controller$probe_accel_bootstrap_target %||% 12L) &&
     realized_total < realized_min &&
     isTRUE(active_floor_met) &&
     isTRUE(anchor_progress_met)
-  sole_blocker_gate_open <- isTRUE(probe_only_blocker_trigger) &&
-    phase_b_active &&
-    !isTRUE(spoke_frozen) &&
-    budget > 0L &&
-    isTRUE(active_floor_met)
-  effective_cap <- if (isTRUE(sole_blocker_gate_open)) {
-    min(
-      as.integer(controller$probe_pairs_per_refit_per_spoke_sole_blocker_max %||% base_cap),
-      remaining_to_min_start
-    )
-  } else if (isTRUE(bootstrap_gate_open)) {
-    min(
-      as.integer(controller$probe_pairs_per_refit_per_spoke_bootstrap_max %||% base_cap),
-      remaining_to_min_start
-    )
-  } else {
-    base_cap
-  }
-  acceleration_used <- isTRUE(effective_cap > base_cap)
+  effective_cap <- min(as.integer(base_cap), as.integer(remaining_to_min_start))
+  acceleration_used <- FALSE
 
   list(
     spoke_id = as.integer(spoke_id),
@@ -2500,7 +2452,7 @@
     active_nonprobe_since_refit = as.integer(active_nonprobe),
     anchor_progress_met = as.logical(anchor_progress_met),
     probe_only_blocker_trigger = as.logical(probe_only_blocker_trigger),
-    allow_when_active = as.logical(sole_blocker_gate_open || bootstrap_gate_open),
+    allow_when_active = as.logical(fixed_gate_open),
     acceleration_used = as.logical(acceleration_used)
   )
 }
@@ -2648,8 +2600,8 @@
     spoke_ids <- as.integer(budgeted_spokes)
   }
 
-  realized_min <- as.integer(controller$probe_edges_min_for_stop %||% 30L)
-  probe_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 2L))
+  realized_min <- as.integer(controller$probe_edges_min_for_stop %||% 80L)
+  probe_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 4L))
   fairness_guard <- .adaptive_link_probe_active_progress_guard(
     state = state,
     controller = controller,

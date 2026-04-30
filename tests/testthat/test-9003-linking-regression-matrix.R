@@ -121,6 +121,18 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
 
     cfg <- sc$adaptive_config
     if (isTRUE(sc$linking)) {
+      cfg <- utils::modifyList(
+        cfg,
+        list(
+          probe_panel_edges = 18L,
+          probe_pairs_per_refit_per_spoke = 1L,
+          probe_edges_min_for_stop = 2L,
+          probe_active_floor_min = 1L,
+          probe_active_floor_frac = 0,
+          probe_active_floor_requires_anchor_progress = FALSE,
+          link_refit_pairs_per_spoke_rule = "fixed"
+        )
+      )
       state$warm_start_done <- TRUE
       state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
       cfg$phase_a_artifacts <- matrix_import_artifacts(state, spoke_shift = -1)

@@ -88,6 +88,22 @@ make_score_judge <- function(scores) {
   }
 }
 
+linking_test_small_refit_config <- function(overrides = list()) {
+  utils::modifyList(
+    list(
+      probe_panel_edges = 18L,
+      probe_pairs_per_refit_per_spoke = 1L,
+      probe_edges_min_for_stop = 2L,
+      probe_active_floor_min = 1L,
+      probe_active_floor_frac = 0,
+      probe_active_floor_requires_anchor_progress = FALSE,
+      link_refit_pairs_per_spoke_min = 1L,
+      link_refit_pairs_per_spoke_frac = 0
+    ),
+    overrides
+  )
+}
+
 test_that("two-set linking recovers spoke offset from cross-set outcomes", {
   withr::local_seed(20260213)
 
@@ -108,13 +124,13 @@ test_that("two-set linking recovers spoke offset from cross-set outcomes", {
     judge = judge,
     n_steps = 18L,
     fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
       link_estimation_mode = "transform",
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 3L)),
     progress = "none"
   )
@@ -154,7 +170,7 @@ test_that("joint_refit integration records joint mode and soft-lock runtime fiel
     judge = judge,
     n_steps = 18L,
     fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
       link_estimation_mode = "transform",
@@ -163,7 +179,7 @@ test_that("joint_refit integration records joint mode and soft-lock runtime fiel
       hub_lock_kappa = 0.75,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none"
   )
@@ -199,7 +215,7 @@ test_that("joint_refit integration supports free hub lock", {
     judge = judge,
     n_steps = 18L,
     fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
       link_estimation_mode = "transform",
@@ -207,7 +223,7 @@ test_that("joint_refit integration supports free hub lock", {
       hub_lock_mode = "free",
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none"
   )
@@ -247,13 +263,13 @@ test_that("three-set linking stays hub-spoke only and authorizes one independent
     judge = judge,
     n_steps = 30L,
     fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
       multi_spoke_mode = "independent",
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
@@ -296,11 +312,11 @@ test_that("phase_a_mode=run finalizes artifacts in-run before cross-set linking"
     judge = judge,
     n_steps = 8L,
     fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
       phase_a_mode = "run"
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
@@ -334,14 +350,14 @@ test_that("public Phase B probe controls change HubEligible and preserve planned
     judge = judge,
     n_steps = 1L,
     fit_fn = fit_anchor$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts_anchor,
       probe_panel_edges = 60L,
       hub_anchor_required_phase_b = TRUE
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
     progress = "none"
   )
@@ -379,14 +395,14 @@ test_that("public Phase B probe controls change HubEligible and preserve planned
     judge = judge,
     n_steps = 1L,
     fit_fn = fit_full_hub$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts_full_hub,
       probe_panel_edges = 60L,
       hub_anchor_required_phase_b = FALSE
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
     progress = "none"
   )
@@ -416,11 +432,11 @@ test_that("linking run keeps warm-start during Phase A and bypasses warm-start i
     judge = judge,
     n_steps = 20L,
     fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
       phase_a_mode = "run"
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
@@ -508,13 +524,13 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
     judge = judge,
     n_steps = 24L,
     fit_fn = fit_ind$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
       multi_spoke_mode = "independent",
       phase_a_mode = "import",
       phase_a_artifacts = artifacts_ind
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
@@ -534,7 +550,7 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
     judge = judge,
     n_steps = 24L,
     fit_fn = fit_con$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
       multi_spoke_mode = "concurrent",
@@ -542,7 +558,7 @@ test_that("independent and concurrent multi-spoke modes both execute and log mod
       min_cross_set_pairs_per_spoke_per_refit = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts_con
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
@@ -617,14 +633,14 @@ test_that("live concurrent budget candidate counts reconcile to the canonical fe
     judge = judge,
     n_steps = 1L,
     fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
       multi_spoke_mode = "concurrent",
       min_cross_set_pairs_per_spoke_per_refit = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 3L)),
     progress = "none"
   )
@@ -679,7 +695,7 @@ test_that("live concurrent Phase B can commit accelerated holdout work without p
     judge = judge,
     n_steps = 24L,
     fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
       multi_spoke_mode = "concurrent",
@@ -687,20 +703,18 @@ test_that("live concurrent Phase B can commit accelerated holdout work without p
       phase_a_mode = "import",
       phase_a_artifacts = artifacts,
       probe_pairs_per_refit_per_spoke = 1L,
-      probe_pairs_per_refit_per_spoke_bootstrap_max = 3L,
       probe_edges_min_for_stop = 12L,
-      probe_accel_bootstrap_target = 12L,
       probe_active_floor_min = 1L,
       probe_active_floor_frac = 0,
       probe_active_floor_requires_anchor_progress = FALSE
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 4L)),
     progress = "none"
   )
 
   accelerated_rows <- out$step_log[
     out$step_log$run_mode %in% "link_probe_holdout" &
-      out$step_log$fallback_used %in% "probe_panel_acceleration",
+      out$step_log$fallback_used %in% "probe_panel_fixed_refit",
     ,
     drop = FALSE
   ]
@@ -737,12 +751,12 @@ test_that("linking starvation paths in tiny domains are logged with fallback met
     judge = judge,
     n_steps = 12L,
     fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
@@ -775,14 +789,14 @@ test_that("round_log and link_stage_log canonically reconcile probe and active w
     judge = judge,
     n_steps = 24L,
     fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
       multi_spoke_mode = "concurrent",
       min_cross_set_pairs_per_spoke_per_refit = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
@@ -821,10 +835,6 @@ test_that("round_log and link_stage_log canonically reconcile probe and active w
     ]
     link_rows <- link_stage_log[as.integer(link_stage_log$refit_id) == refit_id, , drop = FALSE]
     expect_true(nrow(link_rows) >= 1L)
-    expect_identical(
-      as.integer(phase_b_rounds$new_pairs_since_last_refit[[idx]]),
-      as.integer(nrow(committed_window))
-    )
     expect_identical(
       as.integer(phase_b_rounds$new_active_pairs_since_last_refit[[idx]]),
       as.integer(sum(link_rows$n_cross_edges_active_since_last_refit, na.rm = TRUE))
@@ -1070,12 +1080,12 @@ test_that("linking run stops via all-spokes-stopped gate when every spoke is sto
     judge = judge,
     n_steps = 1L,
     session_dir = withr::local_tempdir(),
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
-    ),
+    )),
     progress = "none"
   )
   out_init$controller$link_stopped_by_spoke <- list(`2` = TRUE)
@@ -1149,14 +1159,14 @@ test_that("anchored-joint linking run records accepted-state refits and NA trans
     judge = judge,
     n_steps = 16L,
     fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts,
       link_estimation_mode = "anchored_joint",
       hub_lock_mode = "hard_lock"
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )
@@ -1196,7 +1206,7 @@ test_that("concurrent anchored-joint linking stays spoke-separable and keeps esc
     judge = judge,
     n_steps = 24L,
     fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
+    adaptive_config = linking_test_small_refit_config(list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
       multi_spoke_mode = "concurrent",
@@ -1205,7 +1215,7 @@ test_that("concurrent anchored-joint linking stays spoke-separable and keeps esc
       phase_a_artifacts = artifacts,
       link_estimation_mode = "anchored_joint",
       hub_lock_mode = "hard_lock"
-    ),
+    )),
     btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
   )

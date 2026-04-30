@@ -875,7 +875,8 @@ validate_judge_result <- function(result, A_id, B_id) {
   if (isTRUE(is_probe)) {
     entry$n_pairs_cross_set_probe_done <- as.integer(entry$n_pairs_cross_set_probe_done + 1L)
     entry$n_cross_edges_probe_since_last_refit <- as.integer(entry$n_cross_edges_probe_since_last_refit + 1L)
-    if (identical(as.character(row$fallback_used[[1L]] %||% NA_character_), "probe_panel_acceleration")) {
+    if (as.character(row$fallback_used[[1L]] %||% NA_character_) %in%
+      c("probe_panel_fixed_refit", "probe_panel_acceleration")) {
       entry$probe_panel_acceleration_used_since_last_refit <- TRUE
     }
   } else {
@@ -1094,7 +1095,7 @@ run_one_step <- function(state, judge, ...) {
           active_fallback_path <- as.character(selection$fallback_path %||% NA_character_)
           active_fallback_path <- active_fallback_path[!is.na(active_fallback_path) & nzchar(active_fallback_path)]
           fallback_suffix <- if (isTRUE(allow_when_active)) {
-            "probe_panel_acceleration"
+            "probe_panel_fixed_refit"
           } else {
             "probe_panel_after_active_unavailable"
           }

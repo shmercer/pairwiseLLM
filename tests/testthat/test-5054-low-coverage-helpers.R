@@ -985,6 +985,7 @@ test_that("low-coverage CmdStan, concurrent allocation, selector, and print help
 
 test_that("low-coverage probe panel restoration, run helpers, and cost estimator cover follow-up branches", {
   state <- make_lowcov_link_state()
+  state$controller$probe_panel_edges <- 18L
   panel <- pairwiseLLM:::.adaptive_link_probe_construct_panel(state, state$controller, spoke_id = 2L)
   panel_id <- unique(panel$probe_panel_id)[[1L]]
 
