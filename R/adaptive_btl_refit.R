@@ -7469,10 +7469,7 @@
     step_subset$is_probe_step <- FALSE
   }
   committed_subset <- step_subset[!is.na(step_subset$pair_id), , drop = FALSE]
-  new_pairs_since_last_refit <- max(
-    0L,
-    as.integer(total_pairs_done - as.integer(refit_context$last_refit_M_done %||% 0L))
-  )
+  new_pairs_since_last_refit <- as.integer(nrow(committed_subset))
   refit_id <- as.integer(nrow(state$round_log %||% tibble::tibble()) + 1L)
   summary_cache <- .adaptive_link_refit_summary_cache(state)
   cache_spokes <- vapply(

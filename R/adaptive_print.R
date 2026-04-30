@@ -1940,6 +1940,16 @@ print.adaptive_state <- function(x, ...) {
       "theta_global_rmse_max_used",
       default = thresholds$theta_global_rmse_max %||% 0.05
     ))
+    probe_quality_blockers <- as.character(.adaptive_progress_col_value(
+      link_row,
+      "probe_quality_blocker_codes",
+      default = NA_character_
+    ))
+    stop_blockers <- as.character(.adaptive_progress_col_value(
+      link_row,
+      "stop_blocker_codes",
+      default = NA_character_
+    ))
 
     lines <- c(
       lines,
@@ -2067,6 +2077,27 @@ print.adaptive_state <- function(x, ...) {
           direction = "ge"
         )
       ),
+      paste0(
+        "    ",
+        "probe_quality=",
+        .adaptive_progress_fmt_state(
+          .adaptive_progress_col_value(link_row, "probe_quality_pass", default = NA)
+        ),
+        if (!is.na(probe_quality_blockers) &&
+          nzchar(probe_quality_blockers) &&
+          !identical(probe_quality_blockers, "none")) {
+          paste0(" blockers=", probe_quality_blockers)
+        } else {
+          ""
+        }
+      ),
+      if (!is.na(stop_blockers) &&
+        nzchar(stop_blockers) &&
+        !identical(stop_blockers, "none")) {
+        paste0("    stop_blockers=", stop_blockers)
+      } else {
+        character()
+      },
       paste0(
         "    ",
         .adaptive_progress_gate_detail(

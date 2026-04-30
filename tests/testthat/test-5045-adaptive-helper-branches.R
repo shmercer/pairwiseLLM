@@ -629,6 +629,9 @@ test_that("adaptive progress refit block prints linking stop gates without misle
     delta_spoke_sd = c(0.632, 0.626),
     probe_brier_max_used = c(0.19, 0.19),
     probe_brier_pass = c(NA, NA),
+    probe_quality_pass = c(FALSE, TRUE),
+    probe_quality_blocker_codes = c("probe_near_boundary,probe_midrange", "none"),
+    stop_blocker_codes = c("probe_quality", "none"),
     theta_global_rmse_lagged = c(0.075, 0.023),
     theta_global_rmse_max_used = c(0.05, 0.05),
     theta_global_rmse_pass = c(FALSE, TRUE),
@@ -651,6 +654,12 @@ test_that("adaptive progress refit block prints linking stop gates without misle
   expect_true(any(grepl("spoke=2 active  eligible=no  gate_open=no", block, fixed = TRUE)))
   expect_true(any(grepl("probes=0/30", block, fixed = TRUE)))
   expect_true(any(grepl("reliability_link_global=0.972/0.900 pass", block, fixed = TRUE)))
+  expect_true(any(grepl(
+    "probe_quality=fail blockers=probe_near_boundary,probe_midrange",
+    block,
+    fixed = TRUE
+  )))
+  expect_true(any(grepl("stop_blockers=probe_quality", block, fixed = TRUE)))
   expect_true(any(grepl("probe_pred_rmse_lagged=inactive/0.015 inactive", block, fixed = TRUE)))
   expect_true(any(grepl("theta_global_rmse_lagged=0.075/0.050 fail", block, fixed = TRUE)))
   expect_false(any(grepl("Decision: STOP", block, fixed = TRUE)))

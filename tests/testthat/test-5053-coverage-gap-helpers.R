@@ -2812,7 +2812,7 @@ test_that("round log row cache-backed summaries match canonical reconstruction",
   refit_context <- list(
     step_id_at_refit = 4L,
     timestamp = as.POSIXct("2026-01-01 00:04:00", tz = "UTC"),
-    last_refit_M_done = 0L,
+    last_refit_M_done = 3L,
     last_refit_step = 0L
   )
   row_cached <- suppressWarnings(
@@ -2840,6 +2840,11 @@ test_that("round log row cache-backed summaries match canonical reconstruction",
       config = uncached_state$config$btl_config
     )
   )
+
+  expect_identical(as.integer(row_cached$new_pairs_since_last_refit), 4L)
+  expect_identical(as.integer(row_cached$new_active_pairs_since_last_refit), 3L)
+  expect_identical(as.integer(row_cached$new_probe_pairs_since_last_refit), 1L)
+  expect_identical(as.integer(row_cached$new_total_cross_pairs_since_last_refit), 4L)
 
   compare_cols <- c(
     "mean_degree",
