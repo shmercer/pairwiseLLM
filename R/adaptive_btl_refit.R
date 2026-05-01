@@ -1896,7 +1896,6 @@
     "probe_edges_min_for_stop",
     "reliability_link_global",
     "probe_brier",
-    "probe_quality",
     "probe_pred_rmse_lagged",
     "theta_global_rmse_lagged",
     "hub_not_anchored"
@@ -1911,7 +1910,6 @@
       as.double(reliability_active) < as.double(link_stop_reliability_min %||% 0.90),
     probe_brier = !is.finite(as.double(probe_brier %||% NA_real_)) ||
       as.double(probe_brier) > as.double(probe_brier_max %||% 0.19),
-    probe_quality = !isTRUE(probe_quality_pass),
     probe_pred_rmse_lagged = !is.finite(as.double(probe_pred_rmse_lagged %||% NA_real_)) ||
       as.double(probe_pred_rmse_lagged) > as.double(probe_pred_rmse_max %||% 0.015),
     theta_global_rmse_lagged = !is.finite(as.double(theta_global_rmse_lagged %||% NA_real_)) ||
@@ -5707,7 +5705,6 @@
       isTRUE(hub_anchored) &&
       isTRUE(reliability_stop_pass) &&
       isTRUE(probe_brier_pass) &&
-      isTRUE(probe_quality$probe_quality_pass) &&
       isTRUE(probe_pred_rmse_pass) &&
       isTRUE(theta_global_rmse_pass)
     stop_window <- .adaptive_link_result_window_normalize(
@@ -6632,6 +6629,9 @@
       ,
       drop = FALSE
     ]) > 0L
+    if (identical(link_estimation_mode, "anchored_joint")) {
+      probe_pred_cache_used <- FALSE
+    }
 
     anchored_phase_a_hub_edges <- NA_integer_
     anchored_phase_a_spoke_edges <- NA_integer_

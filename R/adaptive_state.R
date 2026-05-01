@@ -92,6 +92,7 @@
     spoke_id = integer(),
     link_epoch_id = integer(),
     probe_panel_id = character(),
+    pair_key = character(),
     hub_item_id = character(),
     spoke_item_id = character(),
     pred_prob = double()

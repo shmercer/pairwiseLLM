@@ -1971,7 +1971,6 @@ test_that("link_stage_log rows expose feasibility and blocker explanations canon
           "probe_edges_min_for_stop",
           "reliability_link_global",
           "probe_brier",
-          "probe_quality",
           "probe_pred_rmse_lagged",
           "theta_global_rmse_lagged",
           "hub_not_anchored"
@@ -2043,7 +2042,6 @@ test_that("link_stage_log rows expose feasibility and blocker explanations canon
       "probe_edges_min_for_stop",
       "reliability_link_global",
       "probe_brier",
-      "probe_quality",
       "probe_pred_rmse_lagged",
       "theta_global_rmse_lagged",
       "hub_not_anchored"
@@ -4280,14 +4278,14 @@ test_that("anchored-joint deterministic diagnostics open stop gates and freeze t
   expect_true(isTRUE(stats$link_stop_eligible))
   expect_true(isTRUE(stats$link_stop_pass))
 
-  out <- pairwiseLLM:::.adaptive_link_apply_stop_state(
+  stage_rows <- pairwiseLLM:::.adaptive_link_stage_refit_rows(
     out,
-    pairwiseLLM:::.adaptive_link_stage_refit_rows(
-      out,
-      refit_id = 3L,
-      refit_context = list(last_refit_step = 3L)
-    )
+    refit_id = 3L,
+    refit_context = list(last_refit_step = 3L)
   )
+  expect_false(isTRUE(stage_rows$probe_pred_cache_used[[1L]]))
+
+  out <- pairwiseLLM:::.adaptive_link_apply_stop_state(out, stage_rows)
 
   expect_true(isTRUE(out$controller$link_state_frozen_by_spoke[["2"]]))
   expect_identical(out$controller$link_state_frozen_refit_id_by_spoke[["2"]], 3L)

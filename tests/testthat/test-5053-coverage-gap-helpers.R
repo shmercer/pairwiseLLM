@@ -479,6 +479,52 @@ test_that("probe helpers cover selection, commit registration, caching, and stop
   next_pair <- pairwiseLLM:::.adaptive_link_probe_next_pair(state, 2L, epoch_id = 3L)
   expect_identical(next_pair$hub_item_id[[1L]], "h1")
 
+  quality_state <- state
+  quality_state$linking$probe$panels_by_spoke[["2"]] <- tibble::tibble(
+    probe_panel_id = rep("quality-panel", 4L),
+    link_epoch_id = rep(3L, 4L),
+    spoke_id = rep(2L, 4L),
+    hub_item_id = c("h1", "h2", "h3", "h1"),
+    spoke_item_id = c("s21", "s21", "s22", "s22"),
+    spoke_bin = c(1L, 1L, 2L, 2L),
+    hub_bin = c(1L, 1L, 2L, 2L),
+    probe_edges_planned = rep(4L, 4L),
+    probe_panel_reallocation_used = rep(FALSE, 4L),
+    planned_rank = seq_len(4L),
+    pair_key = make_unordered_key(
+      c("h1", "h2", "h3", "h1"),
+      c("s21", "s21", "s22", "s22")
+    ),
+    realized = c(TRUE, FALSE, FALSE, FALSE),
+    realized_step_id = c(1L, NA, NA, NA),
+    realized_pair_id = c(1L, NA, NA, NA),
+    realized_run_mode = c("link_probe_holdout", NA, NA, NA)
+  )
+  quality_state$linking$probe$realized_edges <- pairwiseLLM:::.adaptive_link_probe_empty_realized_log()
+  utility_first_state <- quality_state
+  utility_first_state$linking$probe$panels_by_spoke[["2"]]$realized[] <- FALSE
+  utility_first_pair <- testthat::with_mocked_bindings(
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      candidates$link_u <- c(0.01, 0.25, 0.05, 0.20)
+      candidates
+    },
+    .package = "pairwiseLLM",
+    pairwiseLLM:::.adaptive_link_probe_next_pair(utility_first_state, 2L, epoch_id = 3L)
+  )
+  expect_identical(utility_first_pair$hub_item_id[[1L]], "h2")
+  expect_identical(utility_first_pair$spoke_item_id[[1L]], "s21")
+
+  utility_pair <- testthat::with_mocked_bindings(
+    .adaptive_link_attach_predictive_utility = function(candidates, ...) {
+      candidates$link_u <- c(0.25, 0.05, 0.20)
+      candidates
+    },
+    .package = "pairwiseLLM",
+    pairwiseLLM:::.adaptive_link_probe_next_pair(quality_state, 2L, epoch_id = 3L)
+  )
+  expect_identical(utility_pair$hub_item_id[[1L]], "h1")
+  expect_identical(utility_pair$spoke_item_id[[1L]], "s22")
+
   holdout <- pairwiseLLM:::.adaptive_link_probe_select_holdout(state, step_id = 11L, spoke_id = 2L)
   expect_identical(holdout$run_mode, "link_probe_holdout")
   expect_identical(holdout$link_epoch_id_selected, 3L)
@@ -501,6 +547,8 @@ test_that("probe helpers cover selection, commit registration, caching, and stop
 
   cached <- pairwiseLLM:::.adaptive_link_probe_cache_predictions(committed, refit_id = 2L, spoke_id = 2L)
   expect_true(nrow(cached$linking$probe$prediction_cache) >= 1L)
+  expect_true("pair_key" %in% names(cached$linking$probe$prediction_cache))
+  expect_false(any(is.na(cached$linking$probe$prediction_cache$pair_key)))
 
   boot <- pairwiseLLM:::.adaptive_stop_boundary_bootstrap(
     utils::modifyList(
@@ -2242,6 +2290,69 @@ test_that("probe panel construction keeps the scaled target auditable when feasi
   expect_identical(pairwiseLLM:::.adaptive_link_probe_planned_edges(panel), 160L)
   expect_identical(unique(as.integer(panel$probe_edges_planned)), 160L)
   expect_identical(nrow(panel), 4L)
+})
+
+test_that("probe panel planned ranks interleave bins for early fixed-cap realization", {
+  hub_n <- 10L
+  spoke_n <- 100L
+  items <- tibble::tibble(
+    item_id = c(paste0("h", seq_len(hub_n)), paste0("s", seq_len(spoke_n))),
+    set_id = c(rep(1L, hub_n), rep(2L, spoke_n)),
+    global_item_id = c(paste0("gh", seq_len(hub_n)), paste0("gs", seq_len(spoke_n)))
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 101L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      link_estimation_mode = "transform",
+      hub_lock_mode = "soft_lock",
+      hub_anchor_required_phase_b = FALSE,
+      probe_panel_edges = 100L,
+      probe_rank_bins = 10L
+    )
+  )
+  make_artifact <- function(set_id, prefix, n) {
+    list(
+      set_id = as.integer(set_id),
+      diagnostics = list(diagnostics_pass = TRUE, reliability_EAP_within = 0.95),
+      n_pairs_committed = 4L,
+      quality_gate_accepted = TRUE,
+      items = tibble::tibble(
+        global_item_id = paste0(prefix, seq_len(n)),
+        theta_raw_mean = seq(1, -1, length.out = n),
+        theta_raw_sd = rep(0.15, n),
+        rank_mu_raw = seq_len(n)
+      )
+    )
+  }
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "ready"),
+      validation_message = c("ok", "ok"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(
+      `1` = make_artifact(1L, "gh", hub_n),
+      `2` = make_artifact(2L, "gs", spoke_n)
+    ),
+    ready_for_phase_b = TRUE,
+    phase = "phase_b"
+  )
+
+  panel <- pairwiseLLM:::.adaptive_link_probe_construct_panel(
+    state,
+    state$controller,
+    spoke_id = 2L
+  )
+  first_min <- panel[seq_len(80L), , drop = FALSE]
+
+  expect_identical(nrow(panel), 100L)
+  expect_setequal(unique(as.integer(first_min$spoke_bin)), seq_len(10L))
+  expect_setequal(unique(as.integer(first_min$hub_bin)), seq_len(8L))
 })
 
 test_that("large probe cell sampler avoids full-grid construction and respects exclusions", {

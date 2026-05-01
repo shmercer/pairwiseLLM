@@ -1391,6 +1391,16 @@
   probe$prediction_cache <- tibble::as_tibble(
     probe$prediction_cache %||% .adaptive_link_probe_empty_cache()
   )
+  if (!"pair_key" %in% names(probe$prediction_cache)) {
+    if (all(c("hub_item_id", "spoke_item_id") %in% names(probe$prediction_cache))) {
+      probe$prediction_cache$pair_key <- make_unordered_key(
+        probe$prediction_cache$hub_item_id,
+        probe$prediction_cache$spoke_item_id
+      )
+    } else {
+      probe$prediction_cache$pair_key <- character(nrow(probe$prediction_cache))
+    }
+  }
   probe$realized_edges <- tibble::as_tibble(
     probe$realized_edges %||% .adaptive_link_probe_empty_realized_log()
   )
@@ -2696,8 +2706,45 @@
   if (nrow(pending) < 1L) {
     return(NULL)
   }
+  scored <- tryCatch(
+    .adaptive_link_attach_predictive_utility(
+      candidates = tibble::tibble(
+        i = as.character(pending$hub_item_id),
+        j = as.character(pending$spoke_item_id)
+      ),
+      state = state,
+      controller = .adaptive_controller_resolve(state),
+      spoke_id = as.integer(spoke_id)
+    ),
+    error = function(e) NULL
+  )
+  link_u <- if (!is.null(scored) && "link_u" %in% names(scored)) {
+    as.double(scored$link_u)
+  } else {
+    rep(NA_real_, nrow(pending))
+  }
+  if (length(link_u) != nrow(pending)) {
+    link_u <- rep(NA_real_, nrow(pending))
+  }
+  realized <- panel[panel$realized %in% TRUE, , drop = FALSE]
+  bin_levels_spoke <- sort(unique(as.integer(panel$spoke_bin[!is.na(panel$spoke_bin)])))
+  bin_levels_hub <- sort(unique(as.integer(panel$hub_bin[!is.na(panel$hub_bin)])))
+  spoke_counts <- table(factor(as.integer(realized$spoke_bin), levels = bin_levels_spoke))
+  hub_counts <- table(factor(as.integer(realized$hub_bin), levels = bin_levels_hub))
+  pending_spoke_counts <- as.integer(spoke_counts[as.character(as.integer(pending$spoke_bin))])
+  pending_hub_counts <- as.integer(hub_counts[as.character(as.integer(pending$hub_bin))])
+  pending_spoke_counts[is.na(pending_spoke_counts)] <- 0L
+  pending_hub_counts[is.na(pending_hub_counts)] <- 0L
+  coverage_count <- pmax(pending_spoke_counts, pending_hub_counts)
+  utility_order <- ifelse(is.finite(link_u), -link_u, Inf)
   pending <- pending[
-    order(as.integer(pending$planned_rank), pending$hub_item_id, pending$spoke_item_id),
+    order(
+      coverage_count,
+      utility_order,
+      as.integer(pending$planned_rank),
+      pending$hub_item_id,
+      pending$spoke_item_id
+    ),
     ,
     drop = FALSE
   ]
@@ -2944,6 +2991,7 @@
     spoke_id = as.integer(spoke_id),
     link_epoch_id = as.integer(panel$link_epoch_id %||% 1L),
     probe_panel_id = as.character(panel$probe_panel_id %||% NA_character_),
+    pair_key = make_unordered_key(panel$hub_item_id, panel$spoke_item_id),
     hub_item_id = as.character(panel$hub_item_id),
     spoke_item_id = as.character(panel$spoke_item_id),
     pred_prob = as.double(scored$link_p)

@@ -1111,6 +1111,23 @@
   panel$probe_edges_planned <- as.integer(target_edges)
   panel$probe_panel_reallocation_used <- isTRUE(cell_shortfall_detected) &&
     as.integer(fallback_reallocation_count) > 0L
+  panel$planned_rank <- ave(
+    seq_len(nrow(panel)),
+    as.integer(panel$spoke_bin),
+    as.integer(panel$hub_bin),
+    FUN = seq_along
+  )
+  panel <- panel[
+    order(
+      as.integer(panel$planned_rank),
+      as.integer(panel$hub_bin),
+      as.integer(panel$spoke_bin),
+      panel$hub_item_id,
+      panel$spoke_item_id
+    ),
+    ,
+    drop = FALSE
+  ]
   panel$planned_rank <- as.integer(seq_len(nrow(panel)))
   panel$realized <- FALSE
   panel$realized_step_id <- NA_integer_
