@@ -2726,22 +2726,31 @@
   if (length(link_u) != nrow(pending)) {
     link_u <- rep(NA_real_, nrow(pending))
   }
-  realized <- panel[panel$realized %in% TRUE, , drop = FALSE]
-  bin_levels_spoke <- sort(unique(as.integer(panel$spoke_bin[!is.na(panel$spoke_bin)])))
-  bin_levels_hub <- sort(unique(as.integer(panel$hub_bin[!is.na(panel$hub_bin)])))
-  spoke_counts <- table(factor(as.integer(realized$spoke_bin), levels = bin_levels_spoke))
-  hub_counts <- table(factor(as.integer(realized$hub_bin), levels = bin_levels_hub))
-  pending_spoke_counts <- as.integer(spoke_counts[as.character(as.integer(pending$spoke_bin))])
-  pending_hub_counts <- as.integer(hub_counts[as.character(as.integer(pending$hub_bin))])
-  pending_spoke_counts[is.na(pending_spoke_counts)] <- 0L
-  pending_hub_counts[is.na(pending_hub_counts)] <- 0L
-  coverage_count <- pmax(pending_spoke_counts, pending_hub_counts)
+  coverage_count <- rep(0L, nrow(pending))
+  if (all(c("spoke_bin", "hub_bin") %in% names(panel)) &&
+    all(c("spoke_bin", "hub_bin") %in% names(pending))) {
+    realized <- panel[panel$realized %in% TRUE, , drop = FALSE]
+    bin_levels_spoke <- sort(unique(as.integer(panel$spoke_bin[!is.na(panel$spoke_bin)])))
+    bin_levels_hub <- sort(unique(as.integer(panel$hub_bin[!is.na(panel$hub_bin)])))
+    spoke_counts <- table(factor(as.integer(realized$spoke_bin), levels = bin_levels_spoke))
+    hub_counts <- table(factor(as.integer(realized$hub_bin), levels = bin_levels_hub))
+    pending_spoke_counts <- as.integer(spoke_counts[as.character(as.integer(pending$spoke_bin))])
+    pending_hub_counts <- as.integer(hub_counts[as.character(as.integer(pending$hub_bin))])
+    pending_spoke_counts[is.na(pending_spoke_counts)] <- 0L
+    pending_hub_counts[is.na(pending_hub_counts)] <- 0L
+    coverage_count <- pmax(pending_spoke_counts, pending_hub_counts)
+  }
   utility_order <- ifelse(is.finite(link_u), -link_u, Inf)
+  planned_rank <- if ("planned_rank" %in% names(pending)) {
+    as.integer(pending$planned_rank)
+  } else {
+    seq_len(nrow(pending))
+  }
   pending <- pending[
     order(
       coverage_count,
       utility_order,
-      as.integer(pending$planned_rank),
+      planned_rank,
       pending$hub_item_id,
       pending$spoke_item_id
     ),

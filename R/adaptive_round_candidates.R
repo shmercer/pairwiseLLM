@@ -1111,7 +1111,7 @@
   panel$probe_edges_planned <- as.integer(target_edges)
   panel$probe_panel_reallocation_used <- isTRUE(cell_shortfall_detected) &&
     as.integer(fallback_reallocation_count) > 0L
-  panel$planned_rank <- ave(
+  panel$planned_rank <- stats::ave(
     seq_len(nrow(panel)),
     as.integer(panel$spoke_bin),
     as.integer(panel$hub_bin),
