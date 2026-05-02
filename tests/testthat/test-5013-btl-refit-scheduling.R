@@ -67,6 +67,35 @@ test_that("linking phase A refit target uses active set size", {
   expect_identical(target, 25L)
 })
 
+test_that("linking phase B default refit target uses the Phase B window floor", {
+  set_ids <- c(rep(1L, 20L), rep(2L, 1000L), rep(3L, 1200L))
+  items <- tibble::tibble(
+    item_id = paste0("item", seq_along(set_ids)),
+    set_id = set_ids,
+    global_item_id = paste0("g", seq_along(set_ids))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 7L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$linking$phase_a$phase <- "phase_b"
+  state$linking$phase_a$ready_spokes <- c(2L, 3L)
+  state$linking$phase_a$ready_for_phase_b <- TRUE
+  state$linking$phase_a$strict_ready_for_phase_b <- TRUE
+  state$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L, 3L),
+    source = rep("import", 3L),
+    status = rep("ready", 3L),
+    validation_message = rep("ready", 3L),
+    artifact_path = rep(NA_character_, 3L)
+  )
+
+  expect_identical(pairwiseLLM:::.adaptive_refit_pairs_target(state, list()), 96L)
+  expect_identical(pairwiseLLM:::.adaptive_refit_pairs_target(state, list(refit_pairs_target = 20L)), 96L)
+  expect_identical(pairwiseLLM:::.adaptive_refit_pairs_target(state, list(refit_pairs_target = 120L)), 120L)
+})
+
 test_that("linking phase A refit cadence is tracked per active set", {
   items <- tibble::tibble(
     item_id = as.character(1:8),

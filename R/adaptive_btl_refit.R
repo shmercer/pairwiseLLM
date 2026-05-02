@@ -143,17 +143,24 @@
     5000L,
     as.integer(ceiling(effective_n / 2))
   )
-  refit_pairs_target <- config$refit_pairs_target %||% item_scaled_target
   if (.adaptive_link_mode_active(controller) &&
     identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")) {
-    refit_pairs_target <- max(
-      as.integer(refit_pairs_target),
-      .adaptive_phase_b_refit_pairs_target_floor(
-        state = state,
-        controller = controller,
-        phase_ctx = phase_ctx
-      )
+    phase_b_floor <- .adaptive_phase_b_refit_pairs_target_floor(
+      state = state,
+      controller = controller,
+      phase_ctx = phase_ctx
     )
+    configured_target <- config$refit_pairs_target
+    has_configured_target <- !is.null(configured_target) &&
+      length(configured_target) == 1L &&
+      !is.na(configured_target)
+    refit_pairs_target <- if (isTRUE(has_configured_target)) {
+      max(as.integer(configured_target), phase_b_floor)
+    } else {
+      phase_b_floor
+    }
+  } else {
+    refit_pairs_target <- config$refit_pairs_target %||% item_scaled_target
   }
   as.integer(refit_pairs_target)
 }

@@ -612,7 +612,7 @@ test_that("linking probe defaults scale with spoke set size", {
   validated <- state$controller
 
   expect_identical(validated$probe_acceleration_mode, "fixed_per_refit")
-  expect_identical(validated$probe_edges_min_for_stop, 90L)
+  expect_identical(validated$probe_edges_min_for_stop, 128L)
   expect_identical(validated$probe_panel_edges, 160L)
   expect_identical(validated$probe_pairs_per_refit_per_spoke, 5L)
 

@@ -654,11 +654,7 @@ test_that("adaptive progress refit block prints linking stop gates without misle
   expect_true(any(grepl("spoke=2 active  eligible=no  gate_open=no", block, fixed = TRUE)))
   expect_true(any(grepl("probes=0/30", block, fixed = TRUE)))
   expect_true(any(grepl("reliability_link_global=0.972/0.900 pass", block, fixed = TRUE)))
-  expect_true(any(grepl(
-    "probe_quality=fail blockers=probe_near_boundary,probe_midrange",
-    block,
-    fixed = TRUE
-  )))
+  expect_false(any(grepl("probe_quality=", block, fixed = TRUE)))
   expect_false(any(grepl("stop_blockers=probe_quality", block, fixed = TRUE)))
   expect_true(any(grepl("probe_pred_rmse_lagged=inactive/0.015 inactive", block, fixed = TRUE)))
   expect_true(any(grepl("theta_global_rmse_lagged=0.075/0.050 fail", block, fixed = TRUE)))

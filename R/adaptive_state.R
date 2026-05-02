@@ -557,8 +557,8 @@
     probe_panel_edges_frac = 0.12,
     probe_edges_min_for_stop = NA_integer_,
     probe_edges_min_for_stop_rule = "scaled",
-    probe_edges_min_for_stop_min = 80L,
-    probe_edges_min_for_stop_frac = 0.075,
+    probe_edges_min_for_stop_min = 120L,
+    probe_edges_min_for_stop_frac = 0.106,
     link_refit_pairs_per_spoke_rule = "scaled",
     link_refit_pairs_per_spoke_min = 40L,
     link_refit_pairs_per_spoke_frac = 0.035,
@@ -845,8 +845,8 @@
     identical(as.character(controller$probe_edges_min_for_stop_rule %||% "scaled"), "scaled")) {
     controller$probe_edges_min_for_stop <- .adaptive_scaled_count(
       max_spoke_n,
-      min_value = controller$probe_edges_min_for_stop_min %||% 80L,
-      frac = controller$probe_edges_min_for_stop_frac %||% 0.075,
+      min_value = controller$probe_edges_min_for_stop_min %||% 120L,
+      frac = controller$probe_edges_min_for_stop_frac %||% 0.106,
       lower = 1L
     )
   }

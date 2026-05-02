@@ -1064,7 +1064,7 @@ make_adaptive_judge_llm <- function(
 #'   \item{`probe_edges_min_for_stop`}{Minimum realized held-out probe edges
 #'     required before Phase B stop or escalation can be evaluated. If omitted
 #'     in linking modes, the default scales with the largest spoke:
-#'     `max(80L, ceiling(0.075 * max_spoke_items))`.}
+#'     `max(120L, ceiling(0.106 * max_spoke_items))`.}
 #'   \item{`probe_near_boundary_min_frac`, `probe_extreme_max_frac`,
 #'     `probe_midrange_min_frac`, `probe_unique_hub_min_frac`,
 #'     `probe_unique_spoke_min_frac`, `probe_rank_bins`,

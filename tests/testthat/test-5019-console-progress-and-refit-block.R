@@ -116,7 +116,7 @@ test_that("adaptive_rank_run_live prints linking-specific refit summary lines", 
   expect_true(any(grepl("^  spoke=[0-9]+ active$", combined)))
   expect_true(any(grepl("^    stop_eligible=", combined)))
   expect_true(any(grepl("reliability_link_global=", combined, fixed = TRUE)))
-  expect_true(any(grepl("probe_quality=", combined, fixed = TRUE)))
+  expect_false(any(grepl("probe_quality=", combined, fixed = TRUE)))
   expect_true(any(grepl("probe_pred_rmse_lagged=", combined, fixed = TRUE)))
   expect_true(any(grepl("theta_global_rmse_lagged=", combined, fixed = TRUE)))
   expect_false(any(grepl("authoritative_link_fit_method=", combined, fixed = TRUE)))
