@@ -55,7 +55,7 @@ parsed results CSVs.  A temporary directory is created by default.}
 
 \item{write_registry}{Logical; if \code{TRUE}, a CSV registry of batch jobs
 is written to \code{file.path(output_dir, "jobs_registry.csv")}.  The registry
-can be reloaded with \code{\link[readr:read_delim]{readr::read_csv()}} and passed to
+can be reloaded with \code{\link[readr:read_csv]{readr::read_csv()}} and passed to
 \code{\link[=llm_resume_multi_batches]{llm_resume_multi_batches()}} for polling and resumption.  If \code{FALSE},
 the registry is returned in memory only.}
 

@@ -90,10 +90,10 @@ adaptive_round_log(state)
 \seealso{
 \code{\link[=adaptive_get_logs]{adaptive_get_logs()}}, \code{\link[=summarize_refits]{summarize_refits()}}, \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}
 
-Other adaptive logs: 
-\code{\link{adaptive_get_logs}()},
-\code{\link{adaptive_item_log}()},
-\code{\link{adaptive_results_history}()},
-\code{\link{adaptive_step_log}()}
+Other adaptive logs:
+\code{\link[=adaptive_get_logs]{adaptive_get_logs()}},
+\code{\link[=adaptive_item_log]{adaptive_item_log()}},
+\code{\link[=adaptive_results_history]{adaptive_results_history()}},
+\code{\link[=adaptive_step_log]{adaptive_step_log()}}
 }
 \concept{adaptive logs}

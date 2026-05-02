@@ -34,8 +34,8 @@ validate_session_dir(dir)
 \seealso{
 \code{\link[=save_adaptive_session]{save_adaptive_session()}}, \code{\link[=load_adaptive_session]{load_adaptive_session()}}
 
-Other adaptive persistence: 
-\code{\link{load_adaptive_session}()},
-\code{\link{save_adaptive_session}()}
+Other adaptive persistence:
+\code{\link[=load_adaptive_session]{load_adaptive_session()}},
+\code{\link[=save_adaptive_session]{save_adaptive_session()}}
 }
 \concept{adaptive persistence}

@@ -97,11 +97,11 @@ summarize_adaptive(state)
 \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
 \code{\link[=adaptive_step_log]{adaptive_step_log()}}, \code{\link[=adaptive_round_log]{adaptive_round_log()}}, \code{\link[=adaptive_item_log]{adaptive_item_log()}}
 
-Other adaptive ranking: 
-\code{\link{adaptive_rank}()},
-\code{\link{adaptive_rank_resume}()},
-\code{\link{adaptive_rank_run_live}()},
-\code{\link{make_adaptive_judge_llm}()},
-\code{\link{summarize_adaptive}()}
+Other adaptive ranking:
+\code{\link[=adaptive_rank]{adaptive_rank()}},
+\code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
+\code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
+\code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}},
+\code{\link[=summarize_adaptive]{summarize_adaptive()}}
 }
 \concept{adaptive ranking}

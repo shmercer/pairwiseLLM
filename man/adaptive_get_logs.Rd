@@ -37,10 +37,10 @@ names(logs)
 \seealso{
 \code{\link[=adaptive_step_log]{adaptive_step_log()}}, \code{\link[=adaptive_round_log]{adaptive_round_log()}}, \code{\link[=adaptive_item_log]{adaptive_item_log()}}
 
-Other adaptive logs: 
-\code{\link{adaptive_item_log}()},
-\code{\link{adaptive_results_history}()},
-\code{\link{adaptive_round_log}()},
-\code{\link{adaptive_step_log}()}
+Other adaptive logs:
+\code{\link[=adaptive_item_log]{adaptive_item_log()}},
+\code{\link[=adaptive_results_history]{adaptive_results_history()}},
+\code{\link[=adaptive_round_log]{adaptive_round_log()}},
+\code{\link[=adaptive_step_log]{adaptive_step_log()}}
 }
 \concept{adaptive logs}

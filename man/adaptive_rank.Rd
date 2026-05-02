@@ -666,11 +666,11 @@ names(link_out$logs)
 \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}, \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
 \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}}, \code{\link[=llm_compare_pair]{llm_compare_pair()}}
 
-Other adaptive ranking: 
-\code{\link{adaptive_rank_resume}()},
-\code{\link{adaptive_rank_run_live}()},
-\code{\link{adaptive_rank_start}()},
-\code{\link{make_adaptive_judge_llm}()},
-\code{\link{summarize_adaptive}()}
+Other adaptive ranking:
+\code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
+\code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
+\code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
+\code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}},
+\code{\link[=summarize_adaptive]{summarize_adaptive()}}
 }
 \concept{adaptive ranking}

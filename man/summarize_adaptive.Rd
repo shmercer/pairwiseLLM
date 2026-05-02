@@ -30,11 +30,11 @@ summarize_adaptive(state)
 \seealso{
 \code{\link[=adaptive_get_logs]{adaptive_get_logs()}}, \code{\link[base:print]{base::print()}}
 
-Other adaptive ranking: 
-\code{\link{adaptive_rank}()},
-\code{\link{adaptive_rank_resume}()},
-\code{\link{adaptive_rank_run_live}()},
-\code{\link{adaptive_rank_start}()},
-\code{\link{make_adaptive_judge_llm}()}
+Other adaptive ranking:
+\code{\link[=adaptive_rank]{adaptive_rank()}},
+\code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
+\code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
+\code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
+\code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}
 }
 \concept{adaptive ranking}

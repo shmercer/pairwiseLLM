@@ -31,7 +31,7 @@ after sorting.}
 
 \item{sort_by}{Column used for sorting. When \code{NULL}, the first available
 column in \code{c("rank_link", "rank_raw", "rank_mean", "theta_link_eap",
-  "theta_raw_eap", "theta_mean", "theta_sd", "degree", "pos_A_rate")} is used.}
+"theta_raw_eap", "theta_mean", "theta_sd", "degree", "pos_A_rate")} is used.}
 
 \item{include_optional}{Logical; include optional diagnostic columns.}
 }

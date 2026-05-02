@@ -34,8 +34,8 @@ summarize_adaptive(restored)
 \seealso{
 \code{\link[=save_adaptive_session]{save_adaptive_session()}}, \code{\link[=validate_session_dir]{validate_session_dir()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}}
 
-Other adaptive persistence: 
-\code{\link{save_adaptive_session}()},
-\code{\link{validate_session_dir}()}
+Other adaptive persistence:
+\code{\link[=save_adaptive_session]{save_adaptive_session()}},
+\code{\link[=validate_session_dir]{validate_session_dir()}}
 }
 \concept{adaptive persistence}
