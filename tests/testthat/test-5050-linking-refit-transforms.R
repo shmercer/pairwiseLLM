@@ -2033,7 +2033,7 @@ test_that("link_stage_log rows expose feasibility and blocker explanations canon
   expect_false(isTRUE(row$probe_acceleration_used[[1L]]))
   expect_identical(as.integer(row$probe_effort_base_cap[[1L]]), 4L)
   expect_identical(as.integer(row$probe_effort_effective_cap[[1L]]), 4L)
-  expect_identical(as.integer(row$probe_remaining_to_min_start[[1L]]), 65L)
+  expect_identical(as.integer(row$probe_remaining_to_min_start[[1L]]), 105L)
   expect_identical(as.character(row$stop_blocker_codes[[1L]]), paste(
     c(
       "diagnostics_failed",

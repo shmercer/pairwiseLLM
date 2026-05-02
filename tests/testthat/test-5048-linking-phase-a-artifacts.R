@@ -864,7 +864,11 @@ test_that("phase_specific Phase B startup falls back deterministically without l
   row <- out$step_log[1L, , drop = FALSE]
   expect_true(isTRUE(row$is_cross_set[[1L]]))
   expect_true(is.finite(row$posterior_win_prob_pre[[1L]]))
-  expect_true(is.finite(row$cross_set_utility_pre[[1L]]))
+  if (isTRUE(row$is_probe_step[[1L]])) {
+    expect_true(is.na(row$cross_set_utility_pre[[1L]]))
+  } else {
+    expect_true(is.finite(row$cross_set_utility_pre[[1L]]))
+  }
   expect_true(is.character(row$link_stage))
   expect_identical(as.character(row$link_stage[[1L]]), as.character(row$round_stage[[1L]]))
   expect_true(is.integer(out$step_log$link_spoke_id))

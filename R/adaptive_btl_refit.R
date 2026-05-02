@@ -30,6 +30,22 @@
   )
 }
 
+.adaptive_safe_cor <- function(x, y, method = "pearson") {
+  x <- as.double(x)
+  y <- as.double(y)
+  keep <- is.finite(x) & is.finite(y)
+  x <- x[keep]
+  y <- y[keep]
+  if (length(x) < 2L || length(y) < 2L) {
+    return(NA_real_)
+  }
+  if (!is.finite(stats::sd(x)) || !is.finite(stats::sd(y)) ||
+    stats::sd(x) <= 0 || stats::sd(y) <= 0) {
+    return(NA_real_)
+  }
+  as.double(stats::cor(x, y, method = method, use = "pairwise.complete.obs"))
+}
+
 .adaptive_btl_resolve_config <- function(state, config) {
   defaults <- .adaptive_btl_defaults(state$n_items)
   if (is.null(config)) {
@@ -7620,13 +7636,10 @@
       ts_mu <- as.double(trueskill_state$items$mu[match(theta_ids, ts_ids)])
       theta_vals <- as.double(theta_map[theta_ids])
       if (all(is.finite(ts_mu)) && all(is.finite(theta_vals))) {
-        ts_btl_theta_corr <- stats::cor(ts_mu, theta_vals, use = "pairwise.complete.obs")
+        ts_btl_theta_corr <- .adaptive_safe_cor(ts_mu, theta_vals)
         rank_theta <- rank(theta_vals, ties.method = "average")
         rank_mu <- rank(ts_mu, ties.method = "average")
-        ts_btl_rank_spearman <- stats::cor(rank_mu, rank_theta,
-          method = "spearman",
-          use = "pairwise.complete.obs"
-        )
+        ts_btl_rank_spearman <- .adaptive_safe_cor(rank_mu, rank_theta, method = "spearman")
       }
     }
   }
