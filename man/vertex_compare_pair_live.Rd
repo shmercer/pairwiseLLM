@@ -75,8 +75,8 @@ not supply it together with \code{thinking_level} on Gemini 3 models.}
 
 \item{service_tier}{Vertex AI service tier. Use \code{"standard"} (default) or
 \code{NULL} for provider default behavior. Use \code{"flex"} to request the
-documented \code{shared} request-type header or \code{"priority"} to request the
-documented \code{dedicated} request-type header.}
+documented shared flex headers or \code{"priority"} to request the documented
+\code{dedicated} request-type header.}
 
 \item{api_version}{API version to use, default \code{"v1"}.}
 

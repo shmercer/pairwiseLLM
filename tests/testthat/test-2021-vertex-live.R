@@ -11,6 +11,17 @@ testthat::test_that("normalize_vertex_service_tier validates and maps public tie
   testthat::expect_null(normalize_vertex_service_tier("standard"))
   testthat::expect_equal(normalize_vertex_service_tier("flex"), "shared")
   testthat::expect_equal(normalize_vertex_service_tier("priority"), "dedicated")
+  testthat::expect_equal(
+    pairwiseLLM:::.vertex_service_tier_headers("flex"),
+    list(
+      "X-Vertex-AI-LLM-Request-Type" = "shared",
+      "X-Vertex-AI-LLM-Shared-Request-Type" = "flex"
+    )
+  )
+  testthat::expect_equal(
+    pairwiseLLM:::.vertex_service_tier_headers("priority"),
+    list("X-Vertex-AI-LLM-Request-Type" = "dedicated")
+  )
 
   testthat::expect_error(
     normalize_vertex_service_tier(1),
@@ -96,6 +107,10 @@ testthat::test_that(".vertex_request builds the Vertex express-mode URL and head
     req_data$headers[["X-Vertex-AI-LLM-Request-Type"]],
     "shared"
   )
+  testthat::expect_equal(
+    req_data$headers[["X-Vertex-AI-LLM-Shared-Request-Type"]],
+    "flex"
+  )
 
   req_standard <- pairwiseLLM:::.vertex_request(
     path = "/v1/publishers/google/models/gemini-2.5-flash:generateContent",
@@ -103,6 +118,9 @@ testthat::test_that(".vertex_request builds the Vertex express-mode URL and head
     service_tier = "standard"
   )
   testthat::expect_null(unclass(req_standard)$headers[["X-Vertex-AI-LLM-Request-Type"]])
+  testthat::expect_null(
+    unclass(req_standard)$headers[["X-Vertex-AI-LLM-Shared-Request-Type"]]
+  )
 })
 
 testthat::test_that("vertex_compare_pair_live parses a successful response", {

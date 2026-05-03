@@ -34,6 +34,20 @@ normalize_vertex_service_tier <- function(service_tier) {
 }
 
 #' @keywords internal
+.vertex_service_tier_headers <- function(service_tier) {
+  request_type <- normalize_vertex_service_tier(service_tier)
+  if (is.null(request_type)) {
+    return(list())
+  }
+
+  headers <- list("X-Vertex-AI-LLM-Request-Type" = request_type)
+  if (identical(request_type, "shared") && identical(service_tier, "flex")) {
+    headers[["X-Vertex-AI-LLM-Shared-Request-Type"]] <- "flex"
+  }
+  headers
+}
+
+#' @keywords internal
 .vertex_base_url <- function() {
   "https://aiplatform.googleapis.com"
 }
@@ -69,15 +83,15 @@ normalize_vertex_service_tier <- function(service_tier) {
 #' @keywords internal
 .vertex_request <- function(path, api_key = NULL, service_tier = "standard") {
   api_key <- .vertex_api_key(api_key)
-  request_type <- normalize_vertex_service_tier(service_tier)
+  tier_headers <- .vertex_service_tier_headers(service_tier)
 
   req <- httr2::request(.vertex_base_url())
   req <- httr2::req_url_path_append(req, sub("^/", "", path))
   req <- httr2::req_url_query(req, key = api_key)
   req <- httr2::req_headers(req, "Content-Type" = "application/json")
 
-  if (!is.null(request_type)) {
-    req <- httr2::req_headers(req, "X-Vertex-AI-LLM-Request-Type" = request_type)
+  if (length(tier_headers) > 0L) {
+    req <- do.call(httr2::req_headers, c(list(req), tier_headers))
   }
 
   req
@@ -145,8 +159,8 @@ normalize_vertex_service_tier <- function(service_tier) {
 #'   not supply it together with `thinking_level` on Gemini 3 models.
 #' @param service_tier Vertex AI service tier. Use `"standard"` (default) or
 #'   `NULL` for provider default behavior. Use `"flex"` to request the
-#'   documented `shared` request-type header or `"priority"` to request the
-#'   documented `dedicated` request-type header.
+#'   documented shared flex headers or `"priority"` to request the documented
+#'   `dedicated` request-type header.
 #' @param api_version API version to use, default `"v1"`.
 #' @param include_raw Logical; if `TRUE`, the returned tibble includes a
 #'   `raw_response` list-column with the parsed JSON body.
