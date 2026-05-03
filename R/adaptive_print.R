@@ -1325,6 +1325,46 @@ print.adaptive_state <- function(x, ...) {
   )
 }
 
+.adaptive_progress_refit_target <- function(state, refit_pairs_target) {
+  fallback <- as.integer(refit_pairs_target %||% NA_integer_)
+  fallback <- if (is.finite(fallback) && !is.na(fallback) && fallback >= 1L) {
+    fallback
+  } else {
+    as.integer(adaptive_defaults(state$n_items)$refit_pairs_target)
+  }
+  controller <- .adaptive_controller_resolve(state)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  if (!.adaptive_link_mode_active(controller) ||
+    !identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")) {
+    return(as.integer(fallback))
+  }
+
+  budget_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
+  current_refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+  budget_map <- controller$link_budget_map %||% list()
+  if (is.na(budget_refit_id) ||
+    !identical(budget_refit_id, current_refit_id) ||
+    length(budget_map) < 1L) {
+    return(as.integer(fallback))
+  }
+
+  budget_total <- sum(vapply(
+    budget_map,
+    function(entry) {
+      budget <- as.integer((entry %||% list())$B_spoke_refit_budget %||% 0L)
+      if (!is.finite(budget) || is.na(budget) || budget < 0L) {
+        return(0L)
+      }
+      budget
+    },
+    integer(1L)
+  ))
+  if (!is.finite(budget_total) || is.na(budget_total) || budget_total < 1L) {
+    return(as.integer(fallback))
+  }
+  as.integer(budget_total)
+}
+
 .adaptive_meets_threshold <- function(value, threshold, direction = c("ge", "le")) {
   direction <- match.arg(direction)
   if (!is.finite(value) || !is.finite(threshold)) {
@@ -2233,10 +2273,7 @@ adaptive_progress_init <- function(state, cfg) {
   if (cfg$progress %in% c("none", "refits")) {
     return(NULL)
   }
-  total <- as.integer(cfg$refit_pairs_target %||% NA_integer_)
-  if (!is.finite(total) || total < 1L) {
-    total <- as.integer(adaptive_defaults(state$n_items)$refit_pairs_target)
-  }
+  total <- .adaptive_progress_refit_target(state, cfg$refit_pairs_target)
   id <- cli::cli_progress_bar(
     total = total,
     format = "Adaptive {cli::pb_bar} {current}/{total} pairs {extra}",
@@ -2257,6 +2294,7 @@ adaptive_progress_update <- function(handle, state, cfg) {
     return(handle)
   }
   metrics <- .adaptive_progress_metrics(state, cfg$refit_pairs_target)
+  handle$total <- .adaptive_progress_refit_target(state, cfg$refit_pairs_target)
   label <- paste0(
     "to next refit (steps=",
     metrics$steps_attempted,

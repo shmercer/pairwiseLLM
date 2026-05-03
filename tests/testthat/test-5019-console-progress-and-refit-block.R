@@ -126,6 +126,41 @@ test_that("adaptive_rank_run_live prints linking-specific refit summary lines", 
   expect_false(any(grepl("delta_spoke_sd=", combined, fixed = TRUE)))
 })
 
+test_that("adaptive progress Phase B denominator uses allocated refit budget", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
+    set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
+  )
+  state <- adaptive_rank_start(
+    items,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  state$linking$phase_a <- list(
+    ready_for_phase_b = TRUE,
+    phase = "phase_b",
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L, 3L),
+      source = "import",
+      status = "ready",
+      validation_message = "ready",
+      artifact_path = NA_character_
+    )
+  )
+  state$controller$link_phase <- "phase_b"
+  state$controller$multi_spoke_mode <- "concurrent"
+  state$controller$link_budget_refit_id <- pairwiseLLM:::.adaptive_link_refit_window_id(state)
+  state$controller$link_budget_map <- list(
+    `2` = list(B_spoke_refit_budget = 40L, B_spoke_refit_budget_source = "concurrent_allocator"),
+    `3` = list(B_spoke_refit_budget = 50L, B_spoke_refit_budget_source = "concurrent_allocator")
+  )
+
+  expect_identical(
+    pairwiseLLM:::.adaptive_progress_refit_target(state, refit_pairs_target = 110L),
+    90L
+  )
+})
+
 test_that("adaptive progress step events label holdout and drift probes distinctly", {
   cfg <- pairwiseLLM:::.adaptive_progress_config(
     progress = "all",
