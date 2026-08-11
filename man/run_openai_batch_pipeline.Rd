@@ -29,7 +29,7 @@ run_openai_batch_pipeline(
 Typically produced by \code{\link[=make_pairs]{make_pairs()}}, \code{\link[=sample_pairs]{sample_pairs()}}, and
 \code{\link[=randomize_pair_order]{randomize_pair_order()}}.}
 
-\item{model}{OpenAI model name (e.g. \code{"gpt-4.1"}, \code{"gpt-5.1"}).}
+\item{model}{OpenAI model name (e.g. \code{"gpt-4.1"}, \code{"gpt-5.6-sol"}).}
 
 \item{trait_name}{Trait name to pass to \code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}}.}
 

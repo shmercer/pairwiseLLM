@@ -24,8 +24,8 @@ build_openai_batch_requests(
 \code{ID2}, and \code{text2}.}
 
 \item{model}{Character scalar giving the OpenAI model name.
-Supports standard names (e.g. \code{"gpt-4.1"}) and date-stamped versions
-(e.g. \code{"gpt-5.2-2025-12-11"}).}
+Supports standard names (e.g. \code{"gpt-4.1"}, \code{"gpt-5.6-sol"})
+and date-stamped versions (e.g. \code{"gpt-5.4-2026-01-15"}).}
 
 \item{trait_name}{Short label for the trait (e.g., "Overall Quality").}
 
@@ -49,8 +49,9 @@ standard models (deterministic). Must be \code{NULL} for reasoning models
 \item{reasoning}{Optional reasoning effort for GPT-5 series when using
 the \code{/v1/responses} endpoint. For \code{"gpt-5"} and
 \code{"gpt-5-mini"}, \code{"none"} is normalized to \code{"minimal"}.
-For \code{"gpt-5.1/5.2"}, use \code{"none"}, \code{"low"},
-\code{"medium"}, or \code{"high"}.}
+For later GPT-5.x reasoning models, use model-supported efforts such as
+\code{"none"}, \code{"low"}, \code{"medium"}, \code{"high"},
+\code{"xhigh"}, or \code{"max"}.}
 
 \item{include_thoughts}{Logical; if TRUE and using \code{responses} endpoint
 with reasoning, requests a summary. Defaults \code{reasoning} to
@@ -96,10 +97,10 @@ batch_tbl_chat <- build_openai_batch_requests(
   temperature       = 0
 )
 
-# 2. GPT-5.2-2025-12-11 Responses Batch with Reasoning
+# 2. GPT-5.6 Sol Responses Batch with Reasoning
 batch_tbl_resp <- build_openai_batch_requests(
   pairs = pairs,
-  model = "gpt-5.2-2025-12-11",
+  model = "gpt-5.6-sol",
   trait_name = td$name,
   trait_description = td$description,
   prompt_template = tmpl,

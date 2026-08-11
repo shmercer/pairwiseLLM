@@ -366,7 +366,7 @@ openai_poll_batch_until_complete <- function(
 #' @param pairs Tibble of pairs with at least `ID1`, `text1`, `ID2`, `text2`.
 #'   Typically produced by [make_pairs()], [sample_pairs()], and
 #'   [randomize_pair_order()].
-#' @param model OpenAI model name (e.g. `"gpt-4.1"`, `"gpt-5.1"`).
+#' @param model OpenAI model name (e.g. `"gpt-4.1"`, `"gpt-5.6-sol"`).
 #' @param trait_name Trait name to pass to [build_openai_batch_requests()].
 #' @param trait_description Trait description to pass to
 #'   [build_openai_batch_requests()].
@@ -575,8 +575,8 @@ openai_poll_batch_until_complete <- function(
 #' @param pairs A data frame or tibble with columns \code{ID1}, \code{text1},
 #'   \code{ID2}, and \code{text2}.
 #' @param model Character scalar giving the OpenAI model name.
-#'   Supports standard names (e.g. \code{"gpt-4.1"}) and date-stamped versions
-#'   (e.g. \code{"gpt-5.2-2025-12-11"}).
+#'   Supports standard names (e.g. \code{"gpt-4.1"}, \code{"gpt-5.6-sol"})
+#'   and date-stamped versions (e.g. \code{"gpt-5.4-2026-01-15"}).
 #' @param trait_name Short label for the trait (e.g., "Overall Quality").
 #' @param trait_description Full-text definition of the trait.
 #' @param prompt_template Character template containing the placeholders
@@ -592,8 +592,9 @@ openai_poll_batch_until_complete <- function(
 #' @param reasoning Optional reasoning effort for GPT-5 series when using
 #'   the \code{/v1/responses} endpoint. For \code{"gpt-5"} and
 #'   \code{"gpt-5-mini"}, \code{"none"} is normalized to \code{"minimal"}.
-#'   For \code{"gpt-5.1/5.2"}, use \code{"none"}, \code{"low"},
-#'   \code{"medium"}, or \code{"high"}.
+#'   For later GPT-5.x reasoning models, use model-supported efforts such as
+#'   \code{"none"}, \code{"low"}, \code{"medium"}, \code{"high"},
+#'   \code{"xhigh"}, or \code{"max"}.
 #' @param include_thoughts Logical; if TRUE and using \code{responses} endpoint
 #'   with reasoning, requests a summary. Defaults \code{reasoning} to
 #'   \code{"low"} for GPT-5 series models if not specified.
@@ -631,10 +632,10 @@ openai_poll_batch_until_complete <- function(
 #'   temperature       = 0
 #' )
 #'
-#' # 2. GPT-5.2-2025-12-11 Responses Batch with Reasoning
+#' # 2. GPT-5.6 Sol Responses Batch with Reasoning
 #' batch_tbl_resp <- build_openai_batch_requests(
 #'   pairs = pairs,
-#'   model = "gpt-5.2-2025-12-11",
+#'   model = "gpt-5.6-sol",
 #'   trait_name = td$name,
 #'   trait_description = td$description,
 #'   prompt_template = tmpl,

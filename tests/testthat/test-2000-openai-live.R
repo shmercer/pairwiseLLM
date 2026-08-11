@@ -207,7 +207,7 @@ testthat::test_that("openai_compare_pair_live enforces gpt-5.1/5.2 + reasoning c
       reasoning = "low",
       temperature = 0
     ),
-    regexp = "gpt-5.1/5.2"
+    regexp = "GPT-5.x"
   )
 
   # 2. GPT-5.2 date-stamped should error
@@ -222,7 +222,7 @@ testthat::test_that("openai_compare_pair_live enforces gpt-5.1/5.2 + reasoning c
       reasoning = "medium",
       top_p = 0.5
     ),
-    regexp = "gpt-5.1/5.2"
+    regexp = "GPT-5.x"
   )
 
   # Allowed case

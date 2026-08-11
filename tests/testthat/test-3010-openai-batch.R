@@ -121,7 +121,7 @@ testthat::test_that("build_openai_batch_requests errors for gpt-5.1 + reasoning 
       top_p = 1,
       logprobs = NULL
     ),
-    regexp = "For gpt-5.1/5.2 with reasoning"
+    regexp = "For GPT-5.x reasoning models"
   )
 })
 

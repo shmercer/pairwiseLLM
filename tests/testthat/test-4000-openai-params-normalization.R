@@ -19,7 +19,11 @@ testthat::test_that("is_gpt5_series_model identifies GPT-5 series models", {
     "gpt-5.2-2025-12-11",
     "gpt-5.4",
     "gpt-5.4-mini",
-    "gpt-5.4-mini-2026-01-15"
+    "gpt-5.4-mini-2026-01-15",
+    "gpt-5.6",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna"
   )
 
   testthat::expect_true(all(vapply(positives, is_gpt5_series_model, logical(1))))
@@ -83,7 +87,7 @@ testthat::test_that("normalize_openai_sampling enforces GPT-5.1/5.2 restrictions
       top_p = NULL,
       logprobs = NULL
     ),
-    "gpt-5.1/5.2"
+    "GPT-5.x"
   )
 })
 

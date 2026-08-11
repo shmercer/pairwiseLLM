@@ -162,3 +162,41 @@ testthat::test_that("gpt-5.4-mini keeps flex tier and model-default sampling whe
     }
   )
 })
+
+testthat::test_that("gpt-5.6 named tiers keep reasoning and service tier semantics", {
+  td <- trait_description("overall_quality")
+  tmpl <- set_prompt_template()
+  captured <- rlang::env(body = NULL)
+
+  fake_body <- list(object = "response", model = "gpt-5.6-sol", output = list())
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) {
+      captured$body <- body
+      req
+    },
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) fake_body,
+    .openai_resp_status = function(...) 200L,
+    {
+      pairwiseLLM::openai_compare_pair_live(
+        ID1 = "A", text1 = "Text A",
+        ID2 = "B", text2 = "Text B",
+        model = "gpt-5.6-sol",
+        trait_name = td$name,
+        trait_description = td$description,
+        prompt_template = tmpl,
+        endpoint = "responses",
+        include_thoughts = TRUE,
+        service_tier = "flex"
+      )
+
+      testthat::expect_equal(captured$body$model, "gpt-5.6-sol")
+      testthat::expect_equal(captured$body$reasoning$effort, "low")
+      testthat::expect_equal(captured$body$reasoning$summary, "auto")
+      testthat::expect_equal(captured$body$service_tier, "flex")
+      testthat::expect_false("temperature" %in% names(captured$body))
+    }
+  )
+})

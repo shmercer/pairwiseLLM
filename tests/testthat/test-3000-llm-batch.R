@@ -486,7 +486,7 @@ test_that("build_openai_batch_requests errors for gpt-5.1/5.2 + reasoning != 'no
       pairs = pairs, model = "gpt-5.1", trait_name = td$name, trait_description = td$description,
       endpoint = "responses", reasoning = "low", temperature = 0
     ),
-    regexp = "gpt-5.1/5.2.*temperature"
+    regexp = "GPT-5.x.*temperature"
   )
 
   # GPT-5.2
@@ -495,7 +495,7 @@ test_that("build_openai_batch_requests errors for gpt-5.1/5.2 + reasoning != 'no
       pairs = pairs, model = "gpt-5.2", trait_name = td$name, trait_description = td$description,
       endpoint = "responses", reasoning = "high", top_p = 0.5
     ),
-    regexp = "gpt-5.1/5.2.*temperature"
+    regexp = "GPT-5.x.*temperature"
   )
 })
 

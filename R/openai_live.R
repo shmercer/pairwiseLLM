@@ -9,7 +9,7 @@ NULL
 #' \code{\link{parse_openai_batch_output}}.
 #'
 #' It supports both the Chat Completions endpoint ("/v1/chat/completions") and
-#' the Responses endpoint ("/v1/responses", for example gpt-5.1 with reasoning),
+#' the Responses endpoint ("/v1/responses", for example gpt-5.6 with reasoning),
 #' using the same prompt template and model / parameter rules as the batch
 #' pipeline.
 #'
@@ -31,7 +31,7 @@ NULL
 #' @param text1 Character string containing the first sample's text.
 #' @param ID2 Character ID for the second sample.
 #' @param text2 Character string containing the second sample's text.
-#' @param model OpenAI model name (e.g. "gpt-4.1", "gpt-5.2-2025-12-11").
+#' @param model OpenAI model name (e.g. "gpt-4.1", "gpt-5.6-sol").
 #' @param trait_name Short label for the trait (e.g. "Overall Quality").
 #' @param trait_description Full-text definition of the trait.
 #' @param prompt_template Prompt template string.
@@ -91,11 +91,11 @@ NULL
 #'   temperature = 0
 #' )
 #'
-#' # 2. Reasoning comparison using GPT-5.2
+#' # 2. Reasoning comparison using GPT-5.6 Sol
 #' res_reasoning <- openai_compare_pair_live(
 #'   ID1 = "A", text1 = "Text A...",
 #'   ID2 = "B", text2 = "Text B...",
-#'   model = "gpt-5.2-2025-12-11",
+#'   model = "gpt-5.6-sol",
 #'   trait_name = "clarity",
 #'   trait_description = "Which text is clearer?",
 #'   endpoint = "responses",

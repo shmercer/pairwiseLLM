@@ -29,8 +29,8 @@ this series.}
 \item{model}{Character scalar model name to use for the batch job.
 \itemize{
 \item For \code{"openai"}, use models like \code{"gpt-4.1"}, \code{"gpt-5"}, \code{"gpt-5-mini"},
-\code{"gpt-5.1"}, or \code{"gpt-5.2"} (including date-stamped versions like
-\code{"gpt-5.2-2025-12-11"}).
+\code{"gpt-5.6-sol"}, \code{"gpt-5.6-terra"}, or \code{"gpt-5.6-luna"} (including
+date-stamped GPT-5.x versions where available).
 \item For \code{"anthropic"}, use provider names like \code{"claude-4-5-sonnet"}
 or date-stamped versions like \code{"claude-sonnet-4-5-20250929"}.
 \item For \code{"gemini"}, use names like \code{"gemini-3-pro-preview"}.
@@ -95,8 +95,9 @@ For OpenAI, this helper will by default:
 \item Use the \code{chat.completions} batch style for most models, and
 \item Automatically switch to the \code{responses} style endpoint when:
 \itemize{
-\item \code{model} is in the GPT-5 series (including \code{gpt-5}, \code{gpt-5-mini}, and
-date-stamped \code{gpt-5.1/5.2} variants), and
+\item \code{model} is in the GPT-5 series (including \code{gpt-5}, \code{gpt-5-mini},
+\code{gpt-5.6-sol}, \code{gpt-5.6-terra}, \code{gpt-5.6-luna}, and date-stamped
+GPT-5.x variants), and
 \item either \code{include_thoughts = TRUE} \strong{or} a \code{reasoning} effort is supplied
 in \code{...} (for GPT-5, \code{reasoning = "none"} maps to \code{"minimal"}).
 }
@@ -106,7 +107,7 @@ in \code{...} (for GPT-5, \code{reasoning = "none"} maps to \code{"minimal"}).
 For OpenAI, if \code{temperature} is not specified in \code{...}:
 \itemize{
 \item It defaults to \code{0} (deterministic) for standard models or when reasoning is
-disabled (\code{reasoning = "none"}) on supported GPT-5.1/5.2 models.
+disabled (\code{reasoning = "none"}) on supported GPT-5.x reasoning models.
 \item It remains \code{NULL} (API default) when reasoning is enabled, or for GPT-5
 minimal reasoning (which ignores temperature).
 }

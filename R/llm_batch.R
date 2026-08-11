@@ -12,15 +12,16 @@
 #' For OpenAI, this helper will by default:
 #' * Use the `chat.completions` batch style for most models, and
 #' * Automatically switch to the `responses` style endpoint when:
-#'     - `model` is in the GPT-5 series (including `gpt-5`, `gpt-5-mini`, and
-#'       date-stamped `gpt-5.1/5.2` variants), and
+#'     - `model` is in the GPT-5 series (including `gpt-5`, `gpt-5-mini`,
+#'       `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, and date-stamped
+#'       GPT-5.x variants), and
 #'     - either `include_thoughts = TRUE` **or** a `reasoning` effort is supplied
 #'       in `...` (for GPT-5, `reasoning = "none"` maps to `"minimal"`).
 #'
 #' **Temperature Defaults:**
 #' For OpenAI, if `temperature` is not specified in `...`:
 #' * It defaults to `0` (deterministic) for standard models or when reasoning is
-#'   disabled (`reasoning = "none"`) on supported GPT-5.1/5.2 models.
+#'   disabled (`reasoning = "none"`) on supported GPT-5.x reasoning models.
 #' * It remains `NULL` (API default) when reasoning is enabled, or for GPT-5
 #'   minimal reasoning (which ignores temperature).
 #'
@@ -61,8 +62,8 @@
 #'   this series.
 #' @param model Character scalar model name to use for the batch job.
 #'   * For `"openai"`, use models like `"gpt-4.1"`, `"gpt-5"`, `"gpt-5-mini"`,
-#'     `"gpt-5.1"`, or `"gpt-5.2"` (including date-stamped versions like
-#'     `"gpt-5.2-2025-12-11"`).
+#'     `"gpt-5.6-sol"`, `"gpt-5.6-terra"`, or `"gpt-5.6-luna"` (including
+#'     date-stamped GPT-5.x versions where available).
 #'   * For `"anthropic"`, use provider names like `"claude-4-5-sonnet"`
 #'     or date-stamped versions like `"claude-sonnet-4-5-20250929"`.
 #'   * For `"gemini"`, use names like `"gemini-3-pro-preview"`.

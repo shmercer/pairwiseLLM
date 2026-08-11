@@ -11,7 +11,10 @@ is_gpt5_series_model <- function(model) {
     return(TRUE)
   }
 
-  grepl("^gpt-5\\.[0-9]+(?:-(mini|nano))?(?:-[0-9]{4}-[0-9]{2}-[0-9]{2})?$", model)
+  grepl(
+    "^gpt-5\\.[0-9]+(?:-(mini|nano|sol|terra|luna))?(?:-[0-9]{4}-[0-9]{2}-[0-9]{2})?$",
+    model
+  )
 }
 
 #' @keywords internal
@@ -75,7 +78,7 @@ normalize_openai_sampling <- function(model,
     if (is_gpt5_reasoning) {
       if (!is.null(temperature) || !is.null(top_p) || !is.null(logprobs)) {
         rlang::abort(paste0(
-          "For gpt-5.1/5.2 with reasoning effort not equal to 'none', ",
+          "For GPT-5.x reasoning models with reasoning effort not equal to 'none', ",
           "temperature, top_p, and logprobs must be NULL."
         ))
       }
