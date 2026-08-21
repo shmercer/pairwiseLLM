@@ -2113,8 +2113,23 @@
   fit <- state$btl_fit %||% list()
   mode <- as.character(controller$judge_param_mode %||% "global_shared")
 
-  beta_shared <- as.double(fit$beta_mean %||% 0)
-  epsilon_shared <- as.double(fit$epsilon_mean %||% 0)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  pooled_judge <- (state$linking$phase_a %||% list())$pooled_judge_state %||% NULL
+  use_pooled <- identical(mode, "global_shared") &&
+    identical(scope, "link") &&
+    identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b") &&
+    is.list(pooled_judge)
+
+  beta_shared <- if (isTRUE(use_pooled)) {
+    as.double(pooled_judge$beta_mean %||% 0)
+  } else {
+    as.double(fit$beta_mean %||% 0)
+  }
+  epsilon_shared <- if (isTRUE(use_pooled)) {
+    as.double(pooled_judge$epsilon_mean %||% 0)
+  } else {
+    as.double(fit$epsilon_mean %||% 0)
+  }
   if (!is.finite(beta_shared)) {
     beta_shared <- 0
   }

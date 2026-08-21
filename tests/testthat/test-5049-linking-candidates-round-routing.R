@@ -1485,11 +1485,12 @@ test_that("predictive utility scoring receives full linking controller fields", 
   state$round$staged_active <- TRUE
   state$round$stage_index <- 2L
 
-  seen_judge_mode <- NA_character_
+  seen_judge_mode <- new.env(parent = emptyenv())
+  seen_judge_mode$value <- NA_character_
   cand <- tibble::tibble(i = c("h1", "h2"), j = c("s1", "s2"), link_spoke_id = c(2L, 2L))
   testthat::with_mocked_bindings(
     .adaptive_link_attach_predictive_utility = function(candidates, state, controller, spoke_id) {
-      seen_judge_mode <<- as.character(controller$judge_param_mode %||% NA_character_)
+      seen_judge_mode$value <- as.character(controller$judge_param_mode %||% NA_character_)
       candidates$link_p <- as.double(candidates$p %||% rep(0.5, nrow(candidates)))
       candidates$link_u <- as.double(candidates$link_p * (1 - candidates$link_p))
       candidates$link_d_opt_gain <- rep(1, nrow(candidates))
@@ -1498,7 +1499,7 @@ test_that("predictive utility scoring receives full linking controller fields", 
     pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = cand),
     .package = "pairwiseLLM"
   )
-  expect_identical(seen_judge_mode, "phase_specific")
+  expect_identical(seen_judge_mode$value, "phase_specific")
 })
 
 test_that("active spoke routing handles no-spoke and single-spoke modes deterministically", {

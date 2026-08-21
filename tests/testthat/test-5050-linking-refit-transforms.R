@@ -1192,6 +1192,32 @@ test_that("judge parameter mode controls linking judge scope in fit contract", {
   expect_equal(contract$judge$epsilon, 0.25, tolerance = 1e-12)
 })
 
+test_that("global-shared Phase B refits prefer pooled Phase A judge state", {
+  state <- make_linking_refit_state(
+    list(link_transform_mode = "shift_only", link_refit_mode = "shift_only", judge_param_mode = "global_shared")
+  )
+  state$btl_fit$beta_mean <- 0.01
+  state$btl_fit$epsilon_mean <- 0.02
+  state$linking$phase_a$pooled_judge_state <- list(
+    source = "phase_a_pooled_within_set_refit",
+    model_variant = "btl_e_b",
+    required_sets = c(1L, 2L, 3L),
+    evidence_hash_by_set = c(`1` = "h1", `2` = "h2", `3` = "h3"),
+    has_beta = TRUE,
+    has_epsilon = TRUE,
+    beta_mean = 0.44,
+    epsilon_mean = 0.12
+  )
+  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
+  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
+
+  state <- pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
+  contract <- state$controller$link_refit_stats_by_spoke[["2"]]$fit_contract
+  expect_identical(contract$judge$mode, "global_shared")
+  expect_equal(contract$judge$beta, 0.44, tolerance = 1e-12)
+  expect_equal(contract$judge$epsilon, 0.12, tolerance = 1e-12)
+})
+
 test_that("phase-specific judge mode allows startup fallback but aborts after startup when link params are missing", {
   state <- make_linking_refit_state(
     list(link_transform_mode = "shift_only", link_refit_mode = "shift_only", judge_param_mode = "phase_specific")

@@ -73,6 +73,10 @@ When \code{judge_param_mode = "phase_specific"}, the first Phase B startup
 step may use deterministic fallback from available within/shared judge
 estimates if link-specific estimates are not yet available; once link-specific
 estimates are expected, missing/non-finite values abort.
+When \code{judge_param_mode = "global_shared"}, Phase B uses a pooled
+within-set Phase A judge-parameter refit, using the configured BTL model
+variant, as the accepted shared source for fixed \code{beta}/\code{epsilon}
+constants.
 Bayesian BTL posterior draws are not used as general pair-selection
 objectives; within-set pairing remains TrueSkill-routed, with accepted
 posterior refits contributing only to the long-link probability gate.

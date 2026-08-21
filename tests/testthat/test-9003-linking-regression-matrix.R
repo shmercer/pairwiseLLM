@@ -61,6 +61,7 @@ matrix_import_artifacts <- function(state, spoke_shift = -1.0) {
     if (!identical(as.integer(set_id), 1L)) {
       art$items$theta_raw_mean <- as.double(art$items$theta_raw_mean + spoke_shift)
     }
+    art <- add_test_phase_a_evidence(art, state = state, set_id = set_id)
     art$quality_gate_accepted <- TRUE
     art
   })

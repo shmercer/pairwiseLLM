@@ -154,6 +154,8 @@ make_anchored_joint_resume_state <- function() {
   )
   art1 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 1L)
   art2 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 2L)
+  art1 <- add_test_phase_a_evidence(art1, state = state, set_id = 1L)
+  art2 <- add_test_phase_a_evidence(art2, state = state, set_id = 2L)
   art1$quality_gate_accepted <- TRUE
   art2$quality_gate_accepted <- TRUE
   state <- pairwiseLLM:::.adaptive_apply_controller_config(
@@ -1840,6 +1842,8 @@ test_that("save/load preserves Phase B global audit metrics built from Phase A a
   )
   artifact_1 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 1L)
   artifact_2 <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = 2L)
+  artifact_1 <- add_test_phase_a_evidence(artifact_1, state = state, set_id = 1L)
+  artifact_2 <- add_test_phase_a_evidence(artifact_2, state = state, set_id = 2L)
   artifact_1$quality_gate_accepted <- TRUE
   artifact_2$quality_gate_accepted <- TRUE
   state$linking$phase_a$artifacts <- list(`1` = artifact_1, `2` = artifact_2)

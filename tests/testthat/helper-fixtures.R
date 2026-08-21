@@ -166,6 +166,32 @@ make_test_btl_fit <- function(ids,
   )
 }
 
+add_test_phase_a_evidence <- function(artifact, state, set_id) {
+  set_item_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(set_id)])
+  evidence <- if (length(set_item_ids) >= 2L) {
+    tibble::tibble(
+      pair_id = seq_len(length(set_item_ids) - 1L),
+      step_id = seq_len(length(set_item_ids) - 1L),
+      A_item = set_item_ids[-length(set_item_ids)],
+      B_item = set_item_ids[-1L],
+      y_A = rep(1L, length(set_item_ids) - 1L)
+    )
+  } else {
+    tibble::tibble(
+      pair_id = integer(),
+      step_id = integer(),
+      A_item = character(),
+      B_item = character(),
+      y_A = integer()
+    )
+  }
+  artifact$n_pairs_committed <- as.integer(nrow(evidence))
+  artifact$phase_a_within_set_evidence <- evidence
+  artifact$phase_a_within_set_evidence_hash <- pairwiseLLM:::.adaptive_phase_a_hash_object(evidence)
+  artifact$phase_a_within_set_evidence_source <- "test_fixture_synthetic_chain"
+  artifact
+}
+
 make_deterministic_fit_fn <- function(ids, fit = NULL) {
   env <- new.env(parent = emptyenv())
   env$calls <- 0L
@@ -268,9 +294,41 @@ make_test_link_cmdstan_fit_fn <- function() {
   }
 }
 
+make_test_phase_a_pooled_judge_fit_fn <- function(beta = 0.12, epsilon = 0.08) {
+  function(results, ids, model_variant, cmdstan = list(), inference_contract = NULL) {
+    ids <- as.character(ids)
+    draws <- matrix(rep(seq_along(ids), each = 4L), nrow = 4L)
+    colnames(draws) <- ids
+    fit <- make_test_btl_fit(ids, draws = draws, model_variant = model_variant)
+    if (pairwiseLLM:::model_has_b(model_variant)) {
+      fit$beta_draws <- as.double(beta) + c(-0.01, 0, 0.01, 0.02)
+      fit$beta_mean <- mean(fit$beta_draws)
+      fit$beta_p2.5 <- as.double(stats::quantile(fit$beta_draws, 0.025, names = FALSE))
+      fit$beta_p5 <- as.double(stats::quantile(fit$beta_draws, 0.05, names = FALSE))
+      fit$beta_p50 <- as.double(stats::quantile(fit$beta_draws, 0.5, names = FALSE))
+      fit$beta_p95 <- as.double(stats::quantile(fit$beta_draws, 0.95, names = FALSE))
+      fit$beta_p97.5 <- as.double(stats::quantile(fit$beta_draws, 0.975, names = FALSE))
+    }
+    if (pairwiseLLM:::model_has_e(model_variant)) {
+      fit$epsilon_draws <- pmin(pmax(as.double(epsilon) + c(-0.01, 0, 0.01, 0.02), 0), 1)
+      fit$epsilon_mean <- mean(fit$epsilon_draws)
+      fit$epsilon_p2.5 <- as.double(stats::quantile(fit$epsilon_draws, 0.025, names = FALSE))
+      fit$epsilon_p5 <- as.double(stats::quantile(fit$epsilon_draws, 0.05, names = FALSE))
+      fit$epsilon_p50 <- as.double(stats::quantile(fit$epsilon_draws, 0.5, names = FALSE))
+      fit$epsilon_p95 <- as.double(stats::quantile(fit$epsilon_draws, 0.95, names = FALSE))
+      fit$epsilon_p97.5 <- as.double(stats::quantile(fit$epsilon_draws, 0.975, names = FALSE))
+    }
+    fit$inference_contract <- inference_contract
+    fit
+  }
+}
+
 test_link_btl_config <- function(x = list()) {
   utils::modifyList(
-    list(cmdstan_fit_fn = make_test_link_cmdstan_fit_fn()),
+    list(
+      cmdstan_fit_fn = make_test_link_cmdstan_fit_fn(),
+      phase_a_pooled_judge_fit_fn = make_test_phase_a_pooled_judge_fit_fn()
+    ),
     x %||% list()
   )
 }
@@ -334,6 +392,7 @@ make_positive_probe_acceleration_runtime_state <- function() {
       if (!identical(as.integer(set_id), 1L)) {
         artifact$items$theta_raw_mean <- as.double(artifact$items$theta_raw_mean - 1)
       }
+      artifact <- add_test_phase_a_evidence(artifact, state = state, set_id = set_id)
       artifact$quality_gate_accepted <- TRUE
       artifact
     })
