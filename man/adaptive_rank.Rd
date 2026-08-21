@@ -223,24 +223,17 @@ per refit window. Default is \code{5L}.}
 otherwise run). Default is \code{"run"}.}
 \item{\code{phase_a_required_reliability_min}}{Minimum within-set EAP reliability
 required for Phase A artifacts to be considered ready (unless an imported
-artifact explicitly marks \code{quality_gate_accepted = TRUE}). Default is
-\code{0.80}.}
-\item{\code{phase_a_compatible_model_ids}}{Character vector of allowed model
-identifiers for imported Phase A artifacts (e.g., \code{"btl_e_b"}). Default is
-\code{"btl_e_b"}.}
-\item{\code{phase_a_compatible_config_hashes}}{Character vector of additional
-accepted Phase A config hashes for imported artifacts. Default is
-\code{character()}.}
+artifact is explicitly marked \code{quality_gate_accepted = TRUE} as a trusted
+external quality override). Default is \code{0.80}.}
 \item{\code{phase_a_artifacts}}{Named list mapping \code{set_id} to an imported Phase A
 artifact (list) or a \code{.rds} path containing one. On the wrapper surface,
 this field also accepts a prior \code{adaptive_rank()} \code{phase_a} return,
 an \code{out$phase_a$manifest}, a saved session directory, or a
 \verb{phase_a_artifacts/} directory, and normalizes those inputs back to the
-canonical named-list form before runtime validation. Default is
-\code{list()}.}
-\item{\code{phase_a_set_source}}{Optional named character vector mapping \code{set_id}
-to \code{"run"} or \code{"import"} to force the source for specific sets. Default is
-\code{character()}.}
+canonical named-list form before runtime validation. Imported artifacts
+must match the current normalized BTL \code{model_variant}; all four canonical
+variants (\code{"btl"}, \code{"btl_e"}, \code{"btl_b"}, \code{"btl_e_b"}) are supported when
+the artifact and run variants match. Default is \code{list()}.}
 }
 
 Wrapper preflight validates linking mode combinations against supplied data

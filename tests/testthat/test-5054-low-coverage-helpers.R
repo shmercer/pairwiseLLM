@@ -331,7 +331,7 @@ test_that("low-coverage state, simulation, and cost helpers cover edge branches"
       n_items = 4L,
       set_ids = link_items$set_id
     ),
-    "phase_a_compatible_model_ids"
+    "Unknown `adaptive_config` field"
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(

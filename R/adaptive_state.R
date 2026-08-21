@@ -478,8 +478,6 @@
   out$multi_spoke_mode <- "concurrent"
   out$multi_spoke_budget_rule <- "utility_mass_topk"
   out$cross_set_utility <- "linking_d_optimal"
-  out$phase_a_import_failure_policy <- "fail_fast"
-
   out
 }
 
@@ -636,12 +634,8 @@
     long_link_taper_floor = 2L,
     cross_set_utility = "linking_d_optimal",
     phase_a_mode = "run",
-    phase_a_import_failure_policy = "fail_fast",
     phase_a_required_reliability_min = 0.80,
-    phase_a_compatible_model_ids = "btl_e_b",
-    phase_a_compatible_config_hashes = character(),
     phase_a_artifacts = list(),
-    phase_a_set_source = character(),
     reliability_EAP = NA_real_,
     ts_btl_rank_spearman = NA_real_,
     current_link_spoke_id = NA_integer_,
@@ -757,10 +751,7 @@
     "long_link_taper_floor",
     "phase_a_mode",
     "phase_a_required_reliability_min",
-    "phase_a_compatible_model_ids",
-    "phase_a_compatible_config_hashes",
-    "phase_a_artifacts",
-    "phase_a_set_source"
+    "phase_a_artifacts"
   )
 }
 
@@ -1162,10 +1153,6 @@
     c("linking_d_optimal")
   )
   out$phase_a_mode <- read_choice("phase_a_mode", c("run", "import", "mixed"))
-  out$phase_a_import_failure_policy <- read_choice(
-    "phase_a_import_failure_policy",
-    c("fail_fast", "fallback_to_run")
-  )
   out$phase_a_required_reliability_min <- read_double("phase_a_required_reliability_min", 0, 1)
 
   if (identical(out$link_estimation_mode %||% NULL, "anchored_joint") &&
@@ -1179,30 +1166,8 @@
     )
   }
 
-  if (!is.null(out$phase_a_compatible_model_ids)) {
-    if (!is.character(out$phase_a_compatible_model_ids) ||
-      any(is.na(out$phase_a_compatible_model_ids) | out$phase_a_compatible_model_ids == "")) {
-      rlang::abort("`adaptive_config$phase_a_compatible_model_ids` must be a non-empty character vector.")
-    }
-  }
-  if (!is.null(out$phase_a_compatible_config_hashes)) {
-    if (!is.character(out$phase_a_compatible_config_hashes) ||
-      any(is.na(out$phase_a_compatible_config_hashes) | out$phase_a_compatible_config_hashes == "")) {
-      rlang::abort("`adaptive_config$phase_a_compatible_config_hashes` must be a character vector.")
-    }
-  }
   if (!is.null(out$phase_a_artifacts) && !is.list(out$phase_a_artifacts)) {
     rlang::abort("`adaptive_config$phase_a_artifacts` must be a named list.")
-  }
-  if (!is.null(out$phase_a_set_source)) {
-    if (!is.character(out$phase_a_set_source) || is.null(names(out$phase_a_set_source)) ||
-      any(names(out$phase_a_set_source) == "")) {
-      rlang::abort("`adaptive_config$phase_a_set_source` must be a named character vector.")
-    }
-    allowed_sources <- c("run", "import")
-    if (!all(out$phase_a_set_source %in% allowed_sources)) {
-      rlang::abort("`adaptive_config$phase_a_set_source` values must be `run` or `import`.")
-    }
   }
 
   if (!is.null(out$p_long_low) &&

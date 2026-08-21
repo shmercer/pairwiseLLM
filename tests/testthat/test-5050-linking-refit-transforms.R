@@ -4974,7 +4974,7 @@ test_that("adaptive_state validation branches for linking controls are covered",
       list(phase_a_compatible_config_hashes = c("ok", NA_character_)),
       n_items = 5L
     ),
-    "character vector"
+    "Unknown `adaptive_config` field"
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
@@ -4988,14 +4988,14 @@ test_that("adaptive_state validation branches for linking controls are covered",
       list(phase_a_set_source = c("run")),
       n_items = 5L
     ),
-    "named character vector"
+    "Unknown `adaptive_config` field"
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
       list(phase_a_set_source = c(`1` = "bad")),
       n_items = 5L
     ),
-    "values must be `run` or `import`"
+    "Unknown `adaptive_config` field"
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(

@@ -486,7 +486,10 @@ test_that("controller config rejects removed Phase B mode fields for new runs", 
     "multi_spoke_mode",
     "judge_param_mode",
     "theta_global_rmse_scope",
-    "phase_a_import_failure_policy"
+    "phase_a_import_failure_policy",
+    "phase_a_compatible_model_ids",
+    "phase_a_compatible_config_hashes",
+    "phase_a_set_source"
   )
   for (field in removed) {
     cfg <- list(run_mode = "link_one_spoke", hub_id = 1L)
