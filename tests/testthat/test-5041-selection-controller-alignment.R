@@ -149,7 +149,14 @@ test_that("long-link gate uses posterior probability when accepted refit is avai
   )
 
   out <- testthat::with_mocked_bindings(
-    trueskill_win_probability = function(i_id, j_id, state) 0.99,
+    score_candidates_u0 = function(candidates, trueskill_state) {
+      candidates$p <- 0.99
+      candidates$u0 <- 0.99 * 0.01
+      candidates
+    },
+    .adaptive_long_link_gate_posterior_prob_vec = function(state, i_id, j_id, block_size = 2048L) {
+      rep_len(0.50, length(i_id))
+    },
     pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = tibble::tibble(i = "1", j = "2")),
     .package = "pairwiseLLM"
   )
