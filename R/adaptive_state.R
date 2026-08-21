@@ -458,6 +458,28 @@
     }
   }
 
+  out$link_estimation_mode <- "anchored_joint"
+  out$link_transform_policy <- NA_character_
+  out$link_transform_mode <- NULL
+  out$link_transform_state_by_spoke <- list()
+  out$link_transform_mode_by_spoke <- NULL
+  out$link_refit_mode <- NA_character_
+  out$shift_only_theta_treatment <- NA_character_
+  out$judge_param_mode <- "global_shared"
+  out$within_phase_b_within_set_steps_allowed <- FALSE
+  out$hub_lock_mode <- "hard_lock"
+  out$hub_lock_kappa <- NA_real_
+  out$probe_acceleration_mode <- "fixed_per_refit"
+  out$probe_sole_blocker_acceleration_enabled <- FALSE
+  out$theta_global_rmse_scope <- "direct_evidence_spoke"
+  out$min_cross_set_edges_k <- 1L
+  out$probe_edges_count_toward_active_constraints <- FALSE
+  out$allow_spoke_spoke_cross_set <- FALSE
+  out$multi_spoke_mode <- "concurrent"
+  out$multi_spoke_budget_rule <- "utility_mass_topk"
+  out$cross_set_utility <- "linking_d_optimal"
+  out$phase_a_import_failure_policy <- "fail_fast"
+
   out
 }
 
@@ -671,45 +693,17 @@
     "star_override_budget_per_round",
     "run_mode",
     "hub_id",
-    "link_estimation_mode",
-    "link_transform_policy",
-    "link_transform_mode",
-    "link_refit_mode",
-    "shift_only_theta_treatment",
-    "judge_param_mode",
-    "within_phase_b_within_set_steps_allowed",
-    "hub_lock_mode",
-    "hub_lock_kappa",
     "anchored_joint_spoke_prior_scale",
     "anchored_joint_sd_floor",
     "anchored_joint_spoke_prior_fallback_sd",
     "link_identified_reliability_min",
     "link_stop_reliability_min",
     "link_rank_corr_min",
-    "delta_sd_max",
-    "delta_change_max",
-    "log_alpha_sd_max",
-    "log_alpha_change_max",
-    "link_transform_escalation_window_refits",
-    "link_transform_escalation_passes_required",
-    "link_transform_escalation_refits_required",
-    "link_transform_escalation_is_one_way",
     "max_pairs_after_stop",
     "probe_pairs_per_refit_per_spoke",
     "probe_pairs_per_refit_per_spoke_rule",
     "probe_pairs_per_refit_per_spoke_min",
     "probe_pairs_per_refit_per_spoke_frac",
-    "probe_acceleration_mode",
-    "probe_active_floor_enabled",
-    "probe_sole_blocker_acceleration_enabled",
-    "probe_pairs_per_refit_per_spoke_bootstrap_max",
-    "probe_pairs_per_refit_per_spoke_sole_blocker_max",
-    "probe_accel_bootstrap_target",
-    "probe_active_floor_frac",
-    "probe_active_floor_min",
-    "probe_active_floor_requires_anchor_progress",
-    "probe_sole_blocker_min_realized",
-    "probe_sole_blocker_active_floor_min",
     "probe_panel_edges",
     "probe_panel_edges_rule",
     "probe_panel_edges_min",
@@ -741,25 +735,14 @@
     "probe_brier_max",
     "probe_pred_rmse_max",
     "theta_global_rmse_max",
-    "theta_global_rmse_scope",
-    "min_cross_set_edges_k",
     "stability_window_refits",
     "stability_passes_required",
-    "stability_consecutive_k",
     "min_refits_in_phase_b",
-    "hub_theta_rmse_max",
-    "logalpha_sd_guardrail",
-    "shift_scale_min_cross_set_edges",
-    "shift_scale_min_distinct_spoke_items_per_bin",
     "reliability_var_mu_epsilon",
     "reliability_total_var_epsilon",
     "hub_anchor_required_phase_b",
-    "probe_edges_count_toward_active_constraints",
     "spoke_quantile_coverage_bins",
     "spoke_quantile_coverage_min_per_bin_per_refit",
-    "allow_spoke_spoke_cross_set",
-    "multi_spoke_mode",
-    "multi_spoke_budget_rule",
     "multi_spoke_budget_top_k",
     "min_cross_set_pairs_per_spoke_per_refit",
     "stage_quota_frac_anchor_link",
@@ -772,9 +755,7 @@
     "stage_quota_floor_local_link",
     "long_link_taper_multiplier",
     "long_link_taper_floor",
-    "cross_set_utility",
     "phase_a_mode",
-    "phase_a_import_failure_policy",
     "phase_a_required_reliability_min",
     "phase_a_compatible_model_ids",
     "phase_a_compatible_config_hashes",

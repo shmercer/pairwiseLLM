@@ -929,28 +929,28 @@ test_that("adaptive state and trueskill validators cover additional edge branche
       list(link_transform_mode = "bad_mode"),
       5L
     ),
-    "must be one of"
+    "Unknown `adaptive_config` field"
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
       list(cross_set_utility = "entropy"),
       5L
     ),
-    "must be one of"
+    "Unknown `adaptive_config` field"
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
       list(cross_set_utility = "p_times_1_minus_p"),
       5L
     ),
-    "must be one of"
+    "Unknown `adaptive_config` field"
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
       list(allow_spoke_spoke_cross_set = "yes"),
       5L
     ),
-    "must be TRUE or FALSE"
+    "Unknown `adaptive_config` field"
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
@@ -972,7 +972,7 @@ test_that("adaptive state and trueskill validators cover additional edge branche
       5L,
       set_ids = c(1L, 2L, 2L)
     ),
-    "only supported"
+    "Unknown `adaptive_config` field"
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
@@ -990,9 +990,7 @@ test_that("adaptive state and trueskill validators cover additional edge branche
   cfg_link_ok <- pairwiseLLM:::.adaptive_validate_controller_config(
     list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      multi_spoke_mode = "concurrent",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     ),
     5L,
     set_ids = c(1L, 2L, 3L)
@@ -1008,7 +1006,7 @@ test_that("adaptive state and trueskill validators cover additional edge branche
       5L,
       set_ids = c(1L, 2L, 3L)
     ),
-    "allow_spoke_spoke_cross_set = TRUE"
+    "Unknown `adaptive_config` field"
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(

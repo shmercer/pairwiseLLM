@@ -60,23 +60,16 @@ Pair selection in this framework is stepwise and uncertainty-aware.
 Within-set routing uses TrueSkill base utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
 win probability for pair \eqn{\{i, j\}}. In linking Phase B, anchor/strata
-routing uses a linking-global score derived from Phase A raw summaries plus
-the current spoke transform (\eqn{\delta_s}, optional \eqn{\log \alpha_s}).
+routing uses a linking-global score derived from Phase A raw summaries and
+the accepted Phase B linking state.
 In linking Phase B, eligible cross-set candidates are ranked by
 ridge-stabilized D-optimal log-det information gain on the active linking
 parameter block using order-averaged Model D probabilities. In
-\code{link_estimation_mode = "transform"}, this is the current spoke
-transform; in \code{link_estimation_mode = "anchored_joint"}, it is the
-spoke free block with the hub fixed. Linking inference parameters are used
-for inference/diagnostics/stopping, not as direct selection objectives.
-When \code{judge_param_mode = "phase_specific"}, the first Phase B startup
-step may use deterministic fallback from available within/shared judge
-estimates if link-specific estimates are not yet available; once link-specific
-estimates are expected, missing/non-finite values abort.
-When \code{judge_param_mode = "global_shared"}, Phase B uses a pooled
-within-set Phase A judge-parameter refit, using the configured BTL model
-variant, as the accepted shared source for fixed \code{beta}/\code{epsilon}
-constants.
+the spoke free block with the hub fixed. Linking inference parameters are
+used for inference/diagnostics/stopping, not as direct selection objectives.
+Phase B uses pooled within-set Phase A judge-parameter estimates, using the
+configured BTL model variant, as the accepted shared source for fixed
+\code{beta}/\code{epsilon} constants.
 Bayesian BTL posterior draws are not used as general pair-selection
 objectives; within-set pairing remains TrueSkill-routed, with accepted
 posterior refits contributing only to the long-link probability gate.

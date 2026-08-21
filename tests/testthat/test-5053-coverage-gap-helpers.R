@@ -9,9 +9,7 @@ make_link_probe_state <- function() {
     seed = 101L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$controller$probe_pairs_per_refit_per_spoke <- 0L
@@ -63,6 +61,13 @@ make_link_probe_state <- function() {
     ready_for_phase_b = TRUE,
     phase = "phase_b"
   )
+  for (set_id in names(state$linking$phase_a$artifacts)) {
+    state$linking$phase_a$artifacts[[set_id]] <- add_test_phase_a_evidence(
+      state$linking$phase_a$artifacts[[set_id]],
+      state = state,
+      set_id = as.integer(set_id)
+    )
+  }
   state$controller$current_link_spoke_id <- 2L
   state$controller$link_epoch_id_by_spoke <- list(`2` = 3L, `3` = 1L)
   state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only")
@@ -182,7 +187,6 @@ test_that("build_btl_results_data and fit-contract helpers cover empty and norma
     diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 500),
     diagnostics_pass = TRUE,
     inference_contract = list(
-      judge_param_mode = "phase_specific",
       phase_levels = c("phase2", "phase3", ""),
       judge_scope_levels = c("within", "link", "within"),
       phase_boundary_detected = FALSE
@@ -190,7 +194,7 @@ test_that("build_btl_results_data and fit-contract helpers cover empty and norma
     mcmc_config_used = list(chains = 2L)
   )
 
-  expect_identical(fit$inference_contract$judge_param_mode, "phase_specific")
+  expect_null(fit$inference_contract$judge_param_mode)
   expect_identical(fit$inference_contract$phase_levels, c("phase2", "phase3"))
   expect_identical(fit$inference_contract$judge_scope_levels, c("within", "link"))
   expect_false(fit$inference_contract$phase_boundary_detected)
@@ -316,8 +320,7 @@ test_that("adaptive schema validators cover fit-backed legacy state and canonica
 test_that("resume schema alignment migrates legacy transform columns and typed missing fields", {
   step_schema <- pairwiseLLM:::schema_step_log
   step_tbl <- tibble::tibble(
-    posterior_win_prob_pre = 0.8,
-    link_transform_mode = "shift_scale"
+    posterior_win_prob_pre = 0.8
   )
   aligned_step <- pairwiseLLM:::.adaptive_align_log_schema_for_resume(
     step_tbl,
@@ -326,8 +329,8 @@ test_that("resume schema alignment migrates legacy transform columns and typed m
   )
 
   expect_true("posterior_win_prob_ij_pre" %in% names(aligned_step))
-  expect_identical(aligned_step$link_transform_policy[[1L]], "fixed_shift_scale")
-  expect_identical(aligned_step$link_transform_state[[1L]], "shift_scale")
+  expect_true(is.na(aligned_step$link_transform_policy[[1L]]))
+  expect_true(is.na(aligned_step$link_transform_state[[1L]]))
   expect_false("link_transform_mode" %in% names(aligned_step))
 
   stage_tbl <- tibble::tibble(link_transform_mode = c("shift_only", NA_character_))
@@ -415,7 +418,7 @@ test_that("phase A helpers cover stop-pass sources, pending runs, and config sur
 
   hard_lock <- pairwiseLLM:::.adaptive_apply_controller_config(
     state,
-    adaptive_config = list(hub_lock_mode = "hard_lock", hub_lock_kappa = 0.4)
+    adaptive_config = list()
   )
   surface <- pairwiseLLM:::.adaptive_phase_a_required_config_surface(hard_lock, set_id = 2L)
   expect_identical(names(surface), c("judge_param_mode", "model_variant"))
@@ -601,7 +604,6 @@ test_that("candidate helpers cover probe panels, selection metadata, and backfil
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE
@@ -693,7 +695,6 @@ test_that("probe effort plan accelerates deterministically for identified probe-
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
       linking_identified = TRUE,
       link_stop_eligible = FALSE,
@@ -928,9 +929,7 @@ test_that("Phase B refit target scales for concurrent probe-active floors", {
     items,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      multi_spoke_mode = "concurrent",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$linking$phase_a <- list(
@@ -952,10 +951,9 @@ test_that("Phase B refit target scales for concurrent probe-active floors", {
     88L
   )
 
-  state$controller$multi_spoke_mode <- "independent"
   expect_identical(
     pairwiseLLM:::.adaptive_refit_pairs_target(state, list(refit_pairs_target = 30L)),
-    30L
+    88L
   )
 })
 
@@ -1365,7 +1363,6 @@ test_that("independent multi-spoke holdout routing ignores inactive spokes", {
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE
@@ -1377,7 +1374,6 @@ test_that("independent multi-spoke holdout routing ignores inactive spokes", {
       refit_id = 1L,
       spoke_id = 3L,
       hub_id = 1L,
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE
@@ -1419,7 +1415,7 @@ test_that("independent multi-spoke holdout routing ignores inactive spokes", {
     .package = "pairwiseLLM"
   )
 
-  expect_identical(next_spoke, 2L)
+  expect_identical(next_spoke, 3L)
 })
 
 test_that("concurrent probe progress guard does not impose a cross-spoke startup gate", {
@@ -1434,7 +1430,6 @@ test_that("concurrent probe progress guard does not impose a cross-spoke startup
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
-      multi_spoke_mode = "concurrent",
       min_cross_set_pairs_per_spoke_per_refit = 1L
     )
   )
@@ -1482,7 +1477,6 @@ test_that("concurrent probe progress guard does not impose a cross-spoke startup
         refit_id = 1L,
         spoke_id = 2L,
         hub_id = 1L,
-        link_transform_policy = "auto",
         link_transform_state = "shift_only",
         linking_identified = TRUE,
         link_stop_eligible = FALSE,
@@ -1494,7 +1488,6 @@ test_that("concurrent probe progress guard does not impose a cross-spoke startup
       refit_id = 1L,
       spoke_id = 3L,
       hub_id = 1L,
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
       linking_identified = TRUE,
       link_stop_eligible = FALSE,
@@ -2077,12 +2070,12 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
     refit_id = 1L,
     spoke_id = 2L,
     hub_id = 1L,
-    link_epoch_id = 1L,
     link_estimation_mode = "transform",
     link_transform_policy = "auto",
-    link_transform_state = "shift_only",
     link_refit_mode = "shift_only",
-    hub_lock_mode = "hard_lock",
+    hub_lock_mode = "soft_lock",
+    link_epoch_id = 1L,
+    link_transform_state = "shift_only",
     reliability_link_global = 0.9,
     linking_identified = TRUE,
     link_stop_eligible = TRUE,
@@ -2175,6 +2168,10 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
   )
 
   key_na <- bad_realized
+  key_na$link_estimation_mode <- "anchored_joint"
+  key_na$link_transform_policy <- NA_character_
+  key_na$link_refit_mode <- NA_character_
+  key_na$hub_lock_mode <- "hard_lock"
   key_na$refit_id <- NA_integer_
   expect_error(
     pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(key_na),
@@ -2182,10 +2179,14 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
   )
 
   mode_na <- bad_realized
+  mode_na$link_estimation_mode <- "anchored_joint"
+  mode_na$link_transform_policy <- NA_character_
+  mode_na$link_refit_mode <- NA_character_
+  mode_na$hub_lock_mode <- "hard_lock"
   mode_na$link_transform_state <- NA_character_
   expect_error(
     pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(mode_na),
-    "mode fields must be populated"
+    "anchored_joint rows: required columns must be populated"
   )
 
   logical_na <- bad_realized
@@ -2306,8 +2307,6 @@ test_that("probe panel planned ranks interleave bins for early fixed-cap realiza
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock",
       hub_anchor_required_phase_b = FALSE,
       probe_panel_edges = 100L,
       probe_rank_bins = 10L
@@ -2341,6 +2340,16 @@ test_that("probe panel planned ranks interleave bins for early fixed-cap realiza
     ),
     ready_for_phase_b = TRUE,
     phase = "phase_b"
+  )
+  state$linking$phase_a$artifacts[["1"]] <- add_test_phase_a_evidence(
+    state$linking$phase_a$artifacts[["1"]],
+    state = state,
+    set_id = 1L
+  )
+  state$linking$phase_a$artifacts[["2"]] <- add_test_phase_a_evidence(
+    state$linking$phase_a$artifacts[["2"]],
+    state = state,
+    set_id = 2L
   )
 
   panel <- pairwiseLLM:::.adaptive_link_probe_construct_panel(
@@ -3162,7 +3171,6 @@ test_that("routing, probe-panel, and candidate helper guards cover remaining bra
         refit_id = 1L,
         spoke_id = 2L,
         hub_id = 1L,
-        link_transform_policy = "auto",
         link_transform_state = "shift_only",
         link_stop_pass = FALSE,
         link_state_frozen = FALSE,

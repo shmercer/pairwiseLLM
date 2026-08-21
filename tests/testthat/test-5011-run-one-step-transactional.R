@@ -1,3 +1,52 @@
+add_link_phase_a_evidence <- function(state) {
+  artifact_ids <- names(state$linking$phase_a$artifacts %||% list())
+  for (set_id in artifact_ids) {
+    state$linking$phase_a$artifacts[[set_id]] <- add_test_phase_a_evidence(
+      state$linking$phase_a$artifacts[[set_id]],
+      state = state,
+      set_id = as.integer(set_id)
+    )
+  }
+  state
+}
+
+mark_link_phase_b_ready_with_artifacts <- function(state) {
+  set_ids <- sort(unique(as.integer(state$items$set_id)))
+  artifacts <- stats::setNames(vector("list", length(set_ids)), as.character(set_ids))
+  for (set_id in set_ids) {
+    in_set <- as.integer(state$items$set_id) == set_id
+    n_set <- sum(in_set)
+    artifacts[[as.character(set_id)]] <- list(
+      items = tibble::tibble(
+        global_item_id = as.character(state$items$global_item_id[in_set]),
+        theta_raw_mean = seq(0.2, by = -0.2, length.out = n_set),
+        theta_raw_sd = rep(0.1, n_set),
+        rank_mu_raw = seq_len(n_set)
+      )
+    )
+  }
+  state$warm_start_done <- TRUE
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = set_ids,
+      source = rep("run", length(set_ids)),
+      status = rep("ready", length(set_ids)),
+      validation_message = rep("ok", length(set_ids)),
+      artifact_path = rep(NA_character_, length(set_ids))
+    ),
+    artifacts = artifacts,
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = set_ids,
+    set_stop_pass_by_set = stats::setNames(as.list(rep(TRUE, length(set_ids))), as.character(set_ids)),
+    phase = "phase_b",
+    ready_spokes = setdiff(set_ids, as.integer(state$controller$hub_id %||% 1L)),
+    active_phase_a_set = NA_integer_,
+    phase_b_started_at_step = 1L
+  )
+  add_link_phase_a_evidence(state)
+}
+
 test_that("run_one_step commits valid results transactionally", {
   items <- make_test_items(3)
   trueskill_state <- make_test_trueskill_state(items)
@@ -122,9 +171,7 @@ test_that("held-out probe commits do not mutate the shared history-state cache",
     seed = 19L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$history_pairs <- tibble::tibble(A_id = "h1", B_id = "h2")
@@ -326,13 +373,10 @@ test_that("run_one_step populates linking scaffold columns for cross-set rows", 
     seed = 7L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      link_transform_mode = "auto",
-      hub_lock_mode = "soft_lock",
-      hub_lock_kappa = 0.75
+      hub_id = 1L
     )
   )
+  state <- mark_link_phase_b_ready_with_artifacts(state)
   judge_ok <- make_deterministic_judge("i_wins")
 
   out <- pairwiseLLM:::run_one_step(state, judge_ok)
@@ -341,17 +385,17 @@ test_that("run_one_step populates linking scaffold columns for cross-set rows", 
   expect_equal(sort(c(row$set_i[[1L]], row$set_j[[1L]])), c(1L, 2L))
   expect_true(isTRUE(row$is_cross_set[[1L]]))
   expect_equal(row$link_spoke_id[[1L]], 2L)
-  expect_equal(row$run_mode[[1L]], "link_one_spoke")
-  expect_equal(row$link_transform_policy[[1L]], "auto")
-  expect_equal(row$link_transform_state[[1L]], "shift_only")
-  expect_equal(row$utility_mode[[1L]], "linking_d_optimal_transform")
-  expect_equal(row$hub_lock_mode[[1L]], "soft_lock")
-  expect_equal(row$hub_lock_kappa[[1L]], 0.75)
-  expect_false(isTRUE(row$is_probe_step[[1L]]))
-  expect_false(isTRUE(row$is_holdout_probe_step[[1L]]))
+  expect_equal(row$run_mode[[1L]], "link_probe_holdout")
+  expect_true(is.na(row$link_transform_policy[[1L]]))
+  expect_true(is.na(row$link_transform_state[[1L]]))
+  expect_true(is.na(row$utility_mode[[1L]]))
+  expect_equal(row$hub_lock_mode[[1L]], "hard_lock")
+  expect_true(is.na(row$hub_lock_kappa[[1L]]))
+  expect_true(isTRUE(row$is_probe_step[[1L]]))
+  expect_true(isTRUE(row$is_holdout_probe_step[[1L]]))
   expect_false(isTRUE(row$is_drift_probe_step[[1L]]))
   expect_false(is.na(row$posterior_win_prob_pre[[1L]]))
-  expect_false(is.na(row$cross_set_utility_pre[[1L]]))
+  expect_true(is.na(row$cross_set_utility_pre[[1L]]))
 })
 
 test_that("run_one_step logs hub_lock_kappa as NA unless hub_lock_mode is soft_lock", {
@@ -367,19 +411,17 @@ test_that("run_one_step logs hub_lock_kappa as NA unless hub_lock_mode is soft_l
     seed = 8L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "hard_lock",
-      hub_lock_kappa = 0.75
+      hub_id = 1L
     )
   )
+  state_hard <- mark_link_phase_b_ready_with_artifacts(state_hard)
   out_hard <- pairwiseLLM:::run_one_step(state_hard, judge_ok)
   row_hard <- out_hard$step_log[nrow(out_hard$step_log), , drop = FALSE]
   expect_equal(row_hard$hub_lock_mode[[1L]], "hard_lock")
   expect_true(is.na(row_hard$hub_lock_kappa[[1L]]))
 })
 
-test_that("run_one_step logs linking pre-step transform estimates when available", {
+test_that("run_one_step ignores stale transform pre-step estimates", {
   items <- tibble::tibble(
     item_id = c("a", "b"),
     set_id = c(1L, 2L),
@@ -390,11 +432,10 @@ test_that("run_one_step logs linking pre-step transform estimates when available
     seed = 17L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      link_transform_mode = "auto"
+      hub_id = 1L
     )
   )
+  state <- mark_link_phase_b_ready_with_artifacts(state)
   state$controller$link_refit_stats_by_spoke <- list(
     `2` = list(
       link_transform_state = "shift_scale",
@@ -409,12 +450,12 @@ test_that("run_one_step logs linking pre-step transform estimates when available
   out <- pairwiseLLM:::run_one_step(state, judge_ok)
   row <- out$step_log[nrow(out$step_log), , drop = FALSE]
 
-  expect_equal(row$link_transform_policy[[1L]], "auto")
-  expect_equal(row$link_transform_state[[1L]], "shift_scale")
-  expect_equal(row$delta_spoke_estimate_pre[[1L]], 0.12, tolerance = 1e-12)
-  expect_equal(row$delta_spoke_sd_pre[[1L]], 0.03, tolerance = 1e-12)
-  expect_equal(row$log_alpha_spoke_estimate_pre[[1L]], 0.04, tolerance = 1e-12)
-  expect_equal(row$log_alpha_spoke_sd_pre[[1L]], 0.02, tolerance = 1e-12)
+  expect_true(is.na(row$link_transform_policy[[1L]]))
+  expect_true(is.na(row$link_transform_state[[1L]]))
+  expect_true(is.na(row$delta_spoke_estimate_pre[[1L]]))
+  expect_true(is.na(row$delta_spoke_sd_pre[[1L]]))
+  expect_true(is.na(row$log_alpha_spoke_estimate_pre[[1L]]))
+  expect_true(is.na(row$log_alpha_spoke_sd_pre[[1L]]))
 })
 
 test_that("run_one_step retires frozen spoke work without emitting a new step", {
@@ -428,9 +469,7 @@ test_that("run_one_step retires frozen spoke work without emitting a new step", 
     seed = 37L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -469,6 +508,7 @@ test_that("run_one_step retires frozen spoke work without emitting a new step", 
     active_phase_a_set = NA_integer_,
     phase_b_started_at_step = 1L
   )
+  state <- add_link_phase_a_evidence(state)
   state$controller$link_state_frozen_by_spoke <- list(`2` = TRUE)
   state$controller$link_transform_frozen_by_spoke <- list(`2` = FALSE)
   state$controller$link_transform_frozen_delta_by_spoke <- list(`2` = 0)
@@ -501,9 +541,7 @@ test_that("run_one_step gives active-link work precedence over held-out probes",
     seed = 52L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -538,6 +576,7 @@ test_that("run_one_step gives active-link work precedence over held-out probes",
     active_phase_a_set = NA_integer_,
     phase_b_started_at_step = 1L
   )
+  state <- add_link_phase_a_evidence(state)
   state$refit_meta$refit_pairs_target_current <- 3L
   state$controller$refit_pairs_target <- 3L
   state$controller$probe_pairs_per_refit_per_spoke <- 1L
@@ -553,8 +592,6 @@ test_that("run_one_step gives active-link work precedence over held-out probes",
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
-      link_estimation_mode = "transform",
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE
@@ -592,9 +629,7 @@ test_that("run_one_step preserves a legal active selection after probe accelerat
     seed = 521L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -629,6 +664,7 @@ test_that("run_one_step preserves a legal active selection after probe accelerat
     active_phase_a_set = NA_integer_,
     phase_b_started_at_step = 1L
   )
+  state <- add_link_phase_a_evidence(state)
   state$refit_meta$refit_pairs_target_current <- 4L
   state$controller$refit_pairs_target <- 4L
 
@@ -696,9 +732,7 @@ test_that("run_one_step can commit accelerated holdout work without prior starva
     seed = 523L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -733,6 +767,7 @@ test_that("run_one_step can commit accelerated holdout work without prior starva
     active_phase_a_set = NA_integer_,
     phase_b_started_at_step = 1L
   )
+  state <- add_link_phase_a_evidence(state)
   state$refit_meta$refit_pairs_target_current <- 4L
   state$controller$refit_pairs_target <- 4L
   state$controller$probe_pairs_per_refit_per_spoke <- 1L
@@ -748,8 +783,6 @@ test_that("run_one_step can commit accelerated holdout work without prior starva
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
-      link_estimation_mode = "transform",
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE
@@ -795,9 +828,7 @@ test_that("run_one_step uses link_probe_holdout after active-link starvation", {
     seed = 41L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -832,6 +863,7 @@ test_that("run_one_step uses link_probe_holdout after active-link starvation", {
     active_phase_a_set = NA_integer_,
     phase_b_started_at_step = 1L
   )
+  state <- add_link_phase_a_evidence(state)
   state$refit_meta$refit_pairs_target_current <- 3L
   state$controller$refit_pairs_target <- 3L
 
@@ -926,9 +958,7 @@ test_that("run_one_step keeps holdout probe work within the ordinary per-refit c
     seed = 52L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -963,6 +993,7 @@ test_that("run_one_step keeps holdout probe work within the ordinary per-refit c
     active_phase_a_set = NA_integer_,
     phase_b_started_at_step = 1L
   )
+  state <- add_link_phase_a_evidence(state)
   state$refit_meta$refit_pairs_target_current <- 5L
   state$controller$refit_pairs_target <- 5L
   state$controller$probe_pairs_per_refit_per_spoke <- 1L
@@ -978,8 +1009,6 @@ test_that("run_one_step keeps holdout probe work within the ordinary per-refit c
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
-      link_estimation_mode = "transform",
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
       linking_identified = TRUE,
       link_stop_eligible = FALSE,
@@ -1090,9 +1119,7 @@ test_that("run_one_step keeps independent multi-spoke holdout probes on the acti
     seed = 410L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   draws <- matrix(
@@ -1150,6 +1177,7 @@ test_that("run_one_step keeps independent multi-spoke holdout probes on the acti
     active_phase_a_set = NA_integer_,
     phase_b_started_at_step = 1L
   )
+  state <- add_link_phase_a_evidence(state)
   state$warm_start_done <- TRUE
   state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
   state$controller$multi_spoke_mode <- "independent"
@@ -1219,8 +1247,6 @@ test_that("run_one_step keeps independent multi-spoke holdout probes on the acti
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
-      link_estimation_mode = "transform",
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE
@@ -1232,8 +1258,6 @@ test_that("run_one_step keeps independent multi-spoke holdout probes on the acti
       refit_id = 1L,
       spoke_id = 3L,
       hub_id = 1L,
-      link_estimation_mode = "transform",
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE
@@ -1328,10 +1352,10 @@ test_that("run_one_step keeps independent multi-spoke holdout probes on the acti
 
   row <- out$step_log[nrow(out$step_log), , drop = FALSE]
   expect_identical(as.character(row$run_mode[[1L]]), "link_probe_holdout")
-  expect_identical(as.integer(row$link_spoke_id[[1L]]), 2L)
+  expect_identical(as.integer(row$link_spoke_id[[1L]]), 3L)
   expect_true(isTRUE(row$is_probe_step[[1L]]))
-  expect_identical(as.integer(out$controller$current_link_spoke_id), 2L)
-  expect_identical(as.integer(out$linking$probe$realized_edges$spoke_id[[1L]]), 2L)
+  expect_identical(as.integer(out$controller$current_link_spoke_id), 3L)
+  expect_identical(as.integer(out$linking$probe$realized_edges$spoke_id[[1L]]), 3L)
 })
 
 test_that("run_one_step keeps accelerated concurrent holdout routing on the active spoke", {
@@ -1373,10 +1397,7 @@ test_that("run_one_step keeps accelerated concurrent holdout routing on the acti
     seed = 524L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock",
-      multi_spoke_mode = "concurrent"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -1417,6 +1438,7 @@ test_that("run_one_step keeps accelerated concurrent holdout routing on the acti
     active_phase_a_set = NA_integer_,
     phase_b_started_at_step = 1L
   )
+  state <- add_link_phase_a_evidence(state)
   state$refit_meta$refit_pairs_target_current <- 8L
   state$controller$refit_pairs_target <- 8L
   state$controller$probe_pairs_per_refit_per_spoke <- 1L
@@ -1443,8 +1465,6 @@ test_that("run_one_step keeps accelerated concurrent holdout routing on the acti
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
-      link_estimation_mode = "transform",
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE
@@ -1456,8 +1476,6 @@ test_that("run_one_step keeps accelerated concurrent holdout routing on the acti
       refit_id = 1L,
       spoke_id = 3L,
       hub_id = 1L,
-      link_estimation_mode = "transform",
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE
@@ -1493,9 +1511,7 @@ test_that("invalid linking step does not mutate controller link routing state", 
     seed = 8L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$controller$current_link_spoke_id <- 99L
@@ -1545,9 +1561,7 @@ test_that("run_one_step uses selected spoke fallback for non-hub cross-set rows"
     seed = 13L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -1580,6 +1594,7 @@ test_that("run_one_step uses selected spoke fallback for non-hub cross-set rows"
       rank_mu_raw = 1
     ))
   )
+  state <- add_link_phase_a_evidence(state)
   state$controller$probe_edges_min_for_stop <- 0L
   state$controller$link_refit_stats_by_spoke <- list(`2` = list(), `3` = list())
 
@@ -1595,7 +1610,7 @@ test_that("run_one_step uses selected spoke fallback for non-hub cross-set rows"
         U0_ij = 0.25,
         link_u = 0.25,
         link_d_opt_gain = 0.2,
-        utility_mode = "linking_d_optimal_transform",
+        utility_mode = "linking_d_optimal_anchored_joint",
         run_mode = "link_multi_spoke",
         link_spoke_id_selected = 2L,
         long_gate_pass = NA,

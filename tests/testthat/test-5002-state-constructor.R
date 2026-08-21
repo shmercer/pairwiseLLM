@@ -102,8 +102,7 @@ test_that("adaptive_rank_start normalizes anchored-joint defaults", {
     seed = 3L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "anchored_joint"
+      hub_id = 1L
     )
   )
 

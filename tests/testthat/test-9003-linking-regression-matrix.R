@@ -91,7 +91,6 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
       adaptive_config = list(
         run_mode = "link_multi_spoke",
         hub_id = 1L,
-        multi_spoke_mode = "independent",
         phase_a_mode = "import"
       ),
       linking = TRUE
@@ -102,7 +101,6 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
       adaptive_config = list(
         run_mode = "link_multi_spoke",
         hub_id = 1L,
-        multi_spoke_mode = "concurrent",
         min_cross_set_pairs_per_spoke_per_refit = 1L,
         phase_a_mode = "import"
       ),
@@ -128,9 +126,6 @@ test_that("regression matrix smoke covers baseline/linking modes and resume path
           probe_panel_edges = 18L,
           probe_pairs_per_refit_per_spoke = 1L,
           probe_edges_min_for_stop = 2L,
-          probe_active_floor_min = 1L,
-          probe_active_floor_frac = 0,
-          probe_active_floor_requires_anchor_progress = FALSE,
           link_refit_pairs_per_spoke_rule = "fixed"
         )
       )
@@ -382,8 +377,7 @@ test_that("anchored-joint frozen spokes are removed from active and probe routin
     tibble::tibble(
       refit_id = 3L,
       spoke_id = 2L,
-      link_stop_pass = TRUE,
-      link_estimation_mode = "anchored_joint"
+      link_stop_pass = TRUE
     )
   )
 

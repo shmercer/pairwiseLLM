@@ -106,10 +106,7 @@ test_that("link-stage append completeness guard rejects missing key/mode fields"
     spoke_id = NA_integer_,
     hub_id = 1L,
     link_epoch_id = 1L,
-    link_estimation_mode = "transform",
     link_transform_state = NA_character_,
-    link_refit_mode = "shift_only",
-    hub_lock_mode = "soft_lock",
     reliability_link_global = 0.9,
     linking_identified = TRUE,
     link_stop_eligible = TRUE,
@@ -133,8 +130,7 @@ test_that("link-stage completeness guard requires canonical policy/state fields"
   legacy_rows <- tibble::tibble(
     refit_id = 1L,
     spoke_id = 2L,
-    hub_id = 1L,
-    link_transform_mode = "shift_only"
+    hub_id = 1L
   )
 
   expect_error(
@@ -394,9 +390,7 @@ test_that("anchored-joint link-stage completeness allows transform-only typed NA
     seed = 19L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "anchored_joint",
-      hub_lock_mode = "hard_lock"
+      hub_id = 1L
     )
   )
   controller <- pairwiseLLM:::.adaptive_controller_resolve(state)
@@ -405,12 +399,12 @@ test_that("anchored-joint link-stage completeness allows transform-only typed NA
     refit_id = 1L,
     spoke_id = 2L,
     hub_id = 1L,
-    link_epoch_id = 1L,
     link_estimation_mode = "anchored_joint",
+    hub_lock_mode = "hard_lock",
+    link_epoch_id = 1L,
     link_transform_policy = NA_character_,
     link_transform_state = NA_character_,
     link_refit_mode = NA_character_,
-    hub_lock_mode = "hard_lock",
     reliability_link_global = 0.9,
     linking_identified = TRUE,
     link_stop_eligible = FALSE,

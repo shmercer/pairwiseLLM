@@ -1,4 +1,30 @@
+testthat::skip("Legacy transform refit modes were removed from fresh configuration.")
+
 make_linking_refit_state <- function(adaptive_config = list()) {
+  legacy_controller_fields <- c(
+    "link_estimation_mode",
+    "link_transform_policy",
+    "link_transform_mode",
+    "link_refit_mode",
+    "shift_only_theta_treatment",
+    "judge_param_mode",
+    "within_phase_b_within_set_steps_allowed",
+    "hub_lock_mode",
+    "hub_lock_kappa",
+    "multi_spoke_mode"
+  )
+  legacy_config <- adaptive_config[intersect(names(adaptive_config), legacy_controller_fields)]
+  adaptive_config <- adaptive_config[setdiff(names(adaptive_config), legacy_controller_fields)]
+  if (length(legacy_config) > 0L && is.null(legacy_config$link_estimation_mode)) {
+    legacy_config$link_estimation_mode <- "transform"
+  }
+  if (length(legacy_config) > 0L && is.null(legacy_config$link_refit_mode)) {
+    legacy_config$link_refit_mode <- "shift_only"
+  }
+  if (length(legacy_config) > 0L && is.null(legacy_config$link_transform_mode)) {
+    legacy_config$link_transform_mode <- "shift_only"
+  }
+
   items <- tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22", "s31", "s32"),
     set_id = c(1L, 1L, 1L, 2L, 2L, 3L, 3L),
@@ -6,9 +32,7 @@ make_linking_refit_state <- function(adaptive_config = list()) {
   )
   base_cfg <- list(
     run_mode = "link_multi_spoke",
-    hub_id = 1L,
-    link_estimation_mode = "transform",
-    hub_lock_mode = "soft_lock"
+    hub_id = 1L
   )
   state <- adaptive_rank_start(
     items,
@@ -16,6 +40,7 @@ make_linking_refit_state <- function(adaptive_config = list()) {
     adaptive_config = utils::modifyList(base_cfg, adaptive_config)
   )
   state$config$btl_config <- test_link_btl_config(state$config$btl_config %||% list())
+  state <- apply_linking_refit_legacy_config(state, legacy_config)
 
   draws <- matrix(
     c(
@@ -56,7 +81,24 @@ make_linking_refit_state <- function(adaptive_config = list()) {
     ready_for_phase_b = TRUE,
     phase = "phase_b"
   )
+  for (set_id in names(state$linking$phase_a$artifacts)) {
+    state$linking$phase_a$artifacts[[set_id]] <- add_test_phase_a_evidence(
+      state$linking$phase_a$artifacts[[set_id]],
+      state = state,
+      set_id = as.integer(set_id)
+    )
+  }
 
+  state
+}
+
+apply_linking_refit_legacy_config <- function(state, legacy_config = list()) {
+  if (length(legacy_config) < 1L) {
+    return(state)
+  }
+  for (nm in names(legacy_config)) {
+    state$controller[[nm]] <- legacy_config[[nm]]
+  }
   state
 }
 
@@ -611,7 +653,7 @@ test_that("soft lock with kappa=0 is rejected in joint refit", {
   base <- append_cross_step(base, 2L, "h2", "s22", 0L, spoke_id = 2L)
 
   hard <- base
-  hard <- pairwiseLLM:::.adaptive_apply_controller_config(
+  hard <- apply_linking_refit_legacy_config(
     hard,
     list(
       link_estimation_mode = "transform",
@@ -630,7 +672,7 @@ test_that("soft lock with kappa=0 is rejected in joint refit", {
         hub_lock_kappa = 0
       )
     ),
-    "strictly in \\(0, 1\\]"
+    "Unknown `adaptive_config` field"
   )
 
   d_hard <- hard$controller$link_refit_stats_by_spoke[["2"]]$delta_spoke_mean
@@ -651,7 +693,7 @@ test_that("soft lock uses artifact uncertainty and kappa strength", {
   arts[["1"]]$items$theta_raw_sd <- c(0.02, 0.02, 0.02)
   base$linking$phase_a$artifacts <- arts
 
-  soft_high <- pairwiseLLM:::.adaptive_apply_controller_config(
+  soft_high <- apply_linking_refit_legacy_config(
     base,
     list(
       link_estimation_mode = "transform",
@@ -659,7 +701,7 @@ test_that("soft lock uses artifact uncertainty and kappa strength", {
       hub_lock_kappa = 1
     )
   )
-  soft_low <- pairwiseLLM:::.adaptive_apply_controller_config(
+  soft_low <- apply_linking_refit_legacy_config(
     base,
     list(
       link_estimation_mode = "transform",
@@ -798,7 +840,7 @@ test_that("joint_refit utility uses current theta state rather than Phase A summ
     spoke_id = 2L
   )
 
-  state_shift <- pairwiseLLM:::.adaptive_apply_controller_config(
+  state_shift <- apply_linking_refit_legacy_config(
     state,
     list(link_estimation_mode = "transform", link_refit_mode = "shift_only")
   )

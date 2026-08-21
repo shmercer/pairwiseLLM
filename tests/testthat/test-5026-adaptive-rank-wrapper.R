@@ -844,8 +844,7 @@ test_that("adaptive_rank accepts reviewed public Phase B controls", {
       phase_a_mode = "import",
       phase_a_artifacts = artifacts[c("1", "2")],
       hub_anchor_required_phase_b = FALSE,
-      probe_panel_edges = 12L,
-      within_phase_b_within_set_steps_allowed = FALSE
+      probe_panel_edges = 12L
     ),
     btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
     progress = "none",
@@ -854,10 +853,9 @@ test_that("adaptive_rank accepts reviewed public Phase B controls", {
 
   expect_false(isTRUE(out$state$controller$hub_anchor_required_phase_b))
   expect_identical(out$state$controller$probe_panel_edges, 12L)
-  expect_false(isTRUE(out$state$controller$within_phase_b_within_set_steps_allowed))
 })
 
-test_that("adaptive_rank hard-gates unsupported Phase B public controls", {
+test_that("adaptive_rank rejects removed Phase B public controls", {
   samples <- make_linking_samples_df()
   judge <- function(A, B, state, ...) {
     y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
@@ -878,7 +876,7 @@ test_that("adaptive_rank hard-gates unsupported Phase B public controls", {
         probe_edges_count_toward_active_constraints = TRUE
       )
     ),
-    "probe_edges_count_toward_active_constraints = TRUE"
+    "probe_edges_count_toward_active_constraints"
   )
 
   expect_error(
@@ -895,7 +893,7 @@ test_that("adaptive_rank hard-gates unsupported Phase B public controls", {
         allow_spoke_spoke_cross_set = TRUE
       )
     ),
-    "allow_spoke_spoke_cross_set = TRUE"
+    "allow_spoke_spoke_cross_set"
   )
 })
 
@@ -1060,9 +1058,7 @@ test_that("adaptive_rank wrapper supports anchored-joint linking activation", {
       run_mode = "link_one_spoke",
       hub_id = 1L,
       phase_a_mode = "import",
-      phase_a_artifacts = artifacts[c("1", "2")],
-      link_estimation_mode = "anchored_joint",
-      hub_lock_mode = "hard_lock"
+      phase_a_artifacts = artifacts[c("1", "2")]
     ),
     btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none",
@@ -1099,16 +1095,10 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
-      link_estimation_mode = "transform",
-      multi_spoke_mode = "concurrent",
-      hub_lock_mode = "soft_lock",
       min_cross_set_pairs_per_spoke_per_refit = 1L,
       probe_panel_edges = 18L,
       probe_pairs_per_refit_per_spoke = 1L,
       probe_edges_min_for_stop = 2L,
-      probe_active_floor_min = 1L,
-      probe_active_floor_frac = 0,
-      probe_active_floor_requires_anchor_progress = FALSE,
       link_refit_pairs_per_spoke_rule = "fixed",
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
@@ -1127,7 +1117,7 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
   expect_true(all(sort(unique(cross$link_spoke_id)) == c(2L, 3L)))
   expect_true(all(xor(cross$set_i == 1L, cross$set_j == 1L)))
   expect_true(nrow(out$logs$link_stage_log) >= 2L)
-  expect_true(all(as.character(out$logs$link_stage_log$link_estimation_mode) == "transform"))
+  expect_true(all(as.character(out$logs$link_stage_log$link_estimation_mode) == "anchored_joint"))
   expect_true(all(c("link_transform_policy", "link_transform_state", "link_epoch_id") %in%
     names(out$logs$link_stage_log)))
   expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))
@@ -1198,7 +1188,7 @@ test_that("adaptive_rank wrapper emits clear linking preflight errors", {
   )
 })
 
-test_that("adaptive_rank fails loudly for unsupported within-set maintenance in Phase B", {
+test_that("adaptive_rank rejects removed within-set maintenance control", {
   samples <- make_linking_samples_df()
   two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
   items <- dplyr::rename(two_set, item_id = ID)
@@ -1226,6 +1216,6 @@ test_that("adaptive_rank fails loudly for unsupported within-set maintenance in 
       progress = "none",
       seed = 29L
     ),
-    "Phase B runtime does not support"
+    "within_phase_b_within_set_steps_allowed"
   )
 })

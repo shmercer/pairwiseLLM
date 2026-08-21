@@ -333,9 +333,7 @@ test_that("anchored-joint Phase B global metrics use uncertainty-aware spoke rec
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
-      phase_a_mode = "import",
-      link_estimation_mode = "anchored_joint",
-      hub_lock_mode = "hard_lock"
+      phase_a_mode = "import"
     )
   )
   state$warm_start_done <- TRUE

@@ -122,10 +122,7 @@ make_covr_probe_resume_state <- function() {
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
-      link_refit_mode = "shift_only",
-      hub_lock_mode = "soft_lock",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE
     )
@@ -169,9 +166,7 @@ make_phase_a_anchored_import_state <- function() {
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
-      phase_a_mode = "import",
-      link_estimation_mode = "anchored_joint",
-      hub_lock_mode = "hard_lock"
+      phase_a_mode = "import"
     )
   )
   art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
@@ -424,7 +419,7 @@ test_that("phase A validators and anchored-joint guards cover uncovered error br
   state_non_aj$controller$hub_lock_mode <- "soft_lock"
   expect_error(
     .adaptive_anchored_joint_artifact_copy_init(state_non_aj, spoke_id = 2L),
-    "requires `link_estimation_mode = anchored_joint`"
+    "requires hub and spoke Phase A artifacts"
   )
   state_aj_missing <- state_aj
   state_aj_missing$linking$phase_a$artifacts <- list()
@@ -547,8 +542,6 @@ test_that("phase A validators and anchored-joint guards cover uncovered error br
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock",
       phase_a_mode = "run",
       phase_a_required_reliability_min = 0
     )
@@ -579,7 +572,7 @@ test_that("phase A validators and anchored-joint guards cover uncovered error br
   gate_state$linking$phase_a$artifacts[["2"]]$n_pairs_committed <- 0L
   expect_error(
     .adaptive_phase_a_gate_or_abort(gate_state),
-    "did not satisfy strict stop-pass criteria"
+    "did not reconcile to `n_pairs_committed`"
   )
 })
 
@@ -600,15 +593,14 @@ test_that("persistence resume helpers cover legacy mode inference and resume inv
   aligned_stage <- .adaptive_align_log_schema_for_resume(
     tibble::tibble(
       transform_frozen = TRUE,
-      transform_frozen_refit_id = 7L,
-      link_transform_mode = "shift_only"
+      transform_frozen_refit_id = 7L
     ),
     schema_link_stage_log,
     "link_stage_log"
   )
   expect_true(isTRUE(aligned_stage$link_state_frozen[[1L]]))
   expect_identical(aligned_stage$link_state_frozen_refit_id[[1L]], 7L)
-  expect_identical(as.character(aligned_stage$link_transform_policy[[1L]]), "fixed_shift_only")
+  expect_true(is.na(aligned_stage$link_transform_policy[[1L]]))
 
   reconciled_missing_pair <- .adaptive_resume_reconcile_refit_meta(
     state = list(item_ids = c("a", "b"), refit_meta = list(last_refit_M_done = 9L)),
@@ -691,10 +683,7 @@ test_that("persistence resume helpers cover legacy mode inference and resume inv
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
-      link_refit_mode = "shift_only",
-      hub_lock_mode = "soft_lock",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE,
       link_epoch_id = 99L,
@@ -809,10 +798,7 @@ test_that("adaptive run helper fallbacks cover remaining probe and phase-scope b
       refit_id = 1L,
       spoke_id = 2L,
       hub_id = 1L,
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
-      link_refit_mode = "shift_only",
-      hub_lock_mode = "soft_lock",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE
     )
@@ -823,10 +809,7 @@ test_that("adaptive run helper fallbacks cover remaining probe and phase-scope b
       refit_id = 1L,
       spoke_id = 3L,
       hub_id = 1L,
-      link_transform_policy = "auto",
       link_transform_state = "shift_only",
-      link_refit_mode = "shift_only",
-      hub_lock_mode = "soft_lock",
       link_stop_pass = FALSE,
       link_state_frozen = FALSE
     )
@@ -837,7 +820,7 @@ test_that("adaptive run helper fallbacks cover remaining probe and phase-scope b
       controller = state_independent$controller,
       eligible_spoke_ids = c(2L, 3L)
     ),
-    "expected at most one budgeted spoke"
+    "Missing Phase A artifact"
   )
 
   expect_null(.adaptive_link_probe_select_holdout(make_covr_link_probe_state(), step_id = 1L, spoke_id = 2L))

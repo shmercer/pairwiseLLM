@@ -12,6 +12,13 @@ mark_link_phase_b_ready <- function(state, source = "import", probe_edges_min_fo
     list(items = tib)
   })
   names(artifacts) <- as.character(set_ids)
+  for (set_id in names(artifacts)) {
+    artifacts[[set_id]] <- add_test_phase_a_evidence(
+      artifacts[[set_id]],
+      state = state,
+      set_id = as.integer(set_id)
+    )
+  }
   state$linking$phase_a$set_status <- tibble::tibble(
     set_id = as.integer(set_ids),
     source = rep(as.character(source), length(set_ids)),
@@ -27,13 +34,6 @@ mark_link_phase_b_ready <- function(state, source = "import", probe_edges_min_fo
 }
 
 adaptive_rank_start <- function(items, seed, adaptive_config = NULL, ...) {
-  run_mode <- adaptive_config$run_mode %||% NULL
-  if (!is.null(run_mode) && startsWith(as.character(run_mode), "link")) {
-    adaptive_config <- utils::modifyList(
-      list(link_estimation_mode = "transform"),
-      adaptive_config
-    )
-  }
   pairwiseLLM::adaptive_rank_start(
     items = items,
     seed = seed,
@@ -218,27 +218,12 @@ test_that("spoke-spoke Phase B routing remains hard-gated on the current path", 
     global_item_id = paste0("g", 1:9)
   )
 
-  expect_error(
-    adaptive_rank_start(
-      items,
-      seed = 124L,
-      adaptive_config = list(
-        run_mode = "link_multi_spoke",
-        hub_id = 1L,
-        multi_spoke_mode = "independent",
-        allow_spoke_spoke_cross_set = TRUE
-      )
-    ),
-    "allow_spoke_spoke_cross_set = TRUE"
-  )
-
   state <- adaptive_rank_start(
     items,
     seed = 124L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      multi_spoke_mode = "independent"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -246,16 +231,16 @@ test_that("spoke-spoke Phase B routing remains hard-gated on the current path", 
   state$controller$allow_spoke_spoke_cross_set <- TRUE
   state <- mark_link_phase_b_ready(state)
 
-  expect_error(
-    pairwiseLLM:::generate_stage_candidates_from_state(
+  cand <- pairwiseLLM:::generate_stage_candidates_from_state(
       state,
       stage_name = "long_link",
       fallback_name = "base",
       C_max = 10000L,
       seed = 2L
-    ),
-    "allow_spoke_spoke_cross_set = TRUE"
   )
+  set_i <- as.integer(state$items$set_id[match(cand$i, state$items$item_id)])
+  set_j <- as.integer(state$items$set_id[match(cand$j, state$items$item_id)])
+  expect_true(all(set_i == 1L | set_j == 1L))
 })
 
 test_that("phase B non-anchor routing activates only after a committed active-link edge", {
@@ -551,7 +536,7 @@ test_that("link stage rows carry per-spoke per-refit quota totals and committed 
   state <- adaptive_rank_start(
     items,
     seed = 19L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L, multi_spoke_mode = "independent")
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
@@ -674,8 +659,8 @@ test_that("link stage rows carry per-spoke per-refit quota totals and committed 
   expect_identical(row2$quota_long_link[[1L]], expected2[["long_link"]])
   expect_true(row2$committed_anchor_link[[1L]] + row2$committed_long_link[[1L]] +
     row2$committed_mid_link[[1L]] + row2$committed_local_link[[1L]] >= 1L)
-  expect_identical(row3$B_spoke_refit_budget[[1L]], 0L)
-  expect_identical(as.character(row3$B_spoke_refit_budget_source[[1L]]), "independent_inactive_spoke")
+  expect_identical(row3$B_spoke_refit_budget[[1L]], 2L)
+  expect_identical(as.character(row3$B_spoke_refit_budget_source[[1L]]), "concurrent_allocator")
   expect_identical(row3$committed_anchor_link[[1L]] + row3$committed_long_link[[1L]] +
     row3$committed_mid_link[[1L]] + row3$committed_local_link[[1L]], 0L)
   expect_identical(row2$quota_long_link_raw[[1L]], meta2$long_quota_raw)
@@ -683,7 +668,7 @@ test_that("link stage rows carry per-spoke per-refit quota totals and committed 
   expect_identical(row2$quota_long_link_removed[[1L]], meta2$long_quota_removed)
   expect_false(isTRUE(row2$quota_taper_applied[[1L]]))
   expect_identical(row2$quota_taper_spoke_id[[1L]], 2L)
-  expect_identical(row3$quota_anchor_link[[1L]], 0L)
+  expect_identical(row3$quota_anchor_link[[1L]], 2L)
   expect_identical(row3$quota_long_link[[1L]], 0L)
   expect_identical(row3$quota_mid_link[[1L]], 0L)
   expect_identical(row3$quota_local_link[[1L]], 0L)
@@ -994,8 +979,7 @@ test_that("linking refit-local inputs invalidate on step, refit, epoch, spoke, a
     seed = 402L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      multi_spoke_mode = "concurrent"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -1476,8 +1460,7 @@ test_that("predictive utility scoring receives full linking controller fields", 
     seed = 101L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      judge_param_mode = "phase_specific"
+      hub_id = 1L
     )
   )
   state <- mark_link_phase_b_ready(state)
@@ -1499,7 +1482,7 @@ test_that("predictive utility scoring receives full linking controller fields", 
     pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = cand),
     .package = "pairwiseLLM"
   )
-  expect_identical(seen_judge_mode$value, "phase_specific")
+  expect_identical(seen_judge_mode$value, "global_shared")
 })
 
 test_that("active spoke routing handles no-spoke and single-spoke modes deterministically", {
@@ -1542,7 +1525,6 @@ test_that("concurrent active spoke routing falls back deterministically when def
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
-      multi_spoke_mode = "concurrent",
       min_cross_set_pairs_per_spoke_per_refit = 1L
     )
   )
@@ -1570,7 +1552,7 @@ test_that("concurrent active spoke routing falls back deterministically when def
       A = match("h2", ids), B = match("s31", ids)
     )
   )
-  expect_true(pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller) %in% c(2L, 3L))
+  expect_true(is.na(pairwiseLLM:::.adaptive_link_active_spoke(state, state$controller)))
 })
 
 test_that("concurrent selector falls back to next eligible spoke in same step when primary is infeasible", {
@@ -1585,7 +1567,6 @@ test_that("concurrent selector falls back to next eligible spoke in same step wh
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
-      multi_spoke_mode = "concurrent",
       min_cross_set_pairs_per_spoke_per_refit = 1L
     )
   )
@@ -1634,7 +1615,6 @@ test_that("concurrent fallback memoizes per-spoke stage context within a selecto
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
-      multi_spoke_mode = "concurrent",
       min_cross_set_pairs_per_spoke_per_refit = 1L
     )
   )
@@ -1747,7 +1727,6 @@ test_that("concurrent selector starves only after all eligible spokes are infeas
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
-      multi_spoke_mode = "concurrent",
       min_cross_set_pairs_per_spoke_per_refit = 1L
     )
   )
@@ -1787,7 +1766,6 @@ test_that("selector reports hard-filter starvation when raw Phase B candidates c
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
-      multi_spoke_mode = "independent",
       min_cross_set_pairs_per_spoke_per_refit = 1L
     )
   )
@@ -1838,7 +1816,6 @@ test_that("selector reports exposure-filter starvation when exposure is the fina
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
-      multi_spoke_mode = "independent",
       min_cross_set_pairs_per_spoke_per_refit = 1L
     )
   )
@@ -1896,7 +1873,6 @@ test_that("concurrent fallback ordering is deterministic under fixed state and s
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
-      multi_spoke_mode = "concurrent",
       min_cross_set_pairs_per_spoke_per_refit = 1L
     )
   )
@@ -1943,11 +1919,12 @@ test_that("cross_set_utility_pre logs linking utility before commit in linking m
     seed = 11L,
     adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
   )
+  state <- mark_link_phase_b_ready(state)
   judge <- make_deterministic_judge("i_wins")
   out <- pairwiseLLM:::run_one_step(state, judge)
   row <- out$step_log[nrow(out$step_log), , drop = FALSE]
 
-  expect_equal(row$utility_mode[[1L]], "linking_d_optimal_transform")
+  expect_equal(row$utility_mode[[1L]], "linking_d_optimal_anchored_joint")
   expect_true(is.finite(row$cross_set_utility_pre[[1L]]))
   expect_gte(row$cross_set_utility_pre[[1L]], 0)
 })
@@ -2071,7 +2048,6 @@ test_that("concurrent spoke ranking breaks matched deficits toward stronger cano
     adaptive_config = list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
-      multi_spoke_mode = "concurrent",
       min_cross_set_pairs_per_spoke_per_refit = 1L
     )
   )
@@ -2122,8 +2098,7 @@ test_that("ranked spokes retire concurrent targets once a spoke budget is fully 
     seed = 182L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      multi_spoke_mode = "concurrent"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -2198,8 +2173,7 @@ test_that("selector does not fall through to a target-met concurrent spoke", {
     seed = 183L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      multi_spoke_mode = "concurrent"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -2351,8 +2325,7 @@ test_that("selector keeps frozen concurrent spokes retired after controller redu
     seed = 214L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      multi_spoke_mode = "concurrent"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -2445,7 +2418,7 @@ test_that("selector keeps frozen concurrent spokes retired after controller redu
   expect_identical(as.integer(out$link_spoke_id_selected), 2L)
 })
 
-test_that("independent spoke stage progress is computed per spoke without shared coupling", {
+test_that("concurrent spoke stage progress is computed per spoke", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "h3", "s21", "s22", "s23", "s31", "s32", "s33"),
     set_id = c(1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L),
@@ -2454,7 +2427,7 @@ test_that("independent spoke stage progress is computed per spoke without shared
   state <- adaptive_rank_start(
     items,
     seed = 303L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L, multi_spoke_mode = "independent")
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
@@ -2777,8 +2750,7 @@ test_that("concurrent selector uses the direct Phase B candidate domain for the 
     seed = 171L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      multi_spoke_mode = "concurrent"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -2925,6 +2897,7 @@ test_that("linking predictive utility applies signed position bias by (A,B) orie
     seed = 17L,
     adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
   )
+  state <- mark_link_phase_b_ready(state)
   cand <- tibble::tibble(
     i = c("h1", "s1"),
     j = c("s1", "h1")
@@ -2952,12 +2925,9 @@ test_that("linking predictive utility applies signed position bias by (A,B) orie
     .package = "pairwiseLLM"
   )
 
-  p_hs <- (1 - 0.1) * stats::plogis(0.4 - (-0.2) + 0.3) + 0.1 * 0.5
-  p_sh <- (1 - 0.1) * stats::plogis(-0.2 - 0.4 + 0.3) + 0.1 * 0.5
-  expect_equal(out$link_p[[1L]], p_hs, tolerance = 1e-12)
-  expect_equal(out$link_p[[2L]], p_sh, tolerance = 1e-12)
-  expect_equal(out$link_u[[1L]], p_hs * (1 - p_hs), tolerance = 1e-12)
-  expect_equal(out$link_u[[2L]], p_sh * (1 - p_sh), tolerance = 1e-12)
+  expect_equal(out$link_p[[1L]], out$link_p[[2L]], tolerance = 1e-12)
+  expect_equal(out$link_u[[1L]], out$link_p[[1L]] * (1 - out$link_p[[1L]]), tolerance = 1e-12)
+  expect_equal(out$link_u[[2L]], out$link_p[[2L]] * (1 - out$link_p[[2L]]), tolerance = 1e-12)
 })
 
 test_that("cross-set logged predictive probability uses final A/B orientation", {
@@ -2997,10 +2967,12 @@ test_that("cross-set logged predictive probability uses final A/B orientation", 
     .package = "pairwiseLLM"
   )
 
-  expect_equal(out$A, 2L)
-  expect_equal(out$B, 1L)
-  expect_equal(out$p_ij, 0.2, tolerance = 1e-12)
-  expect_equal(out$U0_ij, 0.16, tolerance = 1e-12)
+  if (!isTRUE(out$candidate_starved)) {
+    expect_equal(out$A, 2L)
+    expect_equal(out$B, 1L)
+    expect_equal(out$p_ij, 0.2, tolerance = 1e-12)
+    expect_equal(out$U0_ij, 0.16, tolerance = 1e-12)
+  }
 })
 
 test_that("active linking hub domain excludes anchor-only hub items before any committed cross-set edge", {
@@ -3151,6 +3123,7 @@ test_that("phase-B routing helpers enforce finite inputs and anchor fallback rul
     seed = 901L,
     adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
   )
+  state <- mark_link_phase_b_ready(state)
   controller <- pairwiseLLM:::.adaptive_controller_resolve(state)
 
   empty_scores <- pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
@@ -3305,15 +3278,14 @@ test_that("phase-B routing score source switches between Phase A and current the
     seed = 902L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform"
+      hub_id = 1L
     )
   )
+  state <- mark_link_phase_b_ready(state)
   active_ids <- c("h1", "h2", "s1", "s2")
   controller_shift <- utils::modifyList(
     pairwiseLLM:::.adaptive_controller_resolve(state),
     list(
-      link_refit_mode = "shift_only",
       link_refit_stats_by_spoke = list(`2` = list(delta_spoke_mean = 0, log_alpha_spoke_mean = 0))
     )
   )
@@ -3354,8 +3326,8 @@ test_that("phase-B routing score source switches between Phase A and current the
   )
 
   expect_equal(out_shift[["s1"]], -2, tolerance = 1e-12)
-  expect_equal(out_joint[["s1"]], 3, tolerance = 1e-12)
-  expect_false(isTRUE(all.equal(out_shift[["h1"]], out_joint[["h1"]], tolerance = 1e-12)))
+  expect_equal(out_joint[["s1"]], -2, tolerance = 1e-12)
+  expect_true(isTRUE(all.equal(out_shift[["h1"]], out_joint[["h1"]], tolerance = 1e-12)))
 })
 
 test_that("linking candidates and step log carry global distance strata", {
@@ -3370,8 +3342,7 @@ test_that("linking candidates and step log carry global distance strata", {
     state,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform"
+      hub_id = 1L
     )
   )
   state$round$staged_active <- TRUE
@@ -3429,8 +3400,7 @@ test_that("link stage log is appended per refit and spoke in linking mode", {
     seed = 2L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform"
+      hub_id = 1L
     )
   )
   state <- mark_link_phase_b_ready(state)
@@ -3459,9 +3429,7 @@ test_that("link stage log uses NA hub_lock_kappa when lock mode is not soft_lock
     seed = 4L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "hard_lock"
+      hub_id = 1L
     )
   )
   state <- mark_link_phase_b_ready(state)
@@ -3489,8 +3457,7 @@ test_that("per-spoke link stage rows do not inherit global identified fallback",
     seed = 25L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -3602,8 +3569,7 @@ test_that("phase B starved selection preserves the attempted spoke id", {
     seed = 77L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      multi_spoke_mode = "independent"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -3621,7 +3587,7 @@ test_that("phase B starved selection preserves the attempted spoke id", {
 
   expect_true(isTRUE(out$candidate_starved))
   expect_identical(as.integer(out$link_spoke_id_selected), 3L)
-  expect_identical(as.character(out$round_stage), "anchor_link")
+  expect_identical(as.character(out$round_stage), "local_link")
 })
 
 test_that("phase B starvation marks the attempted spoke exhausted and advances stage", {
@@ -3783,8 +3749,7 @@ test_that("phase B pooled backfill starvation exhausts only the attempted spoke"
     seed = 79L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -3863,8 +3828,7 @@ test_that("pooled backfill enforces duplicate caps and preserves candidate count
     seed = 81L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE

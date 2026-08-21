@@ -154,6 +154,24 @@ test_that("phase A artifacts round-trip through persistence", {
   art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
   art1$quality_gate_accepted <- TRUE
   art2$quality_gate_accepted <- TRUE
+  art1$n_pairs_committed <- 1L
+  art2$n_pairs_committed <- 1L
+  art1$phase_a_within_set_evidence <- tibble::tibble(
+    pair_id = 1L,
+    step_id = 1L,
+    A_item = "h1",
+    B_item = "h2",
+    y_A = 1L
+  )
+  art2$phase_a_within_set_evidence <- tibble::tibble(
+    pair_id = 2L,
+    step_id = 2L,
+    A_item = "s21",
+    B_item = "s22",
+    y_A = 1L
+  )
+  art1$phase_a_within_set_evidence_hash <- .adaptive_phase_a_hash_object(art1$phase_a_within_set_evidence)
+  art2$phase_a_within_set_evidence_hash <- .adaptive_phase_a_hash_object(art2$phase_a_within_set_evidence)
 
   state$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -288,18 +306,14 @@ test_that("anchored-joint import validation rejects summary-only artifacts witho
     state,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "anchored_joint",
-      hub_lock_mode = "hard_lock"
+      hub_id = 1L
     )
   )
   source_state <- .adaptive_apply_controller_config(
     make_phase_a_ready_state_with_evidence(),
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "anchored_joint",
-      hub_lock_mode = "hard_lock"
+      hub_id = 1L
     )
   )
   artifact <- .adaptive_phase_a_build_artifact(source_state, set_id = 1L)
@@ -327,9 +341,7 @@ test_that("phase_a_prepare scaffolds anchored-joint artifact-copy accepted state
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
-      phase_a_mode = "import",
-      link_estimation_mode = "anchored_joint",
-      hub_lock_mode = "hard_lock"
+      phase_a_mode = "import"
     )
   )
   art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
@@ -454,35 +466,15 @@ test_that("phase A import validation rejects each required failure mode", {
   )
 })
 
-test_that("phase A import hash rejects inference-setting mismatch and supports allowlisted compatibility", {
+test_that("new controller config rejects removed judge mode", {
   state <- make_phase_a_ready_state()
-  artifact <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
-  artifact$quality_gate_accepted <- TRUE
 
-  state_joint <- .adaptive_apply_controller_config(
-    state,
-    adaptive_config = list(judge_param_mode = "phase_specific")
-  )
-  controller_joint <- .adaptive_controller_resolve(state_joint)
   expect_error(
-    .adaptive_phase_a_validate_imported_artifact(
-      artifact,
-      state_joint,
-      set_id = 1L,
-      controller = controller_joint
+    .adaptive_apply_controller_config(
+      state,
+      adaptive_config = list(judge_param_mode = "phase_specific")
     ),
     "judge_param_mode"
-  )
-
-  controller_allow <- controller_joint
-  controller_allow$phase_a_compatible_config_hashes <- artifact$fit_config_hash
-  expect_no_error(
-    .adaptive_phase_a_validate_imported_artifact(
-      artifact,
-      state_joint,
-      set_id = 1L,
-      controller = controller_allow
-    )
   )
 })
 
@@ -496,22 +488,17 @@ test_that("phase A import ignores Phase B-only legacy surface mismatches", {
   )
   artifact$quality_gate_accepted <- TRUE
 
-  state_joint <- .adaptive_apply_controller_config(
+  state_current <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(
-      link_estimation_mode = "transform",
-      link_refit_mode = "joint_refit",
-      hub_lock_mode = "soft_lock",
-      hub_lock_kappa = 0.6
-    )
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
   )
-  controller_joint <- .adaptive_controller_resolve(state_joint)
+  controller <- .adaptive_controller_resolve(state_current)
   expect_no_error(
     .adaptive_phase_a_validate_imported_artifact(
       artifact,
-      state_joint,
+      state_current,
       set_id = 1L,
-      controller = controller_joint
+      controller = controller
     )
   )
 })
@@ -739,7 +726,7 @@ test_that("phase A prepare invalidates memo on imported artifact replacement", {
   expect_true(all(status$status == "ready"))
 })
 
-test_that("phase A prepare invalidates memo on config changes that affect acceptance", {
+test_that("phase A prepare ignores stale removed judge-mode metadata", {
   state <- make_phase_a_ready_state_with_evidence()
   art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
   art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
@@ -760,8 +747,8 @@ test_that("phase A prepare invalidates memo on config changes that affect accept
 
   updated <- .adaptive_phase_a_prepare(state)
   status <- tibble::as_tibble(updated$linking$phase_a$set_status)
-  expect_true(all(status$status == "failed"))
-  expect_true(all(grepl("fit incompatibility", status$validation_message, fixed = TRUE)))
+  expect_true(all(status$status == "ready"))
+  expect_true(all(status$validation_message %in% c("imported", "persisted")))
 })
 
 test_that("phase A import hash is stable for fresh sessions without local btl_fit", {
@@ -808,7 +795,7 @@ test_that("phase A mixed mode supports import and run per set", {
   expect_true(all(c("1", "2") %in% names(prepared$linking$phase_a$artifacts)))
 })
 
-test_that("phase A import fallback policy switches to run mode when configured", {
+test_that("phase A import failures remain fail-fast", {
   state <- make_phase_a_ready_state()
   bad_import <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
   bad_import$judge_param_mode <- "phase_specific"
@@ -822,7 +809,6 @@ test_that("phase A import fallback policy switches to run mode when configured",
     adaptive_config = list(
       run_mode = "within_set",
       phase_a_mode = "import",
-      phase_a_import_failure_policy = "fallback_to_run",
       phase_a_artifacts = list(`1` = bad_import, `2` = import_set2)
     )
   )
@@ -830,10 +816,10 @@ test_that("phase A import fallback policy switches to run mode when configured",
   prepared <- .adaptive_phase_a_prepare(state)
   status <- tibble::as_tibble(prepared$linking$phase_a$set_status)
 
-  expect_equal(status$status[match(1L, status$set_id)], "pending_finalization")
+  expect_equal(status$status[match(1L, status$set_id)], "failed")
   expect_equal(status$status[match(2L, status$set_id)], "ready")
-  expect_equal(status$source[match(1L, status$set_id)], "run")
-  expect_match(status$validation_message[match(1L, status$set_id)], "pending_finalization")
+  expect_equal(status$source[match(1L, status$set_id)], "import")
+  expect_match(status$validation_message[match(1L, status$set_id)], "fit incompatibility")
 })
 
 test_that("phase_a_mode=run executes Phase A within-set steps before Phase B", {
@@ -887,7 +873,7 @@ test_that("phase A gate allows pending run sets and blocks failed imports", {
   expect_error(.adaptive_phase_a_gate_or_abort(state), "cannot start until valid Phase A artifacts")
 })
 
-test_that("phase_specific judge mode respects Phase A to Phase B boundary gating", {
+test_that("adaptive_rank_run_live rejects removed phase-specific judge mode", {
   state <- make_phase_a_ready_state()
   judge <- make_deterministic_judge("i_wins")
 
@@ -896,27 +882,26 @@ test_that("phase_specific judge mode respects Phase A to Phase B boundary gating
   art1$quality_gate_accepted <- TRUE
   art2$quality_gate_accepted <- TRUE
 
-  out <- adaptive_rank_run_live(
-    state,
-    judge,
-    n_steps = 1L,
-    adaptive_config = list(
-      run_mode = "link_one_spoke",
-      hub_id = 1L,
-      judge_param_mode = "phase_specific",
-      phase_a_mode = "import",
-      phase_a_artifacts = list(`1` = art1, `2` = art2),
-      phase_a_compatible_config_hashes = c(art1$fit_config_hash, art2$fit_config_hash)
+  expect_error(
+    adaptive_rank_run_live(
+      state,
+      judge,
+      n_steps = 1L,
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L,
+        judge_param_mode = "phase_specific",
+        phase_a_mode = "import",
+        phase_a_artifacts = list(`1` = art1, `2` = art2),
+        phase_a_compatible_config_hashes = c(art1$fit_config_hash, art2$fit_config_hash)
+      ),
+      progress = "none"
     ),
-    progress = "none"
+    "judge_param_mode"
   )
-
-  expect_identical(out$linking$phase_a$phase, "phase_b")
-  expect_true(isTRUE(out$linking$phase_a$ready_for_phase_b))
-  expect_equal(nrow(out$step_log), 1L)
 })
 
-test_that("phase_specific Phase B startup falls back deterministically without link judge estimates", {
+test_that("global-shared Phase B startup falls back deterministically without link judge estimates", {
   items <- tibble::tibble(
     item_id = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
     text = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
@@ -931,12 +916,70 @@ test_that("phase_specific Phase B startup falls back deterministically without l
   )
   colnames(draws) <- as.character(state$item_ids)
   state$btl_fit <- make_test_btl_fit(state$item_ids, draws = draws, model_variant = "btl_e_b")
+  step_log <- pairwiseLLM:::new_step_log()
+  step_log <- pairwiseLLM:::append_step_log(
+    step_log,
+    list(
+      step_id = 1L,
+      pair_id = 1L,
+      i = 1L,
+      j = 2L,
+      i_id = "h1",
+      j_id = "h2",
+      A = 1L,
+      B = 2L,
+      A_id = "h1",
+      B_id = "h2",
+      set_i = 1L,
+      set_j = 1L,
+      Y = 1L,
+      is_cross_set = FALSE
+    )
+  )
+  step_log <- pairwiseLLM:::append_step_log(
+    step_log,
+    list(
+      step_id = 2L,
+      pair_id = 2L,
+      i = 11L,
+      j = 12L,
+      i_id = "s21",
+      j_id = "s22",
+      A = 11L,
+      B = 12L,
+      A_id = "s21",
+      B_id = "s22",
+      set_i = 2L,
+      set_j = 2L,
+      Y = 1L,
+      is_cross_set = FALSE
+    )
+  )
+  state$step_log <- step_log
   judge <- make_deterministic_judge("i_wins")
 
   art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
   art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
   art1$quality_gate_accepted <- TRUE
   art2$quality_gate_accepted <- TRUE
+  art1$n_pairs_committed <- 1L
+  art2$n_pairs_committed <- 1L
+  art1$phase_a_within_set_evidence <- tibble::tibble(
+    pair_id = 1L,
+    step_id = 1L,
+    A_item = "h1",
+    B_item = "h2",
+    y_A = 1L
+  )
+  art2$phase_a_within_set_evidence <- tibble::tibble(
+    pair_id = 2L,
+    step_id = 2L,
+    A_item = "s21",
+    B_item = "s22",
+    y_A = 1L
+  )
+  art1$phase_a_within_set_evidence_hash <- .adaptive_phase_a_hash_object(art1$phase_a_within_set_evidence)
+  art2$phase_a_within_set_evidence_hash <- .adaptive_phase_a_hash_object(art2$phase_a_within_set_evidence)
 
   state$btl_fit$beta_link_mean <- NULL
   state$btl_fit$epsilon_link_mean <- NULL
@@ -950,7 +993,6 @@ test_that("phase_specific Phase B startup falls back deterministically without l
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
-      judge_param_mode = "phase_specific",
       phase_a_mode = "import",
       phase_a_artifacts = list(`1` = art1, `2` = art2),
       phase_a_compatible_config_hashes = c(art1$fit_config_hash, art2$fit_config_hash)
@@ -958,7 +1000,7 @@ test_that("phase_specific Phase B startup falls back deterministically without l
     progress = "none"
   ))
 
-  row <- out$step_log[1L, , drop = FALSE]
+  row <- out$step_log[nrow(out$step_log), , drop = FALSE]
   expect_true(isTRUE(row$is_cross_set[[1L]]))
   expect_true(is.finite(row$posterior_win_prob_pre[[1L]]))
   if (isTRUE(row$is_probe_step[[1L]])) {

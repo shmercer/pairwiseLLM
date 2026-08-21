@@ -408,9 +408,6 @@ make_positive_probe_acceleration_runtime_state <- function() {
     adaptive_config <- list(
       run_mode = "link_multi_spoke",
       hub_id = 1L,
-      link_estimation_mode = "transform",
-      multi_spoke_mode = "concurrent",
-      hub_lock_mode = "soft_lock",
       min_cross_set_pairs_per_spoke_per_refit = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts,
@@ -419,9 +416,6 @@ make_positive_probe_acceleration_runtime_state <- function() {
       }, character(1L)),
       probe_pairs_per_refit_per_spoke = 1L,
       probe_edges_min_for_stop = 12L,
-      probe_active_floor_min = 1L,
-      probe_active_floor_frac = 0,
-      probe_active_floor_requires_anchor_progress = FALSE,
       link_refit_pairs_per_spoke_rule = "fixed"
     )
     btl_config <- test_link_btl_config(list(refit_pairs_target = 4L))

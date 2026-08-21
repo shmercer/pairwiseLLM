@@ -9,9 +9,7 @@ make_probe_resume_state <- function() {
     seed = 61L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -46,6 +44,16 @@ make_probe_resume_state <- function() {
     active_phase_a_set = NA_integer_,
     phase_b_started_at_step = 1L
   )
+  state$linking$phase_a$artifacts[["1"]] <- add_test_phase_a_evidence(
+    state$linking$phase_a$artifacts[["1"]],
+    state = state,
+    set_id = 1L
+  )
+  state$linking$phase_a$artifacts[["2"]] <- add_test_phase_a_evidence(
+    state$linking$phase_a$artifacts[["2"]],
+    state = state,
+    set_id = 2L
+  )
   state$refit_meta$refit_pairs_target_current <- 3L
   state$controller$refit_pairs_target <- 3L
   state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
@@ -78,9 +86,7 @@ make_anchored_joint_resume_state <- function() {
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
-      phase_a_mode = "import",
-      link_estimation_mode = "anchored_joint",
-      hub_lock_mode = "hard_lock"
+      phase_a_mode = "import"
     )
   )
   draws <- matrix(
@@ -956,9 +962,7 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock",
-      link_transform_policy = "auto"
+      phase_a_mode = "import"
     )
   )
   state$controller$link_transform_state_by_spoke <- list(`2` = "shift_scale")
@@ -984,7 +988,7 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
   save_adaptive_session(state, session_dir)
   restored <- load_adaptive_session(session_dir)
 
-  expect_identical(restored$controller$link_transform_state_by_spoke[["2"]], "shift_scale")
+  expect_identical(restored$controller$link_transform_state_by_spoke, list())
   expect_true(isTRUE(restored$controller$link_state_frozen_by_spoke[["2"]]))
   expect_identical(restored$controller$link_state_frozen_refit_id_by_spoke[["2"]], 3L)
   expect_identical(restored$controller$link_epoch_id_by_spoke[["2"]], 4L)
@@ -1046,10 +1050,7 @@ test_that("load_adaptive_session normalizes legacy controller freeze fields into
     seed = 23L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock",
-      link_transform_policy = "auto"
+      hub_id = 1L
     )
   )
 
@@ -1134,7 +1135,7 @@ test_that("load_adaptive_session normalizes legacy link_stage_log transform colu
   expect_identical(as.character(restored$link_stage_log$link_transform_state[[1L]]), "shift_only")
 })
 
-test_that("load_adaptive_session backfills missing legacy controller mode fields to transform semantics", {
+test_that("load_adaptive_session backfills missing legacy controller mode fields to current defaults", {
   state <- make_probe_resume_state()
   session_dir <- withr::local_tempdir()
   save_adaptive_session(state, session_dir)
@@ -1153,8 +1154,8 @@ test_that("load_adaptive_session backfills missing legacy controller mode fields
 
   restored <- load_adaptive_session(session_dir)
 
-  expect_identical(restored$controller$link_estimation_mode, "transform")
-  expect_identical(restored$controller$hub_lock_mode, "soft_lock")
+  expect_identical(restored$controller$link_estimation_mode, "anchored_joint")
+  expect_identical(restored$controller$hub_lock_mode, "hard_lock")
   expect_identical(as.character(restored$link_stage_log$link_estimation_mode[[1L]]), "transform")
   expect_identical(as.character(restored$link_stage_log$hub_lock_mode[[1L]]), "soft_lock")
 })
@@ -1192,8 +1193,6 @@ test_that("save/load preserves legacy broad-surface Phase A artifact reuse witho
       run_mode = "link_one_spoke",
       hub_id = 1L,
       phase_a_mode = "import",
-      link_estimation_mode = "anchored_joint",
-      hub_lock_mode = "hard_lock",
       phase_a_artifacts = list()
     )
   )
@@ -1205,7 +1204,7 @@ test_that("save/load preserves legacy broad-surface Phase A artifact reuse witho
   expect_true(all(status$status == "ready"))
 })
 
-test_that("save/load preserves free hub lock across controller and link_stage_log", {
+test_that("save/load canonicalizes stale free hub lock controller fields", {
   state <- make_probe_resume_state()
   state$controller$link_refit_mode <- "joint_refit"
   state$controller$hub_lock_mode <- "free"
@@ -1216,8 +1215,8 @@ test_that("save/load preserves free hub lock across controller and link_stage_lo
   save_adaptive_session(state, session_dir)
   restored <- load_adaptive_session(session_dir)
 
-  expect_identical(restored$controller$link_refit_mode, "joint_refit")
-  expect_identical(restored$controller$hub_lock_mode, "free")
+  expect_true(is.na(restored$controller$link_refit_mode))
+  expect_identical(restored$controller$hub_lock_mode, "hard_lock")
   expect_identical(as.character(restored$link_stage_log$link_refit_mode[[1L]]), "joint_refit")
   expect_identical(as.character(restored$link_stage_log$hub_lock_mode[[1L]]), "free")
 })
@@ -1233,9 +1232,7 @@ test_that("save/load preserves feasibility and canonical stop-threshold fields i
     seed = 41L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
@@ -1328,9 +1325,7 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
     seed = 52L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE
@@ -1364,6 +1359,16 @@ test_that("save/load preserves planned probe panels and realized probe bookkeepi
     ready_spokes = 2L,
     active_phase_a_set = NA_integer_,
     phase_b_started_at_step = 1L
+  )
+  state$linking$phase_a$artifacts[["1"]] <- add_test_phase_a_evidence(
+    state$linking$phase_a$artifacts[["1"]],
+    state = state,
+    set_id = 1L
+  )
+  state$linking$phase_a$artifacts[["2"]] <- add_test_phase_a_evidence(
+    state$linking$phase_a$artifacts[["2"]],
+    state = state,
+    set_id = 2L
   )
   state <- pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins"))
   panel_before <- state$linking$probe$panels_by_spoke[["2"]]
@@ -1431,14 +1436,7 @@ test_that("save/load preserves fixed probe controller fields and canonical log c
     seed = 61L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      hub_lock_mode = "soft_lock",
-      probe_acceleration_mode = "fixed_per_refit",
-      probe_active_floor_enabled = TRUE,
-      probe_active_floor_frac = 0.5,
-      probe_active_floor_min = 20L,
-      probe_active_floor_requires_anchor_progress = TRUE
+      hub_id = 1L
     )
   )
   state$controller$link_refit_stats_by_spoke <- list(

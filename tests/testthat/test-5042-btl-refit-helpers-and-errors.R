@@ -118,8 +118,7 @@ test_that("adaptive results extraction maps linking phase and judge scope", {
     seed = 3L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      judge_param_mode = "phase_specific"
+      hub_id = 1L
     )
   )
   state$linking$phase_a$ready_for_phase_b <- TRUE
@@ -151,7 +150,7 @@ test_that("adaptive results extraction maps linking phase and judge scope", {
 
   out <- pairwiseLLM:::.adaptive_results_from_step_log(state)
   expect_identical(out$phase, c("phase2", "phase3"))
-  expect_identical(out$judge_scope, c("within", "link"))
+  expect_identical(out$judge_scope, c("shared", "shared"))
 })
 
 test_that("adaptive results extraction uses link judge scope for within-set rows in phase_b", {
@@ -165,8 +164,7 @@ test_that("adaptive results extraction uses link judge scope for within-set rows
     seed = 8L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
-      hub_id = 1L,
-      judge_param_mode = "phase_specific"
+      hub_id = 1L
     )
   )
   state$step_log <- pairwiseLLM:::append_step_log(
@@ -196,7 +194,7 @@ test_that("adaptive results extraction uses link judge scope for within-set rows
 
   out <- pairwiseLLM:::.adaptive_results_from_step_log(state)
   expect_identical(out$phase, c("phase3", "phase3"))
-  expect_identical(out$judge_scope, c("link", "link"))
+  expect_identical(out$judge_scope, c("shared", "shared"))
 })
 
 test_that("ts-btl rank spearman returns NA for invalid inputs and finite value otherwise", {

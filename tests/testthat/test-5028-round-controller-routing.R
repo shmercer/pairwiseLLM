@@ -105,8 +105,7 @@ test_that("concurrent all-spoke infeasible starvation marks stage exhaustion per
     seed = 901L,
     adaptive_config = list(
       run_mode = "link_multi_spoke",
-      hub_id = 1L,
-      multi_spoke_mode = "concurrent"
+      hub_id = 1L
     )
   )
   state$warm_start_done <- TRUE

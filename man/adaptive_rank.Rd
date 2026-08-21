@@ -132,52 +132,11 @@ overrides allowed by the near-tie rule. Default is \code{1L}.}
 multiple spokes). Default is \code{"within_set"}. Linking modes require
 multi-set inputs with \code{set_id} and \code{global_item_id} in \code{data}.}
 \item{\code{hub_id}}{Hub \code{set_id} for linking modes. Default is \code{1L}.}
-\item{\code{link_estimation_mode}}{Phase B estimation family. Choices are
-\code{"transform"} and \code{"anchored_joint"} (default). \code{"transform"} preserves
-the existing shift/shift-scale linking workflow. \code{"anchored_joint"} uses
-a hub-fixed, spoke-free full-evidence Phase B fit, requires
-\code{hub_lock_mode = "hard_lock"}, and does not accept transform-only config
-fields.}
-\item{\code{link_transform_policy}}{Only used when
-\code{link_estimation_mode = "transform"}. Allowed spoke transform family.
-Choices are \code{"auto"} (start shift-only then possibly escalate),
-\code{"fixed_shift_only"} (offset only), and \code{"fixed_shift_scale"} (offset +
-scale). Default is \code{"auto"}. Earlier \code{link_transform_mode} values are
-accepted for compatibility and normalized internally.}
-\item{\code{link_refit_mode}}{Only used when
-\code{link_estimation_mode = "transform"}. Linking refit mode. Choices are
-\code{"shift_only"} (fit transform with within-set abilities treated as fixed
-inputs) and \code{"joint_refit"} (jointly estimate hub/spoke abilities and
-transform parameters). Default is \code{"shift_only"}.}
-\item{\code{shift_only_theta_treatment}}{Only used when
-\code{link_refit_mode = "shift_only"}. Choices are
-\code{"fixed_eap_plugin_var"} (treat Phase A means with artifact SD plug-in
-variance when available) and \code{"fixed_eap"} (fallback when artifact SDs are
-unavailable). Default is \code{"fixed_eap_plugin_var"}.}
-\item{\code{judge_param_mode}}{How judge-noise parameters are handled across
-phases. Choices are \code{"global_shared"} (single shared judge parameter set)
-and \code{"phase_specific"} (separate within-set and link-phase judge
-parameters). Default is \code{"global_shared"}. In Phase B with
-\code{"global_shared"}, fixed judge constants are initialized from a pooled
-Phase A within-set refit using the configured BTL model variant. Variants
-without position bias or lapse use structural \code{0} values for the absent
-parameter.}
-\item{\code{within_phase_b_within_set_steps_allowed}}{Linking-spec maintenance
-toggle for scheduling within-set comparisons after a set enters Phase B.
-The public field is accepted for config parity, but the current runtime
-does not implement that maintenance path and aborts explicitly if Phase B
-would begin with this set to \code{TRUE}. Default is \code{FALSE}.}
-\item{\code{hub_lock_mode}}{Controls hub behavior in Phase B fits. In
-\code{link_estimation_mode = "transform"}, this is only used when
-\code{link_refit_mode = "joint_refit"} and chooses between \code{"hard_lock"}
-(hub anchored to Phase A), \code{"soft_lock"} (regularize toward Phase A), and
-\code{"free"} (no hub locking). \code{"free"} is only supported for
-\code{run_mode = "link_one_spoke"} with \code{link_estimation_mode = "transform"}
-and \code{link_refit_mode = "joint_refit"}. In
-\code{link_estimation_mode = "anchored_joint"}, the only supported value is
-\code{"hard_lock"}. Default is \code{"hard_lock"}.}
-\item{\code{hub_lock_kappa}}{Only used when \code{hub_lock_mode = "soft_lock"}.
-Regularization strength in \verb{[0,1]}. Default is \code{0.75}.}
+\item{Phase B estimation}{Linking modes use anchored-joint estimation with
+a hard-locked hub, global-shared judge parameters, concurrent spokes, and
+fail-fast Phase A artifact import. Historical transform/free-lock config
+fields are normalized only when loading older sessions or Phase A
+artifacts; they are not accepted as new \code{adaptive_config} keys.}
 \item{\code{anchored_joint_spoke_prior_scale}}{Scale multiplier for anchored-
 joint spoke priors. Default is \code{1.0}.}
 \item{\code{anchored_joint_sd_floor}}{Lower bound applied to anchored-joint
@@ -195,29 +154,6 @@ is \code{0.90}.}
 \item{\code{link_rank_corr_min}}{Minimum Spearman rank correlation between
 TrueSkill and transformed BTL posterior mean ranks on the linking-active
 item domain. Default is \code{0.90}.}
-\item{\code{delta_sd_max}}{Maximum allowed posterior SD of the shift parameter
-\eqn{\\delta_s}, expressed as a multiplier of \code{SD(theta_hub_eap)} computed
-from the current hub posterior mean. Default is \code{0.10}.}
-\item{\code{delta_change_max}}{Maximum allowed absolute change in \eqn{\\delta_s}
-over the lag window used for linking stability. Default is \code{0.05}.}
-\item{\code{log_alpha_sd_max}}{Only used for \code{"shift_scale"} spokes. Maximum
-allowed posterior SD of \code{log(alpha_s)}. Default is \code{0.10}.}
-\item{\code{log_alpha_change_max}}{Only used for \code{"shift_scale"} spokes. Maximum
-allowed absolute change in \code{log(alpha_s)} over the lag window used for
-linking stability. Default is \code{0.05}.}
-\item{\code{link_transform_escalation_window_refits}}{Only used when
-\code{link_transform_policy = "auto"}. Number of eligible refits retained in
-the rolling escalation window. Default is \code{3L}.}
-\item{\code{link_transform_escalation_passes_required}}{Only used when
-\code{link_transform_policy = "auto"}. Minimum number of passing eligible
-refits required within the rolling escalation window. Default is \code{2L}.}
-\item{\code{link_transform_escalation_refits_required}}{Backward-compatible
-alias for older persisted/configured states. When supplied without the
-new rolling-window fields, it seeds both escalation window parameters.}
-\item{\code{link_transform_escalation_is_one_way}}{Only used when
-\code{link_transform_policy = "auto"}. When \code{TRUE}, escalation is one-way
-(shift-only can become shift+scale but not revert). Default is \code{TRUE}.}
-
 \item{\code{max_pairs_after_stop}}{Stop-boundary budget: when \code{0L}, the run stops
 immediately after the first refit with \code{stop_decision = TRUE}. Values
 \verb{> 0L} allow that many additional committed comparisons after the first
@@ -234,30 +170,6 @@ omitted in linking modes, the default scales with the largest spoke:
 \code{max(4L, ceiling(0.0035 * max_spoke_items))}. The runtime uses this as a
 fixed per-refit cap and does not apply bootstrap or sole-blocker probe
 acceleration.}
-\item{\code{probe_acceleration_mode}}{Held-out probe acceleration controller
-family. The current runtime supports only \code{"fixed_per_refit"}, a fixed
-per-refit probe schedule. Default is \code{"fixed_per_refit"}.}
-\item{\code{probe_active_floor_enabled}}{When \code{TRUE}, held-out probe effort may
-be interleaved only after the current refit window reaches the canonical
-active floor. Default is \code{TRUE}.}
-\item{\code{probe_sole_blocker_acceleration_enabled},
-\code{probe_pairs_per_refit_per_spoke_bootstrap_max},
-\code{probe_pairs_per_refit_per_spoke_sole_blocker_max},
-\code{probe_accel_bootstrap_target},
-\code{probe_sole_blocker_min_realized},
-\code{probe_sole_blocker_active_floor_min}}{Deprecated acceleration controls
-retained for persisted-state compatibility. They are not used by the
-fixed per-refit schedule.}
-\item{\code{probe_active_floor_frac}}{Fraction of the current per-spoke
-linking-active budget used to form the active-floor threshold for probe
-acceleration. Default is \code{0.50}.}
-\item{\code{probe_active_floor_min}}{Minimum active-link count required before
-active-floor acceleration may begin in a refit window. Default is
-\code{20L}.}
-\item{\code{probe_active_floor_requires_anchor_progress}}{When \code{TRUE}, active-
-floor acceleration also requires either at least one committed
-anchor-link edge in the current refit window or an exhausted anchor-link
-stage. Default is \code{TRUE}.}
 \item{\code{probe_edges_min_for_stop}}{Minimum realized held-out probe edges
 required before Phase B stop or escalation can be evaluated. If omitted
 in linking modes, the default scales with the largest spoke:
@@ -271,42 +183,20 @@ gates used by Phase B stop decisions to require useful probability
 spread, hub/spoke item coverage, rank-bin coverage, near-boundary Brier
 calibration, and calibration ECE.}
 \item{\code{probe_brier_delta_min}}{Minimum held-out probe Brier improvement
-required for auto escalation from shift-only to shift-scale. Default is
-\code{0.005}.}
+required by the Phase B probe quality gate. Default is \code{0.005}.}
 \item{\code{probe_brier_max}}{Maximum held-out probe Brier score allowed by the
 Phase B stop gate. Default is \code{0.19}.}
 \item{\code{probe_pred_rmse_max}}{Maximum lagged held-out probe prediction RMSE
 allowed by the Phase B stop gate. Default is \code{0.015}.}
 \item{\code{theta_global_rmse_max}}{Maximum lagged transformed-score RMSE on the
-configured spoke scope allowed by the Phase B stop gate. Default is
+direct-evidence spoke scope allowed by the Phase B stop gate. Default is
 \code{0.05}.}
-\item{\code{theta_global_rmse_scope}}{Scope used for transformed-score lagged
-RMSE. Choices are \code{"direct_evidence_spoke"} (default),
-\code{"all_spoke_items"}, and \code{"min_cross_set_edges_k"}.}
-\item{\code{min_cross_set_edges_k}}{Only used when
-\code{theta_global_rmse_scope = "min_cross_set_edges_k"}. Minimum number of
-committed cross-set edges per spoke item required to enter the RMSE
-scope. Default is \code{1L}.}
 \item{\code{stability_window_refits}}{Number of eligible refits retained in the
 rolling stop window. Default is \code{3L}.}
 \item{\code{stability_passes_required}}{Minimum number of passing eligible
 refits required within the rolling stop window. Default is \code{2L}.}
-\item{\code{stability_consecutive_k}}{Backward-compatible alias for older
-persisted/configured states. When supplied without the new rolling-window
-fields, it seeds both stop-window parameters.}
 \item{\code{min_refits_in_phase_b}}{Minimum refit index within Phase B before
 linking stop can be evaluated. Default is \code{3L}.}
-\item{\code{hub_theta_rmse_max}}{Maximum lagged hub-theta RMSE allowed for
-\code{hub_lock_mode = "soft_lock"} to count as anchored. Default is \code{0.02}.}
-\item{\code{logalpha_sd_guardrail}}{Maximum temporary alternative-fit
-\code{sd(log(alpha_s))} allowed for auto escalation. Default is \code{0.10}.}
-\item{\code{shift_scale_min_cross_set_edges}}{Minimum realized linking-active
-non-probe cross-set edges within the current epoch required before a
-shift-scale alternative may be considered. Default is \code{18L}.}
-\item{\code{shift_scale_min_distinct_spoke_items_per_bin}}{Minimum number of
-distinct spoke items with realized linking-active exposure required in
-each spoke quantile bin before a shift-scale alternative may be
-considered. Default is \code{2L}.}
 \item{\code{reliability_var_mu_epsilon}}{Degeneracy guard for the active-domain
 variance of posterior transformed-score means used in linking
 reliability. Default is \code{1e-6}.}
@@ -317,37 +207,20 @@ Default is \code{1e-6}.}
 domain used for Phase B held-out probe construction. When \code{TRUE}
 (default), planned probes are drawn from the hub anchor pool; when
 \code{FALSE}, they are drawn from the full hub set.}
-\item{\code{probe_edges_count_toward_active_constraints}}{Unsupported on the
-current normative Phase B path. Held-out probes remain excluded from
-active duplicate suppression, degree counts, and star-cap exposure
-counters, so \code{TRUE} aborts canonically. Default is \code{FALSE}.}
 \item{\code{spoke_quantile_coverage_bins}}{Cross-set coverage control: number of
 quantile bins used to ensure spoke items across the score distribution
 receive cross-set exposure within each refit window. Default is \code{3L}.}
 \item{\code{spoke_quantile_coverage_min_per_bin_per_refit}}{Cross-set coverage
 control: minimum cross-set comparisons per quantile bin per refit
 window. Default is \code{1L}.}
-\item{\code{allow_spoke_spoke_cross_set}}{Unsupported on the current reviewed
-hub-and-spoke Phase B path. The canonical runtime remains hub<->spoke
-only, so \code{TRUE} aborts canonically. Default is \code{FALSE}.}
-\item{\code{multi_spoke_mode}}{Only used when \code{run_mode = "link_multi_spoke"}.
-Choices are \code{"independent"} (fit each spoke separately) and
-\code{"concurrent"} (enforce per-refit spoke budgets and stronger hub locking
-requirements). Default is \code{"concurrent"}.}
 \item{\code{min_cross_set_pairs_per_spoke_per_refit}}{Only used in concurrent
 multi-spoke linking. Minimum cross-set committed comparisons per spoke
 per refit window. Default is \code{5L}.}
-\item{\code{cross_set_utility}}{Cross-set selection utility. Currently only
-\code{"linking_d_optimal"} is supported. Default is \code{"linking_d_optimal"}.}
 
 \item{\code{phase_a_mode}}{Phase A handling for linking modes. Choices are
 \code{"run"} (compute within-set Phase A artifacts in-run), \code{"import"}
 (require user-supplied artifacts), and \code{"mixed"} (import where provided,
 otherwise run). Default is \code{"run"}.}
-\item{\code{phase_a_import_failure_policy}}{Only used when any set is configured
-for Phase A import. Choices are \code{"fail_fast"} (abort on invalid/missing
-artifacts) and \code{"fallback_to_run"} (switch that set to Phase A run if the
-import fails validation). Default is \code{"fail_fast"}.}
 \item{\code{phase_a_required_reliability_min}}{Minimum within-set EAP reliability
 required for Phase A artifacts to be considered ready (unless an imported
 artifact explicitly marks \code{quality_gate_accepted = TRUE}). Default is
@@ -507,11 +380,9 @@ Linking run modes:
 \code{run_mode = "link_one_spoke"} and \code{run_mode = "link_multi_spoke"} require
 multi-set input (\code{set_id}/\code{global_item_id}), enforce hub<->spoke routing
 defaults, and preserve Phase A artifact gating before Phase B cross-set
-comparisons begin. \code{link_estimation_mode = "anchored_joint"} is the default
-wrapper behavior and resolves to \code{hub_lock_mode = "hard_lock"}. Use
-\code{link_estimation_mode = "transform"} for the transform-based alternative
-Phase B fit. Every wrapper call returns canonical \code{phase_a} outputs that can
-be fed back into a later linking run through
+comparisons begin. Phase B uses anchored-joint estimation with a hard-locked
+hub and global-shared judge parameters. Every wrapper call returns canonical
+\code{phase_a} outputs that can be fed back into a later linking run through
 \code{adaptive_config$phase_a_artifacts}.
 
 Selection semantics:
@@ -651,15 +522,6 @@ link_out <- adaptive_rank(
 #   ),
 #   n_steps = 200,
 #   progress = "refits"
-# )
-
-# Transform is the explicit opt-in alternative:
-# adaptive_config = list(
-#   run_mode = "link_one_spoke",
-#   hub_id = 1L,
-#   phase_a_mode = "run",
-#   link_estimation_mode = "transform",
-#   link_transform_policy = "auto"
 # )
 
 names(link_out$logs)
