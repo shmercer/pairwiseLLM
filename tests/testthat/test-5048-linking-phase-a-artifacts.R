@@ -185,6 +185,103 @@ test_that("phase A artifacts round-trip through persistence", {
   expect_equal(nrow(r1$phase_a_within_set_evidence), 1L)
 })
 
+test_that("pooled Phase A judge state supports all BTL model variants", {
+  state <- make_phase_a_ready_state_with_evidence()
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
+  art1$quality_gate_accepted <- TRUE
+  art2$quality_gate_accepted <- TRUE
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("import", "import"),
+      status = c("ready", "ready"),
+      validation_message = c("ok", "ok"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(`1` = art1, `2` = art2),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = c(1L, 2L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE),
+    phase = "phase_b",
+    ready_spokes = 2L,
+    phase_b_started_at_step = 3L
+  )
+
+  variants <- c("btl", "btl_e", "btl_b", "btl_e_b")
+  states <- lapply(variants, function(variant) {
+    out <- pairwiseLLM:::.adaptive_phase_a_ensure_pooled_judge_state(
+      state,
+      btl_config = test_link_btl_config(list(model_variant = variant))
+    )
+    out$linking$phase_a$pooled_judge_state
+  })
+  names(states) <- variants
+
+  expect_false(states$btl$has_beta)
+  expect_false(states$btl$has_epsilon)
+  expect_equal(states$btl$beta_mean, 0)
+  expect_equal(states$btl$epsilon_mean, 0)
+  expect_false(states$btl_e$has_beta)
+  expect_true(states$btl_e$has_epsilon)
+  expect_equal(states$btl_e$beta_mean, 0)
+  expect_true(states$btl_e$epsilon_mean > 0)
+  expect_true(states$btl_b$has_beta)
+  expect_false(states$btl_b$has_epsilon)
+  expect_true(states$btl_b$beta_mean > 0)
+  expect_equal(states$btl_b$epsilon_mean, 0)
+  expect_true(states$btl_e_b$has_beta)
+  expect_true(states$btl_e_b$has_epsilon)
+})
+
+test_that("pooled Phase A judge state round-trips through persistence", {
+  state <- make_phase_a_ready_state_with_evidence()
+  art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
+  art1$quality_gate_accepted <- TRUE
+  art2$quality_gate_accepted <- TRUE
+  state <- .adaptive_apply_controller_config(
+    state,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("import", "import"),
+      status = c("ready", "ready"),
+      validation_message = c("ok", "ok"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(`1` = art1, `2` = art2),
+    ready_for_phase_b = TRUE,
+    strict_ready_for_phase_b = TRUE,
+    required_sets = c(1L, 2L),
+    set_stop_pass_by_set = list(`1` = TRUE, `2` = TRUE),
+    phase = "phase_b",
+    ready_spokes = 2L,
+    phase_b_started_at_step = 3L
+  )
+  state <- .adaptive_phase_a_ensure_pooled_judge_state(
+    state,
+    btl_config = test_link_btl_config()
+  )
+  session_dir <- withr::local_tempdir()
+  save_adaptive_session(state, session_dir = session_dir)
+
+  restored <- load_adaptive_session(session_dir)
+  pooled <- restored$linking$phase_a$pooled_judge_state
+  expect_identical(pooled$source, "phase_a_pooled_within_set_refit")
+  expect_true(isTRUE(pooled$has_beta))
+  expect_true(isTRUE(pooled$has_epsilon))
+  expect_equal(pooled$beta_mean, state$linking$phase_a$pooled_judge_state$beta_mean)
+  expect_equal(pooled$epsilon_mean, state$linking$phase_a$pooled_judge_state$epsilon_mean)
+})
+
 test_that("anchored-joint import validation rejects summary-only artifacts without exact evidence", {
   state <- make_phase_a_ready_state()
   state <- .adaptive_apply_controller_config(

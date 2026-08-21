@@ -157,7 +157,11 @@ unavailable). Default is \code{"fixed_eap_plugin_var"}.}
 \item{\code{judge_param_mode}}{How judge-noise parameters are handled across
 phases. Choices are \code{"global_shared"} (single shared judge parameter set)
 and \code{"phase_specific"} (separate within-set and link-phase judge
-parameters). Default is \code{"global_shared"}.}
+parameters). Default is \code{"global_shared"}. In Phase B with
+\code{"global_shared"}, fixed judge constants are initialized from a pooled
+Phase A within-set refit using the configured BTL model variant. Variants
+without position bias or lapse use structural \code{0} values for the absent
+parameter.}
 \item{\code{within_phase_b_within_set_steps_allowed}}{Linking-spec maintenance
 toggle for scheduling within-set comparisons after a set enters Phase B.
 The public field is accepted for config parity, but the current runtime

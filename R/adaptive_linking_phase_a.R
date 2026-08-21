@@ -920,6 +920,271 @@
   hash_fn(tibble::as_tibble(evidence %||% .adaptive_phase_a_empty_within_set_evidence()))
 }
 
+.adaptive_phase_a_pooled_judge_results <- function(state,
+                                                   artifacts,
+                                                   required_sets,
+                                                   controller) {
+  required_sets <- as.integer(required_sets)
+  artifacts <- artifacts %||% list()
+  rows <- list()
+  ids <- character()
+  evidence_hash_by_set <- stats::setNames(character(length(required_sets)), as.character(required_sets))
+
+  for (set_id in required_sets) {
+    set_key <- as.character(set_id)
+    artifact <- artifacts[[set_key]] %||% NULL
+    if (is.null(artifact)) {
+      rlang::abort(paste0(
+        "Phase A pooled judge refit requires a finalized artifact for set_id ",
+        set_id,
+        "."
+      ))
+    }
+    evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
+      artifact = artifact,
+      state = state,
+      set_id = set_id,
+      controller = controller
+    )
+    if (nrow(evidence) < 1L) {
+      set_item_n <- sum(as.integer(state$items$set_id) == as.integer(set_id), na.rm = TRUE)
+      if (set_item_n >= 2L) {
+        rlang::abort(paste0(
+          "Phase A pooled judge refit requires non-empty within-set evidence for set_id ",
+          set_id,
+          "."
+        ))
+      }
+      evidence_hash_by_set[[set_key]] <- .adaptive_phase_a_within_set_evidence_hash(evidence)
+      ids <- c(ids, as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(set_id)]))
+      next
+    }
+    evidence_hash_by_set[[set_key]] <- .adaptive_phase_a_within_set_evidence_hash(evidence)
+    set_ids <- unique(c(as.character(evidence$A_item), as.character(evidence$B_item)))
+    ids <- c(ids, set_ids)
+    rows[[set_key]] <- tibble::tibble(
+      pair_uid = paste0("phase_a_set_", set_id, "_pair_", as.integer(evidence$pair_id)),
+      unordered_key = make_unordered_key(evidence$A_item, evidence$B_item),
+      ordered_key = make_ordered_key(evidence$A_item, evidence$B_item),
+      A_id = as.character(evidence$A_item),
+      B_id = as.character(evidence$B_item),
+      better_id = ifelse(
+        as.integer(evidence$y_A) == 1L,
+        as.character(evidence$A_item),
+        as.character(evidence$B_item)
+      ),
+      winner_pos = as.integer(ifelse(as.integer(evidence$y_A) == 1L, 1L, 2L)),
+      phase = "phase2",
+      judge_scope = "shared",
+      iter = as.integer(evidence$step_id),
+      received_at = as.POSIXct("1970-01-01 00:00:00", tz = "UTC") +
+        seq_len(nrow(evidence)),
+      backend = "adaptive_phase_a",
+      model = "pooled_within_set"
+    )
+  }
+
+  results <- if (length(rows) > 0L) {
+    dplyr::bind_rows(rows)
+  } else {
+    tibble::tibble()
+  }
+  ids <- as.character(sort(unique(ids)))
+  list(
+    results = results,
+    ids = ids,
+    evidence_hash_by_set = evidence_hash_by_set
+  )
+}
+
+.adaptive_phase_a_pooled_judge_state_valid <- function(pooled_state,
+                                                       required_sets,
+                                                       model_variant,
+                                                       evidence_hash_by_set) {
+  if (!is.list(pooled_state)) {
+    return(FALSE)
+  }
+  stored_sets <- as.integer(pooled_state$required_sets %||% integer())
+  if (!identical(sort(stored_sets), sort(as.integer(required_sets)))) {
+    return(FALSE)
+  }
+  stored_variant <- as.character(pooled_state$model_variant %||% NA_character_)
+  if (!identical(stored_variant, as.character(model_variant))) {
+    return(FALSE)
+  }
+  stored_hashes <- pooled_state$evidence_hash_by_set %||% character()
+  if (is.null(names(stored_hashes)) || is.null(names(evidence_hash_by_set))) {
+    return(FALSE)
+  }
+  identical(
+    as.character(stored_hashes)[names(evidence_hash_by_set)],
+    as.character(evidence_hash_by_set)
+  )
+}
+
+.adaptive_phase_a_pooled_judge_fit_default <- function(results,
+                                                       ids,
+                                                       model_variant,
+                                                       cmdstan,
+                                                       inference_contract = NULL) {
+  fit_out <- fit_bayes_btl_mcmc(
+    results = results,
+    ids = ids,
+    model_variant = model_variant,
+    cmdstan = cmdstan %||% list(),
+    inference_contract = inference_contract
+  )
+  .adaptive_btl_extract_fit_contract(fit_out)
+}
+
+.adaptive_phase_a_pooled_judge_state_from_fit <- function(fit,
+                                                          model_variant,
+                                                          required_sets,
+                                                          evidence_hash_by_set,
+                                                          phase_b_started_at_step,
+                                                          created_at_step) {
+  model_variant <- normalize_model_variant(model_variant)
+  has_beta <- isTRUE(model_has_b(model_variant))
+  has_epsilon <- isTRUE(model_has_e(model_variant))
+
+  beta_mean <- if (isTRUE(has_beta)) as.double(fit$beta_mean %||% NA_real_) else 0
+  epsilon_mean <- if (isTRUE(has_epsilon)) as.double(fit$epsilon_mean %||% NA_real_) else 0
+  if (isTRUE(has_beta) && !is.finite(beta_mean)) {
+    rlang::abort("Phase A pooled judge refit did not return a finite `beta_mean`.")
+  }
+  if (isTRUE(has_epsilon) && !is.finite(epsilon_mean)) {
+    rlang::abort("Phase A pooled judge refit did not return a finite `epsilon_mean`.")
+  }
+
+  list(
+    source = "phase_a_pooled_within_set_refit",
+    model_variant = model_variant,
+    fit_config_hash = .adaptive_phase_a_hash_object(list(
+      model_variant = model_variant,
+      required_sets = as.integer(required_sets),
+      evidence_hash_by_set = evidence_hash_by_set
+    )),
+    required_sets = as.integer(required_sets),
+    evidence_hash_by_set = as.character(evidence_hash_by_set),
+    has_beta = as.logical(has_beta),
+    has_epsilon = as.logical(has_epsilon),
+    beta_mean = as.double(beta_mean),
+    beta_p2.5 = if (isTRUE(has_beta)) as.double(fit$beta_p2.5 %||% NA_real_) else 0,
+    beta_p5 = if (isTRUE(has_beta)) as.double(fit$beta_p5 %||% NA_real_) else 0,
+    beta_p50 = if (isTRUE(has_beta)) as.double(fit$beta_p50 %||% NA_real_) else 0,
+    beta_p95 = if (isTRUE(has_beta)) as.double(fit$beta_p95 %||% NA_real_) else 0,
+    beta_p97.5 = if (isTRUE(has_beta)) as.double(fit$beta_p97.5 %||% NA_real_) else 0,
+    epsilon_mean = as.double(max(0, min(1, epsilon_mean))),
+    epsilon_p2.5 = if (isTRUE(has_epsilon)) as.double(fit$epsilon_p2.5 %||% NA_real_) else 0,
+    epsilon_p5 = if (isTRUE(has_epsilon)) as.double(fit$epsilon_p5 %||% NA_real_) else 0,
+    epsilon_p50 = if (isTRUE(has_epsilon)) as.double(fit$epsilon_p50 %||% NA_real_) else 0,
+    epsilon_p95 = if (isTRUE(has_epsilon)) as.double(fit$epsilon_p95 %||% NA_real_) else 0,
+    epsilon_p97.5 = if (isTRUE(has_epsilon)) as.double(fit$epsilon_p97.5 %||% NA_real_) else 0,
+    beta_draws = if (isTRUE(has_beta)) fit$beta_draws %||% NULL else NULL,
+    epsilon_draws = if (isTRUE(has_epsilon)) fit$epsilon_draws %||% NULL else NULL,
+    diagnostics = fit$diagnostics %||% list(),
+    mcmc_config_used = fit$mcmc_config_used %||% list(),
+    phase_b_started_at_step = as.integer(phase_b_started_at_step),
+    created_at_step = as.integer(created_at_step)
+  )
+}
+
+.adaptive_phase_a_pooled_judge_refit <- function(state,
+                                                 btl_config,
+                                                 controller = NULL) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
+  btl_config <- btl_config %||% state$config$btl_config %||% list()
+  phase_a <- state$linking$phase_a %||% list()
+  artifacts <- phase_a$artifacts %||% list()
+  required_sets <- as.integer(
+    phase_a$required_sets %||% .adaptive_phase_a_required_sets(state, controller = controller)
+  )
+  model_variant <- normalize_model_variant(btl_config$model_variant %||% "btl_e_b")
+  pooled_inputs <- .adaptive_phase_a_pooled_judge_results(
+    state = state,
+    artifacts = artifacts,
+    required_sets = required_sets,
+    controller = controller
+  )
+  existing <- phase_a$pooled_judge_state %||% NULL
+  if (.adaptive_phase_a_pooled_judge_state_valid(
+    pooled_state = existing,
+    required_sets = required_sets,
+    model_variant = model_variant,
+    evidence_hash_by_set = pooled_inputs$evidence_hash_by_set
+  )) {
+    return(existing)
+  }
+
+  if (nrow(pooled_inputs$results) < 1L) {
+    fit <- list(
+      beta_mean = 0,
+      beta_p2.5 = 0,
+      beta_p5 = 0,
+      beta_p50 = 0,
+      beta_p95 = 0,
+      beta_p97.5 = 0,
+      epsilon_mean = 0,
+      epsilon_p2.5 = 0,
+      epsilon_p5 = 0,
+      epsilon_p50 = 0,
+      epsilon_p95 = 0,
+      epsilon_p97.5 = 0,
+      diagnostics = list(no_phase_a_within_set_edges = TRUE),
+      mcmc_config_used = list()
+    )
+  } else {
+    fit_fn <- btl_config$phase_a_pooled_judge_fit_fn %||% .adaptive_phase_a_pooled_judge_fit_default
+    if (!is.function(fit_fn)) {
+      rlang::abort("`btl_config$phase_a_pooled_judge_fit_fn` must be a function when provided.")
+    }
+    fit <- fit_fn(
+      results = pooled_inputs$results,
+      ids = pooled_inputs$ids,
+      model_variant = model_variant,
+      cmdstan = btl_config[["cmdstan"]] %||% list(),
+      inference_contract = list(
+        source = "phase_a_pooled_within_set_refit",
+        required_sets = as.integer(required_sets)
+      )
+    )
+    fit <- .adaptive_btl_extract_fit_contract(fit)
+  }
+  .adaptive_phase_a_pooled_judge_state_from_fit(
+    fit = fit,
+    model_variant = model_variant,
+    required_sets = required_sets,
+    evidence_hash_by_set = pooled_inputs$evidence_hash_by_set,
+    phase_b_started_at_step = as.integer(phase_a$phase_b_started_at_step %||% NA_integer_),
+    created_at_step = as.integer(nrow(state$step_log %||% tibble::tibble()))
+  )
+}
+
+.adaptive_phase_a_ensure_pooled_judge_state <- function(state,
+                                                        btl_config = NULL,
+                                                        controller = NULL) {
+  out <- state
+  controller <- controller %||% .adaptive_controller_resolve(out)
+  if (!as.character(controller$run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(out)
+  }
+  if (!identical(as.character(controller$judge_param_mode %||% "global_shared"), "global_shared")) {
+    return(out)
+  }
+  phase_ctx <- .adaptive_link_phase_context(out, controller = controller)
+  if (!identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")) {
+    return(out)
+  }
+  out$linking <- out$linking %||% list()
+  out$linking$phase_a <- out$linking$phase_a %||% list()
+  out$linking$phase_a$pooled_judge_state <- .adaptive_phase_a_pooled_judge_refit(
+    state = out,
+    btl_config = btl_config %||% out$config$btl_config %||% list(),
+    controller = controller
+  )
+  out
+}
+
 .adaptive_phase_a_artifact_resolve_within_set_evidence <- function(artifact,
                                                                    state,
                                                                    set_id,
@@ -2042,6 +2307,7 @@
   }
   prior_phase <- as.character((out$linking$phase_a %||% list())$phase %||% "phase_a")
   prior_phase_b_start <- as.integer((out$linking$phase_a %||% list())$phase_b_started_at_step %||% NA_integer_)
+  prior_pooled_judge_state <- (out$linking$phase_a %||% list())$pooled_judge_state %||% NULL
   phase_b_start <- prior_phase_b_start
   if (!identical(prior_phase, "phase_b") && identical(phase, "phase_b") && !is.finite(phase_b_start)) {
     phase_b_start <- as.integer(nrow(out$step_log %||% tibble::tibble()) + 1L)
@@ -2060,7 +2326,8 @@
     active_phase_a_set = as.integer(active_phase_a_set),
     phase_b_started_at_step = as.integer(phase_b_start),
     warm_start_scope_set = prior_warm_start_scope_set,
-    prepare_context_by_set = prepare_context_by_set
+    prepare_context_by_set = prepare_context_by_set,
+    pooled_judge_state = prior_pooled_judge_state
   )
 
   .adaptive_anchored_joint_sync_scaffolding(out)

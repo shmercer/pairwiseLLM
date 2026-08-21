@@ -4018,6 +4018,10 @@
 #' step may use deterministic fallback from available within/shared judge
 #' estimates if link-specific estimates are not yet available; once link-specific
 #' estimates are expected, missing/non-finite values abort.
+#' When \code{judge_param_mode = "global_shared"}, Phase B uses a pooled
+#' within-set Phase A judge-parameter refit, using the configured BTL model
+#' variant, as the accepted shared source for fixed \code{beta}/\code{epsilon}
+#' constants.
 #' Bayesian BTL posterior draws are not used as general pair-selection
 #' objectives; within-set pairing remains TrueSkill-routed, with accepted
 #' posterior refits contributing only to the long-link probability gate.
@@ -4546,17 +4550,23 @@ adaptive_rank_run_live <- function(state,
   state$refit_meta$refit_pairs_target_current <- as.integer(btl_cfg$refit_pairs_target)
   state$controller <- .adaptive_controller_resolve(state)
   state$controller$refit_pairs_target <- as.integer(btl_cfg$refit_pairs_target)
+  state <- .adaptive_phase_a_ensure_pooled_judge_state(
+    state,
+    btl_config = btl_cfg,
+    controller = state$controller
+  )
 
   progress_handle <- adaptive_progress_init(state, cfg)
   on.exit(adaptive_progress_finish(progress_handle), add = TRUE)
 
-  dirty_since_save <- FALSE
+  dirty_since_save <- new.env(parent = emptyenv())
+  dirty_since_save$value <- FALSE
   persist_session <- function(force = FALSE) {
     session_dir_current <- state$config$session_dir %||% NULL
     if (is.null(session_dir_current)) {
       return(invisible(FALSE))
     }
-    if (!isTRUE(force) && !isTRUE(dirty_since_save)) {
+    if (!isTRUE(force) && !isTRUE(dirty_since_save$value)) {
       return(invisible(FALSE))
     }
 
@@ -4572,7 +4582,7 @@ adaptive_rank_run_live <- function(state,
     }
 
     save_adaptive_session(state, session_dir = session_dir_current, overwrite = TRUE)
-    dirty_since_save <<- FALSE
+    dirty_since_save$value <- FALSE
     invisible(TRUE)
   }
 
@@ -4583,6 +4593,11 @@ adaptive_rank_run_live <- function(state,
     state <- .adaptive_phase_a_finalize_if_ready(state)
     state <- .adaptive_clear_stale_global_stop_state(state)
     .adaptive_phase_a_gate_or_abort(state)
+    state <- .adaptive_phase_a_ensure_pooled_judge_state(
+      state,
+      btl_config = btl_cfg,
+      controller = .adaptive_controller_resolve(state)
+    )
     if (isTRUE(.adaptive_link_all_spokes_exhausted(
       state,
       refit_id = .adaptive_link_refit_window_id(state)
@@ -4608,7 +4623,7 @@ adaptive_rank_run_live <- function(state,
     state <- .adaptive_link_sync_warm_start(state)
     state <- .adaptive_round_activate_if_ready(state)
     state <- run_one_step(state, judge, ...)
-    dirty_since_save <- TRUE
+    dirty_since_save$value <- TRUE
     step_row <- tibble::as_tibble(state$step_log)[nrow(state$step_log), , drop = FALSE]
     event <- adaptive_progress_step_event(step_row, cfg)
     if (!is.null(event)) {

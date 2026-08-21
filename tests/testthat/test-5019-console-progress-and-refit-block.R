@@ -56,6 +56,7 @@ test_that("adaptive_rank_run_live prints linking-specific refit summary lines", 
   state$btl_fit <- make_test_btl_fit(ids, draws = draws, model_variant = "btl_e_b")
   artifacts <- lapply(sort(unique(items$set_id)), function(set_id) {
     art <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = as.integer(set_id))
+    art <- add_test_phase_a_evidence(art, state = state, set_id = set_id)
     art$quality_gate_accepted <- TRUE
     art
   })

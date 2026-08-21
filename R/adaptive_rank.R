@@ -964,7 +964,11 @@ make_adaptive_judge_llm <- function(
 #'   \item{`judge_param_mode`}{How judge-noise parameters are handled across
 #'     phases. Choices are `"global_shared"` (single shared judge parameter set)
 #'     and `"phase_specific"` (separate within-set and link-phase judge
-#'     parameters). Default is `"global_shared"`.}
+#'     parameters). Default is `"global_shared"`. In Phase B with
+#'     `"global_shared"`, fixed judge constants are initialized from a pooled
+#'     Phase A within-set refit using the configured BTL model variant. Variants
+#'     without position bias or lapse use structural `0` values for the absent
+#'     parameter.}
 #'   \item{`within_phase_b_within_set_steps_allowed`}{Linking-spec maintenance
 #'     toggle for scheduling within-set comparisons after a set enters Phase B.
 #'     The public field is accepted for config parity, but the current runtime

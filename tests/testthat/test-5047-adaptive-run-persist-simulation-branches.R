@@ -65,6 +65,7 @@ test_that("adaptive_rank_start and adaptive_rank_run_live cover additional input
     .adaptive_phase_a_prepare = function(state) state,
     .adaptive_phase_a_finalize_if_ready = function(state) state,
     .adaptive_phase_a_gate_or_abort = function(state) invisible(NULL),
+    .adaptive_phase_a_ensure_pooled_judge_state = function(state, ...) state,
     .adaptive_link_sync_warm_start = function(state) state,
     .adaptive_clear_stale_global_stop_state = function(state) state,
     run_one_step = function(st, judge, ...) {
@@ -334,6 +335,7 @@ test_that("adaptive_rank_run_live covers progress event, persistence writes, and
     .adaptive_phase_a_prepare = function(state) state,
     .adaptive_phase_a_finalize_if_ready = function(state) state,
     .adaptive_phase_a_gate_or_abort = function(state) invisible(NULL),
+    .adaptive_phase_a_ensure_pooled_judge_state = function(state, ...) state,
     .adaptive_link_sync_warm_start = function(state) state,
     .adaptive_clear_stale_global_stop_state = function(state) state,
     run_one_step = function(st, judge, ...) {
@@ -1011,6 +1013,23 @@ test_that("link_multi_spoke Phase B starvation is non-terminal until all spokes 
   state$round$staged_active <- TRUE
   state$round$round_id <- 1L
   state$config$session_dir <- tempfile("session-link-phaseb-starve-")
+  phase_b_artifacts <- list(
+    `1` = add_test_phase_a_evidence(
+      list(set_id = 1L, items = tibble::tibble(item_id = c("h1", "h2"), theta_raw_mean = c(2, 1))),
+      state,
+      set_id = 1L
+    ),
+    `2` = add_test_phase_a_evidence(
+      list(set_id = 2L, items = tibble::tibble(item_id = c("s21", "s22"), theta_raw_mean = c(2, 1))),
+      state,
+      set_id = 2L
+    ),
+    `3` = add_test_phase_a_evidence(
+      list(set_id = 3L, items = tibble::tibble(item_id = c("s31", "s32"), theta_raw_mean = c(2, 1))),
+      state,
+      set_id = 3L
+    )
+  )
   state$linking$phase_a <- list(
     set_status = tibble::tibble(
       set_id = c(1L, 2L, 3L),
@@ -1019,11 +1038,7 @@ test_that("link_multi_spoke Phase B starvation is non-terminal until all spokes 
       validation_message = c("ready", "ready", "ready"),
       artifact_path = c(NA_character_, NA_character_, NA_character_)
     ),
-    artifacts = list(
-      `1` = list(items = tibble::tibble(item_id = c("h1", "h2"), theta_raw_mean = c(2, 1))),
-      `2` = list(items = tibble::tibble(item_id = c("s21", "s22"), theta_raw_mean = c(2, 1))),
-      `3` = list(items = tibble::tibble(item_id = c("s31", "s32"), theta_raw_mean = c(2, 1)))
-    ),
+    artifacts = phase_b_artifacts,
     ready_for_phase_b = TRUE,
     strict_ready_for_phase_b = TRUE,
     phase = "phase_b",
@@ -1125,6 +1140,23 @@ test_that("phase B run stops immediately when all effective spokes are exhausted
   state$round$staged_active <- TRUE
   state$round$round_id <- 1L
   state$config$session_dir <- tempfile("session-link-phaseb-exhausted-")
+  phase_b_artifacts <- list(
+    `1` = add_test_phase_a_evidence(
+      list(set_id = 1L, items = tibble::tibble(item_id = c("h1", "h2"), theta_raw_mean = c(2, 1))),
+      state,
+      set_id = 1L
+    ),
+    `2` = add_test_phase_a_evidence(
+      list(set_id = 2L, items = tibble::tibble(item_id = c("s21", "s22"), theta_raw_mean = c(2, 1))),
+      state,
+      set_id = 2L
+    ),
+    `3` = add_test_phase_a_evidence(
+      list(set_id = 3L, items = tibble::tibble(item_id = c("s31", "s32"), theta_raw_mean = c(2, 1))),
+      state,
+      set_id = 3L
+    )
+  )
   state$linking$phase_a <- list(
     set_status = tibble::tibble(
       set_id = c(1L, 2L, 3L),
@@ -1133,7 +1165,7 @@ test_that("phase B run stops immediately when all effective spokes are exhausted
       validation_message = c("ready", "ready", "ready"),
       artifact_path = c(NA_character_, NA_character_, NA_character_)
     ),
-    artifacts = list(),
+    artifacts = phase_b_artifacts,
     ready_for_phase_b = TRUE,
     strict_ready_for_phase_b = TRUE,
     phase = "phase_b",

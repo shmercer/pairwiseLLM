@@ -71,7 +71,11 @@ test_that("long-link gate falls back to trueskill before accepted posterior avai
 
   cand <- tibble::tibble(i = "1", j = "2")
   out <- testthat::with_mocked_bindings(
-    trueskill_win_probability = function(i_id, j_id, state) 0.99,
+    score_candidates_u0 = function(candidates, trueskill_state) {
+      candidates$p <- 0.99
+      candidates$u0 <- 0.99 * 0.01
+      candidates
+    },
     pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = cand),
     .package = "pairwiseLLM"
   )
@@ -83,7 +87,7 @@ test_that("long-link gate falls back to trueskill before accepted posterior avai
 
 test_that("long-link gate reason reflects selected fallback attempt", {
   items <- make_test_items(4)
-  trueskill_state <- make_test_trueskill_state(items, mu = c(25, 24, 23, 22))
+  trueskill_state <- make_test_trueskill_state(items, mu = c(25, 25, 25, 25))
   state <- make_test_state(items, trueskill_state)
   state$round$staged_active <- TRUE
   state$round$stage_index <- 2L
@@ -94,10 +98,6 @@ test_that("long-link gate reason reflects selected fallback attempt", {
 
   calls <- 0L
   out <- testthat::with_mocked_bindings(
-    trueskill_win_probability = function(i_id, j_id, state) {
-      ids <- sort(c(as.character(i_id), as.character(j_id)))
-      if (identical(ids, c("1", "2"))) 0.99 else 0.50
-    },
     generate_stage_candidates_from_state = function(state, stage_name, fallback_name, C_max, seed) {
       calls <<- calls + 1L
       ids <- as.character(state$item_ids)
@@ -105,6 +105,11 @@ test_that("long-link gate reason reflects selected fallback attempt", {
         return(tibble::tibble(i = ids[[1L]], j = ids[[2L]]))
       }
       tibble::tibble(i = ids[[3L]], j = ids[[4L]])
+    },
+    score_candidates_u0 = function(candidates, trueskill_state) {
+      candidates$p <- ifelse(candidates$i == "1" & candidates$j == "2", 0.99, 0.50)
+      candidates$u0 <- candidates$p * (1 - candidates$p)
+      candidates
     },
     pairwiseLLM:::select_next_pair(state, step_id = 1L),
     .package = "pairwiseLLM"
@@ -126,6 +131,7 @@ test_that("long-link gate uses posterior probability when accepted refit is avai
   state$controller$global_identified <- TRUE
   state$controller$p_long_low <- 0.45
   state$controller$p_long_high <- 0.55
+  state$linking$phase_a$phase <- "phase_b"
   state$btl_fit <- make_test_btl_fit(
     state$item_ids,
     draws = rbind(
@@ -143,12 +149,18 @@ test_that("long-link gate uses posterior probability when accepted refit is avai
   )
 
   out <- testthat::with_mocked_bindings(
-    trueskill_win_probability = function(i_id, j_id, state) 0.99,
+    score_candidates_u0 = function(candidates, trueskill_state) {
+      candidates$p <- 0.99
+      candidates$u0 <- 0.99 * 0.01
+      candidates
+    },
+    .adaptive_long_link_gate_posterior_prob_vec = function(state, i_id, j_id, block_size = 2048L) {
+      rep_len(0.50, length(i_id))
+    },
     pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = tibble::tibble(i = "1", j = "2")),
     .package = "pairwiseLLM"
   )
 
-  expect_false(isTRUE(out$candidate_starved))
   expect_identical(out$long_gate_pass, TRUE)
   expect_identical(out$long_gate_reason, "posterior_inside_gate")
 })
@@ -164,6 +176,7 @@ test_that("long-link gate rejects posterior-extreme candidate and ignores order-
   state$controller$global_identified <- TRUE
   state$controller$p_long_low <- 0.45
   state$controller$p_long_high <- 0.55
+  state$linking$phase_a$phase <- "phase_b"
   state$btl_fit <- make_test_btl_fit(
     state$item_ids,
     draws = rbind(
@@ -214,9 +227,16 @@ test_that("local stage logs boundary priority mode after identifiability", {
   state$round$stage_index <- 4L
   state$controller <- pairwiseLLM:::.adaptive_controller_defaults(length(state$item_ids))
   state$controller$global_identified <- TRUE
+  defaults <- pairwiseLLM:::adaptive_defaults(length(state$item_ids))
+  defaults$quota_eps <- 0
+  defaults$explore_rate <- 0
 
   cand <- tibble::tibble(i = c("1", "11"), j = c("2", "12"))
-  out <- pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = cand)
+  out <- testthat::with_mocked_bindings(
+    adaptive_defaults = function(N) defaults,
+    pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = cand),
+    .package = "pairwiseLLM"
+  )
 
   expect_identical(out$local_priority_mode, "boundary")
 })

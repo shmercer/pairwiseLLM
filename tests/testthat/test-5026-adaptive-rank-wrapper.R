@@ -42,6 +42,7 @@ make_wrapper_import_artifacts <- function(items) {
   set_ids <- sort(unique(as.integer(state$items$set_id)))
   artifacts <- lapply(set_ids, function(set_id) {
     art <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = as.integer(set_id))
+    art <- add_test_phase_a_evidence(art, state = state, set_id = set_id)
     art$quality_gate_accepted <- TRUE
     art
   })
