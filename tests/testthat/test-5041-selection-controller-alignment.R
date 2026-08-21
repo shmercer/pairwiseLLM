@@ -227,9 +227,16 @@ test_that("local stage logs boundary priority mode after identifiability", {
   state$round$stage_index <- 4L
   state$controller <- pairwiseLLM:::.adaptive_controller_defaults(length(state$item_ids))
   state$controller$global_identified <- TRUE
+  defaults <- pairwiseLLM:::adaptive_defaults(length(state$item_ids))
+  defaults$quota_eps <- 0
+  defaults$explore_rate <- 0
 
   cand <- tibble::tibble(i = c("1", "11"), j = c("2", "12"))
-  out <- pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = cand)
+  out <- testthat::with_mocked_bindings(
+    adaptive_defaults = function(N) defaults,
+    pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = cand),
+    .package = "pairwiseLLM"
+  )
 
   expect_identical(out$local_priority_mode, "boundary")
 })
