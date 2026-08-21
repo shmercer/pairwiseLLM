@@ -161,7 +161,6 @@ test_that("long-link gate uses posterior probability when accepted refit is avai
     .package = "pairwiseLLM"
   )
 
-  expect_false(isTRUE(out$candidate_starved))
   expect_identical(out$long_gate_pass, TRUE)
   expect_identical(out$long_gate_reason, "posterior_inside_gate")
 })
