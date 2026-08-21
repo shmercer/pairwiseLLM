@@ -120,9 +120,13 @@ test_that("selection paths pass canonical seed_base into adaptive_assign_order",
   trueskill_state <- make_test_trueskill_state(items)
   state <- make_test_state(items, trueskill_state)
   state$meta$seed <- 77L
+  defaults <- pairwiseLLM:::adaptive_defaults(length(state$item_ids))
+  defaults$quota_eps <- 0
+  defaults$explore_rate <- 0
 
   captured_seed <- NA_integer_
   out <- testthat::with_mocked_bindings(
+    adaptive_defaults = function(N) defaults,
     .adaptive_select_stage = function(stage, state, config, controller, generation_stage, round, history_state, counts,
                                       step_id, seed_base, candidates = NULL) {
       list(
