@@ -228,7 +228,7 @@
 .adaptive_phase_a_fit_contract_surface <- function(judge_param_mode,
                                                    model_variant) {
   judge_param_mode <- as.character(judge_param_mode %||% "global_shared")
-  model_variant <- as.character(model_variant %||% "btl_e_b")
+  model_variant <- normalize_model_variant(model_variant %||% "btl_e_b")
 
   if (length(judge_param_mode) != 1L || is.na(judge_param_mode) || !nzchar(judge_param_mode)) {
     rlang::abort("Phase A fit contract surface requires a single non-empty `judge_param_mode`.")
@@ -246,9 +246,10 @@
 .adaptive_phase_a_required_config_surface <- function(state, set_id) {
   controller <- .adaptive_controller_resolve(state)
   fit <- state$btl_fit %||% list()
+  btl_config <- state$config$btl_config %||% list()
   .adaptive_phase_a_fit_contract_surface(
     judge_param_mode = controller$judge_param_mode %||% "global_shared",
-    model_variant = fit$model_variant %||% "btl_e_b"
+    model_variant = btl_config$model_variant %||% fit$model_variant %||% "btl_e_b"
   )
 }
 
@@ -541,21 +542,13 @@
                                                    persisted_artifact = NULL,
                                                    import_artifact = NULL) {
   requested_source <- as.character(requested_source %||% NA_character_)
-  policy <- as.character(controller$phase_a_import_failure_policy %||% "fail_fast")
   reliability_min <- as.double(controller$phase_a_required_reliability_min %||% 0.80)
 
   context <- list(
     set_id = as.integer(set_id),
     requested_source = requested_source,
     link_estimation_mode = as.character(controller$link_estimation_mode %||% "transform"),
-    phase_a_import_failure_policy = policy,
     phase_a_required_reliability_min = reliability_min,
-    phase_a_compatible_model_ids = sort(unique(as.character(
-      controller$phase_a_compatible_model_ids %||% "btl_e_b"
-    ))),
-    phase_a_compatible_config_hashes = sort(unique(as.character(
-      controller$phase_a_compatible_config_hashes %||% character()
-    ))),
     required_config_hash = .adaptive_phase_a_required_config_hash(
       state,
       set_id = set_id,
@@ -569,8 +562,7 @@
     )
   }
 
-  include_run_surface <- identical(requested_source, "run") ||
-    identical(policy, "fallback_to_run")
+  include_run_surface <- identical(requested_source, "run")
   if (isTRUE(include_run_surface)) {
     n_pairs_committed <- .adaptive_phase_a_within_set_pair_count(state, set_id = set_id)
     context$run_surface <- list(
@@ -1760,30 +1752,43 @@
     rlang::abort(paste0("Phase A artifact set_id mismatch for set ", set_id, "."))
   }
 
-  fit_model_id <- as.character(artifact$fit_model_id %||% NA_character_)
-  allowed_model_ids <- as.character(controller$phase_a_compatible_model_ids %||% "btl_e_b")
-  if (!is.character(fit_model_id) || length(fit_model_id) != 1L || is.na(fit_model_id) ||
-    !fit_model_id %in% allowed_model_ids) {
+  required_surface <- .adaptive_phase_a_required_config_surface(state, set_id = set_id)
+  artifact_surface <- .adaptive_phase_a_artifact_fit_contract_surface(artifact)
+  fit_model_id <- artifact$fit_model_id %||% NULL
+  if (!is.null(fit_model_id)) {
+    fit_model_id <- normalize_model_variant(fit_model_id)
+    if (!identical(fit_model_id, artifact_surface$model_variant)) {
+      rlang::abort(paste0(
+        "Phase A artifact likelihood/model incompatibility for set ",
+        set_id,
+        ": artifact fit_model_id `",
+        fit_model_id,
+        "` did not match fit_config_surface model_variant `",
+        artifact_surface$model_variant,
+        "`."
+      ))
+    }
+  }
+  if (!identical(artifact_surface$model_variant, required_surface$model_variant)) {
     rlang::abort(paste0(
       "Phase A artifact likelihood/model incompatibility for set ",
       set_id,
-      "."
+      ": artifact model_variant `",
+      artifact_surface$model_variant,
+      "` did not match required model_variant `",
+      required_surface$model_variant,
+      "`."
     ))
   }
 
   fit_config_hash <- as.character(artifact$fit_config_hash %||% NA_character_)
   required_hash <- .adaptive_phase_a_required_config_hash(state, set_id = set_id)
-  required_surface <- .adaptive_phase_a_required_config_surface(state, set_id = set_id)
-  artifact_surface <- .adaptive_phase_a_artifact_fit_contract_surface(artifact)
   artifact_contract_hash <- .adaptive_phase_a_hash_object(artifact_surface)
-  compatible_hashes <- as.character(controller$phase_a_compatible_config_hashes %||% character())
   if (is.na(fit_config_hash) || fit_config_hash == "") {
     rlang::abort(paste0("Phase A artifact missing fit_config_hash for set ", set_id, "."))
   }
   if (!identical(fit_config_hash, required_hash) &&
-    !identical(artifact_contract_hash, required_hash) &&
-    !fit_config_hash %in% compatible_hashes &&
-    !artifact_contract_hash %in% compatible_hashes) {
+    !identical(artifact_contract_hash, required_hash)) {
     mismatch_fields <- character()
     if (is.list(artifact_surface)) {
       common_fields <- intersect(names(required_surface), names(artifact_surface))
@@ -1805,8 +1810,7 @@
       required_hash,
       "`, reconstructed fit-contract hash `",
       artifact_contract_hash,
-      "` did not match the current within-set fit contract, and neither hash was found in ",
-      "`adaptive_config$phase_a_compatible_config_hashes`.",
+      "` did not match the current within-set fit contract.",
       mismatch_msg
     ))
   }
@@ -2002,22 +2006,6 @@
     source[import_sets] <- "import"
   }
 
-  explicit <- controller$phase_a_set_source %||% NULL
-  if (!is.null(explicit)) {
-    if (length(explicit) == 0L) {
-      return(source)
-    }
-    if (!is.character(explicit) || is.null(names(explicit)) || any(names(explicit) == "")) {
-      rlang::abort("`adaptive_config$phase_a_set_source` must be a named character vector.")
-    }
-    bad <- setdiff(unique(as.character(explicit)), c("run", "import"))
-    if (length(bad) > 0L) {
-      rlang::abort("`adaptive_config$phase_a_set_source` values must be `run` or `import`.")
-    }
-    overlap <- intersect(names(source), names(explicit))
-    source[overlap] <- explicit[overlap]
-  }
-
   source
 }
 
@@ -2046,14 +2034,18 @@
     }
   }
 
-  import_map <- .adaptive_phase_a_collect_import_map(controller)
+  requested_import_map <- .adaptive_phase_a_collect_import_map(controller)
+  import_map <- requested_import_map
   for (set_key in names(persisted_map)) {
     if (is.null(import_map[[set_key]])) {
       import_map[[set_key]] <- persisted_map[[set_key]]
     }
   }
-  sources <- .adaptive_phase_a_resolve_set_sources(controller, set_ids = set_ids, import_map = import_map)
-  policy <- as.character(controller$phase_a_import_failure_policy %||% "fail_fast")
+  sources <- .adaptive_phase_a_resolve_set_sources(
+    controller,
+    set_ids = set_ids,
+    import_map = requested_import_map
+  )
 
   statuses <- .adaptive_phase_a_empty_state(set_ids = set_ids)
   artifacts <- list()
@@ -2194,9 +2186,6 @@
           artifacts[[set_key]] <- artifact
           status <- "ready"
           message <- "imported"
-        } else if (identical(policy, "fallback_to_run")) {
-          source <- "run"
-          message <- paste0("import_failed_fallback_to_run: ", message)
         } else {
           status <- "failed"
         }

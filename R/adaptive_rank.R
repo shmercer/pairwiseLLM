@@ -1028,24 +1028,17 @@ make_adaptive_judge_llm <- function(
 #'     otherwise run). Default is `"run"`.}
 #'   \item{`phase_a_required_reliability_min`}{Minimum within-set EAP reliability
 #'     required for Phase A artifacts to be considered ready (unless an imported
-#'     artifact explicitly marks `quality_gate_accepted = TRUE`). Default is
-#'     `0.80`.}
-#'   \item{`phase_a_compatible_model_ids`}{Character vector of allowed model
-#'     identifiers for imported Phase A artifacts (e.g., `"btl_e_b"`). Default is
-#'     `"btl_e_b"`.}
-#'   \item{`phase_a_compatible_config_hashes`}{Character vector of additional
-#'     accepted Phase A config hashes for imported artifacts. Default is
-#'     `character()`.}
+#'     artifact is explicitly marked `quality_gate_accepted = TRUE` as a trusted
+#'     external quality override). Default is `0.80`.}
 #'   \item{`phase_a_artifacts`}{Named list mapping `set_id` to an imported Phase A
 #'     artifact (list) or a `.rds` path containing one. On the wrapper surface,
 #'     this field also accepts a prior `adaptive_rank()` `phase_a` return,
 #'     an `out$phase_a$manifest`, a saved session directory, or a
 #'     `phase_a_artifacts/` directory, and normalizes those inputs back to the
-#'     canonical named-list form before runtime validation. Default is
-#'     `list()`.}
-#'   \item{`phase_a_set_source`}{Optional named character vector mapping `set_id`
-#'     to `"run"` or `"import"` to force the source for specific sets. Default is
-#'     `character()`.}
+#'     canonical named-list form before runtime validation. Imported artifacts
+#'     must match the current normalized BTL `model_variant`; all four canonical
+#'     variants (`"btl"`, `"btl_e"`, `"btl_b"`, `"btl_e_b"`) are supported when
+#'     the artifact and run variants match. Default is `list()`.}
 #'   }
 #'
 #'   Wrapper preflight validates linking mode combinations against supplied data

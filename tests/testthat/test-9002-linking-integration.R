@@ -480,7 +480,6 @@ test_that("mixed run/import mode combines imported and in-run artifacts by set",
       run_mode = "link_one_spoke",
       hub_id = 1L,
       phase_a_mode = "mixed",
-      phase_a_set_source = c(`1` = "import", `2` = "run"),
       phase_a_artifacts = list(`1` = import_artifacts[["1"]])
     ),
     btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),

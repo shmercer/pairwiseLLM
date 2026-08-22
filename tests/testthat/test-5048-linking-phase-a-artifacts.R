@@ -257,6 +257,45 @@ test_that("pooled Phase A judge state supports all BTL model variants", {
   expect_true(states$btl_e_b$has_epsilon)
 })
 
+test_that("Phase A artifact import supports all matching BTL model variants", {
+  variants <- c("btl", "btl_e", "btl_b", "btl_e_b")
+  for (variant in variants) {
+    state <- make_phase_a_ready_state()
+    state$config$btl_config$model_variant <- variant
+    state$btl_fit$model_variant <- variant
+    artifact <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+    artifact$quality_gate_accepted <- TRUE
+    controller <- .adaptive_controller_resolve(state)
+
+    expect_no_error(
+      .adaptive_phase_a_validate_imported_artifact(
+        artifact,
+        state,
+        set_id = 1L,
+        controller = controller
+      )
+    )
+  }
+})
+
+test_that("Phase A artifact import rejects cross-variant reuse", {
+  state <- make_phase_a_ready_state()
+  artifact <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
+  artifact$quality_gate_accepted <- TRUE
+  state$config$btl_config$model_variant <- "btl"
+  controller <- .adaptive_controller_resolve(state)
+
+  expect_error(
+    .adaptive_phase_a_validate_imported_artifact(
+      artifact,
+      state,
+      set_id = 1L,
+      controller = controller
+    ),
+    "model_variant"
+  )
+})
+
 test_that("pooled Phase A judge state round-trips through persistence", {
   state <- make_phase_a_ready_state_with_evidence()
   art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
@@ -426,6 +465,17 @@ test_that("phase A import validation rejects each required failure mode", {
   expect_error(
     .adaptive_phase_a_validate_imported_artifact(bad_quality, state, set_id = 1L, controller = controller),
     "missing reliability_EAP_within"
+  )
+
+  trusted_quality <- bad_quality
+  trusted_quality$quality_gate_accepted <- TRUE
+  expect_no_error(
+    .adaptive_phase_a_validate_imported_artifact(
+      trusted_quality,
+      state,
+      set_id = 1L,
+      controller = controller
+    )
   )
 
   bad_hash <- valid
@@ -780,8 +830,7 @@ test_that("phase A mixed mode supports import and run per set", {
     adaptive_config = list(
       run_mode = "within_set",
       phase_a_mode = "mixed",
-      phase_a_artifacts = list(`1` = import_set1),
-      phase_a_set_source = c(`1` = "import", `2` = "run")
+      phase_a_artifacts = list(`1` = import_set1)
     )
   )
 
@@ -892,8 +941,7 @@ test_that("adaptive_rank_run_live rejects removed phase-specific judge mode", {
         hub_id = 1L,
         judge_param_mode = "phase_specific",
         phase_a_mode = "import",
-        phase_a_artifacts = list(`1` = art1, `2` = art2),
-        phase_a_compatible_config_hashes = c(art1$fit_config_hash, art2$fit_config_hash)
+        phase_a_artifacts = list(`1` = art1, `2` = art2)
       ),
       progress = "none"
     ),
@@ -994,8 +1042,7 @@ test_that("global-shared Phase B startup falls back deterministically without li
       run_mode = "link_one_spoke",
       hub_id = 1L,
       phase_a_mode = "import",
-      phase_a_artifacts = list(`1` = art1, `2` = art2),
-      phase_a_compatible_config_hashes = c(art1$fit_config_hash, art2$fit_config_hash)
+      phase_a_artifacts = list(`1` = art1, `2` = art2)
     ),
     progress = "none"
   ))
@@ -1098,22 +1145,12 @@ test_that("phase A helper branch guards and edge paths are exercised", {
     "Unable to resolve set_id"
   )
 
-  expect_error(
-    .adaptive_phase_a_resolve_set_sources(
-      list(phase_a_mode = "mixed", phase_a_set_source = c("run")),
-      set_ids = c(1L, 2L),
-      import_map = list()
-    ),
-    "named character vector"
+  mixed_sources <- .adaptive_phase_a_resolve_set_sources(
+    list(phase_a_mode = "mixed"),
+    set_ids = c(1L, 2L),
+    import_map = list(`1` = artifact)
   )
-  expect_error(
-    .adaptive_phase_a_resolve_set_sources(
-      list(phase_a_mode = "mixed", phase_a_set_source = c(`1` = "bad")),
-      set_ids = c(1L, 2L),
-      import_map = list()
-    ),
-    "values must be `run` or `import`"
-  )
+  expect_identical(unname(mixed_sources), c("import", "run"))
 
   state$linking$phase_a <- list(
     set_status = tibble::tibble(),
