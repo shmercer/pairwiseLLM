@@ -819,6 +819,24 @@ test_that("coverage source propagates through selection and linking stage rows",
   sel <- pairwiseLLM:::select_next_pair(state, step_id = 1L)
   expect_identical(sel$coverage_source, "phase_a_rank_mu_raw")
 
+  external_candidates <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state,
+    stage_name = "anchor_link",
+    fallback_name = "base",
+    C_max = 5000L,
+    seed = 99L
+  )
+  external_candidates$coverage_source <- NULL
+  external_candidates$coverage_bins_used <- NULL
+  external_candidates$link_spoke_id <- NULL
+  sel_external <- pairwiseLLM:::select_next_pair(
+    state,
+    step_id = 1L,
+    candidates = external_candidates
+  )
+  expect_identical(sel_external$coverage_source, "phase_a_rank_mu_raw")
+  expect_identical(sel_external$coverage_bins_used, 1L)
+
   state$controller$link_stage_coverage_source <- list(`2` = sel$coverage_source)
   state$controller$link_stage_coverage_bins_used <- list(`2` = as.integer(sel$coverage_bins_used))
   state$step_log <- pairwiseLLM:::append_step_log(

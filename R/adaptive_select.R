@@ -2955,7 +2955,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         spoke_for_utility <- if ("link_spoke_id" %in% names(cand)) {
           as.integer(unique(stats::na.omit(as.integer(cand$link_spoke_id)))[1L] %||% NA_integer_)
         } else {
-          as.integer(spoke_attempt %||% NA_integer_)
+          as.integer(if (!is.na(spoke_attempt)) spoke_attempt else active_link_spoke)
         }
         if (!is.na(spoke_for_utility) &&
           isTRUE((link_controller$link_state_frozen_by_spoke %||% list())[[as.character(spoke_for_utility)]])) {
@@ -3216,6 +3216,35 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       selected_spoke_id <- set_j_selected
     } else if (identical(set_j_selected, hub_id)) {
       selected_spoke_id <- set_i_selected
+    }
+  }
+  if (isTRUE(selected_is_cross_set) &&
+    isTRUE(link_phase_b) &&
+    !is.na(selected_spoke_id) &&
+    (is.na(coverage_meta$coverage_source) || is.na(coverage_meta$coverage_bins_used))) {
+    coverage_fallback <- tryCatch(
+      .adaptive_link_refit_local_inputs(
+        state = state,
+        controller = link_controller,
+        spoke_id = as.integer(selected_spoke_id),
+        defaults = defaults
+      )$coverage,
+      error = function(e) NULL
+    )
+    if (is.list(coverage_fallback)) {
+      if (is.na(coverage_meta$coverage_source)) {
+        coverage_meta$coverage_source <- as.character(
+          coverage_fallback$source %||% NA_character_
+        )
+      }
+      if (is.na(coverage_meta$coverage_bins_used)) {
+        coverage_meta$coverage_bins_used <- as.integer(
+          coverage_fallback$bins_used %||% NA_integer_
+        )
+      }
+      if (is.na(coverage_meta$link_spoke_id)) {
+        coverage_meta$link_spoke_id <- as.integer(selected_spoke_id)
+      }
     }
   }
   A_id <- as.character(order_vals[["A_id"]] %||% NA_character_)
