@@ -290,6 +290,78 @@ build_btl_results_data <- function(
   )
 }
 
+.btl_mcmc_standalone_fit_metrics <- function(fit_contract, config) {
+  if (!is.list(fit_contract)) {
+    rlang::abort("`fit_contract` must be a list.")
+  }
+  if (!is.list(config)) {
+    rlang::abort("`config` must be a list.")
+  }
+
+  diagnostics <- fit_contract$diagnostics %||% list()
+  divergences <- as.integer(diagnostics$divergences %||% NA_integer_)
+  max_rhat <- as.double(diagnostics$max_rhat %||% NA_real_)
+  min_ess_bulk <- as.double(diagnostics$min_ess_bulk %||% NA_real_)
+
+  divergences_max <- if (isTRUE(config$require_divergences_zero %||% TRUE)) {
+    0L
+  } else {
+    NA_integer_
+  }
+  max_rhat_allowed <- as.double(config$max_rhat %||% NA_real_)
+  ess_bulk_required <- as.double(config$min_ess_bulk %||% NA_real_)
+
+  diagnostics_divergences_pass <- if (is.na(divergences_max)) {
+    !is.na(divergences)
+  } else {
+    !is.na(divergences) && divergences <= divergences_max
+  }
+  diagnostics_rhat_pass <- !is.na(max_rhat) &&
+    is.finite(max_rhat_allowed) &&
+    max_rhat <= max_rhat_allowed
+  diagnostics_ess_pass <- !is.na(min_ess_bulk) &&
+    is.finite(ess_bulk_required) &&
+    min_ess_bulk >= ess_bulk_required
+
+  diagnostics_pass <- isTRUE(diagnostics_divergences_pass) &&
+    isTRUE(diagnostics_rhat_pass) &&
+    isTRUE(diagnostics_ess_pass)
+
+  reliability_EAP <- compute_reliability_EAP(fit_contract$theta_draws %||% NULL)
+  eap_min <- as.double(config$eap_reliability_min %||% NA_real_)
+  eap_pass <- isTRUE(diagnostics_pass) &&
+    is.finite(reliability_EAP) &&
+    is.finite(eap_min) &&
+    reliability_EAP >= eap_min
+
+  theta_mean <- as.double(fit_contract$theta_mean %||% NA_real_)
+  theta_sd_eap <- if (length(theta_mean) >= 2L && all(is.finite(theta_mean))) {
+    stats::sd(theta_mean)
+  } else {
+    NA_real_
+  }
+
+  list(
+    diagnostics_pass = diagnostics_pass,
+    diagnostics_divergences_pass = diagnostics_divergences_pass,
+    diagnostics_rhat_pass = diagnostics_rhat_pass,
+    diagnostics_ess_pass = diagnostics_ess_pass,
+    divergences = divergences,
+    divergences_max_allowed = divergences_max,
+    max_rhat = max_rhat,
+    max_rhat_allowed = max_rhat_allowed,
+    min_ess_bulk = min_ess_bulk,
+    ess_bulk_required = ess_bulk_required,
+    reliability_EAP = reliability_EAP,
+    reliability_EAP_scope = reliability_EAP,
+    eap_reliability_min = eap_min,
+    eap_pass = eap_pass,
+    eap_pass_scope = eap_pass,
+    theta_sd_eap = theta_sd_eap,
+    theta_sd_eap_scope = theta_sd_eap
+  )
+}
+
 .btl_mcmc_inference_contract_from_results <- function(results, inference_contract = NULL) {
   if (is.null(inference_contract)) {
     inference_contract <- list()
@@ -528,6 +600,8 @@ fit_bayes_btl_mcmc <- function(
     )
     fit_contract <- as_btl_fit_contract_from_mcmc(mcmc_fit, ids = ids)
     fit_contract$inference_contract <- contract_meta
+    fit_metrics <- .btl_mcmc_standalone_fit_metrics(fit_contract, mcmc_config)
+    fit_contract$diagnostics_pass <- as.logical(fit_metrics$diagnostics_pass)
     validate_btl_fit_contract(fit_contract, ids = ids)
     fits[[idx]] <- fit_contract
 
@@ -539,6 +613,7 @@ fit_bayes_btl_mcmc <- function(
     )
 
     metrics <- btl_mcmc_fill_terminal_stop_metrics(state, mcmc_config)
+    metrics[names(fit_metrics)] <- fit_metrics
     metrics$proposed_pairs <- as.integer(nrow(results_subset))
     round_row <- build_round_log_row(
       state = state,
