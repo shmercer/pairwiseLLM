@@ -2290,6 +2290,19 @@ generate_stage_candidates_from_state <- function(state,
       bins_undercovered = integer(),
       source = NA_character_
     )
+    coverage_source <- as.character(coverage$source %||% NA_character_)
+    coverage_bins_used <- as.integer(coverage$bins_used %||% NA_integer_)
+    if (is.na(coverage_source) || is.na(coverage_bins_used)) {
+      coverage_direct <- .adaptive_link_spoke_coverage(
+        state = state,
+        controller = controller,
+        spoke_id = as.integer(spoke_id),
+        spoke_ids = spoke_ids,
+        routing_scores = local_inputs$routing_scores %||% stats::setNames(numeric(), character()),
+        score_source = "linking_global_score"
+      )
+      coverage <- utils::modifyList(coverage, coverage_direct, keep.null = TRUE)
+    }
   } else if (isTRUE(is_link_mode)) {
     active_set <- as.integer(phase_ctx$active_phase_a_set %||% NA_integer_)
     if (is.na(active_set)) {

@@ -2949,20 +2949,29 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
           defaults = defaults
         )
         if (!"link_spoke_id" %in% names(stage_candidates)) {
-          stage_candidates$link_spoke_id <- rep.int(as.integer(metadata_spoke_id), nrow(stage_candidates))
+          stage_candidates$link_spoke_id <- rep.int(NA_integer_, nrow(stage_candidates))
         }
+        stage_candidates$link_spoke_id <- as.integer(stage_candidates$link_spoke_id)
+        missing_spoke_id <- is.na(stage_candidates$link_spoke_id)
+        stage_candidates$link_spoke_id[missing_spoke_id] <- as.integer(metadata_spoke_id)
+
         if (!"coverage_source" %in% names(stage_candidates)) {
-          stage_candidates$coverage_source <- rep.int(
-            as.character(coverage_values$source %||% NA_character_),
-            nrow(stage_candidates)
-          )
+          stage_candidates$coverage_source <- rep.int(NA_character_, nrow(stage_candidates))
         }
+        stage_candidates$coverage_source <- as.character(stage_candidates$coverage_source)
+        missing_coverage_source <- is.na(stage_candidates$coverage_source)
+        stage_candidates$coverage_source[missing_coverage_source] <- as.character(
+          coverage_values$source %||% NA_character_
+        )
+
         if (!"coverage_bins_used" %in% names(stage_candidates)) {
-          stage_candidates$coverage_bins_used <- rep.int(
-            as.integer(coverage_values$bins_used %||% NA_integer_),
-            nrow(stage_candidates)
-          )
+          stage_candidates$coverage_bins_used <- rep.int(NA_integer_, nrow(stage_candidates))
         }
+        stage_candidates$coverage_bins_used <- as.integer(stage_candidates$coverage_bins_used)
+        missing_coverage_bins <- is.na(stage_candidates$coverage_bins_used)
+        stage_candidates$coverage_bins_used[missing_coverage_bins] <- as.integer(
+          coverage_values$bins_used %||% NA_integer_
+        )
       }
 
       if (isTRUE(link_phase_b) && isTRUE(attempt_backfill_active)) {

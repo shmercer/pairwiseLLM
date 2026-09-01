@@ -826,9 +826,9 @@ test_that("coverage source propagates through selection and linking stage rows",
     C_max = 5000L,
     seed = 99L
   )
-  external_candidates$coverage_source <- NULL
-  external_candidates$coverage_bins_used <- NULL
-  external_candidates$link_spoke_id <- NULL
+  external_candidates$coverage_source <- NA_character_
+  external_candidates$coverage_bins_used <- NA_integer_
+  external_candidates$link_spoke_id <- NA_integer_
   sel_external <- pairwiseLLM:::select_next_pair(
     state,
     step_id = 1L,
