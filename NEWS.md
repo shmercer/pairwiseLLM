@@ -54,9 +54,13 @@
 ## Bug fixes
 * Fixed Anthropic extended-thinking live requests when users explicitly set
   the required `temperature = 1`.
+* OpenAI Responses live requests now forward and enforce an explicitly supplied
+  `max_output_tokens` limit.
 * Changed omitted `temperature` and `top_p` controls to use model/provider
   defaults instead of injecting deterministic sampling values. Provider-required
   reasoning constraints are still enforced.
+* Provider smoke runs now exit unsuccessfully when a selected API key is absent,
+  unless missing-key skips were explicitly allowed.
 
 # pairwiseLLM 1.3.0
 
