@@ -9,12 +9,10 @@
 #' match those available in your Ollama installation (for example
 #' `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`).
 #'
-#' Temperature and context length are controlled as follows:
+#' Sampling and context length are controlled as follows:
 #'
 #' \itemize{
-#'   \item By default, \code{temperature = 0} for all models.
-#'   \item For Qwen models (model names beginning with \code{"qwen"}) and
-#'     \code{think = TRUE}, \code{temperature} is set to \code{0.6}.
+#'   \item Sampling parameters are omitted so the local model default applies.
 #'   \item The context window is set via \code{options$num_ctx}, which
 #'     defaults to \code{8192L} but may be overridden via the \code{num_ctx}
 #'     argument.
@@ -48,12 +46,9 @@
 #'   \code{"<BETTER_SAMPLE>"}.
 #' @param tag_suffix Suffix for the better-sample tag. Defaults to
 #'   \code{"</BETTER_SAMPLE>"}.
-#' @param think Logical; if \code{TRUE} and the model is a Qwen model (name
-#'   starts with \code{"qwen"}), the temperature is set to \code{0.6}.
-#'   Otherwise the temperature is \code{0}. The \code{think} argument does
-#'   not itself modify the HTTP request body; it is used only for choosing
-#'   the temperature, but the function will parse a \code{thinking} field
-#'   from the response whenever one is present.
+#' @param think Logical; forwarded to Ollama's \code{think} request field.
+#'   The function parses a \code{thinking} field from the response whenever
+#'   one is present.
 #' @param num_ctx Integer; context window to use via \code{options$num_ctx}.
 #'   The default is \code{8192L}.
 #' @param include_raw Logical; if \code{TRUE}, adds a list-column
@@ -209,12 +204,6 @@ ollama_compare_pair_live <- function(
 
   pair_uid <- list(...)$pair_uid %||% NULL
 
-  # Temperature rule:
-  # - default: 0
-  # - Qwen + think = TRUE: 0.6
-  is_qwen <- grepl("^qwen", model, ignore.case = TRUE)
-  temperature <- if (isTRUE(think) && is_qwen) 0.6 else 0
-
   prompt <- build_prompt(
     template   = prompt_template,
     trait_name = trait_name,
@@ -230,8 +219,7 @@ ollama_compare_pair_live <- function(
     # Explicitly control Ollama thinking behavior
     think = isTRUE(think),
     options = list(
-      num_ctx     = as.integer(num_ctx),
-      temperature = temperature
+      num_ctx = as.integer(num_ctx)
     )
   )
 
@@ -388,11 +376,9 @@ ollama_compare_pair_live <- function(
 #'     Defaults are set to sequential processing.
 #' }
 #'
-#' Temperature and context length are controlled as follows:
+#' Sampling and context length are controlled as follows:
 #'
-#' * By default, `temperature = 0` for all models.
-#' * For Qwen models (model names beginning with `"qwen"`) and `think = TRUE`,
-#'   `temperature` is set to `0.6`.
+#' * Sampling parameters are omitted so the local model default applies.
 #' * The context window is set via `options$num_ctx`, which defaults to
 #'   `8192` but may be overridden via the `num_ctx` argument.
 #'
@@ -414,9 +400,7 @@ ollama_compare_pair_live <- function(
 #'   `status_every`-th pair. Defaults to 1 (every pair). Errors are always
 #'   printed.
 #' @param progress Logical; if `TRUE`, shows a textual progress bar.
-#' @param think Logical; see [ollama_compare_pair_live()] for behavior. When
-#'   `TRUE` and the model name starts with `"qwen"`, the temperature is set
-#'   to `0.6`; otherwise the temperature remains `0`.
+#' @param think Logical; see [ollama_compare_pair_live()] for behavior.
 #' @param num_ctx Integer; context window to use via `options$num_ctx`. The
 #'   default is `8192L`.
 #' @param include_raw Logical; if `TRUE`, each row of the returned tibble will

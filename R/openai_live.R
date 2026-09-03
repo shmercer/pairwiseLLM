@@ -20,12 +20,10 @@ NULL
 #'   \item Visible assistant output into the \code{content} column.
 #' }
 #'
-#' **Temperature Defaults:**
-#' If `temperature` is not provided in `...`:
-#' * It defaults to `0` (deterministic) for standard models or when reasoning is
-#'   disabled.
-#' * It remains `NULL` when reasoning is enabled, as the API does not support
-#'   temperature in that mode.
+#' **Sampling defaults:**
+#' If `temperature` or `top_p` is not provided in `...`, the corresponding
+#' field is omitted so the model/provider default applies. Reasoning modes that
+#' do not support sampling parameters continue to require them to be `NULL`.
 #'
 #' @param ID1 Character ID for the first sample.
 #' @param text1 Character string containing the first sample's text.
@@ -87,8 +85,7 @@ NULL
 #'   ID2 = "B", text2 = "Text B...",
 #'   model = "gpt-4.1",
 #'   trait_name = "clarity",
-#'   trait_description = "Which text is clearer?",
-#'   temperature = 0
+#'   trait_description = "Which text is clearer?"
 #' )
 #'
 #' # 2. Reasoning comparison using GPT-5.6 Sol
@@ -148,24 +145,10 @@ openai_compare_pair_live <- function(
     service_tier <- NULL
   }
 
-  # Determine temperature default
-  is_gpt5_base <- model %in% c("gpt-5", "gpt-5-mini", "gpt-5-nano")
-  is_gpt5_reasoning <- is_gpt5_series_model(model) && !is_gpt5_base
-
-  reasoning_active <- if (is_gpt5_reasoning) {
-    !is.null(reasoning_effort) && !identical(reasoning_effort, "none")
-  } else if (is_gpt5_base) {
-    !is.null(reasoning_effort)
-  } else {
-    FALSE
-  }
-
   temperature <- if ("temperature" %in% names(dots)) {
     dots$temperature
-  } else if (reasoning_active) {
-    NULL # Must be NULL for reasoning
   } else {
-    0 # Default to 0 for everything else (standard or disabled reasoning)
+    NULL
   }
 
   sampling <- normalize_openai_sampling(

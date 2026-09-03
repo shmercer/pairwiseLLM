@@ -51,9 +51,7 @@ printed.}
 
 \item{progress}{Logical; if \code{TRUE}, shows a textual progress bar.}
 
-\item{think}{Logical; see \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}} for behavior. When
-\code{TRUE} and the model name starts with \code{"qwen"}, the temperature is set
-to \code{0.6}; otherwise the temperature remains \code{0}.}
+\item{think}{Logical; see \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}} for behavior.}
 
 \item{num_ctx}{Integer; context window to use via \code{options$num_ctx}. The
 default is \code{8192L}.}
@@ -107,11 +105,9 @@ out-of-memory errors unless the hardware can handle concurrent requests.
 Defaults are set to sequential processing.
 }
 
-Temperature and context length are controlled as follows:
+Sampling and context length are controlled as follows:
 \itemize{
-\item By default, \code{temperature = 0} for all models.
-\item For Qwen models (model names beginning with \code{"qwen"}) and \code{think = TRUE},
-\code{temperature} is set to \code{0.6}.
+\item Sampling parameters are omitted so the local model default applies.
 \item The context window is set via \code{options$num_ctx}, which defaults to
 \code{8192} but may be overridden via the \code{num_ctx} argument.
 }

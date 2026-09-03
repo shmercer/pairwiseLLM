@@ -134,9 +134,8 @@ Temperature and thinking-mode behaviour are controlled by
 \itemize{
 \item When \code{reasoning = "none"} (no extended thinking):
 \itemize{
-\item The default \code{temperature} is \code{0} (deterministic),
-unless you explicitly supply a \code{temperature} argument via
-\code{...}.
+\item Omitted \code{temperature} and \code{top_p} values are not
+sent, so the model/provider defaults apply.
 \item The default \code{max_tokens} is \code{768}, unless you
 override it via \code{max_tokens} in \code{...}.
 }
@@ -152,8 +151,8 @@ this constraint also produce an error.
 }
 }
 
-Therefore, when you run batches without extended thinking (the usual case),
-the effective default is a temperature of \code{0}. When you explicitly use
+Therefore, batches without extended thinking use model-default sampling.
+When you explicitly use
 extended thinking (either by setting \code{reasoning = "enabled"} or by
 using \code{include_thoughts = TRUE}), Anthropic's requirement of
 \code{temperature = 1} is enforced.

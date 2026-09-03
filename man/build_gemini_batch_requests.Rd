@@ -27,7 +27,7 @@ build_gemini_batch_requests(
 \code{\link{make_pairs}}, \code{\link{sample_pairs}}, and
 \code{\link{randomize_pair_order}}.}
 
-\item{model}{Gemini model name, for example \code{"gemini-3-pro-preview"}.
+\item{model}{Gemini model name, for example \code{"gemini-3.5-flash-lite"}.
 This parameter is not embedded in each request object (the model is
 provided via the path), but is included here for symmetry with other
 backends and potential validation.}
@@ -48,7 +48,8 @@ This is mapped to Gemini's \code{thinkingConfig.thinkingLevel}.
 \itemize{
 \item For Gemini 3 Flash models (for example \code{"gemini-3-flash-preview"}),
 \code{"minimal"} is supported and is passed through as \code{"minimal"}.
-\item For non-Flash Gemini 3 models (for example \code{"gemini-3-pro-preview"}),
+\item For models not matched by the package's Gemini 3 Flash-name
+detector (for example \code{"gemini-3.5-flash-lite"}),
 \code{"minimal"} is not supported.
 \item For backward compatibility with earlier Gemini 3 Pro usage,
 \code{"low"} maps to \code{"low"} and both \code{"medium"} and \code{"high"}
@@ -110,10 +111,10 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Gemini 3 Pro example (existing behavior)
+# Dated tested Gemini Developer API configuration
 reqs <- build_gemini_batch_requests(
   pairs             = pairs,
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,

@@ -38,11 +38,12 @@ and \code{{SAMPLE_2}}. Defaults to \code{set_prompt_template()}.}
 \item{endpoint}{Which OpenAI endpoint to target. One of
 \code{"chat.completions"} (default) or \code{"responses"}.}
 
-\item{temperature}{Optional temperature parameter. Defaults to \code{0} for
-standard models (deterministic). Must be \code{NULL} for reasoning models
-(enabled).}
+\item{temperature}{Optional temperature parameter. If \code{NULL}, it is omitted
+so the model/provider default applies. Must be \code{NULL} for reasoning modes
+that do not support it.}
 
-\item{top_p}{Optional top_p parameter.}
+\item{top_p}{Optional top-p parameter. If \code{NULL}, it is omitted so the
+model/provider default applies.}
 
 \item{logprobs}{Optional logprobs parameter.}
 
@@ -93,8 +94,7 @@ batch_tbl_chat <- build_openai_batch_requests(
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  endpoint          = "chat.completions",
-  temperature       = 0
+  endpoint          = "chat.completions"
 )
 
 # 2. GPT-5.6 Sol Responses Batch with Reasoning

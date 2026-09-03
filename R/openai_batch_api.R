@@ -584,10 +584,11 @@ openai_poll_batch_until_complete <- function(
 #'   and \code{{SAMPLE_2}}. Defaults to \code{set_prompt_template()}.
 #' @param endpoint Which OpenAI endpoint to target. One of
 #'   \code{"chat.completions"} (default) or \code{"responses"}.
-#' @param temperature Optional temperature parameter. Defaults to `0` for
-#'   standard models (deterministic). Must be `NULL` for reasoning models
-#'   (enabled).
-#' @param top_p Optional top_p parameter.
+#' @param temperature Optional temperature parameter. If `NULL`, it is omitted
+#'   so the model/provider default applies. Must be `NULL` for reasoning modes
+#'   that do not support it.
+#' @param top_p Optional top-p parameter. If `NULL`, it is omitted so the
+#'   model/provider default applies.
 #' @param logprobs Optional logprobs parameter.
 #' @param reasoning Optional reasoning effort for GPT-5 series when using
 #'   the \code{/v1/responses} endpoint. For \code{"gpt-5"} and
@@ -628,8 +629,7 @@ openai_poll_batch_until_complete <- function(
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
-#'   endpoint          = "chat.completions",
-#'   temperature       = 0
+#'   endpoint          = "chat.completions"
 #' )
 #'
 #' # 2. GPT-5.6 Sol Responses Batch with Reasoning
@@ -682,21 +682,6 @@ openai_poll_batch_until_complete <- function(
     if (endpoint == "responses" && isTRUE(include_thoughts) &&
       is.null(reasoning_effort) && !is_gpt5_series_model(model)) {
       rlang::warn("include_thoughts requested for non-reasoning model; ignores thoughts.")
-    }
-
-    is_gpt5_base <- model %in% c("gpt-5", "gpt-5-mini", "gpt-5-nano")
-    is_gpt5_reasoning <- is_gpt5_series_model(model) && !is_gpt5_base
-
-    reasoning_active <- if (is_gpt5_reasoning) {
-      !is.null(reasoning_effort) && !identical(reasoning_effort, "none")
-    } else if (is_gpt5_base) {
-      !is.null(reasoning_effort)
-    } else {
-      FALSE
-    }
-
-    if (is.null(temperature) && !reasoning_active) {
-      temperature <- 0
     }
 
     sampling <- normalize_openai_sampling(

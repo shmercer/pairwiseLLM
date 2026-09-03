@@ -129,7 +129,7 @@ outdir <- tempfile("multi_batch_example_")
 # and print progress messages as each batch is created.
 job_info <- llm_submit_pairs_multi_batch(
   pairs             = pairs,
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = "writing_quality",
   trait_description = "Which text shows better writing quality?",
   n_segments        = 5,

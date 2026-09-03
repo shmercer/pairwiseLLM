@@ -18,12 +18,10 @@
 #'     - either `include_thoughts = TRUE` **or** a `reasoning` effort is supplied
 #'       in `...` (for GPT-5, `reasoning = "none"` maps to `"minimal"`).
 #'
-#' **Temperature Defaults:**
-#' For OpenAI, if `temperature` is not specified in `...`:
-#' * It defaults to `0` (deterministic) for standard models or when reasoning is
-#'   disabled (`reasoning = "none"`) on supported GPT-5.x reasoning models.
-#' * It remains `NULL` (API default) when reasoning is enabled, or for GPT-5
-#'   minimal reasoning (which ignores temperature).
+#' **Sampling defaults:**
+#' For OpenAI, omitted `temperature` and `top_p` values are not added to the
+#' request, so the model/provider defaults apply. Reasoning modes that do not
+#' support sampling parameters continue to require them to be `NULL`.
 #'
 #' For Anthropic, standard and date-stamped model names
 #' (e.g. `"claude-sonnet-4-5-20250929"`) are supported. This helper delegates
@@ -31,9 +29,8 @@
 #' [run_anthropic_batch_pipeline()] and [build_anthropic_batch_requests()],
 #' which apply the following rules:
 #' \itemize{
-#'   \item When `reasoning = "none"` (no extended thinking), the default
-#'     temperature is `0` (deterministic) unless you explicitly supply a
-#'     different `temperature` in `...`.
+#'   \item When `reasoning = "none"` (no extended thinking), omitted
+#'     `temperature` and `top_p` values use the model/provider defaults.
 #'   \item When `reasoning = "enabled"` (extended thinking), Anthropic requires
 #'     `temperature = 1`. If you supply a different value in `...`, an error
 #'     is raised. Default values in this mode are `max_tokens = 2048` and
@@ -64,9 +61,9 @@
 #'   * For `"openai"`, use models like `"gpt-4.1"`, `"gpt-5"`, `"gpt-5-mini"`,
 #'     `"gpt-5.6-sol"`, `"gpt-5.6-terra"`, or `"gpt-5.6-luna"` (including
 #'     date-stamped GPT-5.x versions where available).
-#'   * For `"anthropic"`, use provider names like `"claude-4-5-sonnet"`
+#'   * For `"anthropic"`, use provider names like `"claude-sonnet-4-5"`
 #'     or date-stamped versions like `"claude-sonnet-4-5-20250929"`.
-#'   * For `"gemini"`, use names like `"gemini-3-pro-preview"`.
+#'   * For `"gemini"`, use names like `"gemini-3.5-flash-lite"`.
 #' @param trait_name A short name for the trait being evaluated (e.g.
 #'   `"overall_quality"`).
 #' @param trait_description A human-readable description of the trait.
@@ -138,7 +135,7 @@
 #' batch_anthropic <- llm_submit_pairs_batch(
 #'   pairs             = pairs,
 #'   backend           = "anthropic",
-#'   model             = "claude-4-5-sonnet",
+#'   model             = "claude-sonnet-4-5",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
@@ -150,7 +147,7 @@
 #' batch_gemini <- llm_submit_pairs_batch(
 #'   pairs             = pairs,
 #'   backend           = "gemini",
-#'   model             = "gemini-3-pro-preview",
+#'   model             = "gemini-3.5-flash-lite",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
@@ -241,24 +238,6 @@ llm_submit_pairs_batch <- function(
       } else {
         "chat.completions"
       }
-    }
-
-    # Determine default temperature logic
-    # Reasoning is ACTIVE if:
-    # 1. GPT-5.1/5.2 reasoning is non-"none", or
-    # 2. GPT-5 base models have any reasoning effort (including "minimal").
-    reasoning_active <- if (is_gpt5_reasoning) {
-      !is.null(reasoning_effort) && !identical(reasoning_effort, "none")
-    } else if (is_gpt5_base) {
-      !is.null(reasoning_effort)
-    } else {
-      FALSE
-    }
-
-    # Default to 0 ONLY if reasoning is NOT active.
-    # This covers standard models and GPT-5.1/5.2 with reasoning disabled.
-    if (!"temperature" %in% names(dot_list) && !reasoning_active) {
-      dot_list$temperature <- 0
     }
 
     dot_list$endpoint <- NULL

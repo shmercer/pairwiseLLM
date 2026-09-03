@@ -106,14 +106,10 @@ column.
 \item Visible assistant output into the \code{content} column.
 }
 
-\strong{Temperature Defaults:}
-If \code{temperature} is not provided in \code{...}:
-\itemize{
-\item It defaults to \code{0} (deterministic) for standard models or when reasoning is
-disabled.
-\item It remains \code{NULL} when reasoning is enabled, as the API does not support
-temperature in that mode.
-}
+\strong{Sampling defaults:}
+If \code{temperature} or \code{top_p} is not provided in \code{...}, the corresponding
+field is omitted so the model/provider default applies. Reasoning modes that
+do not support sampling parameters continue to require them to be \code{NULL}.
 }
 \examples{
 \dontrun{
@@ -125,8 +121,7 @@ res <- openai_compare_pair_live(
   ID2 = "B", text2 = "Text B...",
   model = "gpt-4.1",
   trait_name = "clarity",
-  trait_description = "Which text is clearer?",
-  temperature = 0
+  trait_description = "Which text is clearer?"
 )
 
 # 2. Reasoning comparison using GPT-5.6 Sol

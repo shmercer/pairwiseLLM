@@ -36,7 +36,7 @@ gemini_compare_pair_live(
 
 \item{text2}{Character containing the second sample text.}
 
-\item{model}{Gemini model identifier (for example \code{"gemini-3-pro-preview"} or
+\item{model}{Gemini model identifier (for example \code{"gemini-3.5-flash-lite"} or
 \code{"gemini-3-flash-preview"}). The value is interpolated into the path
 \code{"/{api_version}/models/<model>:generateContent"}.}
 
@@ -56,7 +56,8 @@ This controls the maximum depth of internal reasoning.
 \itemize{
 \item For Gemini 3 Flash models (for example \code{"gemini-3-flash-preview"}),
 \code{"minimal"} is supported and is passed through as \code{"minimal"}.
-\item For non-Flash Gemini 3 models (for example \code{"gemini-3-pro-preview"}),
+\item For models not matched by the package's Gemini 3 Flash-name
+detector (for example \code{"gemini-3.5-flash-lite"}),
 \code{"minimal"} is not supported.
 \item For backward compatibility with earlier Gemini 3 Pro usage,
 \code{"low"} maps to \code{"low"} and both \code{"medium"} and \code{"high"} map to \code{"high"}.
@@ -147,13 +148,13 @@ still using the final answer content to detect the \verb{<BETTER_SAMPLE>} tag.
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Gemini 3 Pro example (existing behavior)
+# Dated tested Gemini Developer API configuration
 res <- gemini_compare_pair_live(
   ID1               = "S01",
   text1             = "Text 1",
   ID2               = "S02",
   text2             = "Text 2",
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,

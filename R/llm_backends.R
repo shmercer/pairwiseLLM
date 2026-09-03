@@ -38,10 +38,10 @@
 #' @param model Model identifier for the chosen backend. For `"openai"` this
 #'   should be an OpenAI model name (for example `"gpt-4.1"`, `"gpt-5.1"`).
 #'   For `"anthropic"`, use Anthropic model names such as
-#'   `"claude-4-5-sonnet"`. For `"gemini"` and `"vertex"`, use the
-#'   corresponding Gemini model names (for example `"gemini-3-pro-preview"` or
+#'   `"claude-sonnet-4-5"`. For `"gemini"` and `"vertex"`, use the
+#'   corresponding Gemini model names (for example `"gemini-3.5-flash-lite"` or
 #'   `"gemini-2.5-flash"`). For "together", use Together.ai model identifiers
-#'   such as `"deepseek-ai/DeepSeek-R1"` or `"deepseek-ai/DeepSeek-V3"`. For
+#'   such as `"deepseek-ai/DeepSeek-V4-Flash-0731"`. For
 #'   `"ollama"`, use a local model name known to the Ollama server (for example
 #'    `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`).
 #' @param trait_name Short label for the trait (for example
@@ -345,10 +345,10 @@ llm_compare_pair <- function(
 #' @param model Model identifier for the chosen backend. For `"openai"` this
 #'   should be an OpenAI model name (for example `"gpt-4.1"`, `"gpt-5.1"`).
 #'   For `"anthropic"`, use Anthropic model names such as
-#'   `"claude-4-5-sonnet"`. For `"gemini"` and `"vertex"`, use the
-#'   corresponding Gemini model names (for example `"gemini-3-pro-preview"` or
+#'   `"claude-sonnet-4-5"`. For `"gemini"` and `"vertex"`, use the
+#'   corresponding Gemini model names (for example `"gemini-3.5-flash-lite"` or
 #'   `"gemini-2.5-flash"`). For "together", use Together.ai model identifiers
-#'   such as `"deepseek-ai/DeepSeek-R1"` or `"deepseek-ai/DeepSeek-V3"`. For
+#'   such as `"deepseek-ai/DeepSeek-V4-Flash-0731"`. For
 #'   `"ollama"`, use a local model name known to the Ollama server (for example
 #'    `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`).
 #' @param trait_name Trait name to pass through to the backend-specific

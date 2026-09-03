@@ -29,10 +29,9 @@ together_compare_pair_live(
 
 \item{text2}{Character string containing the second sample's text.}
 
-\item{model}{Together.ai model name (for example
-\code{"deepseek-ai/DeepSeek-R1"}, \code{"moonshotai/Kimi-K2-Instruct-0905"},
-\code{"Qwen/Qwen3-235B-A22B-Instruct-2507-tput"},
-\code{"deepseek-ai/DeepSeek-V3"}).}
+\item{model}{Together.ai model name (for example the dated tested identifier
+\code{"deepseek-ai/DeepSeek-V4-Flash-0731"}). Check the provider's current
+serverless catalog before use.}
 
 \item{trait_name}{Short label for the trait (for example "Overall Quality").}
 
@@ -57,9 +56,8 @@ failure). This is useful for debugging parsing problems.}
 
 \item{...}{Additional Together.ai parameters, typically including
 \code{temperature}, \code{top_p}, and provider-specific options. These are passed
-through to the JSON request body as top-level fields. If \code{temperature} is
-omitted, the function uses backend defaults (0.6 for
-\code{"deepseek-ai/DeepSeek-R1"}, 0 for all other models).
+through to the JSON request body as top-level fields. Omitted sampling
+controls use model/provider defaults.
 When \code{pair_uid} is supplied via \code{...}, it is used verbatim as \code{custom_id}.}
 }
 \value{
@@ -72,8 +70,8 @@ A tibble with one row and columns:
 \item{object_type}{API object type, typically \code{"chat.completion"}.}
 \item{status_code}{HTTP-style status code (200 if successful).}
 \item{error_message}{Error message if something goes wrong; otherwise \code{NA}.}
-\item{thoughts}{Internal reasoning text, for example \verb{<think>...</think>}
-blocks from models like \code{"deepseek-ai/DeepSeek-R1"}.}
+\item{thoughts}{Internal reasoning text from \verb{<think>...</think>} blocks,
+when present.}
 \item{content}{Concatenated visible assistant output (without \verb{<think>}
 blocks).}
 \item{better_sample}{"SAMPLE_1", "SAMPLE_2", or \code{NA}, based on the
@@ -94,31 +92,21 @@ result into a small tibble. It is the Together.ai analogue of
 conventions (for example \verb{<BETTER_SAMPLE>...</BETTER_SAMPLE>}).
 }
 \details{
-For models such as \code{"deepseek-ai/DeepSeek-R1"} that emit internal reasoning
-wrapped in \verb{<think>...</think>} tags, this helper will:
+For models that emit internal reasoning wrapped in \verb{<think>...</think>} tags,
+this helper will:
 \itemize{
 \item Extract the \verb{<think>...</think>} block into the \code{thoughts} column.
 \item Remove the \verb{<think>...</think>} block from the visible \code{content}
 column, so \code{content} contains only the user-facing answer.
 }
 
-Other Together.ai models (for example \code{"moonshotai/Kimi-K2-Instruct-0905"},
-\code{"Qwen/Qwen3-235B-A22B-Instruct-2507-tput"},
-\code{"deepseek-ai/DeepSeek-V3"}) are supported via the same API but may not use
-\verb{<think>} tags; in those cases, \code{thoughts} will be \code{NA} and the full model
-output will appear in \code{content}.
+Models that do not use \verb{<think>} tags return \code{NA} in \code{thoughts}, and their
+full output appears in \code{content}. Model identifiers are forwarded to the
+provider; see \code{vignette("model-compatibility")} for dated tested examples.
 
-Temperature handling:
-\itemize{
-\item If \code{temperature} is \strong{not} supplied in \code{...}, the function applies
-backend defaults:
-\itemize{
-\item \code{"deepseek-ai/DeepSeek-R1"} → \code{temperature = 0.6}.
-\item All other models → \code{temperature = 0}.
-}
-\item If \code{temperature} is included in \code{...}, that value is used and the
-defaults are not applied.
-}
+If \code{temperature} or \code{top_p} is omitted from \code{...}, the corresponding field
+is not sent and the model/provider default applies. Explicit values are
+passed through unchanged.
 }
 \examples{
 \dontrun{
@@ -130,13 +118,13 @@ samples <- example_writing_samples[1:2, ]
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Example: DeepSeek-R1 with default temperature = 0.6 if not supplied
+# Dated tested Together serverless configuration
 res_deepseek <- together_compare_pair_live(
   ID1               = samples$ID[1],
   text1             = samples$text[1],
   ID2               = samples$ID[2],
   text2             = samples$text[2],
-  model             = "deepseek-ai/DeepSeek-R1",
+  model             = "deepseek-ai/DeepSeek-V4-Flash-0731",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl
@@ -144,20 +132,6 @@ res_deepseek <- together_compare_pair_live(
 
 res_deepseek$better_id
 res_deepseek$thoughts
-
-# Example: Kimi-K2 with default temperature = 0 unless overridden
-res_kimi <- together_compare_pair_live(
-  ID1               = samples$ID[1],
-  text1             = samples$text[1],
-  ID2               = samples$ID[2],
-  text2             = samples$text[2],
-  model             = "moonshotai/Kimi-K2-Instruct-0905",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl
-)
-
-res_kimi$better_id
 }
 
 }

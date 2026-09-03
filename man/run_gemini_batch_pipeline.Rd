@@ -27,7 +27,7 @@ run_gemini_batch_pipeline(
 \arguments{
 \item{pairs}{Tibble/data frame of pairs.}
 
-\item{model}{Gemini model name, for example \code{"gemini-3-pro-preview"} or
+\item{model}{Gemini model name, for example \code{"gemini-3.5-flash-lite"} or
 \code{"gemini-3-flash-preview"}.}
 
 \item{trait_name}{Trait name.}
@@ -45,7 +45,8 @@ requests via \code{generationConfig$thinkingConfig$thinkingLevel}.
 \itemize{
 \item For Gemini 3 Flash models (for example \code{"gemini-3-flash-preview"}),
 \code{"minimal"} is supported and is passed through as \code{"minimal"}.
-\item For non-Flash Gemini 3 models (for example \code{"gemini-3-pro-preview"}),
+\item For models not matched by the package's Gemini 3 Flash-name
+detector (for example \code{"gemini-3.5-flash-lite"}),
 \code{"minimal"} is not supported.
 \item For backward compatibility with earlier Gemini 3 Pro usage,
 \code{"low"} maps to \code{"low"} and both \code{"medium"} and \code{"high"}
@@ -131,10 +132,10 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Run the full Gemini batch pipeline (Gemini 3 Pro example)
+# Run the full Gemini batch pipeline
 res <- run_gemini_batch_pipeline(
   pairs             = pairs,
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
