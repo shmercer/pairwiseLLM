@@ -2,6 +2,21 @@
 
 ## New Features
 
+### Adaptive linking
+* Added cross-set adaptive linking through `adaptive_rank()`, with one-spoke and
+  multi-spoke hub-and-spoke run modes for placing separately ranked sets on a
+  shared scale.
+* Phase A can run canonical within-set ranking, import saved Phase A artifacts,
+  or combine imported and newly run sets. Phase B uses anchored-joint
+  estimation with hard-locked hub parameters, globally shared judge parameters,
+  and concurrent spoke processing.
+* Added D-optimal cross-set candidate selection, spoke-aware comparison budgets,
+  and fixed per-refit held-out probes with explicit coverage, calibration, and
+  stopping gates.
+* Added persistent Phase A manifests and linking sessions, resume support,
+  `link_stage_log`, and explicit blocker and invalid-judgment reporting for
+  auditable long-running workflows.
+
 ### Model support & live API improvements
 * Added a separate Vertex AI Gemini live backend via `backend = "vertex"` with
   `VERTEX_API_KEY`.
@@ -10,10 +25,38 @@
     batch helpers.
 * Clarified provider-specific `service_tier` behavior for Gemini Developer API
   and Vertex AI Gemini API in the package docs, README, and vignettes.
+* Added request-shape handling for the OpenAI GPT-5.x and GPT-5.6 model
+  families.
+
+### Bayesian BTL usability
+* Added exported `build_btl_results_data()` to convert conventional
+  `ID1`/`ID2`/`better_id` outcomes into the canonical input required by
+  `fit_bayes_btl_mcmc()`.
+* Standalone Bayesian BTL fits now report reliability and sampler diagnostics
+  through the same result and log surfaces used by adaptive workflows.
+
+## Improvements
+* Reduced adaptive-linking refit, candidate-generation, logging, and checkpoint
+  overhead for large runs, including bounded candidate construction and
+  analytic anchored-joint derivatives.
+* Hardened adaptive-linking resume behavior, Phase A stopping scope, spoke
+  routing, probe scheduling, and Phase B pair accounting.
 
 ## Documentation
 * Updated the backend support matrix to distinguish Gemini Developer API from
   Vertex AI Gemini API and to document the live-only Vertex scope.
+* Replaced the undated supported-model list with a dated, machine-readable
+  compatibility registry that separates backend implementation, live/batch
+  testing, and current provider availability.
+* Corrected stale provider identifiers, API-key and CmdStan setup guidance,
+  OpenAI Flex wording, cost-estimator summaries, and broken public examples.
+
+## Bug fixes
+* Fixed Anthropic extended-thinking live requests when users explicitly set
+  the required `temperature = 1`.
+* Changed omitted `temperature` and `top_p` controls to use model/provider
+  defaults instead of injecting deterministic sampling values. Provider-required
+  reasoning constraints are still enforced.
 
 # pairwiseLLM 1.3.0
 
