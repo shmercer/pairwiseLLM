@@ -8,6 +8,47 @@ set_prompt_template <- pairwiseLLM:::set_prompt_template
 anthropic_compare_pair_live <- pairwiseLLM::anthropic_compare_pair_live
 submit_anthropic_pairs_live <- pairwiseLLM::submit_anthropic_pairs_live
 
+testthat::test_that("Anthropic thinking accepts an explicit temperature of one", {
+  captured <- new.env(parent = emptyenv())
+  response_body <- list(
+    model = "claude-haiku-4-5-20251001",
+    type = "message",
+    content = list(list(
+      type = "text",
+      text = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>"
+    )),
+    usage = list(input_tokens = 10, output_tokens = 5)
+  )
+
+  testthat::with_mocked_bindings(
+    .anthropic_api_key = function(...) "FAKEKEY",
+    .anthropic_req_body_json = function(req, body) {
+      captured$body <- body
+      req
+    },
+    .anthropic_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .anthropic_resp_body_json = function(...) response_body,
+    .anthropic_resp_status = function(...) 200L,
+    {
+      res <- anthropic_compare_pair_live(
+        ID1 = "S1", text1 = "Clear", ID2 = "S2", text2 = "Vague",
+        model = "claude-haiku-4-5-20251001",
+        trait_name = "Overall Quality",
+        trait_description = "Prefer the clearer answer.",
+        reasoning = "enabled",
+        include_thoughts = TRUE,
+        temperature = 1,
+        max_tokens = 2048,
+        thinking_budget_tokens = 1024
+      )
+
+      testthat::expect_identical(captured$body$temperature, 1)
+      testthat::expect_identical(captured$body$thinking$budget_tokens, 1024L)
+      testthat::expect_identical(res$better_id, "S1")
+    }
+  )
+})
+
 testthat::test_that("anthropic_compare_pair_live parses /v1/messages correctly", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
@@ -276,13 +317,14 @@ testthat::test_that("anthropic_compare_pair_live applies recommended
 
       testthat::expect_equal(res$better_id, ID2)
 
-      # Check that body has our recommended defaults
+      # Check the non-sampling default and model-default sampling contract
       testthat::expect_equal(length(bodies), 1L)
       b <- bodies[[1]]
 
       testthat::expect_equal(b$model, "claude-sonnet-4-5")
       testthat::expect_equal(b$max_tokens, 768)
-      testthat::expect_equal(b$temperature, 0)
+      testthat::expect_false("temperature" %in% names(b))
+      testthat::expect_false("top_p" %in% names(b))
     }
   )
 })
@@ -389,8 +431,9 @@ testthat::test_that("anthropic_compare_pair_live defaults and thinking
       b_none <- bodies[[1]]
       b_reason <- bodies[[2]]
 
-      # Temperatures differ by reasoning mode
-      testthat::expect_equal(b_none$temperature, 0)
+      # Standard mode uses the model default; reasoning requires one
+      testthat::expect_false("temperature" %in% names(b_none))
+      testthat::expect_false("top_p" %in% names(b_none))
       testthat::expect_equal(b_reason$temperature, 1)
 
       # Different max_tokens by reasoning mode

@@ -69,9 +69,8 @@ same recommended defaults and reasoning constraints as
 \itemize{
 \item \code{reasoning = "none"}:
 \itemize{
-\item Default \code{temperature = 0} (deterministic behaviour),
-unless you explicitly supply a different \code{temperature} via
-\code{...}.
+\item Omitted \code{temperature} and \code{top_p} values are not
+sent, so the model/provider defaults apply.
 \item Default \code{max_tokens = 768}, unless overridden via
 \code{max_tokens} in \code{...}.
 }
@@ -86,8 +85,8 @@ this constraint produce an error.
 }
 }
 
-As a result, when you build batches without extended thinking
-(\code{reasoning = "none"}), the effective default temperature is 0. When
+As a result, batches without extended thinking
+(\code{reasoning = "none"}) use model-default sampling. When
 you opt into extended thinking (\code{reasoning = "enabled"}), Anthropic's
 requirement of \code{temperature = 1} is enforced for all batch requests.
 }

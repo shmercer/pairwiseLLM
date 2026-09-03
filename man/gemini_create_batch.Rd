@@ -18,7 +18,7 @@ gemini_create_batch(
 list from the output of \code{\link{build_gemini_batch_requests}} via
 \code{batch$request}.}
 
-\item{model}{Gemini model name, for example \code{"gemini-3-pro-preview"}.}
+\item{model}{Gemini model name, for example \code{"gemini-3.5-flash-lite"}.}
 
 \item{api_key}{Optional Gemini API key. Defaults to
 \code{Sys.getenv("GEMINI_API_KEY")}.}
@@ -58,7 +58,7 @@ tmpl <- set_prompt_template()
 
 batch_tbl <- build_gemini_batch_requests(
   pairs             = pairs,
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -76,7 +76,7 @@ requests[[1]]
 \dontrun{
 batch <- gemini_create_batch(
   requests = requests,
-  model    = "gemini-3-pro-preview"
+  model    = "gemini-3.5-flash-lite"
 )
 
 batch$name

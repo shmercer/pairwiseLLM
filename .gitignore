@@ -5,6 +5,11 @@
 .DS_Store
 .quarto
 dev-output/
+/README.html
+/*.tar.gz
+/*.Rcheck/
+/cobertura.xml
+/vignettes/*.html
 docs
 /doc/
 /Meta/
@@ -12,6 +17,9 @@ tests/testthat/bad.csv
 dev-checklists
 agents.md
 agents_adaptive.md
+/.agents/
+/.codex/
+/AGENTS.md
 inst/stan/btl_e_b.exe
 inst/stan/btl_e_b
 inst/stan/link_transform_refit
@@ -19,3 +27,4 @@ inst/stan/link_transform_refit
 /codex/
 /scripts/
 /tasklists/
+/prompts/

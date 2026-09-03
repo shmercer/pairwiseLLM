@@ -31,9 +31,9 @@ this series.}
 \item For \code{"openai"}, use models like \code{"gpt-4.1"}, \code{"gpt-5"}, \code{"gpt-5-mini"},
 \code{"gpt-5.6-sol"}, \code{"gpt-5.6-terra"}, or \code{"gpt-5.6-luna"} (including
 date-stamped GPT-5.x versions where available).
-\item For \code{"anthropic"}, use provider names like \code{"claude-4-5-sonnet"}
+\item For \code{"anthropic"}, use provider names like \code{"claude-sonnet-4-5"}
 or date-stamped versions like \code{"claude-sonnet-4-5-20250929"}.
-\item For \code{"gemini"}, use names like \code{"gemini-3-pro-preview"}.
+\item For \code{"gemini"}, use names like \code{"gemini-3.5-flash-lite"}.
 }}
 
 \item{trait_name}{A short name for the trait being evaluated (e.g.
@@ -103,14 +103,10 @@ in \code{...} (for GPT-5, \code{reasoning = "none"} maps to \code{"minimal"}).
 }
 }
 
-\strong{Temperature Defaults:}
-For OpenAI, if \code{temperature} is not specified in \code{...}:
-\itemize{
-\item It defaults to \code{0} (deterministic) for standard models or when reasoning is
-disabled (\code{reasoning = "none"}) on supported GPT-5.x reasoning models.
-\item It remains \code{NULL} (API default) when reasoning is enabled, or for GPT-5
-minimal reasoning (which ignores temperature).
-}
+\strong{Sampling defaults:}
+For OpenAI, omitted \code{temperature} and \code{top_p} values are not added to the
+request, so the model/provider defaults apply. Reasoning modes that do not
+support sampling parameters continue to require them to be \code{NULL}.
 
 For Anthropic, standard and date-stamped model names
 (e.g. \code{"claude-sonnet-4-5-20250929"}) are supported. This helper delegates
@@ -118,9 +114,8 @@ temperature and extended-thinking behaviour to
 \code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}} and \code{\link[=build_anthropic_batch_requests]{build_anthropic_batch_requests()}},
 which apply the following rules:
 \itemize{
-\item When \code{reasoning = "none"} (no extended thinking), the default
-temperature is \code{0} (deterministic) unless you explicitly supply a
-different \code{temperature} in \code{...}.
+\item When \code{reasoning = "none"} (no extended thinking), omitted
+\code{temperature} and \code{top_p} values use the model/provider defaults.
 \item When \code{reasoning = "enabled"} (extended thinking), Anthropic requires
 \code{temperature = 1}. If you supply a different value in \code{...}, an error
 is raised. Default values in this mode are \code{max_tokens = 2048} and
@@ -174,7 +169,7 @@ res_openai <- llm_download_batch_results(batch_openai)
 batch_anthropic <- llm_submit_pairs_batch(
   pairs             = pairs,
   backend           = "anthropic",
-  model             = "claude-4-5-sonnet",
+  model             = "claude-sonnet-4-5",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -186,7 +181,7 @@ res_anthropic <- llm_download_batch_results(batch_anthropic)
 batch_gemini <- llm_submit_pairs_batch(
   pairs             = pairs,
   backend           = "gemini",
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,

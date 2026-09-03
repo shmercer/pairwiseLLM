@@ -261,7 +261,7 @@ testthat::test_that("openai_compare_pair_live enforces gpt-5.1/5.2 + reasoning c
 
 # ---------------------------------------------------------------------
 
-testthat::test_that("openai_compare_pair_live allows other gpt-5* models with temp=0", {
+testthat::test_that("openai_compare_pair_live uses model-default sampling when omitted", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -277,7 +277,7 @@ testthat::test_that("openai_compare_pair_live allows other gpt-5* models with te
     usage = list(input_tokens = 1L, output_tokens = 1L, total_tokens = 2L)
   )
 
-  # Capture request body to check temperature
+  # Capture request body to check omitted sampling fields
   captured_body <- NULL
 
   testthat::with_mocked_bindings(
@@ -300,8 +300,8 @@ testthat::test_that("openai_compare_pair_live allows other gpt-5* models with te
         include_raw = TRUE
       )
       testthat::expect_equal(res$better_id, "B")
-      # Check that temperature was defaulted to 0
-      testthat::expect_equal(captured_body$temperature, 0)
+      testthat::expect_false("temperature" %in% names(captured_body))
+      testthat::expect_false("top_p" %in% names(captured_body))
     }
   )
 })

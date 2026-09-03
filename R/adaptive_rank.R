@@ -1145,7 +1145,7 @@ make_adaptive_judge_llm <- function(
 #' head(out$logs$step_log)
 #'
 #' \dontrun{
-#' # Live run with OpenAI gpt-5.1 + flex priority.
+#' # Live run with OpenAI gpt-5.1 + lower-cost Flex processing.
 #' live <- adaptive_rank(
 #'   data = example_writing_samples[1:12, c("ID", "text")],
 #'   backend = "openai",

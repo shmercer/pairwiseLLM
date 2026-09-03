@@ -123,9 +123,8 @@ making it easier to debug or retry specific failures.
 Temperature and extended-thinking behaviour are controlled by
 \code{\link{anthropic_compare_pair_live}}:
 \itemize{
-\item When \code{reasoning = "none"} (no extended thinking), the default
-\code{temperature} is \code{0} (deterministic) unless you explicitly
-supply a different \code{temperature} via \code{...}.
+\item When \code{reasoning = "none"} (no extended thinking), omitted
+\code{temperature} and \code{top_p} values use model/provider defaults.
 \item When \code{reasoning = "enabled"} (extended thinking), Anthropic
 requires \code{temperature = 1}. If you supply a different value, an
 error is raised by \code{\link{anthropic_compare_pair_live}}.
@@ -135,7 +134,7 @@ If you set \code{include_thoughts = TRUE} while \code{reasoning = "none"},
 the underlying calls upgrade to \code{reasoning = "enabled"}, which in turn
 implies \code{temperature = 1} and adds a \code{thinking} block to the API
 request. When \code{include_thoughts = FALSE} (the default), and you leave
-\code{reasoning = "none"}, the effective default temperature is \code{0}.
+\code{reasoning = "none"}, omitted sampling values use model defaults.
 }
 \examples{
 \dontrun{

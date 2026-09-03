@@ -26,10 +26,9 @@ submit_together_pairs_live(
 \code{ID2}, \code{text2}. Typically created by \code{\link[=make_pairs]{make_pairs()}}, \code{\link[=sample_pairs]{sample_pairs()}}, and
 \code{\link[=randomize_pair_order]{randomize_pair_order()}}.}
 
-\item{model}{Together.ai model name, for example \code{"deepseek-ai/DeepSeek-R1"},
-\code{"moonshotai/Kimi-K2-Instruct-0905"},
-\code{"Qwen/Qwen3-235B-A22B-Instruct-2507-tput"},
-\code{"deepseek-ai/DeepSeek-V3"}.}
+\item{model}{Together.ai model name, for example the dated tested identifier
+\code{"deepseek-ai/DeepSeek-V4-Flash-0731"}. Check the provider's current
+serverless catalog before use.}
 
 \item{trait_name}{Trait name to pass to \code{\link[=together_compare_pair_live]{together_compare_pair_live()}}.}
 
@@ -120,7 +119,7 @@ tmpl <- set_prompt_template()
 # If interrupted, running this again will resume progress.
 res_seq <- submit_together_pairs_live(
   pairs             = pairs,
-  model             = "deepseek-ai/DeepSeek-R1",
+  model             = "deepseek-ai/DeepSeek-V4-Flash-0731",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -131,7 +130,7 @@ res_seq <- submit_together_pairs_live(
 # Note: On Windows, this opens background R sessions.
 res_par <- submit_together_pairs_live(
   pairs             = pairs,
-  model             = "deepseek-ai/DeepSeek-R1",
+  model             = "deepseek-ai/DeepSeek-V4-Flash-0731",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,

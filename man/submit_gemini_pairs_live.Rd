@@ -32,7 +32,7 @@ submit_gemini_pairs_live(
 \arguments{
 \item{pairs}{Tibble/data frame with columns \code{ID1}, \code{text1}, \code{ID2}, \code{text2}.}
 
-\item{model}{Gemini model name (e.g. \code{"gemini-3-pro-preview"} or
+\item{model}{Gemini model name (e.g. \code{"gemini-3.5-flash-lite"} or
 \code{"gemini-3-flash-preview"}).}
 
 \item{trait_name}{Trait name.}
@@ -146,7 +146,7 @@ tmpl <- set_prompt_template()
 # 1. Sequential execution with incremental saving
 res_seq <- submit_gemini_pairs_live(
   pairs             = pairs,
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -156,7 +156,7 @@ res_seq <- submit_gemini_pairs_live(
 # 2. Parallel execution (faster)
 res_par <- submit_gemini_pairs_live(
   pairs             = pairs,
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,

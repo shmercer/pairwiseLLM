@@ -1,0 +1,11 @@
+test_id,backend,provider,model_id,mode,endpoint,reasoning_mode,env_var
+openai_chat_live,openai,OpenAI,gpt-4.1,live,chat.completions,none,OPENAI_API_KEY
+openai_responses_live,openai,OpenAI,gpt-5.6-luna,live,responses,none,OPENAI_API_KEY
+anthropic_standard_live,anthropic,Anthropic,claude-haiku-4-5-20251001,live,messages,none,ANTHROPIC_API_KEY
+anthropic_thinking_live,anthropic,Anthropic,claude-haiku-4-5-20251001,live,messages,enabled,ANTHROPIC_API_KEY
+gemini_thinking_live,gemini,Google,gemini-3.5-flash-lite,live,generateContent,thinking_level=low,GEMINI_API_KEY
+vertex_standard_live,vertex,Google,gemini-2.5-flash,live,generateContent,thinking_budget=0,VERTEX_API_KEY
+together_standard_live,together,Together AI,deepseek-ai/DeepSeek-V4-Flash-0731,live,chat.completions,none,TOGETHER_API_KEY
+openai_responses_batch,openai,OpenAI,gpt-5.6-luna,batch,responses,none,OPENAI_API_KEY
+anthropic_standard_batch,anthropic,Anthropic,claude-haiku-4-5-20251001,batch,messages,none,ANTHROPIC_API_KEY
+gemini_thinking_batch,gemini,Google,gemini-3.5-flash-lite,batch,batchGenerateContent,thinking_level=low,GEMINI_API_KEY

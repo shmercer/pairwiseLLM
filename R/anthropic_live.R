@@ -122,10 +122,10 @@ NULL
 #'   \code{temperature}, \code{top_p} or a custom \code{thinking_budget_tokens},
 #'   which will be passed through to the Messages API.
 #'
-#'   When \code{reasoning = "none"} the defaults are:
+#'   When \code{reasoning = "none"}:
 #'   \itemize{
-#'     \item \code{temperature = 0} (deterministic behaviour) unless you
-#'       supply \code{temperature} explicitly.
+#'     \item Omitted \code{temperature} and \code{top_p} values are not sent,
+#'       so the model/provider defaults apply.
 #'     \item \code{max_tokens = 768} unless you supply \code{max_tokens}.
 #'   }
 #'
@@ -172,7 +172,7 @@ NULL
 #'
 #' For stable, reproducible comparisons we recommend:
 #' \itemize{
-#'   \item \code{reasoning = "none"} with \code{temperature = 0} and
+#'   \item \code{reasoning = "none"} with model-default sampling and
 #'     \code{max_tokens = 768} for standard pairwise scoring.
 #'   \item \code{reasoning = "enabled"} when you explicitly want extended
 #'     thinking; in this mode Anthropic requires \code{temperature = 1}.
@@ -198,8 +198,8 @@ NULL
 #' \code{reasoning} is upgraded to \code{"enabled"}, the default
 #' \code{temperature} becomes 1, and a \code{thinking} block is included in the
 #' request. When \code{reasoning = "none"} and \code{include_thoughts} is
-#' \code{FALSE} or \code{NULL}, the default temperature remains 0 unless
-#' you explicitly override it.
+#' \code{FALSE} or \code{NULL}, omitted sampling parameters use the
+#' model/provider defaults.
 #'
 #' @examples
 #' \dontrun{
@@ -212,7 +212,7 @@ NULL
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # Short, deterministic comparison with no explicit thinking block
+#' # Standard comparison with model-default sampling and no thinking block
 #' res_claude <- anthropic_compare_pair_live(
 #'   ID1               = samples$ID[1],
 #'   text1             = samples$text[1],
@@ -321,8 +321,7 @@ anthropic_compare_pair_live <- function(
   # Temperature defaults & validation
   # ------------------------------------------------------------------
   if (reasoning == "none") {
-    # Default to deterministic behaviour when not using extended thinking
-    temperature <- dots$temperature %||% 0
+    temperature <- dots$temperature %||% NULL
   } else {
     if (is.null(dots$temperature)) {
       temperature <- 1
@@ -333,6 +332,8 @@ anthropic_compare_pair_live <- function(
         "Either omit `temperature` or set `temperature = 1`.",
         call. = FALSE
       )
+    } else {
+      temperature <- dots$temperature
     }
   }
 
@@ -601,9 +602,8 @@ anthropic_compare_pair_live <- function(
 #' Temperature and extended-thinking behaviour are controlled by
 #' \code{\link{anthropic_compare_pair_live}}:
 #' \itemize{
-#'   \item When \code{reasoning = "none"} (no extended thinking), the default
-#'     \code{temperature} is \code{0} (deterministic) unless you explicitly
-#'     supply a different \code{temperature} via \code{...}.
+#'   \item When \code{reasoning = "none"} (no extended thinking), omitted
+#'     \code{temperature} and \code{top_p} values use model/provider defaults.
 #'   \item When \code{reasoning = "enabled"} (extended thinking), Anthropic
 #'     requires \code{temperature = 1}. If you supply a different value, an
 #'     error is raised by \code{\link{anthropic_compare_pair_live}}.
@@ -613,7 +613,7 @@ anthropic_compare_pair_live <- function(
 #' the underlying calls upgrade to \code{reasoning = "enabled"}, which in turn
 #' implies \code{temperature = 1} and adds a \code{thinking} block to the API
 #' request. When \code{include_thoughts = FALSE} (the default), and you leave
-#' \code{reasoning = "none"}, the effective default temperature is \code{0}.
+#' \code{reasoning = "none"}, omitted sampling values use model defaults.
 #'
 #' @param pairs Tibble or data frame with at least columns \code{ID1},
 #'   \code{text1}, \code{ID2}, \code{text2}. Typically created by

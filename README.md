@@ -1,3 +1,9 @@
+pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
+Writing Evaluation
+================
+
+<!-- README-source-md5: fc5d42bbeeba03668ce5fa2103c43c2e -->
+
 <figure>
 <img
 src="https://www.dropbox.com/scl/fi/dn51r1q7bkythiz5e6jdj/pairwiseLLM_logo.jpeg?rlkey=qlpe8xyda35wriryxqa87a1v8&amp;st=tu8hmsp6&amp;raw=1"
@@ -8,7 +14,9 @@ alt="pairwiseLLM banner" />
 # pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
 
 <!-- badges: start -->
-[![Dev version](https://img.shields.io/badge/dynamic/regex?label=dev%20version&color=green&url=https%3A%2F%2Fraw.githubusercontent.com%2Fshmercer%2FpairwiseLLM%2Fmaster%2FDESCRIPTION&search=%5EVersion%3A%5Cs*(.*)%24&replace=%241&flags=m)](https://github.com/shmercer/pairwiseLLM)
+
+[![Dev
+version](https://img.shields.io/badge/dynamic/regex?label=dev%20version&color=green&url=https%3A%2F%2Fraw.githubusercontent.com%2Fshmercer%2FpairwiseLLM%2Fmaster%2FDESCRIPTION&search=%5EVersion%3A%5Cs*(.*)%24&replace=%241&flags=m)](https://github.com/shmercer/pairwiseLLM)
 [![CRAN
 status](https://www.r-pkg.org/badges/version/pairwiseLLM)](https://CRAN.R-project.org/package=pairwiseLLM)
 [![R-CMD-check](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/shmercer/pairwiseLLM/actions/workflows/R-CMD-check.yaml)
@@ -30,8 +38,10 @@ It includes:
 - Unified live APIs across OpenAI, Anthropic, Gemini Developer API,
   Vertex AI Gemini API, Together.ai, and Ollama, plus batch APIs for
   OpenAI, Anthropic, and Gemini Developer API  
-- An adaptive pairing workflow to run optimal pairs of writing samples
-  until reliability targets are met  
+- An adaptive pairing workflow to run adaptively selected pairs until
+  stopping criteria are met
+- Adaptive linking workflows that place separately ranked sets on a
+  shared scale through hub-and-spoke comparisons
 - A prompt template registry with tested templates designed to reduce
   positional bias  
 - Positional-bias diagnostics (forward vs reverse design)  
@@ -59,51 +69,52 @@ see:
 
 ------------------------------------------------------------------------
 
-## Supported Models
+## Backends and model identifiers
 
-The following models are confirmed to work for pairwise comparisons.
-Other similar models may work, but have not been fully tested.
+`pairwiseLLM` generally forwards the `model` identifier to the selected
+provider; it does not maintain an exhaustive model allowlist. Four
+separate questions matter: whether a backend is implemented, whether a
+model accepts the request shape used by an endpoint, whether maintainers
+tested that exact configuration, and whether the provider currently
+offers the model.
 
-| Provider | Model | Reasoning Mode? |
-|----|----|----|
-| **[OpenAI](https://openai.com/api/)** | gpt-5.2 | ✅ Yes |
-| **[OpenAI](https://openai.com/api/)** | gpt-5.1 | ✅ Yes |
-| **[OpenAI](https://openai.com/api/)** | gpt-4o | ❌ No |
-| **[OpenAI](https://openai.com/api/)** | gpt-4.1 | ❌ No |
-| **[Anthropic](https://console.anthropic.com/)** | claude-sonnet-4-5 | ✅ Yes |
-| **[Anthropic](https://console.anthropic.com/)** | claude-haiku-4-5 | ✅ Yes |
-| **[Anthropic](https://console.anthropic.com/)** | claude-opus-4-5 | ✅ Yes |
-| **[Gemini Developer API](https://ai.google.dev/gemini-api/docs)** | gemini-3.1-pro-preview       | ✅ Yes |
-| **[Gemini Developer API](https://ai.google.dev/gemini-api/docs)**  | gemini-3-flash-preview     | ✅ Yes |
-| **[Vertex AI API](https://cloud.google.com/vertex-ai)** | gemini-3.1-pro-preview       | ✅ Yes |
-| **[Vertex AI API](https://cloud.google.com/vertex-ai)** | gemini-3-flash-preview       | ✅ Yes |
-| **[DeepSeek-AI](https://www.deepseek.com/en)<sub>1</sub>** | DeepSeek-R1 | ✅ Yes |
-| **[DeepSeek-AI](https://www.deepseek.com/en)<sub>1</sub>** | DeepSeek-V3 | ❌ No |
-| **[Moonshot-AI](https://www.moonshot.ai/)<sub>1</sub>** | Kimi-K2-Instruct-0905 | ❌ No |
-| **[Qwen](https://qwen.ai/home)<sub>1</sub>** | Qwen3-235B-A22B-Instruct-2507 | ❌ No |
-| **[Qwen](https://qwen.ai/home)<sub>2</sub>** | qwen3:32b | ✅ Yes |
-| **[Google](https://deepmind.google/models/gemma/)<sub>2</sub>** | gemma3:27b | ❌ No |
-| **[Mistral](https://mistral.ai/)<sub>2</sub>** | mistral-small3.2:24b | ❌ No |
-
-<sub>1</sub> via the [together.ai](https://www.together.ai/) API
-
-<sub>2</sub> via [Ollama](https://ollama.com/) on a local machine
+The dated, machine-readable compatibility record is described in
+[`vignette("model-compatibility")`](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html).
+Absence from that record does not imply incompatibility. Preview
+identifiers and reasoning controls can change independently of the
+package.
 
 The backend matrix is provider-specific:
 
-| Backend   | Provider Surface     | Live | Batch | API Key Surface |
-|-----------|----------------------|------|-------|-----------------|
-| openai    | OpenAI               | ✅   | ✅    | `OPENAI_API_KEY` |
+| Backend   | Provider Surface     | Live | Batch | API Key Surface     |
+|-----------|----------------------|------|-------|---------------------|
+| openai    | OpenAI               | ✅   | ✅    | `OPENAI_API_KEY`    |
 | anthropic | Anthropic            | ✅   | ✅    | `ANTHROPIC_API_KEY` |
-| gemini    | Gemini Developer API | ✅   | ✅    | `GEMINI_API_KEY` |
-| vertex    | Vertex AI Gemini API | ✅   | ❌    | `VERTEX_API_KEY` |
-| together  | Together.ai          | ✅   | ❌    | `TOGETHER_API_KEY` |
-| ollama    | Ollama (local)       | ✅   | ❌    | none |
+| gemini    | Gemini Developer API | ✅   | ✅    | `GEMINI_API_KEY`    |
+| vertex    | Vertex AI Gemini API | ✅   | ❌    | `VERTEX_API_KEY`    |
+| together  | Together.ai          | ✅   | ❌    | `TOGETHER_API_KEY`  |
+| ollama    | Ollama (local)       | ✅   | ❌    | none                |
 
-`backend = "gemini"` means the Gemini Developer API only. `backend =
-"vertex"` means the Vertex AI Gemini API only. Vertex is live-only in
-this series, so generic batch wrappers reject `backend = "vertex"`
-explicitly instead of falling back to Gemini batch mode.
+`backend = "gemini"` means the Gemini Developer API only.
+`backend = "vertex"` means the Vertex AI Gemini API only. Vertex is
+live-only in this series, so generic batch wrappers reject
+`backend = "vertex"` explicitly instead of falling back to Gemini batch
+mode.
+
+Use official provider catalogs to check current availability:
+[OpenAI](https://developers.openai.com/api/docs/models),
+[Anthropic](https://platform.claude.com/docs/en/about-claude/models/overview),
+[Gemini Developer API](https://ai.google.dev/gemini-api/docs/models),
+[Vertex
+AI](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models),
+and [Together AI](https://docs.together.ai/docs/serverless-models).
+Ollama tags are local, environment-dependent identifiers.
+
+Unless you supply `temperature` or `top_p`, pairwiseLLM omits those
+sampling fields so the selected model/provider defaults apply. Explicit
+values are still forwarded where the endpoint supports them.
+Provider-required constraints, such as Anthropic extended thinking’s
+`temperature = 1`, remain enforced.
 
 ------------------------------------------------------------------------
 
@@ -128,13 +139,32 @@ Load the package:
 library(pairwiseLLM)
 ```
 
+Bayesian BTL and adaptive workflows also require CmdStan. Install
+`cmdstanr` and its C++ toolchain, then install CmdStan once:
+
+``` r
+# install.packages(
+#   "cmdstanr",
+#   repos = c("https://stan-dev.r-universe.dev", getOption("repos"))
+# )
+cmdstanr::check_cmdstan_toolchain(fix = TRUE)
+cmdstanr::install_cmdstan()
+cmdstanr::cmdstan_version()
+```
+
+See the [CmdStanR installation
+guide](https://mc-stan.org/cmdstanr/articles/cmdstanr.html) for
+platform-specific compiler prerequisites. Ordinary pairing, provider,
+BT, and Elo workflows do not require CmdStan.
+
 ------------------------------------------------------------------------
 
 ## API Keys
 
 `pairwiseLLM` reads keys only from environment variables.  
 Keys are **never printed**, **never stored**, and **never written** to
-disk.
+disk. Configure only the key for the cloud backend you plan to use.
+Local Ollama does not require a provider API key.
 
 You can verify which providers are available using:
 
@@ -200,14 +230,14 @@ check_llm_api_keys()
 At a high level, `pairwiseLLM` workflows follow this structure:
 
 1.  **Writing samples** – e.g., essays, constructed responses, short
-    answers.  
+    answers.
 2.  **Trait** – a rating dimension such as “overall quality” or
-    “organization”.  
-3.  **Pairs** – pairs of samples to be compared for that trait.  
+    “organization”.
+3.  **Pairs** – pairs of samples to be compared for that trait.
 4.  **Prompt template** – instructions + placeholders for
-    `{TRAIT_NAME}`, `{TRAIT_DESCRIPTION}`, `{SAMPLE_1}`, `{SAMPLE_2}`.  
-5.  **Backend** – which provider/model to use (OpenAI, Anthropic,
-    Gemini Developer API, Vertex AI Gemini API, Together, Ollama).  
+    `{TRAIT_NAME}`, `{TRAIT_DESCRIPTION}`, `{SAMPLE_1}`, `{SAMPLE_2}`.
+5.  **Backend** – which provider/model to use (OpenAI, Anthropic, Gemini
+    Developer API, Vertex AI Gemini API, Together, Ollama).
 6.  **Modeling** – convert pairwise results to latent scores via BT or
     Elo.
 
@@ -315,7 +345,7 @@ trait_description("overall_quality")
 #> [1] "Overall Quality"
 #> 
 #> $description
-#> [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."
+#> [1] "Overall quality of the writing, considering how well ideas are expressed,\nhow clearly the writing is organized, and how effective the language and\nconventions are."
 ```
 
 You can also provide custom traits:
@@ -333,8 +363,8 @@ trait_description(
 
 Use the unified API for direct API calls. The `submit_llm_pairs()`
 function supports **parallel processing** and **incremental output
-saving** for all live backends (OpenAI, Anthropic, Gemini Developer
-API, Vertex AI Gemini API, Together.ai, and Ollama).
+saving** for all live backends (OpenAI, Anthropic, Gemini Developer API,
+Vertex AI Gemini API, Together.ai, and Ollama).
 
 - `llm_compare_pair()` — compare one pair  
 - `submit_llm_pairs()` — compare many pairs at once
@@ -397,11 +427,11 @@ if (nrow(res_list$failed_attempts) > 0) {
 Vertex validate and encode it separately rather than sharing one
 transport rule.
 
-| Backend | Public Values | Notes |
-|----|----|----|
-| `gemini` | `"standard"`, `"flex"`, `"priority"` | Gemini Developer API; available on live and batch paths. |
-| `vertex` | `"standard"`, `"flex"`, `"priority"` | Vertex AI Gemini API; live only and encoded via the Vertex request header. |
-| `openai` | provider-specific | OpenAI validates its own tier surface separately. |
+| Backend  | Public Values                        | Notes                                                                                                                                              |
+|----------|--------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| `gemini` | `"standard"`, `"flex"`, `"priority"` | Gemini Developer API; available on live and batch paths.                                                                                           |
+| `vertex` | `"standard"`, `"flex"`, `"priority"` | Vertex AI Gemini API; live only and encoded via the Vertex request header.                                                                         |
+| `openai` | provider-specific                    | `"flex"` requests lower-cost, slower Flex processing when the selected model supports it; capacity can be unavailable. It is not priority routing. |
 
 Example Vertex live request with a Vertex-specific API key surface:
 
@@ -435,11 +465,12 @@ Example:
 ``` r
 batch <- llm_submit_pairs_batch(
   backend           = "gemini",
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-2.5-flash",
   pairs             = pairs,
   trait_name        = td$name,
   trait_description = td$description,
-  prompt_template   = tmpl
+  prompt_template   = tmpl,
+  service_tier      = "priority"
 )
 
 results <- llm_download_batch_results(batch)
@@ -456,9 +487,10 @@ and cost with `estimate_llm_pairs_cost()`. The estimator:
   `prompt_tokens` and `completion_tokens`
 - Uses the pilot to calibrate a **prompt-bytes → input-tokens** model
   for the remaining pairs
-- Estimates output tokens for the remaining pairs using the pilot
-  distribution and calculates costs (expected = 50th %ile; budget = 90th
-  %ile).
+- Uses the median and the selected `budget_quantile` of usable pilot
+  output tokens to estimate the remaining calls, then adds the observed
+  pilot token totals without applying a batch discount to those live
+  pilot calls.
 
 ### Example (batch pricing discount + budget cost)
 
@@ -497,9 +529,10 @@ est$summary
 
 ### Reuse pilot results (avoid paying twice)
 
-By default, the estimator returns the pilot results and the remaining
-pairs. This lets you run the pilot once, then submit only the remaining
-pairs:
+By default, the estimator returns the original pilot output object and
+the pairs not selected for the pilot. This lets you run the pilot once,
+then submit only the remaining pairs. The estimator does not merge pilot
+judgments into a later submission result automatically:
 
 ``` r
 # Pairs not included in the pilot:
@@ -684,12 +717,12 @@ only in whether they include:
 - a **lapse (random-response) rate**
 - a **position (order) bias**
 
-| Model | Lapse | Position bias | Description |
-|----|----|----|----|
-| `btl` | ✗ | ✗ | Standard Bradley–Terry–Luce |
-| `btl_e` | ✓ | ✗ | BTL with lapse (random responding) |
-| `btl_b` | ✗ | ✓ | BTL with position bias |
-| `btl_e_b` | ✓ | ✓ | BTL with both lapse and position bias (default) |
+| Model     | Lapse | Position bias | Description                                     |
+|-----------|-------|---------------|-------------------------------------------------|
+| `btl`     | ✗     | ✗             | Standard Bradley–Terry–Luce                     |
+| `btl_e`   | ✓     | ✗             | BTL with lapse (random responding)              |
+| `btl_b`   | ✗     | ✓             | BTL with position bias                          |
+| `btl_e_b` | ✓     | ✓             | BTL with both lapse and position bias (default) |
 
 **Recommended default:** `btl_e_b` This is the most robust option when
 the judge is an LLM or other noisy rater.
@@ -799,10 +832,10 @@ algorithms, see:
 
 ## Live vs Batch Summary
 
-| Workflow | Use Case | Functions |
-|----|----|----|
-| **Live** | small or interactive runs | `submit_llm_pairs`, `llm_compare_pair` |
-| **Batch** | large jobs, cost control | `llm_submit_pairs_batch`, `llm_download_batch_results` |
+| Workflow  | Use Case                  | Functions                                              |
+|-----------|---------------------------|--------------------------------------------------------|
+| **Live**  | small or interactive runs | `submit_llm_pairs`, `llm_compare_pair`                 |
+| **Batch** | large jobs, cost control  | `llm_submit_pairs_batch`, `llm_download_batch_results` |
 
 ------------------------------------------------------------------------
 
@@ -862,5 +895,5 @@ MIT License. See `LICENSE`.
 ## Citation
 
 > Mercer, S. H. (2026). *pairwiseLLM: Pairwise writing quality
-> comparisons with large language models* (Version 1.3.0) \[R package;
+> comparisons with large language models* (Version 1.3.1) \[R package;
 > Computer software\]. <https://github.com/shmercer/pairwiseLLM>

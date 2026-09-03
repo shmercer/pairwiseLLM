@@ -32,10 +32,10 @@ llm_compare_pair(
 \item{model}{Model identifier for the chosen backend. For \code{"openai"} this
 should be an OpenAI model name (for example \code{"gpt-4.1"}, \code{"gpt-5.1"}).
 For \code{"anthropic"}, use Anthropic model names such as
-\code{"claude-4-5-sonnet"}. For \code{"gemini"} and \code{"vertex"}, use the
-corresponding Gemini model names (for example \code{"gemini-3-pro-preview"} or
+\code{"claude-sonnet-4-5"}. For \code{"gemini"} and \code{"vertex"}, use the
+corresponding Gemini model names (for example \code{"gemini-3.5-flash-lite"} or
 \code{"gemini-2.5-flash"}). For "together", use Together.ai model identifiers
-such as \code{"deepseek-ai/DeepSeek-R1"} or \code{"deepseek-ai/DeepSeek-V3"}. For
+such as \code{"deepseek-ai/DeepSeek-V4-Flash-0731"}. For
 \code{"ollama"}, use a local model name known to the Ollama server (for example
 \code{"mistral-small3.2:24b"}, \code{"qwen3:32b"}, \code{"gemma3:27b"}).}
 

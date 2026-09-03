@@ -72,7 +72,8 @@ library(readr)
 library(stringr)
 ```
 
-Required environment variables:
+Configure the environment variable only for each provider included in your
+run plan:
 
 | Provider | Environment Variable |
 |----------|----------------------|
@@ -151,19 +152,16 @@ Here we define a small grid:
 
 ```{r}
 anthropic_models <- c(
-  "claude-sonnet-4-5",
-  "claude-haiku-4-5",
-  "claude-opus-4-5"
+  "claude-haiku-4-5-20251001"
 )
 
 gemini_models <- c(
-  "gemini-3-pro-preview"
+  "gemini-2.5-flash"
 )
 
 openai_models <- c(
   "gpt-4.1",
-  "gpt-4o",
-  "gpt-5.1"
+  "gpt-5.6-luna"
 )
 
 thinking_levels <- c("no_thinking", "with_thinking")
@@ -189,8 +187,8 @@ openai_grid <- tidyr::expand_grid(
   thinking  = thinking_levels,
   direction = directions
 ) |>
-  # For example, only allow "with_thinking" for gpt-5.1
-  dplyr::filter(model == "gpt-5.1" | thinking == "no_thinking")
+  # For example, only allow "with_thinking" for the GPT-5-series model
+  dplyr::filter(model == "gpt-5.6-luna" | thinking == "no_thinking")
 
 batch_grid <- dplyr::bind_rows(
   anthropic_grid,
@@ -260,13 +258,12 @@ submit_one_run <- function(template_id, prompt_template, provider, model, thinki
 
   if (identical(provider, "openai")) {
     # Only request thoughts for models that support them in this workflow
-    extra_args$include_thoughts <- is_thinking && grepl("^gpt-5\\.1", model)
+    extra_args$include_thoughts <- is_thinking && grepl("^gpt-5", model)
     extra_args$include_raw      <- TRUE
   } else if (identical(provider, "anthropic")) {
     extra_args$reasoning        <- if (is_thinking) "enabled" else "none"
     extra_args$include_thoughts <- is_thinking
     extra_args$include_raw      <- TRUE
-    # Optional: set deterministic temperature when not using reasoning
     # Optional: set deterministic temperature when not using reasoning
     if (!is_thinking) extra_args$temperature <- 0
   } else if (identical(provider, "gemini")) {
@@ -304,7 +301,11 @@ submit_one_run <- function(template_id, prompt_template, provider, model, thinki
 }
 
 run_results <- purrr::pmap(
-  run_plan,
+  run_plan |>
+    dplyr::select(
+      template_id, prompt_template, provider, model, thinking, direction,
+      run_dir
+    ),
   submit_one_run
 )
 

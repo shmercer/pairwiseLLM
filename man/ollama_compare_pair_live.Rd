@@ -51,12 +51,9 @@ ollama_compare_pair_live(
 \item{tag_suffix}{Suffix for the better-sample tag. Defaults to
 \code{"</BETTER_SAMPLE>"}.}
 
-\item{think}{Logical; if \code{TRUE} and the model is a Qwen model (name
-starts with \code{"qwen"}), the temperature is set to \code{0.6}.
-Otherwise the temperature is \code{0}. The \code{think} argument does
-not itself modify the HTTP request body; it is used only for choosing
-the temperature, but the function will parse a \code{thinking} field
-from the response whenever one is present.}
+\item{think}{Logical; forwarded to Ollama's \code{think} request field.
+The function parses a \code{thinking} field from the response whenever
+one is present.}
 
 \item{num_ctx}{Integer; context window to use via \code{options$num_ctx}.
 The default is \code{8192L}.}
@@ -110,12 +107,10 @@ instance and expects a single non-streaming response. Model names should
 match those available in your Ollama installation (for example
 \code{"mistral-small3.2:24b"}, \code{"qwen3:32b"}, \code{"gemma3:27b"}).
 
-Temperature and context length are controlled as follows:
+Sampling and context length are controlled as follows:
 
 \itemize{
-\item By default, \code{temperature = 0} for all models.
-\item For Qwen models (model names beginning with \code{"qwen"}) and
-\code{think = TRUE}, \code{temperature} is set to \code{0.6}.
+\item Sampling parameters are omitted so the local model default applies.
 \item The context window is set via \code{options$num_ctx}, which
 defaults to \code{8192L} but may be overridden via the \code{num_ctx}
 argument.

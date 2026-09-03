@@ -64,6 +64,12 @@ testthat::test_that("write_openai_batch_file writes JSONL file", {
   testthat::expect_true(all(vapply(keys, function(k) {
     all(c("custom_id", "method", "url", "body") %in% k)
   }, logical(1))))
+  bodies <- lapply(objs, `[[`, "body")
+  testthat::expect_true(all(vapply(
+    bodies,
+    function(body) !any(c("temperature", "top_p") %in% names(body)),
+    logical(1)
+  )))
 })
 
 testthat::test_that("build_openai_batch_requests supports gpt-5.1 with reasoning = 'none' on responses", {

@@ -48,9 +48,10 @@ testthat::test_that("build_anthropic_batch_requests builds valid requests", {
   # NEW: Batch should match anthropic live formatting => no system field
   testthat::expect_false("system" %in% names(p1))
 
-  # With reasoning = "none", temperature should default to 0 and there
-  # should be no thinking block; max_tokens should default to 768.
-  testthat::expect_equal(p1$temperature, 0)
+  # Standard mode uses model-default sampling and has no thinking block;
+  # max_tokens still defaults to 768.
+  testthat::expect_false("temperature" %in% names(p1))
+  testthat::expect_false("top_p" %in% names(p1))
   testthat::expect_equal(p1$max_tokens, 768)
   testthat::expect_false("thinking" %in% names(p1))
 
@@ -607,7 +608,7 @@ testthat::test_that("build_anthropic_batch_requests passes ... arguments (e.g. t
     trait_name = td$name,
     trait_description = td$description,
     top_p = 0.9,
-    temperature = 0.5 # Overriding default 0
+    temperature = 0.5
   )
 
   params <- batch$params[[1]]

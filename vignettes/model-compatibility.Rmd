@@ -1,0 +1,103 @@
+---
+title: "Backends and Tested Model Configurations"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Backends and Tested Model Configurations}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## What the package supports
+
+`pairwiseLLM` implements request and response handling for six backends. The
+package generally forwards `model` identifiers to the selected provider; it
+does not maintain an exhaustive model allowlist.
+
+| Backend | Provider surface | Live | Batch | Credential |
+|---|---|:---:|:---:|---|
+| `openai` | OpenAI | yes | yes | `OPENAI_API_KEY` |
+| `anthropic` | Anthropic | yes | yes | `ANTHROPIC_API_KEY` |
+| `gemini` | Gemini Developer API | yes | yes | `GEMINI_API_KEY` |
+| `vertex` | Vertex AI Gemini API | yes | no | `VERTEX_API_KEY` |
+| `together` | Together AI | yes | no | `TOGETHER_API_KEY` |
+| `ollama` | Local Ollama server | yes | no | none |
+
+Backend implementation is not the same as compatibility with every model.
+Endpoint compatibility depends on the request shape a model accepts;
+maintainer testing covers only the exact configurations below; and current
+availability is controlled by the provider. Preview identifiers and reasoning
+controls can change independently of this package.
+
+Check current availability in the official catalogs for
+[OpenAI](https://developers.openai.com/api/docs/models),
+[Anthropic](https://platform.claude.com/docs/en/about-claude/models/overview),
+[Gemini Developer API](https://ai.google.dev/gemini-api/docs/models),
+[Vertex AI](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models),
+and [Together AI](https://docs.together.ai/docs/serverless-models).
+Ollama tags depend on what is installed on the local server.
+
+## Dated compatibility record
+
+The machine-readable source is installed at
+`inst/extdata/model_compatibility.csv`. Absence from this registry does not
+imply incompatibility. A `true` value records a successful maintained smoke
+test for that exact mode; a live success is not evidence of batch success.
+The dated detailed result artifacts are
+`inst/extdata/model_smoke_results_2026-09-03.csv` and
+`inst/extdata/model_batch_smoke_results_2026-09-03.csv`. Standard configurations
+omit `temperature` and `top_p`, so their model/provider defaults apply.
+
+```{r registry}
+registry_path <- system.file(
+  "extdata",
+  "model_compatibility.csv",
+  package = "pairwiseLLM"
+)
+if (!nzchar(registry_path)) {
+  source_paths <- c(
+    file.path("inst", "extdata", "model_compatibility.csv"),
+    file.path("..", "inst", "extdata", "model_compatibility.csv")
+  )
+  registry_path <- source_paths[file.exists(source_paths)][1]
+}
+registry <- utils::read.csv(registry_path, check.names = FALSE)
+registry[c(
+  "backend", "model_id", "endpoint", "live_tested", "batch_tested",
+  "reasoning_mode", "package_version", "test_date", "status"
+)]
+```
+
+Registry statuses mean:
+
+- `tested-current`: the recorded configuration passed on the stated date and
+  was current in the provider catalog when checked.
+- `tested-legacy`: a successful dated test whose identifier is now legacy.
+- `retired`: the provider has retired the identifier; it is retained only as
+  historical evidence.
+- `unverified`: availability or a partial response was observed, but no
+  successful parsed package result was established.
+
+The opt-in `inst/scripts/smoke_model_compatibility.R` harness can re-test
+selected live or batch configurations and write a dated result artifact. It
+makes billable network calls and is intentionally excluded from the package
+test suite. For example:
+
+```text
+PAIRWISELLM_RUN_PROVIDER_SMOKE=true \
+  Rscript inst/scripts/smoke_model_compatibility.R \
+  --mode=live --providers=openai,anthropic
+```
+
+Selected providers must have their recorded API-key environment variables set;
+otherwise the harness records `skipped-no-key` and exits unsuccessfully. Use
+`--allow-missing-keys=true` only when those skipped rows are intentional.
+
+Claude 5 reasoning is not advertised here: that family uses adaptive-thinking
+semantics that this package does not currently implement and test. Likewise,
+Ollama names such as `qwen3:32b`, `gemma3:27b`, and
+`mistral-small3.2:24b` are only dated, environment-dependent local examples,
+not claims about what another Ollama installation provides.

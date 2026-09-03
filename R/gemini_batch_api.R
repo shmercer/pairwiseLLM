@@ -318,7 +318,7 @@
 #'   \code{text1}, \code{ID2}, \code{text2}. Typically created by
 #'   \code{\link{make_pairs}}, \code{\link{sample_pairs}}, and
 #'   \code{\link{randomize_pair_order}}.
-#' @param model Gemini model name, for example \code{"gemini-3-pro-preview"}.
+#' @param model Gemini model name, for example \code{"gemini-3.5-flash-lite"}.
 #'   This parameter is not embedded in each request object (the model is
 #'   provided via the path), but is included here for symmetry with other
 #'   backends and potential validation.
@@ -335,7 +335,8 @@
 #'   \itemize{
 #'     \item For Gemini 3 Flash models (for example \code{"gemini-3-flash-preview"}),
 #'       \code{"minimal"} is supported and is passed through as \code{"minimal"}.
-#'     \item For non-Flash Gemini 3 models (for example \code{"gemini-3-pro-preview"}),
+#'     \item For models not matched by the package's Gemini 3 Flash-name
+#'       detector (for example \code{"gemini-3.5-flash-lite"}),
 #'       \code{"minimal"} is not supported.
 #'     \item For backward compatibility with earlier Gemini 3 Pro usage,
 #'       \code{"low"} maps to \code{"low"} and both \code{"medium"} and \code{"high"}
@@ -377,10 +378,10 @@
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # Gemini 3 Pro example (existing behavior)
+#' # Dated tested Gemini Developer API configuration
 #' reqs <- build_gemini_batch_requests(
 #'   pairs             = pairs,
-#'   model             = "gemini-3-pro-preview",
+#'   model             = "gemini-3.5-flash-lite",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
@@ -560,7 +561,7 @@ build_gemini_batch_requests <- function(
 #'   \code{list(contents = ..., generationConfig = ...)}. You can obtain this
 #'   list from the output of \code{\link{build_gemini_batch_requests}} via
 #'   \code{batch$request}.
-#' @param model Gemini model name, for example \code{"gemini-3-pro-preview"}.
+#' @param model Gemini model name, for example \code{"gemini-3.5-flash-lite"}.
 #' @param api_key Optional Gemini API key. Defaults to
 #'   \code{Sys.getenv("GEMINI_API_KEY")}.
 #' @param api_version API version string for the path; defaults to
@@ -586,7 +587,7 @@ build_gemini_batch_requests <- function(
 #'
 #' batch_tbl <- build_gemini_batch_requests(
 #'   pairs             = pairs,
-#'   model             = "gemini-3-pro-preview",
+#'   model             = "gemini-3.5-flash-lite",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
@@ -604,7 +605,7 @@ build_gemini_batch_requests <- function(
 #' \dontrun{
 #' batch <- gemini_create_batch(
 #'   requests = requests,
-#'   model    = "gemini-3-pro-preview"
+#'   model    = "gemini-3.5-flash-lite"
 #' )
 #'
 #' batch$name
@@ -1220,7 +1221,7 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #' \code{\link{run_anthropic_batch_pipeline}}.
 #'
 #' @param pairs Tibble/data frame of pairs.
-#' @param model Gemini model name, for example \code{"gemini-3-pro-preview"} or
+#' @param model Gemini model name, for example \code{"gemini-3.5-flash-lite"} or
 #'   \code{"gemini-3-flash-preview"}.
 #' @param trait_name Trait name.
 #' @param trait_description Trait description.
@@ -1234,7 +1235,8 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #'   \itemize{
 #'     \item For Gemini 3 Flash models (for example \code{"gemini-3-flash-preview"}),
 #'       \code{"minimal"} is supported and is passed through as \code{"minimal"}.
-#'     \item For non-Flash Gemini 3 models (for example \code{"gemini-3-pro-preview"}),
+#'     \item For models not matched by the package's Gemini 3 Flash-name
+#'       detector (for example \code{"gemini-3.5-flash-lite"}),
 #'       \code{"minimal"} is not supported.
 #'     \item For backward compatibility with earlier Gemini 3 Pro usage,
 #'       \code{"low"} maps to \code{"low"} and both \code{"medium"} and \code{"high"}
@@ -1293,10 +1295,10 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # Run the full Gemini batch pipeline (Gemini 3 Pro example)
+#' # Run the full Gemini batch pipeline
 #' res <- run_gemini_batch_pipeline(
 #'   pairs             = pairs,
-#'   model             = "gemini-3-pro-preview",
+#'   model             = "gemini-3.5-flash-lite",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,

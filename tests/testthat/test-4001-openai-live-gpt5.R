@@ -65,6 +65,49 @@ testthat::test_that("gpt-5 reasoning low rejects sampling params", {
   )
 })
 
+testthat::test_that("Responses requests forward and validate max_output_tokens", {
+  td <- trait_description("overall_quality")
+  captured_body <- NULL
+  fake_body <- list(object = "response", model = "gpt-5.6-luna", output = list())
+
+  testthat::with_mocked_bindings(
+    .openai_api_key = function(...) "KEY",
+    .openai_req_body_json = function(req, body) {
+      captured_body <<- body
+      req
+    },
+    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
+    .openai_resp_body_json = function(...) fake_body,
+    .openai_resp_status = function(...) 200L,
+    {
+      pairwiseLLM::openai_compare_pair_live(
+        ID1 = "A", text1 = "Text A",
+        ID2 = "B", text2 = "Text B",
+        model = "gpt-5.6-luna",
+        trait_name = td$name,
+        trait_description = td$description,
+        endpoint = "responses",
+        reasoning = "none",
+        max_output_tokens = 256
+      )
+      testthat::expect_identical(captured_body$max_output_tokens, 256L)
+    }
+  )
+
+  testthat::expect_error(
+    pairwiseLLM::openai_compare_pair_live(
+      ID1 = "A", text1 = "Text A",
+      ID2 = "B", text2 = "Text B",
+      model = "gpt-5.6-luna",
+      trait_name = td$name,
+      trait_description = td$description,
+      endpoint = "responses",
+      max_output_tokens = 0
+    ),
+    "positive integer"
+  )
+})
+
 testthat::test_that("gpt-5.2 service_tier includes flex/priority and omits standard", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()

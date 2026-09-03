@@ -1,5 +1,17 @@
 ^pairwiseLLM\.Rproj$
 ^\.Rproj\.user$
+^\.Rhistory$
+^\.RData$
+^\.httr-oauth$
+^\.DS_Store$
+^\.quarto$
+^\.agents$
+^\.codex$
+^README\.html$
+^[^/]+_[^/]+\.tar\.gz$
+^[^/]+\.Rcheck$
+^cobertura\.xml$
+^vignettes/.*\.html$
 ^LICENSE\.md$
 ^data-raw$
 ^dev$
@@ -17,6 +29,7 @@
 ^tests/testthat/bad\.csv$
 ^agents\.md$
 ^agents_adaptive\.md$
+^AGENTS\.md$
 ^dev-checklists$
 ^\.lintr$
 ^inst/stan/btl_e_b\.exe$
@@ -25,3 +38,4 @@
 ^codex$
 ^scripts$
 ^tasklists$
+^prompts$
