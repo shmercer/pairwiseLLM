@@ -208,6 +208,17 @@ This transition is data-driven, not based on a fixed number of iterations.
 
 This example demonstrates a complete adaptive ranking workflow using example writing samples included in the package.
 
+Adaptive runs periodically fit a Bayesian BTL model and therefore require
+CmdStan. Before the first run, install CmdStanR, verify the compiler toolchain,
+and install CmdStan as described in the
+[CmdStanR installation guide](https://mc-stan.org/cmdstanr/articles/cmdstanr.html):
+
+```{r, eval=FALSE}
+cmdstanr::check_cmdstan_toolchain(fix = TRUE)
+cmdstanr::install_cmdstan()
+cmdstanr::cmdstan_version()
+```
+
 We show how to:
 - load example data,
 - select a writing trait to evaluate,
@@ -224,7 +235,7 @@ Below is an example of the full adaptive workflow using `adaptive_rank()`.
 Key configuration choices in this example:
 
 * **Model**: `gpt-5.1`
-* **Service tier**: `"flex"` (priority routing)
+* **Service tier**: `"flex"` (lower-cost, slower OpenAI Flex processing; capacity may be unavailable)
 * **Custom stopping thresholds**: slightly relaxed reliability, stricter rank stability
 
 ```{r eval=FALSE}
@@ -253,7 +264,7 @@ set.seed(123)
 
 res <- adaptive_rank(
   data = example_writing_samples,
-  id_col = "sample_id",
+  id_col = "ID",
   text_col = "text",
 
   backend = "openai",
@@ -364,12 +375,14 @@ This provides a transparent justification for termination.
 `adaptive_rank()` is also the high-level entry point for linking runs:
 
 * `run_mode = "link_one_spoke"` for one spoke set,
-* `run_mode = "link_multi_spoke"` for multi-spoke runs (`independent` or `concurrent`).
+* `run_mode = "link_multi_spoke"` for multi-spoke runs.
 
 In linking mode:
 
 * Phase B is hub↔spoke by default.
 * Phase B only starts after valid Phase A artifacts are available.
+* Multi-spoke execution is concurrent and hub parameters are hard-locked;
+  these are enforced contract properties rather than user controls.
 * Returned logs include `link_stage_log` in addition to `step_log`, `round_log`, and `item_log`.
 
 ```{r eval=FALSE}
@@ -401,8 +414,6 @@ res_multi <- adaptive_rank(
   adaptive_config = list(
     run_mode = "link_multi_spoke",
     hub_id = 1L,
-    multi_spoke_mode = "concurrent",
-    hub_lock_mode = "soft_lock",
     phase_a_mode = "run"
   ),
   progress = "all"
