@@ -5,6 +5,8 @@
 # PAIRWISELLM_RUN_PROVIDER_SMOKE=true \
 #   Rscript inst/scripts/smoke_model_compatibility.R \
 #   --mode=live --providers=openai,anthropic
+# Missing selected provider keys fail the run by default. Use
+# --allow-missing-keys=true only when skipped rows are intentional.
 
 args <- commandArgs(trailingOnly = TRUE)
 
@@ -12,6 +14,14 @@ arg_value <- function(name, default) {
   hit <- grep(paste0("^--", name, "="), args, value = TRUE)
   if (length(hit) == 0L) return(default)
   sub(paste0("^--", name, "="), "", hit[[1L]])
+}
+
+arg_flag <- function(name, default = FALSE) {
+  value <- tolower(arg_value(name, if (default) "true" else "false"))
+  if (!value %in% c("true", "false")) {
+    stop("--", name, " must be true or false.", call. = FALSE)
+  }
+  identical(value, "true")
 }
 
 enabled <- tolower(Sys.getenv("PAIRWISELLM_RUN_PROVIDER_SMOKE", unset = "false")) %in%
@@ -31,6 +41,7 @@ if (!mode_filter %in% c("live", "batch", "all")) {
   stop("--mode must be live, batch, or all.", call. = FALSE)
 }
 provider_filter <- strsplit(arg_value("providers", "all"), ",", fixed = TRUE)[[1L]]
+allow_missing_keys <- arg_flag("allow-missing-keys")
 output_path <- arg_value(
   "output",
   file.path("tasklists", "evidence", "model-smoke-results.csv")
@@ -190,6 +201,9 @@ for (i in seq_len(nrow(smoke_matrix))) {
   message(row$test_id, ": ", outcome$status)
 }
 
-if (any(vapply(results, function(x) grepl("^failed", x$status), logical(1)))) {
+statuses <- vapply(results, function(x) x$status[[1L]], character(1))
+has_failures <- any(startsWith(statuses, "failed"))
+has_unallowed_skips <- !allow_missing_keys && any(statuses == "skipped-no-key")
+if (has_failures || has_unallowed_skips) {
   quit(status = 1L, save = "no")
 }
