@@ -92,6 +92,10 @@ PAIRWISELLM_RUN_PROVIDER_SMOKE=true \
   --mode=live --providers=openai,anthropic
 ```
 
+Selected providers must have their recorded API-key environment variables set;
+otherwise the harness records `skipped-no-key` and exits unsuccessfully. Use
+`--allow-missing-keys=true` only when those skipped rows are intentional.
+
 Claude 5 reasoning is not advertised here: that family uses adaptive-thinking
 semantics that this package does not currently implement and test. Likewise,
 Ollama names such as `qwen3:32b`, `gemma3:27b`, and
