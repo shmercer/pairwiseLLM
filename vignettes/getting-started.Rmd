@@ -60,7 +60,8 @@ For advanced batch processing workflows, see:
 `backend = "vertex"` uses the Vertex AI Gemini API. Those backends use
 separate API-key surfaces.
 
-You should put these in your `~/.Renviron`:
+Configure only the key for the cloud backend you plan to use; you do not need
+keys for every provider. You can put the relevant key in your `~/.Renviron`:
 
 ```
 OPENAI_API_KEY="sk-..."
@@ -76,7 +77,7 @@ Check which keys are available:
 library(pairwiseLLM)
 
 check_llm_api_keys()
-#> All known LLM API keys are set: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, VERTEX_API_KEY, TOGETHER_API_KEY.
+#> Some LLM API keys are not set. This is expected when you use only selected backends.
 #> # A tibble: 5 × 4
 #>   backend   service              env_var           has_key
 #>   <chr>     <chr>                <chr>             <lgl>
@@ -211,7 +212,7 @@ live-only and uses a different wire format internally.
 res_gemini <- submit_llm_pairs(
   pairs             = pairs_small,
   backend           = "gemini",
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -229,6 +230,10 @@ res_vertex <- submit_llm_pairs(
   service_tier      = "flex"
 )
 ```
+
+For OpenAI, `service_tier = "flex"` requests lower-cost, slower Flex
+processing when the selected model supports it. Capacity may be unavailable;
+Flex is not priority routing. Service-tier meanings are provider-specific.
 
 Preview results:
 
@@ -323,7 +328,7 @@ not implemented in this series.
 ```{r, eval=FALSE}
 batch <- llm_submit_pairs_batch(
   backend            = "gemini",
-  model              = "gemini-3-pro-preview",
+  model              = "gemini-2.5-flash",
   pairs              = pairs_small,
   trait_name         = td$name,
   trait_description  = td$description,
@@ -389,7 +394,7 @@ the rest of the job by calibrating input tokens from prompt byte length.
 
 The output includes both:
 
-- **Expected cost** (using mean output tokens from the pilot)
+- **Expected cost** (using median output tokens from usable pilot calls)
 - **Budget cost** (using a high quantile of pilot output tokens, controlled by `budget_quantile`)
 
 If you are running a discounted batch workflow, set `mode = "batch"` and supply a `batch_discount` multiplier.
@@ -424,8 +429,10 @@ est$summary
 
 Avoid paying twice: reuse pilot results
 
-The estimator returns both the pilot output and the pairs not included in the pilot (remaining_pairs).
-Use remaining_pairs to submit only the remaining work after you are satisfied with the estimate:
+The estimator returns the original pilot output object and the pairs not
+included in the pilot (`remaining_pairs`). Use `remaining_pairs` to submit only
+the remaining work after you are satisfied with the estimate. Pilot judgments
+are not automatically merged into the later submission result:
 
 ```{r, eval=FALSE}
 remaining_pairs <- est$remaining_pairs
