@@ -41,8 +41,9 @@ NULL
 #' @param include_raw Logical; if TRUE, adds a \code{raw_response} column.
 #' @param ... Additional OpenAI parameters, for example
 #'   \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},
-#'   \code{service_tier}, \code{pair_uid}, and (optionally)
-#'   \code{include_thoughts}. When
+#'   \code{service_tier}, \code{max_output_tokens}, \code{pair_uid}, and
+#'   (optionally) \code{include_thoughts}. \code{max_output_tokens} must be a
+#'   positive integer and is supported only by the Responses endpoint. When
 #'   \code{pair_uid} is supplied, it is used verbatim as \code{custom_id}.
 #'   The same validation rules for
 #'   gpt-5 models are applied as in \code{\link{build_openai_batch_requests}}.
@@ -133,6 +134,23 @@ openai_compare_pair_live <- function(
   pair_uid <- dots$pair_uid %||% NULL
   top_p <- dots$top_p %||% NULL
   logprobs <- dots$logprobs %||% NULL
+  max_output_tokens <- dots$max_output_tokens %||% NULL
+
+  if (!is.null(max_output_tokens)) {
+    valid_max_output_tokens <- is.numeric(max_output_tokens) &&
+      length(max_output_tokens) == 1L &&
+      !is.na(max_output_tokens) &&
+      is.finite(max_output_tokens) &&
+      max_output_tokens >= 1 &&
+      max_output_tokens == floor(max_output_tokens)
+    if (!valid_max_output_tokens) {
+      rlang::abort("`max_output_tokens` must be a positive integer.")
+    }
+    if (!identical(endpoint, "responses")) {
+      rlang::abort("`max_output_tokens` is supported only by the OpenAI Responses endpoint.")
+    }
+    max_output_tokens <- as.integer(max_output_tokens)
+  }
 
   reasoning_effort <- normalize_openai_reasoning(
     model = model,
@@ -188,6 +206,7 @@ openai_compare_pair_live <- function(
     if (!is.null(temperature)) body$temperature <- temperature
     if (!is.null(top_p)) body$top_p <- top_p
     if (!is.null(logprobs)) body$logprobs <- logprobs
+    if (!is.null(max_output_tokens)) body$max_output_tokens <- max_output_tokens
     path <- "/responses"
   }
 
