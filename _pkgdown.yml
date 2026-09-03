@@ -4,9 +4,9 @@ template:
   bootstrap: 5
   bootswatch: flatly
   bslib:
-    base_font: {google: "Inter"}
-    heading_font: {google: "Inter"}
-    code_font: {google: "JetBrains Mono"}
+    base_font: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    heading_font: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    code_font: "'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace"
 
 navbar:
   structure:
@@ -28,6 +28,8 @@ navbar:
       menu:
         - text: "Getting Started with pairwiseLLM"
           href: articles/getting-started.html
+        - text: "Backends and Tested Model Configurations"
+          href: articles/model-compatibility.html
         - text: "Advanced: Submitting and Polling Multiple Batches"
           href: articles/advanced-batch-workflows.html
 
@@ -56,6 +58,7 @@ articles:
   - title: "Usage Guides"
     contents:
       - getting-started
+      - model-compatibility
       - advanced-batch-workflows
 
   - title: "Adaptive Pairing"
