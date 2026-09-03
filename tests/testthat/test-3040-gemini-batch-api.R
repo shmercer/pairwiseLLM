@@ -58,6 +58,8 @@ testthat::test_that("build_gemini_batch_requests builds valid requests (Happy Pa
 
   # Verify thinking level mapping (low -> Low)
   testthat::expect_equal(r1$generationConfig$thinkingConfig$thinkingLevel, "Low")
+  testthat::expect_false("temperature" %in% names(r1$generationConfig))
+  testthat::expect_false("topP" %in% names(r1$generationConfig))
   testthat::expect_null(r1$serviceTier)
 })
 

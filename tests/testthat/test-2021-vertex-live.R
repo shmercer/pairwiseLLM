@@ -333,6 +333,8 @@ testthat::test_that("vertex_compare_pair_live supports Gemini 3 thinking_level a
     captured$body$generationConfig$thinkingConfig$thinkingLevel,
     "MEDIUM"
   )
+  testthat::expect_false("temperature" %in% names(captured$body$generationConfig))
+  testthat::expect_false("topP" %in% names(captured$body$generationConfig))
 
   testthat::expect_error(
     vertex_compare_pair_live(

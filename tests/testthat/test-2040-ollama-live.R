@@ -100,9 +100,10 @@ testthat::test_that("ollama_compare_pair_live parses successful response
       testthat::expect_equal(captured_body$model, "mistral-small3.2:24b")
       testthat::expect_false(isTRUE(captured_body$stream))
 
-      # Default context window + temperature for non-Qwen models
+      # Default context window with model-default sampling
       testthat::expect_equal(captured_body$options$num_ctx, 8192L)
-      testthat::expect_equal(captured_body$options$temperature, 0)
+      testthat::expect_false("temperature" %in% names(captured_body$options))
+      testthat::expect_false("top_p" %in% names(captured_body$options))
     }
   )
 })
@@ -219,10 +220,10 @@ testthat::test_that("ollama_compare_pair_live validates scalar arguments", {
 })
 
 # ---------------------------------------------------------------------
-# ollama_compare_pair_live: Qwen + think = TRUE → temperature = 0.6
+# ollama_compare_pair_live: Qwen thinking with model-default sampling
 # ---------------------------------------------------------------------
 
-testthat::test_that("ollama_compare_pair_live sets Qwen temperature
+testthat::test_that("ollama_compare_pair_live leaves Qwen sampling unset
                     when think = TRUE", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
@@ -271,11 +272,12 @@ testthat::test_that("ollama_compare_pair_live sets Qwen temperature
       testthat::expect_equal(res$better_sample, "SAMPLE_2")
       testthat::expect_equal(res$better_id, ID2)
 
-      # Temperature logic: Qwen + think = TRUE → 0.6
+      # Thinking is independent of model-default sampling
       testthat::expect_type(captured_body, "list")
       testthat::expect_equal(captured_body$model, "qwen3:32b")
       testthat::expect_equal(captured_body$options$num_ctx, 4096L)
-      testthat::expect_equal(captured_body$options$temperature, 0.6)
+      testthat::expect_false("temperature" %in% names(captured_body$options))
+      testthat::expect_false("top_p" %in% names(captured_body$options))
     }
   )
 })
@@ -641,7 +643,8 @@ testthat::test_that("ollama_compare_pair_live exposes thinking only when think =
       )
 
       testthat::expect_equal(res$thoughts, "Internal reasoning trace")
-      testthat::expect_equal(captured_body$options$temperature, 0.6)
+      testthat::expect_false("temperature" %in% names(captured_body$options))
+      testthat::expect_false("top_p" %in% names(captured_body$options))
     }
   )
 })

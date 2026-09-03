@@ -439,6 +439,8 @@ test_that("gemini_compare_pair_live correctly constructs request body with confi
     service_tier = "standard"
   )
   expect_null(captured_body$serviceTier)
+  expect_false("temperature" %in% names(captured_body$generationConfig))
+  expect_false("topP" %in% names(captured_body$generationConfig))
 
   gemini_compare_pair_live(
     ID1 = "A", text1 = "A", ID2 = "B", text2 = "B",
