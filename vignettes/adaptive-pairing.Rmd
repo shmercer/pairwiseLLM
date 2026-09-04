@@ -366,7 +366,7 @@ attempts do not advance that count.
 See [adaptive_rank()], [adaptive_step_log()], [adaptive_round_log()], [adaptive_item_log()],
 [save_adaptive_session()], and [validate_session_dir()] for complete argument and schema details.
 For the within-set algorithm and statistical rationale, see
-[Bayesian BTL Adaptive Pairing Design](bayesian-btl-adaptive-pairing-design.html).
+[Within-Set Adaptive Pairing Design](within-set-adaptive-design.html).
 
 ## Citation
 

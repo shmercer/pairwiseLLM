@@ -38,8 +38,8 @@ navbar:
       menu:
         - text: "Adaptive Pairing & Ranking"
           href: articles/adaptive-pairing.html
-        - text: "Design: Bayesian BTL Adaptive Pairing"
-          href: articles/bayesian-btl-adaptive-pairing-design.html
+        - text: "Design: Within-Set Adaptive Pairing"
+          href: articles/within-set-adaptive-design.html
 
     template_positional_bias:
       text: "Template Positional Bias"
@@ -64,7 +64,7 @@ articles:
   - title: "Adaptive Pairing"
     contents:
       - adaptive-pairing
-      - bayesian-btl-adaptive-pairing-design
+      - within-set-adaptive-design
 
   - title: "Template Positional Bias"
     contents:

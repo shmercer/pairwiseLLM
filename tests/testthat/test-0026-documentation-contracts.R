@@ -183,3 +183,90 @@ test_that("practical adaptive vignette keeps the wrapper-first within-set contra
   expect_identical(pairwiseLLM:::adaptive_defaults(2L)$refit_pairs_target, 20L)
   expect_identical(pairwiseLLM:::adaptive_defaults(20L)$refit_pairs_target, 20L)
 })
+
+test_that("within-set design vignette tracks current adaptive contracts", {
+  root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  path <- file.path(root, "vignettes", "within-set-adaptive-design.Rmd")
+  skip_if(
+    !file.exists(path),
+    "Repository vignette sources are unavailable in installed-package tests."
+  )
+
+  text <- paste(readLines(path, warn = FALSE), collapse = "\n")
+  active_sources <- c(
+    file.path(root, "README.Rmd"),
+    file.path(root, "vignettes", "adaptive-pairing.Rmd"),
+    file.path(root, "_pkgdown.yml")
+  )
+  active_text <- paste(unlist(lapply(active_sources, readLines, warn = FALSE)), collapse = "\n")
+
+  expect_false(file.exists(file.path(
+    root, "vignettes", "bayesian-btl-adaptive-pairing-design.Rmd"
+  )))
+  expect_false(grepl("bayesian-btl-adaptive-pairing-design", active_text, fixed = TRUE))
+  expect_true(grepl("within-set-adaptive-design", active_text, fixed = TRUE))
+  expect_true(grepl("B_{\\mathrm{refit}}=\\operatorname{clamp}", text, fixed = TRUE))
+  expect_true(grepl("not classical test-score", text, fixed = TRUE))
+  expect_true(grepl("## Foundational concepts", text, fixed = TRUE))
+  expect_false(grepl("## How to read this document", text, fixed = TRUE))
+  acronym_definitions <- c(
+    "comparative judgment (CJ)",
+    "Bradley--Terry--Luce (BTL)",
+    "Markov chain Monte Carlo (MCMC)",
+    "expected a posteriori (EAP)",
+    "effective sample size (ESS)"
+  )
+  expect_true(all(vapply(
+    acronym_definitions,
+    function(definition) grepl(definition, text, fixed = TRUE),
+    logical(1L)
+  )))
+  stage_explanations <- c(
+    "`anchor_link` (anchor link)",
+    "`long_link` (long link)",
+    "`mid_link` (mid link)",
+    "`local_link` (local link)",
+    "Conceptual example of one adaptive step"
+  )
+  expect_true(all(vapply(
+    stage_explanations,
+    function(explanation) grepl(explanation, text, fixed = TRUE),
+    logical(1L)
+  )))
+  phase_b_mentions <- gregexpr("linking Phase B", text, fixed = TRUE)[[1L]]
+  expect_lte(sum(phase_b_mentions > 0L), 1L)
+
+  selector <- pairwiseLLM:::adaptive_defaults(100L)
+  expect_identical(selector$refit_pairs_target, 50L)
+  expect_identical(selector$round_pairs_target, 25L)
+  expect_identical(selector$anchor_frac_total, 0.10)
+  expect_identical(selector$anchor_count_min, 10L)
+  expect_identical(
+    c(selector$anchor_top_weight, selector$anchor_mid_weight, selector$anchor_bottom_weight),
+    c(0.30, 0.40, 0.30)
+  )
+  expect_identical(selector$dup_max_obs, 2L)
+  expect_identical(selector$dup_max_obs_relaxed, 3L)
+  expect_identical(c(selector$p_long_low, selector$p_long_high), c(0.10, 0.90))
+
+  btl <- pairwiseLLM:::.adaptive_btl_defaults(100L)
+  expect_identical(btl$model_variant, "btl_e_b")
+  expect_identical(btl$ess_bulk_min, 400)
+  expect_identical(btl$ess_bulk_min_near_stop, 1000)
+  expect_identical(btl$eap_reliability_min, 0.90)
+  expect_identical(btl$stability_lag, 2L)
+  expect_identical(btl$theta_corr_min, 0.95)
+  expect_identical(btl$theta_sd_rel_change_max, 0.10)
+  expect_identical(btl$rank_spearman_min, 0.95)
+
+  scores <- stats::setNames(seq(100, 1), as.character(seq_len(100L)))
+  anchors <- pairwiseLLM:::.adaptive_select_rolling_anchors(scores, selector)
+  expect_length(anchors, 10L)
+
+  stan_dir <- system.file("stan", package = "pairwiseLLM")
+  for (model in c("btl.stan", "btl_e.stan", "btl_b.stan", "btl_e_b.stan")) {
+    stan <- paste(readLines(file.path(stan_dir, model), warn = FALSE), collapse = "\n")
+    expect_true(grepl("theta_raw - mean(theta_raw)", stan, fixed = TRUE))
+    expect_true(grepl("theta_raw ~ normal(0, 1)", stan, fixed = TRUE))
+  }
+})
