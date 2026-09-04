@@ -2,7 +2,7 @@ pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
 Writing Evaluation
 ================
 
-<!-- README-source-md5: fc5d42bbeeba03668ce5fa2103c43c2e -->
+<!-- README-source-md5: 2e09f81e5cd771a0d6ed81ca0c42b6fa -->
 
 <figure>
 <img
@@ -247,26 +247,17 @@ The package provides helpers for each step.
 
 ## Adaptive pairing & ranking (overview)
 
-`pairwiseLLM` includes an adaptive pairing workflow for efficiently
-ranking writing samples using pairwise comparisons. Instead of
-allocating comparisons uniformly at random, adaptive pairing selects
-pairs where additional judgments are most informative, concentrating
-effort on ambiguous regions (near-ties) to reduce posterior uncertainty
-in latent quality estimates and rankings.
-
-In practice, compared to random pairing designs:
-
-- Overall Bayesian EAP reliability can be slightly lower (because
-  comparisons are not spread uniformly),
-- but credible/confidence intervals around latent quality scores and
-  rankings are typically tighter.
+`pairwiseLLM` includes an adaptive pairing workflow for ranking writing
+samples using pairwise comparisons. Instead of allocating comparisons
+uniformly at random, the within-set controller uses current rank,
+uncertainty, coverage, and degree information to choose each next pair.
 
 To get started, see:
 
 - **Tutorial:** Adaptive Pairing & Ranking  
   <https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html>
-- **Design spec:** Bayesian BTL + Adaptive Pairing Design  
-  <https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl-adaptive-pairing-design.html>
+- **Design:** Within-Set Adaptive Pairing Design
+  <https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html>
 
 ------------------------------------------------------------------------
 
@@ -822,11 +813,11 @@ For a full tutorial on adaptive pairing, see:
 - **Adaptive Pairing & Ranking**
   <https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html>
 
-For a detailed technical specification of the Bayesian and adaptive
-algorithms, see:
+For a detailed description of the current within-set Bayesian and
+adaptive algorithms, see:
 
-- **Bayesian BTL + Adaptive Pairing Design (v3.1)**
-  <https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl-adaptive-pairing-design.html>
+- **Within-Set Adaptive Pairing Design**
+  <https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html>
 
 ------------------------------------------------------------------------
 

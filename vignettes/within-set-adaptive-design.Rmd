@@ -1,0 +1,611 @@
+---
+title: "Within-Set Adaptive Pairing Design"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Within-Set Adaptive Pairing Design}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+This article describes the algorithm currently implemented by `pairwiseLLM` for adaptively
+ranking one set of items. The same procedure produces the canonical within-set artifacts used by
+linking Phase A; cross-set linking in Phase B is outside this article's scope. For an operational
+tutorial, begin with
+[Practical Within-Set Adaptive Pairing](adaptive-pairing.html). The public
+entry points are `adaptive_rank()`, `adaptive_rank_start()`, `adaptive_rank_run_live()`, and
+`adaptive_rank_resume()`.
+
+## Foundational concepts
+
+Pairwise comparative judgment (CJ) asks a judge to choose between two items rather than score each
+item in isolation. **Adaptive pairing** means that the next pair depends on the valid judgments
+collected so far. The procedure can therefore spend comparisons on graph coverage, broad links,
+or close distinctions as the ranking develops instead of fixing every pair in advance.
+
+The design combines two models with different, complementary jobs:
+
+1. **TrueSkill** is updated after every valid comparison and supplies the fast ranking proxy and
+   pair-selection probabilities. It lets the selector react immediately without running an
+   expensive joint model after every judgment.
+2. **Bayesian Bradley--Terry--Luce (BTL)** models are refit intermittently. Their posterior draws
+   supply item estimates, uncertainty summaries, Markov chain Monte Carlo (MCMC) diagnostics,
+   stopping metrics, rolling anchors, and one eligibility gate for long-range pairs.
+
+In Bayesian estimation, the likelihood supplied by the observed choices is combined with prior
+distributions that regularize the model. The result is a posterior distribution: a range of
+parameter values and their relative plausibility given the model and data. Retained MCMC draws
+approximate that distribution. An expected a posteriori (EAP) estimate is the arithmetic mean of
+an item's retained posterior draws; its posterior variance describes remaining model-based
+uncertainty. These summaries are conditional on the BTL model and priors, so they do not establish
+that the judgments are valid or free from systematic error.
+
+The effective sample size (ESS) estimates how much independent-equivalent information remains after
+accounting for autocorrelation among MCMC draws. It can be much smaller than the number of retained
+draws.
+
+## Glossary and units
+
+| Term | Meaning |
+|---|---|
+| state | The complete mutable session record: items, model states, histories, logs, and controls. |
+| attempted step | One attempt to select and judge at most one pair. Invalid judgments still consume a step. |
+| committed comparison | A step with a valid binary outcome. Only these update models and counts. |
+| round | A scheduling unit that allocates committed comparisons across four within-set stages. |
+| stage | One of `anchor_link`, `long_link`, `mid_link`, or `local_link`. |
+| phase | A linking unit: Phase A creates within-set results and Phase B links sets. It is not a stage. |
+| candidate | An unordered pair eligible for consideration before all filters are applied. |
+| anchor | An item selected from the current top, middle, or bottom of the ranking proxy. |
+| long link | A non-anchor pair separated by at least the configured number of rank strata. |
+| refit | A Bayesian BTL fit triggered by enough new committed comparisons. |
+| near-stop | A persistent flag that raises the required bulk ESS at later refits. It is not a stop. |
+| stop reason | The recorded reason for termination, such as `btl_converged` or `candidate_starvation`. |
+
+The unit of selection is an unordered item pair. The unit of judgment is its ordered presentation
+as first item \(A\) and second item \(B\). The unit of the reliability and stability summaries is
+the item, while the unit of MCMC diagnostics is the fitted parameter set or sampler transition.
+
+## Algorithm overview
+
+For \(N\geq2\) items, the live runner repeats the following sequence:
+
+```text
+initialize state and shuffled-chain warm start
+  -> select one ordered pair
+  -> request one binary judgment
+  -> if valid: commit counts/history and update TrueSkill
+  -> update the round and stage controller
+  -> if enough new comparisons exist: refit Bayesian BTL
+       -> compute diagnostics, reliability, and lagged stability
+       -> update global-identification and near-stop states
+       -> record refit and item summaries
+       -> stop only if every required stop gate passes
+```
+
+Selection and model updates are transactional. A valid result has \(Y_k=1\) when the judge selects
+the first-presented item \(A_k\), and \(Y_k=0\) when it selects \(B_k\). A missing, malformed,
+ambiguous, tied, refused, or otherwise invalid response is logged but does not update the
+comparison history, degrees, presentation counts, TrueSkill state, round quotas, or BTL-refit
+cadence. During the warm start, the same pair is retried until a valid result is committed.
+
+## Initialization and connected warm start
+
+All items begin with the default TrueSkill parameters
+
+\[
+  \mu_i=25,\qquad \sigma_i=25/3,\qquad \beta_{\mathrm{TS}}=25/6,
+\]
+
+unless item-level `mu` or `sigma` values are supplied to the internal state constructor. Here
+\(\beta_{\mathrm{TS}}\) is the TrueSkill performance-scale parameter and is distinct from the BTL
+position-effect parameter introduced below.
+
+Given a deterministic run seed, the item IDs are shuffled to produce
+\((s_1,\ldots,s_N)\). The warm-start queue is
+
+\[
+  \{s_1,s_2\},\{s_2,s_3\},\ldots,\{s_{N-1},s_N\}.
+\]
+
+After all \(N-1\) pairs have valid committed outcomes, these edges form a spanning path. The
+comparison graph is therefore connected, so all item locations can be related through observed
+paths. Connectivity is necessary for a common within-set scale, but it does not by itself imply
+precise estimates or strong MCMC diagnostics. Invalid attempts do not advance the path.
+
+Presentation order is assigned separately from unordered-pair construction. The controller favors
+the orientation that improves each endpoint's first/second-position balance. A repeated pair is
+presented in the reverse of its last recorded order.
+
+## Online TrueSkill update and selection utility
+
+For candidate endpoints \(i\) and \(j\), the implemented TrueSkill win probability is
+
+\[
+ p^{\mathrm{TS}}_{ij}
+ = \Phi\!\left(
+   \frac{\mu_i-\mu_j}
+        {\sqrt{\sigma_i^2+\sigma_j^2+2\beta_{\mathrm{TS}}^2}}
+ \right),
+\]
+
+where \(\Phi\) is the standard-normal distribution function. The base ambiguity utility is
+
+\[
+ U_{0,ij}=p^{\mathrm{TS}}_{ij}(1-p^{\mathrm{TS}}_{ij}).
+\]
+
+It is largest at 0.25 when the current model assigns equal win probability to both items. It is a
+pair-selection heuristic, not expected information gain under the later BTL model.
+
+After a valid judgment, let \(w\) and \(l\) denote the winner and loser. Define
+
+\[
+ c=\sqrt{2\beta_{\mathrm{TS}}^2+\sigma_w^2+\sigma_l^2},\quad
+ t=\frac{\mu_w-\mu_l}{c},\quad
+ v(t)=\frac{\phi(t)}{\Phi(t)},\quad
+ w(t)=v(t)\{v(t)+t\},
+\]
+
+where \(\phi\) is the standard-normal density. The implementation applies the two-player,
+no-draw update
+
+\[
+ \begin{aligned}
+ \mu_w'&=\mu_w+\frac{\sigma_w^2}{c}v(t), &
+ \mu_l'&=\mu_l-\frac{\sigma_l^2}{c}v(t),\\
+ (\sigma_w')^2&=\sigma_w^2\left\{1-\frac{\sigma_w^2}{c^2}w(t)\right\}, &
+ (\sigma_l')^2&=\sigma_l^2\left\{1-\frac{\sigma_l^2}{c^2}w(t)\right\}.
+ \end{aligned}
+\]
+
+The two endpoint variances have a numerical floor before taking square roots. Other items are not
+updated in that step. These sequential approximate updates treat committed outcomes as the new
+evidence stream; they are not a substitute for the joint Bayesian BTL posterior used for final
+item summaries.
+
+## Rounds, anchors, and rank strata
+
+After the warm start, each round schedules
+
+\[
+ B_{\mathrm{round}}=\left\lceil B_{\mathrm{refit}}/2\right\rceil
+\]
+
+committed comparisons, where the default refit target is defined below. Stages are attempted in
+the fixed order anchor, long, mid, and local. Early rounds 1--4 allocate base fractions 0.30, 0.10,
+0.10, and the remainder, respectively. Later rounds use 0.20, 0.05, 0.10, and the remainder.
+Fractions are converted to integer quotas with ceilings and a deterministic correction if rounding
+would exceed the round total. If a stage cannot supply a pair after every fallback, its shortfall
+is recorded and the controller advances; exhaustion of the full within-set round terminates with
+`candidate_starvation`.
+
+The ranking proxy is decreasing TrueSkill \(\mu_i\), with item ID breaking ties. Rolling anchors
+are refreshed after a new BTL refit; before a refit they use TrueSkill, and afterward they use BTL
+EAP estimates when a complete finite vector is available. The target number is
+
+\[
+ A=\begin{cases}
+ \max\{1,\operatorname{round}(0.10N)\}, & N<10,\\
+ \operatorname{clamp}\{10,40,\operatorname{round}(0.10N)\}, & N\geq10,
+ \end{cases}
+\]
+
+and cannot exceed \(N-1\). Integer allocation assigns approximately 30%, 40%, and 30% of anchors
+to the top, middle, and bottom of the current order.
+
+The internal defaults record also contains `anchor_count_min = 10`; the current anchor selector
+uses the equivalent fixed lower bound of 10 directly. It is not a separate public override. The
+0.30/0.40/0.30 weight fields are used by the integer allocation.
+
+Strata are also recomputed from the ranking proxy. The first
+\(\lceil0.10N\rceil\) items form a top band divided into at most five finer strata. Remaining items
+are divided into \(K\) base strata, where \(K=5,10,12,20\) for \(N<60\),
+\(60\leq N<150\), \(150\leq N<400\), and \(N\geq400\), respectively. Stratum distance is the
+absolute difference between the resulting integer stratum labels.
+
+The four candidate stages move from maintaining broad structure toward resolving nearby items.
+Their code names describe which pair domain is eligible, while their purposes explain why the
+domain is included:
+
+| Stage | Eligible pairs | Purpose in the algorithm |
+|---|---|---|
+| `anchor_link` (anchor link) | Exactly one endpoint is a rolling anchor. | Compare ordinary items with representatives of the current top, middle, and bottom regions. These recurring reference points help maintain paths across the developing ranking; anchors are model-selected items, not fixed standards or known truths. |
+| `long_link` (long link) | Neither endpoint is an anchor, and stratum distance is at least \(\lceil K/2\rceil\). | Add broad comparisons across distant ranking regions. This supports graph connectivity and checks coarse ordering, especially before the run has concentrated on close distinctions. |
+| `mid_link` (mid link) | Neither endpoint is an anchor, and base stratum distance is 2 through \(\min(4,K-1)\). | Bridge broad and local comparisons by connecting moderately separated regions. |
+| `local_link` (local link) | Stratum distance is at most 1; anchor endpoints are allowed. | Compare near neighbors, where current estimates often imply a less predictable outcome, and support distinctions near a configured decision boundary. |
+
+The labels describe routing roles rather than statistical guarantees. A pair admitted by one stage
+must still survive the filters and controls below.
+
+For large pools, at most `C_max = 20000` legal pairs are sampled deterministically from a stage's
+candidate domain using the run and step seeds.
+
+## Candidate filters, coverage, and fallback
+
+Each stage attempt constructs candidates, removes self-pairs, scores them with TrueSkill, verifies
+that repeats have a recorded prior orientation, and applies any active long-link gate. It then
+applies per-round exposure pressure, duplicate limits, and recent-degree star caps. Candidate counts
+after each operation are written to `step_log`, making filter collapse identifiable.
+
+### Conceptual example of one adaptive step
+
+Suppose the controller is in `local_link`. It first forms pairs whose endpoints occupy the same or
+adjacent rank strata. It removes illegal repeats and pairs that violate exposure or degree controls,
+then gives each remaining pair the TrueSkill ambiguity score \(U_0\). A pair with a predicted choice
+probability of 0.51 has \(U_0=0.51(1-0.51)=0.2499\), close to the maximum of 0.25, so it is a strong
+exploitation candidate if no higher-priority rule intervenes. The selected unordered pair is then
+assigned a presentation order, sent to the judge, and logged. A valid choice is committed and the
+two endpoints' TrueSkill states are updated immediately. Once the number of newly committed
+comparisons reaches the refit target, a joint BTL refit updates all item posterior summaries and
+diagnostics. Those new summaries can change later anchors, long-link eligibility, routing state,
+and stopping decisions. The numbers in this example are illustrative; the actual choice also
+depends on the current stage, exploration draw, fallback level, and all active constraints.
+
+### Coverage and exploration
+
+Let \(d_i\) be item \(i\)'s total committed degree and \(d_{\min}=\min_i d_i\). Items with
+\(d_i\leq d_{\min}+1\) form the under-represented set. While \(d_{\min}<2\), a step has probability
+0.20 of invoking the coverage override, which restricts candidates to pairs containing at least one
+under-represented endpoint.
+
+Otherwise, or when the override is not drawn, probabilistic exploration uses
+
+\[
+ e(N)=\operatorname{clamp}\{0.10,0.25,0.20-0.02\log_{10}(N)\}.
+\]
+
+After global identification, this rate is multiplied by 0.50. The uncertainty-pool and
+duplicate-relaxation fallbacks double the active exploration rate, capped at 0.50. On an
+exploration step, the controller samples an under-represented endpoint and then chooses a partner.
+With probability 0.15 it favors maximum rank distance; otherwise it favors the closest TrueSkill
+mean. Ties favor greater \(U_0\), lower recent partner degree, and item ID.
+
+On an exploitation step, within-set candidates are ordered by decreasing \(U_0\). In the local
+stage after global identification, the controller first meets a boundary-priority target for a
+window around rank `boundary_k` and otherwise prioritizes pairs closest to
+\(p^{\mathrm{TS}}_{ij}=0.5\). These choices concentrate comparisons near uncertain distinctions;
+they do not guarantee minimum posterior error for a fixed budget.
+
+### Duplicate and degree controls
+
+The base duplicate limit is two committed observations per unordered pair. In the
+`dup_relax` fallback, a third observation is eligible only when all of the following hold:
+
+- the pair has fewer than three observations;
+- \(|p^{\mathrm{TS}}_{ij}-0.5|\leq0.05\); and
+- \(U_{0,ij}\) is at or above the current candidate pool's 0.90 quantile.
+
+Recent degree is counted over the most recent
+\(W_{\mathrm{cap}}=\max\{200,\min(2000,B_{\mathrm{refit}})\}\) committed comparisons. A candidate is
+normally rejected if either endpoint has recent degree greater than
+\(\lceil0.08W_{\mathrm{cap}}\rceil\). After global identification, the mid and local stages may use
+at most one star-cap override per round for a near-tie pair
+\(|p^{\mathrm{TS}}_{ij}-0.5|\leq0.05\), provided neither endpoint is above the 0.90 quantile of
+total degree.
+
+Round exposure is also a soft control. The normal filter avoids endpoints that have exhausted the
+per-round repeat allowance; if that empties the pool, the same stage is retried under repeat
+pressure. Hard invariants and duplicate limits remain active.
+
+### Fallback ladder
+
+If no candidate survives, the selector tries the following deterministic sequence:
+
+1. `base`: normal stage bounds and duplicate policy;
+2. `expand_locality`: widen mid/local bounds while retaining long-link semantics;
+3. `uncertainty_pool`: retain base bounds and double the exploration rate;
+4. `dup_relax`: permit the conditional third observation described above; and
+5. `global_safe`: consider the broadest stage-compatible domain.
+
+`global_safe` does not discard stage identity: long pairs must still be long, anchor pairs must
+still contain exactly one anchor, and the other hard constraints remain. If the full ladder fails,
+the failed step records `candidate_starved = TRUE`. The round controller may advance past a
+starved stage; exhaustion of all stages stops a within-set run.
+
+## Global identification and long-link tapering
+
+After each refit, the controller calculates EAP reliability \(R_{\mathrm{EAP}}\) and the Spearman
+correlation between TrueSkill ranks and BTL posterior-mean ranks. It sets `global_identified` when
+
+\[
+ R_{\mathrm{EAP}}\geq0.80
+ \quad\text{and}\quad
+ \rho_{\mathrm{rank}}(\mu,\widehat\theta)\geq0.90.
+\]
+
+This is a routing state, not a proof of model identification in the formal statistical sense.
+When active, the long-stage fraction is
+
+\[
+ f_{\mathrm{long}}^*=\max\{0.02,0.25f_{\mathrm{long}}\}.
+\]
+
+The removed integer quota is reallocated 20% to the mid stage and 80% to the local stage, subject
+to integer rounding. Exploration is also tapered as described above.
+
+After global identification, a long pair is retained only when its choice probability lies in
+\([0.10,0.90]\). If the availability check finds no diagnostic-passing refit in the current
+within-set scope, the gate uses
+\(p^{\mathrm{TS}}_{ij}\). When a qualifying Bayesian fit is available, the current implementation
+uses the orientation-specific posterior predictive probability. This is the predicted probability
+of choosing the first item, averaged over retained draws so that current uncertainty about item,
+lapse, and position parameters contributes to the prediction:
+
+\[
+ \bar p_{ij}=\frac{1}{S}\sum_{s=1}^S
+ \left[(1-\epsilon^{(s)})
+ \operatorname{logit}^{-1}\!\left(
+ \theta_i^{(s)}-\theta_j^{(s)}+b^{(s)}
+ \right)+\frac{\epsilon^{(s)}}{2}\right].
+\]
+
+Here the stored candidate orientation treats \(i\) as first position for the gate; final display
+order is assigned later. Thus \(\bar p_{ij}\) is not the position-neutral posterior probability
+\(\Pr(\theta_i>\theta_j\mid Y)\). This gate removes long comparisons predicted to be nearly
+deterministic under the implemented observation model. The availability check asks whether any
+logged refit in scope passed diagnostics, whereas the probability is calculated from the fit
+currently stored in state. If a later refit fails after an earlier pass, inspect the latest
+`round_log` diagnostics when auditing subsequent long-link decisions.
+
+## Bayesian BTL refits
+
+Unlike the endpoint-only TrueSkill update, each BTL refit analyzes all committed comparisons
+together. The item parameter \(\theta_i\) is a latent location on the within-set quality scale:
+larger differences between two item locations imply a larger modeled choice probability for the
+higher item, subject to the optional position and lapse terms.
+
+For committed comparison \(k=1,\ldots,M\), let \(A_k\) and \(B_k\) be the first- and
+second-presented items and \(Y_k=1\) indicate selection of \(A_k\). All four implemented variants
+use item parameters \(\theta_i\); optional parameters are a global lapse probability \(\epsilon\)
+and a global first-position effect \(b\):
+
+| `model_variant` | Choice probability \(p_k=\Pr(Y_k=1)\) |
+|---|---|
+| `btl` | \(\operatorname{logit}^{-1}(\theta_{A_k}-\theta_{B_k})\) |
+| `btl_e` | \((1-\epsilon)\operatorname{logit}^{-1}(\theta_{A_k}-\theta_{B_k})+\epsilon/2\) |
+| `btl_b` | \(\operatorname{logit}^{-1}(\theta_{A_k}-\theta_{B_k}+b)\) |
+| `btl_e_b` (default) | \((1-\epsilon)\operatorname{logit}^{-1}(\theta_{A_k}-\theta_{B_k}+b)+\epsilon/2\) |
+
+In every case, \(Y_k\sim\operatorname{Bernoulli}(p_k)\). Positive \(b\) indicates greater choice
+probability for the first-presented item, conditional on latent-quality difference. It measures a
+global positional tendency; it is not a forward/reverse consistency statistic. The lapse mixture
+models a global probability of an uninformative 50:50 response and should not be interpreted as a
+directly observed error rate.
+
+The Stan models use
+
+\[
+ \theta_i^{\mathrm{raw}}\sim\mathcal N(0,1),\qquad
+ \theta_i=\theta_i^{\mathrm{raw}}-\frac{1}{N}\sum_{j=1}^N\theta_j^{\mathrm{raw}},
+\]
+
+with \(\epsilon\sim\operatorname{Beta}(2,20)\) when present and
+\(b\sim\mathcal N(0,0.3^2)\) when present. Centering identifies the within-set location while
+retaining the prior's regularization. In plain terms, only differences among item locations affect
+the likelihood, so subtracting their mean sets an arbitrary zero point without changing those
+differences. The priors discourage extreme values when evidence is sparse. Consequently, items
+with only wins or only losses can still have finite posterior summaries; this is Bayesian
+regularization under separation, not evidence that sparse or one-sided comparison data are
+adequate.
+
+Refit eligibility depends on committed comparisons only. With \(M_t\) the committed count and
+\(M_r\) the count at the last refit, a refit occurs when
+
+\[
+ M_t-M_r\geq B_{\mathrm{refit}},\qquad
+ B_{\mathrm{refit}}=\operatorname{clamp}\{20,5000,\lceil N/2\rceil\}.
+\]
+
+For within-set work inside linking Phase A, \(N\) is the active set size and cadence is tracked
+separately for each set. Warm-start comparisons count. Invalid attempts do not. The default Stan
+run uses 1,000 warmup and 1,000 retained iterations per chain, up to eight chains based on detected
+cores, and a default parallel-chain budget of 80% of detected cores. Actual settings are stored in
+the refit log.
+
+The 30--2,000 item range is an operating recommendation for study planning, not input validation:
+the public state constructor accepts any \(N\geq2\). Small studies may spend much of their budget
+reaching the minimum refit cadence, while large studies require explicit planning for judgment,
+MCMC, persistence, and storage costs.
+
+## Code-derived defaults
+
+The tables below are generated from the runtime helpers so scaled defaults cannot silently drift
+away from this article.
+
+```{r selector-defaults, echo=FALSE}
+design_n <- c(30L, 100L, 500L, 2000L)
+selector_rows <- lapply(design_n, function(n) {
+  x <- pairwiseLLM:::adaptive_defaults(n)
+  data.frame(
+    N = n,
+    explore_rate = x$explore_rate,
+    refit_pairs_target = x$refit_pairs_target,
+    round_pairs_target = x$round_pairs_target,
+    rank_strata = x$k_base
+  )
+})
+knitr::kable(do.call(rbind, selector_rows), digits = 3)
+```
+
+```{r btl-defaults, echo=FALSE}
+btl <- pairwiseLLM:::.adaptive_btl_defaults(100L)
+btl_table <- data.frame(
+  control = c(
+    "model_variant", "ess_bulk_min", "ess_bulk_min_near_stop", "max_rhat",
+    "divergences_max", "eap_reliability_min", "stability_lag", "theta_corr_min",
+    "theta_sd_rel_change_max", "rank_spearman_min"
+  ),
+  default_at_N_100 = unlist(btl[c(
+    "model_variant", "ess_bulk_min", "ess_bulk_min_near_stop", "max_rhat",
+    "divergences_max", "eap_reliability_min", "stability_lag", "theta_corr_min",
+    "theta_sd_rel_change_max", "rank_spearman_min"
+  )], use.names = FALSE)
+)
+knitr::kable(btl_table)
+```
+
+Public selector overrides are supplied in `adaptive_config`; public refit and stopping overrides
+are supplied in `btl_config`. See `?adaptive_rank` and `?adaptive_rank_run_live` for the accepted
+keys. Quantities used only to explain the implementation are not additional public arguments.
+
+## Diagnostics, reliability, and stopping
+
+Stopping is evaluated only after a completed BTL refit. The gates address three different
+questions: whether the sampler behaved adequately, whether posterior uncertainty is small relative
+to observed item spread, and whether estimates have remained similar across separated refits.
+Passing all three is an operational stopping rule, not proof that the ranking is correct.
+
+Let \(S\) denote the number of retained posterior draws,
+and write
+
+\[
+ \widehat\theta_i=\frac{1}{S}\sum_{s=1}^S\theta_i^{(s)},\qquad
+ \widehat V_i=\operatorname{Var}_{s}\!\left(\theta_i^{(s)}\right).
+\]
+
+The implemented EAP reliability statistic is
+
+\[
+ R_{\mathrm{EAP}}=
+ \frac{\operatorname{Var}_{i}(\widehat\theta_i)}
+ {\operatorname{Var}_{i}(\widehat\theta_i)+N^{-1}\sum_{i=1}^{N}\widehat V_i}.
+\]
+
+Both variances use the sample-variance convention in R, with denominator one less than the number
+of observations: \(N-1\) across item EAP estimates and \(S-1\) across draws for each item. The
+posterior variances are then averaged with denominator \(N\). The statistic is returned as missing
+when there are fewer than two items or draws, non-finite draws, nonpositive between-item variance,
+or a non-finite component; otherwise it is clamped to \([0,1]\).
+
+This quantity is best described as a posterior signal-to-total-variance ratio across the current
+items. It resembles an empirical reliability coefficient, but it is not classical test-score
+reliability, does not assess judge validity, and depends on the fitted model, prior, comparison
+graph, and observed spread of the particular item set.
+
+The MCMC gate checks whether the numerical simulation appears trustworthy enough for the later
+summaries. A divergence is a sampler warning that the algorithm had difficulty following the
+posterior geometry. Split \(\widehat R\) compares within-chain and between-chain behavior, with
+values close to 1 preferred. Bulk ESS estimates the independent-equivalent information in the
+autocorrelated central portion of the draws. The gate requires all of the following:
+
+- total divergent transitions \(\leq0\);
+- maximum split \(\widehat R\leq1.01\); and
+- minimum bulk effective sample size across monitored parameters at or above the active threshold.
+
+The default bulk-ESS threshold is
+\(\max\{400,\operatorname{round}(20\sqrt N)\}\). Once `near_stop` is active it becomes
+\(\max\{1000,\operatorname{round}(50\sqrt N)\}\). A refit enters near-stop when the ordinary
+diagnostics pass and \(R_{\mathrm{EAP}}\) is within 0.05 below the stopping threshold. Entry affects
+later refits; it does not retrospectively apply the stricter ESS threshold to the refit that
+triggered entry.
+
+Let \(t\) be the current refit and \(L=2\) the default `stability_lag`. Stability is eligible only
+when \(t>L\). With item EAP vectors \(\widehat{\boldsymbol\theta}^{(t)}\) and
+\(\widehat{\boldsymbol\theta}^{(t-L)}\), the implementation computes
+
+\[
+ \rho_\theta(t)=\operatorname{cor}\!\left(
+ \widehat{\boldsymbol\theta}^{(t)},
+ \widehat{\boldsymbol\theta}^{(t-L)}
+ \right),
+\]
+
+\[
+ \Delta_{SD}(t)=
+ \frac{\left|SD\{\widehat{\boldsymbol\theta}^{(t)}\}-
+ SD\{\widehat{\boldsymbol\theta}^{(t-L)}\}\right|}
+ {SD\{\widehat{\boldsymbol\theta}^{(t-L)}\}},
+\]
+
+and Spearman rank correlation
+
+\[
+ \rho_{\mathrm{rank}}(t)=\operatorname{cor}_{\mathrm{Spearman}}\!\left(
+ \operatorname{rank}\{\widehat{\boldsymbol\theta}^{(t)}\},
+ \operatorname{rank}\{\widehat{\boldsymbol\theta}^{(t-L)}\}
+ \right).
+\]
+
+Ranks use average handling of ties. Correlations use pairwise-complete observations, although the
+normal fit contract requires finite posterior summaries. A zero or non-finite lagged SD makes
+\(\Delta_{SD}\) missing, which blocks stopping. These are descriptive comparisons across the same
+dependent item estimates, not hypothesis tests with independent observations.
+
+Here SD means the standard deviation across item EAP estimates. The Pearson correlation
+\(\rho_\theta\) measures similarity of item locations, \(\Delta_{SD}\) measures proportional change
+in their spread, and the Spearman correlation \(\rho_{\mathrm{rank}}\) measures similarity of rank
+order. Looking back by \(L\) refits makes the comparison less local than a one-refit check, but none
+of these statistics establishes future stability.
+
+The within-set stop decision is true only when all active conditions pass:
+
+\[
+ \begin{aligned}
+ &\text{MCMC diagnostics pass},\\
+ &R_{\mathrm{EAP}}\geq0.90,\\
+ &t>L,\\
+ &\rho_\theta(t)\geq0.95,\\
+ &\Delta_{SD}(t)\leq0.10,\\
+ &\rho_{\mathrm{rank}}(t)\geq0.95.
+ \end{aligned}
+\]
+
+Passing records `stop_reason = "btl_converged"`. The name means that the configured operational
+gates passed; it should not be read as a theorem that the posterior, ranking, or data-generating
+process has converged. Reaching the caller's `n_steps` budget simply returns the current state and
+does not manufacture a stop reason. Candidate exhaustion records `candidate_starvation`. Invalid
+judgments can exhaust attempted-step budget without increasing the committed-comparison count.
+
+Several posterior summaries in `round_log`, including near-tie and credible-interval summaries,
+are diagnostic-only and do not enter `should_stop()`.
+
+## Audit trail and reproducibility
+
+The canonical logs expose different units:
+
+- `step_log` has one row per attempted step, including invalid outcomes, routing decisions,
+  fallback paths, candidate counts, endpoint degrees, probabilities, utilities, and judge metadata.
+- `round_log` has one row per Bayesian refit despite its historical field name. It records the
+  comparison count, MCMC configuration and diagnostics, reliability, lagged stability, routing
+  state, thresholds, and stop decision.
+- `item_log` stores item-level posterior summaries for each refit.
+
+Use `adaptive_step_log()`, `adaptive_round_log()`, `adaptive_item_log()`,
+`adaptive_results_history()`, and the summary helpers to inspect these records. Supplying
+`session_dir` persists initialized state and completed refits; ordinary progress is checkpointed at
+the configured step cadence. `adaptive_rank_resume()` restores the session after schema and state
+validation. Persisting the item log writes separate per-refit files; it does not replace the
+canonical in-memory history.
+
+Audit the comparison graph, invalid-response rate, stage shortfalls, fallback and starvation rates,
+degree concentration, posterior diagnostics, and stop gates together. A high final
+\(R_{\mathrm{EAP}}\) alone is not sufficient evidence that judgments are valid or that important
+subgroups, score regions, or presentation conditions were adequately represented.
+
+## Applied Example
+
+For an applied example, Mercer and Reed used `pairwiseLLM` to conduct separate within-wave adaptive
+comparative-judgment analyses of student writing, fit the default position-and-lapse BTL model, and
+report the likelihood, priors, centering, MCMC settings, EAP reliability criterion, and realized
+comparison degree. See Mercer, S. H., and Reed, D. K. (2026), *Validity of Large Language Model Comparative
+Judgment for Universal Writing Screening*, [EdArXiv preprint](https://osf.io/preprints/edarxiv/4k9r8_v1).
+
+## Foundational References
+
+Bradley, R. A., & Terry, M. E. (1952). Rank analysis of incomplete block designs: I. The method of
+paired comparisons. *Biometrika, 39*(3/4), 324--345.
+
+Luce, R. D. (1959). *Individual Choice Behavior: A Theoretical Analysis*. Wiley.
+
+Pollitt, A. (2012). The method of adaptive comparative judgement. *Assessment in Education:
+Principles, Policy & Practice, 19*(3), 281--300.
+
+> Mercer, S. H. (2026). *Within-set adaptive pairing design* [R package vignette]. In
+> *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*
+> (Version 1.3.1).
