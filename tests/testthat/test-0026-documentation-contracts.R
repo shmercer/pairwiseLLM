@@ -152,3 +152,34 @@ test_that("corrected documentation examples retain their contracts", {
   expect_identical(nrow(pairwiseLLM::make_pairs(pairwiseLLM::example_writing_samples)), 190L)
   expect_identical(pairwiseLLM:::adaptive_defaults(20L)$refit_pairs_target, 20L)
 })
+
+test_that("practical adaptive vignette keeps the wrapper-first within-set contract", {
+  root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  skip_if(
+    !file.exists(file.path(root, "vignettes", "adaptive-pairing.Rmd")),
+    "Repository vignette sources are unavailable in installed-package tests."
+  )
+  adaptive <- readLines(file.path(root, "vignettes", "adaptive-pairing.Rmd"), warn = FALSE)
+  text <- paste(adaptive, collapse = "\n")
+
+  expect_gte(sum(grepl("adaptive_rank\\(", adaptive)), 4L)
+  expect_true(grepl("n_steps = 22L", text, fixed = TRUE))
+  expect_true(grepl("refit_pairs_target` is 20", text, fixed = TRUE))
+  expect_true(grepl("validate_session_dir(session_dir)", text, fixed = TRUE))
+  expect_true(grepl("load_adaptive_session(session_dir)", text, fixed = TRUE))
+  expect_true(grepl("adaptive_results_history(out$state)", text, fixed = TRUE))
+  expect_true(grepl("model = \"gpt-5.6-luna\"", text, fixed = TRUE))
+
+  linking_only_controls <- c(
+    "run_mode =", "hub_id =", "phase_a_mode =", "phase_a_artifacts =",
+    "linking_samples", "link_stage_log"
+  )
+  expect_false(any(vapply(
+    linking_only_controls,
+    function(control) grepl(control, text, fixed = TRUE),
+    logical(1L)
+  )))
+
+  expect_identical(pairwiseLLM:::adaptive_defaults(2L)$refit_pairs_target, 20L)
+  expect_identical(pairwiseLLM:::adaptive_defaults(20L)$refit_pairs_target, 20L)
+})

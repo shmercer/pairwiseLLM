@@ -1,8 +1,8 @@
 ---
-title: "Adaptive Pairing and Ranking in pairwiseLLM"
+title: "Practical Within-Set Adaptive Pairing"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Adaptive Pairing and Ranking in pairwiseLLM}
+  %\VignetteIndexEntry{Practical Within-Set Adaptive Pairing}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -12,462 +12,364 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
+
+cmdstan_available <- requireNamespace("cmdstanr", quietly = TRUE) &&
+  tryCatch(
+    !is.null(cmdstanr::cmdstan_version()),
+    error = function(e) FALSE
+  )
+
+knitr::opts_chunk$set(eval = cmdstan_available)
 ```
 
-## Overview
+## Scope
 
-The `pairwiseLLM` package supports ranking writing samples (or other items) using pairwise comparisons. When the number of items is large or judgments are expensive, choosing which pairs to compare becomes as important as how the comparisons are modeled.
+This article shows how to rank **one set of items** with [adaptive_rank()]. The wrapper reads and
+validates the items, starts or resumes a run, requests comparisons from a judge, performs Bayesian
+refits, and returns the ranking and audit logs. Most users should start with this wrapper rather
+than assembling the lower-level state and runner functions themselves.
 
-Adaptive pairing is designed to allocate comparisons more efficiently by focusing effort where it reduces uncertainty the most.
+## Choose a pairing strategy
 
-At a high level:
+Use exhaustive pairing when the set is small enough to evaluate every one of the
+`choose(N, 2)` unordered pairs and complete coverage is important. Use a random sample when you
+want a simple fixed-budget design or a baseline for comparison. Use adaptive selection when each
+judgment is costly and you want the next comparison to respond to evidence already collected.
 
-* Pair selection is adaptive and uncertainty-aware.
-* Fewer total comparisons are needed to reach stable rankings.
-* Remaining uncertainty is concentrated in genuinely ambiguous cases (near-ties).
-* Final rankings are accompanied by principled Bayesian uncertainty estimates.
+The runtime accepts `N >= 2` unique items. A range such as 30--2,000 items is operating guidance,
+not an enforced limit. Very small sets may exhaust all eligible candidates before a Bayesian
+refit, while large studies should be planned around provider cost, refit time, and storage.
 
-This vignette introduces the adaptive pairing and ranking workflow and explains when and why it is useful.
+## What happens during a run?
 
----
+Within-set ranking has three phases.
 
-## Why adaptive pairing?
+1. **Phase 1: warm start.** A seeded shuffled chain schedules `N - 1` valid comparisons, producing
+   a connected comparison graph.
+2. **Phase 2: normal adaptation.** TrueSkill is updated after every committed comparison and guides
+   the next pair. The controller balances coverage, long-, mid-, and local-range comparisons,
+   repeated-pair limits, and fallbacks.
+3. **Phase 3: near stop.** After a Bayesian refit passes diagnostics and its EAP reliability is
+   within 0.05 of the stopping threshold, later refits use the stricter near-stop ESS requirement.
+   Pair-selection behavior does not otherwise change merely because Phase 3 was entered.
 
-A simple baseline approach to pairwise ranking is random pairing: select pairs uniformly at random and fit a model once enough data have been collected. Random pairing is straightforward to understand and often yields slightly higher global reliability metrics.
-
-However, random pairing is inefficient:
-
-* Many comparisons are redundant or uninformative.
-* Obvious mismatches consume judgment budget.
-* Uncertainty remains unnecessarily large in decision-relevant regions of the ranking.
-
-Adaptive pairing addresses this by allocating comparisons where they matter most.
-
-### Reliability vs. precision
-
-In practice, adaptive pairing often produces:
-
-* Slightly lower overall Bayesian EAP reliability compared to random pairing, because comparisons are intentionally concentrated rather than uniformly distributed.
-* Substantially tighter credible (confidence) intervals around latent quality scores and rankings, especially among closely ranked items.
-
-This tradeoff is intentional. Adaptive pairing prioritizes precision of estimates and rankings over uniform coverage of the latent scale.
-
-For applications such as writing quality evaluation, where distinctions between nearby samples matter more than broad global separation, this tradeoff is often desirable.
-
----
-
-## Conceptual model
-
-Adaptive ranking in `pairwiseLLM` separates pair selection from inference:
-
-* A fast model (TrueSkill) guides which pair to compare next after each new pair is evaluated.
-* A Bayesian Bradley–Terry–Luce (BTL) model is used intermittently to estimate latent quality, quantify uncertainty, and determine stopping.
-
-This separation allows the system to adapt quickly while still producing fully Bayesian final results.
-
----
-
-## The adaptive workflow
-
-An adaptive run proceeds through repeated cycles:
-
-1. **Select a pair**
-   A candidate pair is chosen based on uncertainty, coverage needs, and structural constraints.
-
-2. **Obtain a judgment**
-   The pair is evaluated (typically by an LLM), producing a binary outcome.
-
-3. **Online update**
-   The online state is updated immediately.
-
-4. **Periodic Bayesian refit**
-   After enough new comparisons, all accumulated data are refit using Bayesian BTL to produce posterior estimates, diagnostics, and stopping metrics.
-
-This cycle repeats until stopping criteria are met.
-
----
-
-## Early vs. late stages of adaptation
-
-Adaptive behavior intentionally changes over the course of a run.
-
-### Early stage: global scale identification
-
-Early in the run, the algorithm focuses on establishing a well-connected comparison graph and identifying the global latent scale. This involves:
-
-* comparisons that link distant parts of the ranking,
-* anchor items that connect many samples,
-* exploratory pairing to avoid isolated samples.
-
-The goal is to ensure that all samples are meaningfully connected before refinements are made.
-
-### Late stage: local refinement
-
-Once the global scale is reliably identified, adaptive behavior shifts:
-
-* long-range comparisons are reduced,
-* more comparisons are allocated to similar-quality samples,
-* near-ties receive focused attention.
-
-This concentrates effort where remaining uncertainty affects ranking decisions.
-
----
-
-## Global identifiability and stopping
-
-A key feature of the adaptive workflow is an explicit notion of global identifiability.
-
-At each Bayesian refit, diagnostics are used to assess whether:
-
-* latent quality estimates are reliable, and
-* rankings implied by TrueSkill and Bayesian models agree.
-
-Once global identifiability is achieved, it gates later-stage behavior and enables more aggressive local refinement.
-
-Stopping decisions are made only when:
-
-* Bayesian diagnostics are satisfactory,
-* posterior reliability is high,
-* quality scores and rankings are stable across refits.
-
-This ensures that adaptive efficiency does not come at the cost of statistical defensibility.
-
----
-
-## How the adaptive algorithm works (schematic overview)
-
-Adaptive pairing in `pairwiseLLM` combines fast online selection with slower Bayesian inference. The key idea is that pair selection and inference operate on different time scales.
-
-At each step, only one pair is selected and evaluated. Bayesian refits occur intermittently and are used to guide later behavior and stopping decisions.
-
-### High-level flow
+TrueSkill is the fast, step-by-step selection model. Bayesian Bradley--Terry--Luce (BTL) refits are
+slower and intermittent. They provide posterior item estimates and uncertainty, convergence
+diagnostics, stability checks, and stopping decisions. Once an accepted posterior exists, its win
+probabilities also gate eligibility for long-range comparisons; BTL is therefore not exclusively
+a final reporting model.
 
 ```text
- ┌──────────────────────┐
- │  Initialize run      │
- │  (warm start)        │
- └─────────┬────────────┘
-           │
-           ▼
- ┌──────────────────────┐
- │  Adaptive pairing    │
- │  (step-by-step)      │
- │                      │
- │  • select pair       │
- │  • query judge       │
- │  • update online     │
- │    state             │
- └─────────┬────────────┘
-           │  (after enough pairs)
-           ▼
- ┌──────────────────────┐
- │  Bayesian BTL refit  │
- │                      │
- │  • posterior θ       │
- │  • uncertainty       │
- │  • diagnostics       │
- │  • stability checks  │
- └─────────┬────────────┘
-           │
-           ▼
- ┌──────────────────────┐
- │  Adapt behavior      │
- │  & check stopping    │
- │                      │
- │  • taper long links  │
- │  • focus near-ties   │
- │  • reduce exploration│
- └─────────┬────────────┘
-           │
-           ├── if stop = FALSE ──► back to adaptive pairing
-           │
-           └── if stop = TRUE ──► return results
+items -> warm start -> select one pair -> judge -> TrueSkill update
+                              ^                    |
+                              |                    v
+                              +---- continue <- periodic BTL refit -> stop check
 ```
----
 
-### Early vs. late behavior
+Adaptive selection is intended to direct effort toward useful comparisons, but it does not
+guarantee a particular ranking, reliability, cost reduction, or improvement over random pairing.
+Those outcomes depend on the items, judge, budget, and model assumptions.
 
-* **Early phase**
+## Install and check CmdStan
 
-  * Emphasizes coverage and global scale identification
-  * Uses anchor, long-range, and mid-range comparisons
-  * Exploration remains relatively high
+Bayesian refits require the suggested `cmdstanr` package, a working C++ toolchain, and CmdStan.
+This is a one-time machine setup; it does not require an LLM credential.
 
-* **Late phase**
-
-  * Triggered once the global scale is statistically identified
-  * Long-range comparisons are reduced
-  * Comparisons focus on near-ties 
-  * Exploration is tapered
-
-This transition is data-driven, not based on a fixed number of iterations.
-
----
-
-## Worked example: adaptive ranking of writing samples
-
-This example demonstrates a complete adaptive ranking workflow using example writing samples included in the package.
-
-Adaptive runs periodically fit a Bayesian BTL model and therefore require
-CmdStan. Before the first run, install CmdStanR, verify the compiler toolchain,
-and install CmdStan as described in the
-[CmdStanR installation guide](https://mc-stan.org/cmdstanr/articles/cmdstanr.html):
-
-```{r, eval=FALSE}
+```{r cmdstan-install, eval=FALSE}
+install.packages(
+  "cmdstanr",
+  repos = c("https://stan-dev.r-universe.dev", getOption("repos"))
+)
 cmdstanr::check_cmdstan_toolchain(fix = TRUE)
 cmdstanr::install_cmdstan()
-cmdstanr::cmdstan_version()
 ```
 
-We show how to:
-- load example data,
-- select a writing trait to evaluate,
-- define a prompt template,
-- run adaptive ranking with a live LLM judge,
-- and extract logs for further analysis.
+Before starting a study, confirm that CmdStan can be found:
 
----
+```{r cmdstan-check, eval=TRUE}
+cmdstan_available
 
-### Run adaptive ranking
+if (cmdstan_available) {
+  cmdstanr::cmdstan_version()
+}
+```
 
-Below is an example of the full adaptive workflow using `adaptive_rank()`.
+The executable ranking chunks below run when CmdStan is available. The deterministic judge is
+local, so the example never makes a network request or incurs provider charges.
 
-Key configuration choices in this example:
+## A complete offline run with `adaptive_rank()`
 
-* **Model**: `gpt-5.1`
-* **Service tier**: `"flex"` (lower-cost, slower OpenAI Flex processing; capacity may be unavailable)
-* **Custom stopping thresholds**: slightly relaxed reliability, stricter rank stability
+Start from a clean R session and load the package data. The `ID` column already contains unique,
+non-missing identifiers. We retain `quality_score` only to simulate a judge.
 
-```{r eval=FALSE}
+```{r example-setup, eval=TRUE}
 library(pairwiseLLM)
 
-# Example data shipped with the package
-data("example_writing_samples")
+data("example_writing_samples", package = "pairwiseLLM")
+samples <- example_writing_samples[, c("ID", "text", "quality_score")]
 
-# Choose a built-in trait (or define a custom trait$name and trait$description)
-trait <- "overall_quality"
+trait <- trait_description("overall_quality")
+prompt_template <- set_prompt_template()
 
-# Prompt template (character string with required placeholders)
-tmpl <- set_prompt_template()  # or set_prompt_template(template = "...custom...")
+deterministic_judge <- function(A, B, state, ...) {
+  a_wins <- A$quality_score[[1]] >= B$quality_score[[1]]
+  list(
+    is_valid = TRUE,
+    Y = as.integer(a_wins),
+    invalid_reason = NA_character_
+  )
+}
+```
 
-# Use custom stopping criteria
-btl_config <- list(
-  # --- default values ---
-  eap_reliability_min = 0.90,        # Bayesian EAP reliability threshold
-  stability_lag = 2L,                # number of refits to use for stability checks
-  theta_corr_min = 0.95,             # correlation between θ across refits (stability)
-  theta_sd_rel_change_max = 0.10,    # relative change in posterior SD across refits
-  rank_spearman_min = 0.95,          # rank stability threshold across refits
-)
+A custom judge receives one-row item tables `A` and `B` plus the current state. A valid response
+must contain `is_valid = TRUE` and `Y` equal to `1` when A wins or `0` when B wins. The simulated
+judge uses a fixture score so its choices are deterministic. Because it bypasses an LLM, the trait
+and prompt are not consulted until the live example later in this article.
 
-set.seed(123)
+The minimum useful wrapper call supplies data, its ID and text columns, a judge, and a step budget.
+We also choose a session directory so progress is persisted. With 20 items, the implemented
+default `refit_pairs_target` is 20 committed comparisons: `ceiling(N / 2)` clamped to
+`[20, 5000]`. A budget of 22 attempted steps leaves room for the warm start and produces one refit
+under this deterministic fixture.
 
-res <- adaptive_rank(
-  data = example_writing_samples,
+```{r adaptive-run}
+session_dir <- tempfile("pairwisellm-adaptive-")
+
+out <- adaptive_rank(
+  data = samples,
   id_col = "ID",
   text_col = "text",
-
-  backend = "openai",
-  model = "gpt-5.1",
-  trait = trait,
-  prompt_template = tmpl,
-
-  # Service tier / routing lives inside judge_args
-  judge_args = list(service_tier = "flex"),
-
-  # Pass btl_config for stopping rules
-  btl_config = btl_config,
-
-  # Run for up to N steps; the run may stop early if stopping rules pass
-  n_steps = 5000L,
+  judge = deterministic_judge,
+  n_steps = 22L,
+  session_dir = session_dir,
+  persist_item_log = TRUE,
+  resume = FALSE,
+  seed = 42L,
+  progress = "none"
 )
 ```
 
+`n_steps` is a maximum number of attempted steps for that call, not a promise that every attempt
+will commit and not a global stopping criterion. A run can return earlier after Bayesian stopping
+or candidate starvation.
 
-For most users, this single function call is sufficient to run an adaptive study end-to-end.
+### Inspect the ranking and stopping state
 
----
+The wrapper returns the final state and common reporting views together. `out$items` is sorted by
+the current within-set rank; lower rank values are better.
 
-### Inspecting results
+```{r adaptive-results}
+out$summary
 
-#### Ranked items with uncertainty
+out$items[, c(
+  "item_id", "theta_raw_eap", "theta_raw_sd", "rank_raw", "degree"
+)] |>
+  head()
 
-```{r eval=FALSE}
-item_summary <- res$items     # summarize_items(...)
-head(item_summary)
+out$refits[, c(
+  "refit_id", "total_pairs_done", "diagnostics_pass",
+  "reliability_EAP", "stop_decision", "stop_reason"
+)]
 ```
 
-Typical columns include:
+The latent `theta_raw_eap` scale is relative within this set. Its sign and absolute magnitude are
+not an external score scale. Posterior standard deviations describe model uncertainty under the
+fitted BTL model; they do not include every possible source of judge or sampling error.
 
-* posterior mean latent quality,
-* credible interval bounds,
-* induced rank,
-* total number of comparisons per item.
+`out$summary$last_stop_reason` remains missing when the wrapper merely reaches its requested step
+budget. For within-set runs, terminal reasons include `"btl_converged"` and
+`"candidate_starvation"`. Inspect the last refit row as well as the run summary: no single
+diagnostic should be interpreted as proof that the ranking is correct.
 
-These summaries reflect the final Bayesian refit.
+### Inspect comparisons and audit logs
 
----
+```{r adaptive-logs}
+names(out$logs)
 
-#### Step-level logs (pair selection audit trail)
+step_log <- adaptive_step_log(out$state)
+step_log[, c(
+  "step_id", "pair_id", "A_id", "B_id", "Y", "status",
+  "round_stage", "fallback_used", "starvation_reason"
+)] |>
+  head()
 
-```{r eval=FALSE}
-step_log <- adaptive_step_log(res$state)
-head(step_log)
+summarize_adaptive(out$state)
+summarize_refits(out$state, last_n = 1L, include_optional = FALSE)
+summarize_items(out$state, top_n = 5L)
+
+result_history <- adaptive_results_history(out$state)
+head(result_history)
 ```
 
-Each row corresponds to one attempted adaptive step and records:
+The step log has one row per attempt. A non-missing `pair_id` identifies a committed result. The
+round log has one row per completed Bayesian refit, and the item log stores posterior item
+summaries for each refit. `adaptive_results_history()` converts committed outcomes to the
+three-column format accepted by `build_bt_data()`.
 
-* which pair was selected,
-* which stage it came from (anchor / long / mid / local),
-* whether exploration was used,
-* whether fallbacks or overrides occurred.
+## Persistence, interruption, and resume
 
-This log allows detailed analysis of adaptive behavior.
+Supplying `session_dir` makes the wrapper persist the initial state, every completed refit,
+terminal stops, the end of an ordinary call, and intermediate checkpoints. The default checkpoint
+cadence is every 100 attempted steps; change it with `checkpoint_every_steps` when losing that much
+work would be costly. Frequent checkpoints increase disk I/O.
 
----
+An abrupt process termination can lose attempts since the most recent completed save. After an
+interrupt, validate what is on disk rather than assuming the in-memory state was written.
 
-#### Pair result history
+```{r adaptive-persistence}
+session_metadata <- validate_session_dir(session_dir)
+session_metadata[c("schema_version", "package_version", "n_items")]
 
-```{r eval=FALSE}
-# Pair result history (committed outcomes)
-pair_history <- subset(step_log, status == "ok", select = c(
-  step_id, timestamp, pair_id,
-  i, j, A, B, Y,
-  round_id, round_stage, pair_type
-))
+loaded_state <- load_adaptive_session(session_dir)
+summarize_adaptive(loaded_state)
 
-head(pair_history)
-```
-
-This table contains the committed comparison outcomes:
-
-* ordered pairs,
-* binary results,
-* timing and refit indices.
-
-It can be reused for:
-
-* refitting alternative models,
-* agreement analyses,
-* simulation studies.
-
----
-
-#### Refit-level summaries and stopping diagnostics
-
-```{r eval=FALSE}
-refit_log <- res$refits    # summarize_refits(...)
-refit_log
-```
-
-The refit log records:
-
-* Bayesian diagnostics,
-* reliability and stability metrics,
-* whether and why stopping occurred.
-
-This provides a transparent justification for termination.
-
----
-
-### Linking workflows with `adaptive_rank()`
-
-`adaptive_rank()` is also the high-level entry point for linking runs:
-
-* `run_mode = "link_one_spoke"` for one spoke set,
-* `run_mode = "link_multi_spoke"` for multi-spoke runs.
-
-In linking mode:
-
-* Phase B is hub↔spoke by default.
-* Phase B only starts after valid Phase A artifacts are available.
-* Multi-spoke execution is concurrent and hub parameters are hard-locked;
-  these are enforced contract properties rather than user controls.
-* Returned logs include `link_stage_log` in addition to `step_log`, `round_log`, and `item_log`.
-
-```{r eval=FALSE}
-# Two-set linking with imported Phase A artifacts
-res_link <- adaptive_rank(
-  data = linking_samples_df,
+resumed <- adaptive_rank(
+  data = samples,
   id_col = "ID",
   text_col = "text",
-  judge = my_judge,
-  n_steps = 300L,
-  adaptive_config = list(
-    run_mode = "link_one_spoke",
-    hub_id = 1L,
-    phase_a_mode = "import",
-    phase_a_artifacts = phase_a_artifacts
-  ),
-  progress = "refits"
-)
-
-# Multi-spoke linking with persistence/resume
-res_multi <- adaptive_rank(
-  data = linking_samples_df,
-  id_col = "ID",
-  text_col = "text",
-  judge = my_judge,
-  n_steps = 600L,
-  session_dir = "adaptive-linking-session",
+  judge = deterministic_judge,
+  n_steps = 2L,
+  session_dir = session_dir,
+  persist_item_log = TRUE,
   resume = TRUE,
-  adaptive_config = list(
-    run_mode = "link_multi_spoke",
-    hub_id = 1L,
-    phase_a_mode = "run"
-  ),
-  progress = "all"
+  progress = "none"
+)
+
+c(
+  before = nrow(out$logs$step_log),
+  after = nrow(resumed$logs$step_log)
 )
 ```
 
----
+Resume is intentionally strict. If saved artifacts are present but invalid, `adaptive_rank()`
+aborts instead of silently creating a new run. The input IDs and their order must exactly match
+the saved session. Set `resume = FALSE` only when you deliberately want a new state, and choose a
+new or empty session directory to avoid mixing studies.
 
-### Downstream analyses
+The wrapper handles ordinary saving. For an explicit snapshot outside a wrapper call, use the
+lower-level persistence helpers:
 
-Because all adaptive decisions are logged, you can:
+```{r adaptive-manual-save}
+snapshot_dir <- tempfile("pairwisellm-snapshot-")
+save_adaptive_session(resumed$state, snapshot_dir, overwrite = TRUE)
+validate_session_dir(snapshot_dir)
+snapshot <- load_adaptive_session(snapshot_dir)
+```
 
-* examine how uncertainty evolves over time,
-* compare adaptive vs. random pairing efficiency,
-* refit models with alternative assumptions,
-* visualize how near-ties concentrate late-stage effort.
+Setting `persist_item_log = TRUE` writes a separate item-log file for each refit. The canonical
+state, step log, round log, and metadata are persisted regardless; the option is useful when
+per-refit item histories must be inspected independently.
 
----
+## Invalid judgments and failed calls
 
-## When should you use adaptive ranking?
+Invalid judge output is transactional: it creates an attempted step with no committed `pair_id`,
+does not update TrueSkill or comparison history, and does not count toward the BTL refit cadence.
+It still consumes one unit of `n_steps`. The LLM judge created internally by `adaptive_rank()`
+maps provider errors to invalid results and preserves available status, error, token, and raw
+response fields in the step log.
 
-Adaptive pairing is particularly useful when:
+This small example deliberately rejects its first attempt, then accepts the next one:
 
-* the number of items is large,
-* judgments are expensive or slow,
-* fine distinctions between nearby items matter,
-* uncertainty estimates are as important as point rankings.
+```{r invalid-judgment, eval=TRUE}
+invalid_once_judge <- function(A, B, state, ...) {
+  if (nrow(state$step_log) == 0L) {
+    return(list(
+      is_valid = FALSE,
+      Y = NA_integer_,
+      invalid_reason = "simulated_parse_failure"
+    ))
+  }
+  deterministic_judge(A, B, state)
+}
 
-For very small item sets or exploratory analyses, simpler random pairing designs may still be appropriate.
+invalid_demo <- adaptive_rank(
+  data = samples[1:4, ],
+  id_col = "ID",
+  text_col = "text",
+  judge = invalid_once_judge,
+  n_steps = 2L,
+  resume = FALSE,
+  seed = 7L,
+  progress = "none"
+)
 
----
+adaptive_step_log(invalid_demo$state)[, c(
+  "step_id", "pair_id", "status", "judge_valid", "judge_invalid_reason"
+)]
+```
 
-## Technical details
+Investigate repeated invalid rows before increasing the budget. Common causes include a thrown
+judge error, a response that does not name either presented ID, or a custom judge that returns a
+missing or non-binary `Y`.
 
-This vignette focuses on how to use adaptive pairing.
+## Live LLM substitution
 
-For a complete technical specification of the adaptive algorithm, including:
-- pair types and quotas,
-- fallback rules,
-- Bayesian models and diagnostics,
-- logging guarantees,
+The following code is a **live-API example and is not evaluated**. It requires an OpenAI key,
+network access, and incurs provider charges. The exact model configuration shown here was recorded
+as tested with pairwiseLLM 1.3.1 on 2026-09-03; provider availability can change independently of
+package support. Check the model-compatibility article and provider catalog before a new study.
 
-see the companion vignette:
+```{r live-openai, eval=FALSE}
+check_llm_api_keys()
 
-- [Bayesian BTL Adaptive Pairing Design](bayesian-btl-adaptive-pairing-design.html)
+live <- adaptive_rank(
+  data = samples[, c("ID", "text")],
+  id_col = "ID",
+  text_col = "text",
+  backend = "openai",
+  model = "gpt-5.6-luna",
+  endpoint = "responses",
+  trait_name = trait$name,
+  trait_description = trait$description,
+  prompt_template = prompt_template,
+  judge_args = list(reasoning = "none"),
+  n_steps = 200L,
+  session_dir = "adaptive-live-session",
+  checkpoint_every_steps = 25L,
+  persist_item_log = TRUE,
+  resume = TRUE,
+  progress = "all",
+  save_outputs = TRUE
+)
+```
 
----
+Each live comparison is usually the dominant monetary and wall-clock cost. Bayesian refits are the
+dominant local compute cost and become more expensive as the item set and posterior model grow.
+Use a bounded `n_steps`, inspect logs between calls, and resume rather than starting over.
 
-## Summary
+## Troubleshooting
 
-Adaptive pairing in `pairwiseLLM` reallocates comparisons toward the most informative parts of the ranking, reducing uncertainty where it matters most. While overall reliability metrics may be slightly lower than with random pairing, adaptive designs typically produce tighter credible intervals and more decision-relevant rankings, making them well suited for writing quality evaluation and similar tasks.
+**CmdStan is missing or compilation fails.** Run `cmdstanr::check_cmdstan_toolchain()` and
+`cmdstanr::cmdstan_version()`. Install or repair the compiler toolchain before retrying. An LLM
+credential cannot substitute for CmdStan.
+
+**IDs are missing or duplicated.** `id_col` must identify a non-missing, unique column. For the
+shipped data it is `id_col = "ID"`. Resume also requires the same IDs in the same order as the
+saved state.
+
+**The judge output is malformed.** A custom judge must return `is_valid`, `Y`, and preferably
+`invalid_reason`. For a valid result, `Y` must be exactly `0` or `1`. Review
+`judge_invalid_reason`, `llm_status_code`, and `llm_error_message` in `adaptive_step_log()`.
+
+**The run reports candidate starvation.** The selector applies its implemented within-stage
+fallbacks before declaring a stage starved. A terminal `"candidate_starvation"` means no eligible
+pair remained after those fallbacks. This can occur with very small or heavily repeated designs;
+inspect `fallback_path`, `starvation_reason`, and committed pair counts rather than treating it as
+Bayesian convergence.
+
+**There is no item summary yet.** `out$items` is empty until the first successful BTL refit. Under
+the default cadence, at least 20 new committed comparisons are needed. Invalid and starved
+attempts do not advance that count.
+
+## Related documentation
+
+See [adaptive_rank()], [adaptive_step_log()], [adaptive_round_log()], [adaptive_item_log()],
+[save_adaptive_session()], and [validate_session_dir()] for complete argument and schema details.
+For the within-set algorithm and statistical rationale, see
+[Bayesian BTL Adaptive Pairing Design](bayesian-btl-adaptive-pairing-design.html).
 
 ## Citation
 
-> Mercer, S. H. (2026). *Adaptive pairing and ranking in pairwiseLLM* [R package vignette]. 
-In *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*. 
-https://doi.org/10.32614/CRAN.package.pairwiseLLM
+> Mercer, S. H. (2026). *Practical within-set adaptive pairing* [R package vignette].
+> In *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*.
+> https://doi.org/10.32614/CRAN.package.pairwiseLLM
