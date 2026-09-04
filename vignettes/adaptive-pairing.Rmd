@@ -302,40 +302,153 @@ Investigate repeated invalid rows before increasing the budget. Common causes in
 judge error, a response that does not name either presented ID, or a custom judge that returns a
 missing or non-binary `Y`.
 
-## Live LLM substitution
+## A detailed live-LLM workflow
 
-The following code is a **live-API example and is not evaluated**. It requires an OpenAI key,
-network access, and incurs provider charges. The exact model configuration shown here was recorded
-as tested with pairwiseLLM 1.3.1 on 2026-09-03; provider availability can change independently of
-package support. Check the model-compatibility article and provider catalog before a new study.
+The following is a **live-API example and is not evaluated**. It requires an OpenAI key, network
+access, and incurs provider charges. The request shape shown here was recorded as tested with
+pairwiseLLM 1.3.1 on 2026-09-03. That is dated evidence about this configuration, not a promise
+that the provider still offers the model. Check
+[Backends and Tested Model Configurations](model-compatibility.html) and the provider catalog
+before a long run.
 
-```{r live-openai, eval=FALSE}
-check_llm_api_keys()
+Set `OPENAI_API_KEY` outside the script. Replace `real_samples` with a data frame or file containing
+one row per item, a unique ID, and the text to compare. Preserve that input in its exact row order
+for resume.
+
+```{r live-openai, eval=FALSE, purl=TRUE}
+library(pairwiseLLM)
+
+stopifnot(nzchar(Sys.getenv("OPENAI_API_KEY")))
+
+real_samples <- utils::read.csv(
+  "writing-samples.csv",
+  stringsAsFactors = FALSE
+)
+stopifnot(nrow(real_samples) >= 2L)
+stopifnot(all(c("ID", "text") %in% names(real_samples)))
+stopifnot(!anyNA(real_samples$ID), !anyDuplicated(real_samples$ID))
+stopifnot(!anyNA(real_samples$text), all(nzchar(real_samples$text)))
+
+live_trait <- trait_description("overall_quality")
+live_prompt <- set_prompt_template()
+live_session <- "adaptive-live-session"
 
 live <- adaptive_rank(
-  data = samples[, c("ID", "text")],
+  data = real_samples,
   id_col = "ID",
   text_col = "text",
   backend = "openai",
   model = "gpt-5.6-luna",
   endpoint = "responses",
-  trait_name = trait$name,
-  trait_description = trait$description,
-  prompt_template = prompt_template,
+  trait_name = live_trait$name,
+  trait_description = live_trait$description,
+  prompt_template = live_prompt,
   judge_args = list(reasoning = "none"),
   n_steps = 200L,
-  session_dir = "adaptive-live-session",
-  checkpoint_every_steps = 25L,
+  session_dir = live_session,
+  checkpoint_every_steps = 10L,
   persist_item_log = TRUE,
-  resume = TRUE,
-  progress = "all",
+  resume = FALSE,
+  seed = 20260904L,
+  progress = "refits",
   save_outputs = TRUE
 )
 ```
 
+This one call validates and normalizes the data, constructs the LLM judge, initializes the
+within-set controller, attempts at most 200 judgments, performs Bayesian refits when due, persists
+the session, and returns reporting views. `n_steps` is a per-call ceiling, not a target number of
+valid comparisons or a guarantee that the stopping criteria will pass. Use a new or empty
+`session_dir` with `resume = FALSE`.
+
+The call intentionally retains the package's inference and stopping defaults. Do not copy reduced
+diagnostic thresholds from a test fixture into a real study merely to make it finish sooner.
+
+### Inspect the live run
+
+Inspect the ranking, diagnostics, and stopping state before reporting results:
+
+```{r live-openai-inspection, eval=FALSE, purl=TRUE}
+live$summary
+
+live$items[, c(
+  "item_id", "theta_raw_eap", "theta_raw_sd", "rank_raw", "degree"
+)] |>
+  head(10L)
+
+live$refits[, c(
+  "refit_id", "total_pairs_done", "diagnostics_pass",
+  "reliability_EAP", "stop_decision", "stop_reason"
+)] |>
+  tail()
+```
+
+An empty `live$items` means no successful BTL refit is available yet. Reaching the requested step
+budget does not establish convergence. Read the latest refit diagnostics and stop reason together.
+
+The step log records each attempted provider call, including provenance, validity, errors, and
+available token counts:
+
+```{r live-openai-audit, eval=FALSE, purl=TRUE}
+live_steps <- live$logs$step_log[, c(
+  "step_id", "pair_id", "A_id", "B_id", "Y", "status",
+  "judge_backend", "judge_model", "judge_endpoint", "judge_invalid_reason",
+  "llm_status_code", "llm_error_message",
+  "prompt_tokens", "completion_tokens", "total_tokens"
+)]
+
+tail(live_steps)
+
+colSums(live_steps[, c(
+  "prompt_tokens", "completion_tokens", "total_tokens"
+)], na.rm = TRUE)
+
+live_steps[live_steps$status == "invalid", ]
+```
+
+Invalid API, refusal, or parse responses consume attempted steps but do not commit comparisons,
+update TrueSkill, or advance the BTL refit cadence. Investigate repeated invalid rows before adding
+budget. `include_raw = TRUE` on `adaptive_rank()` also stores serialized raw responses for deeper
+auditing, but those payloads can contain submitted text and increase storage. Enable it only under
+an appropriate retention policy.
+
+### Continue the same study
+
+Resume with the same input IDs, row order, trait, prompt, model settings, and session directory.
+Only `n_steps`, progress display, and checkpoint cadence should normally change between calls.
+
+```{r live-openai-resume, eval=FALSE, purl=TRUE}
+live <- adaptive_rank(
+  data = real_samples,
+  id_col = "ID",
+  text_col = "text",
+  backend = "openai",
+  model = "gpt-5.6-luna",
+  endpoint = "responses",
+  trait_name = live_trait$name,
+  trait_description = live_trait$description,
+  prompt_template = live_prompt,
+  judge_args = list(reasoning = "none"),
+  n_steps = 100L,
+  session_dir = live_session,
+  checkpoint_every_steps = 10L,
+  persist_item_log = TRUE,
+  resume = TRUE,
+  progress = "refits",
+  save_outputs = TRUE
+)
+```
+
+Resume validates saved schemas and aborts on incompatible artifacts or mismatched input IDs instead
+of silently starting a new run. A sudden process termination can lose attempts since the last
+completed refit or checkpoint, so choose `checkpoint_every_steps` according to how many paid calls
+you can afford to repeat.
+
 Each live comparison is usually the dominant monetary and wall-clock cost. Bayesian refits are the
 dominant local compute cost and become more expensive as the item set and posterior model grow.
-Use a bounded `n_steps`, inspect logs between calls, and resume rather than starting over.
+Cost also rises with invalid calls and additional steps needed to clear diagnostics or coverage
+gaps. Use bounded increments, inspect the audit and refit logs between calls, and do not add budget
+when candidate starvation or a persistent structural problem requires a design change instead.
 
 ## Troubleshooting
 

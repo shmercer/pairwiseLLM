@@ -169,6 +169,18 @@ test_that("practical adaptive vignette keeps the wrapper-first within-set contra
   expect_true(grepl("load_adaptive_session(session_dir)", text, fixed = TRUE))
   expect_true(grepl("adaptive_results_history(out$state)", text, fixed = TRUE))
   expect_true(grepl("model = \"gpt-5.6-luna\"", text, fixed = TRUE))
+  expect_true(grepl('endpoint = "responses"', text, fixed = TRUE))
+  expect_true(grepl("utils::read.csv(", text, fixed = TRUE))
+  expect_true(grepl('Sys.getenv("OPENAI_API_KEY")', text, fixed = TRUE))
+  expect_true(grepl("live$items[, c(", text, fixed = TRUE))
+  expect_true(grepl("live$refits[, c(", text, fixed = TRUE))
+  expect_true(grepl("judge_invalid_reason", text, fixed = TRUE))
+  expect_true(grepl("prompt_tokens", text, fixed = TRUE))
+  expect_true(grepl("completion_tokens", text, fixed = TRUE))
+  expect_true(grepl("include_raw = TRUE", text, fixed = TRUE))
+  expect_true(grepl("resume = FALSE", text, fixed = TRUE))
+  expect_true(grepl("resume = TRUE", text, fixed = TRUE))
+  expect_gte(sum(grepl("session_dir = live_session", adaptive, fixed = TRUE)), 2L)
 
   linking_only_controls <- c(
     "run_mode =", "hub_id =", "phase_a_mode =", "phase_a_artifacts =",
