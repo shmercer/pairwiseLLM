@@ -1,0 +1,665 @@
+---
+title: "Practical Adaptive Linking"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Practical Adaptive Linking}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+This article shows how to place rankings from separately evaluated sets onto one common scale.
+It uses [adaptive_rank()] as the main entry point. The executable examples use a deterministic
+local judge so that rendering does not require credentials or make network requests. A detailed
+live-LLM workflow example appears later.
+
+Adaptive linking has two phases:
+
+1. **Phase A** ranks each set internally and produces a canonical within-set artifact.
+2. **Phase B** collects selected hub--spoke comparisons and estimates spoke items on the hub scale.
+
+These phases are distinct from the within-set selection stages described in
+[Practical Within-Set Adaptive Pairing](adaptive-pairing.html). For the algorithmic rationale,
+see the adaptive-linking design article when it is available.
+
+## Public contract at a glance
+
+| User task | `adaptive_rank()` input or output | Current behavior |
+|---|---|---|
+| Identify sets | `data$set_id` | Positive integer-like values; `hub_id` must name one observed set. |
+| Identify items across sources | `data$global_item_id` | Non-empty and unique across the combined input. |
+| Link one spoke | `run_mode = "link_one_spoke"` | The input must contain exactly one non-hub set. |
+| Link several spokes | `run_mode = "link_multi_spoke"` | Spokes progress concurrently. |
+| Obtain Phase A data | `phase_a_mode = "run"` | Run within-set work before any Phase B comparison. |
+| Reuse Phase A data | `phase_a_mode = "import"` | Require compatible artifacts for every set and fail fast otherwise. |
+| Combine both approaches | `phase_a_mode = "mixed"` | Import supplied sets and run all remaining sets. |
+| Inspect Phase A | `out$phase_a` | Manifest, paths, and per-set source/status/validation message. |
+| Inspect linked scores | `out$items` | `theta_link_eap`, its uncertainty summaries, and `rank_link`. |
+| Diagnose Phase B | `out$logs$link_stage_log` | Per-spoke budgets, probes, gates, and blockers. |
+| Continue safely | `session_dir`, `resume = TRUE` | Load compatible state with identical IDs and order. |
+
+Phase B has one public estimation contract: anchored-joint estimation with hub item parameters
+hard-locked to their Phase A values. Judge parameters are shared globally, including across
+spokes. Candidate selection uses the implemented D-optimal utility. Held-out probes are collected
+at the configured fixed per-refit cap while a spoke is active.
+
+## Prerequisites
+
+Bayesian Phase A refits and Phase B linking require `cmdstanr`, a working C++ toolchain, and
+CmdStan. They do not require an LLM credential when a custom local judge is supplied.
+
+```{r cmdstan-check}
+cmdstan_available <- requireNamespace("cmdstanr", quietly = TRUE) &&
+  tryCatch({
+    cmdstanr::cmdstan_version()
+    TRUE
+  }, error = function(e) FALSE)
+
+cmdstan_available
+```
+
+If this prints `FALSE`, install and verify CmdStan before running the remaining executable chunks:
+
+```{r cmdstan-install, eval=FALSE}
+install.packages(
+  "cmdstanr",
+  repos = c("https://stan-dev.r-universe.dev", getOption("repos"))
+)
+cmdstanr::check_cmdstan_toolchain(fix = TRUE)
+cmdstanr::install_cmdstan()
+```
+
+## Construct a hub and spokes
+
+This is a **runnable offline example**. Each source system uses short local IDs such as `01` and
+`02`, so those values repeat between sets. `ID` is the row identifier consumed by
+`adaptive_rank()` and must be unique in the combined table. `global_item_id` is the stable
+cross-source identity used by linking and must also be globally unique.
+
+```{r linking-data}
+library(pairwiseLLM)
+
+make_set <- function(set_id, prefix, scores) {
+  local_id <- sprintf("%02d", seq_along(scores))
+  data.frame(
+    ID = paste0(prefix, "_", local_id),
+    text = paste("Writing sample", prefix, local_id),
+    quality_score = as.double(scores),
+    set_id = as.integer(set_id),
+    global_item_id = paste0("study_2026_", prefix, "_", local_id),
+    stringsAsFactors = FALSE
+  )
+}
+
+hub_samples <- make_set(1L, "hub", c(6.0, 5.0, 4.0, 3.0, 2.0, 1.0))
+spoke_2_samples <- make_set(2L, "school_b", c(5.5, 4.5, 3.5, 2.5, 1.5, 0.5))
+spoke_3_samples <- make_set(3L, "school_c", c(5.2, 4.2, 3.2, 2.2, 1.2, 0.2))
+linking_samples <- rbind(hub_samples, spoke_2_samples, spoke_3_samples)
+
+stopifnot(!anyDuplicated(linking_samples$ID))
+stopifnot(!anyDuplicated(linking_samples$global_item_id))
+
+deterministic_judge <- function(A, B, state, ...) {
+  list(
+    is_valid = TRUE,
+    Y = as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]]),
+    invalid_reason = NA_character_
+  )
+}
+```
+
+The simulated score exists only to make the judge reproducible. It is not passed to the Bayesian
+model as an item score. A valid custom judge returns `Y = 1` when displayed item A wins and
+`Y = 0` when B wins.
+
+The following settings keep this vignette quick. Very low refit and probe thresholds are useful
+for exercising the workflow, not for a substantive study. Production runs should normally retain
+the package defaults unless a study design justifies changing them.
+
+```{r tutorial-settings}
+tutorial_btl <- list(
+  refit_pairs_target = 3L,
+  ess_bulk_min = 1,
+  ess_bulk_min_near_stop = 1,
+  max_rhat = 5,
+  divergences_max = 100L
+)
+
+tutorial_link_controls <- list(
+  phase_a_required_reliability_min = 0,
+  probe_panel_edges = 8L,
+  probe_pairs_per_refit_per_spoke = 1L,
+  probe_edges_min_for_stop = 2L,
+  min_refits_in_phase_b = 1L,
+  stability_window_refits = 1L,
+  stability_passes_required = 1L
+)
+```
+
+## Phase A from raw samples
+
+A practical workflow often ranks the hub and each spoke in separate jobs. Each call below starts
+from raw samples and writes a reusable canonical artifact under its session directory.
+
+```{r phase-a-runs, eval=isTRUE(get0("cmdstan_available", ifnotfound=FALSE))}
+phase_a_root <- tempfile("pairwisellm-phase-a-")
+
+hub_run <- adaptive_rank(
+  data = hub_samples,
+  id_col = "ID",
+  text_col = "text",
+  judge = deterministic_judge,
+  n_steps = 6L,
+  btl_config = tutorial_btl,
+  session_dir = file.path(phase_a_root, "hub"),
+  persist_item_log = TRUE,
+  resume = FALSE,
+  seed = 101L,
+  progress = "none"
+)
+
+spoke_2_run <- adaptive_rank(
+  data = spoke_2_samples,
+  id_col = "ID",
+  text_col = "text",
+  judge = deterministic_judge,
+  n_steps = 6L,
+  btl_config = tutorial_btl,
+  session_dir = file.path(phase_a_root, "spoke-2"),
+  persist_item_log = TRUE,
+  resume = FALSE,
+  seed = 102L,
+  progress = "none"
+)
+
+hub_run$phase_a$set_status
+spoke_2_run$phase_a$set_status
+hub_run$phase_a$artifact_paths
+```
+
+The status is `ready` only after the latest canonical artifact has committed within-set evidence,
+passing MCMC diagnostics, and EAP reliability at or above
+`phase_a_required_reliability_min`. A small call can instead return `pending_finalization`; resume
+that same session with more steps until its quality criteria pass. Phase B never begins merely
+because an artifact file exists.
+
+```{r phase-a-inspection, eval=isTRUE(get0("cmdstan_available", ifnotfound=FALSE))}
+hub_artifact <- hub_run$phase_a$manifest[["1"]]
+
+names(hub_artifact)
+hub_artifact[c("set_id", "n_items", "n_pairs_committed", "fit_model_id")]
+hub_artifact$diagnostics
+head(hub_artifact$items)
+head(hub_artifact$phase_a_within_set_evidence)
+```
+
+`out$phase_a`, `out$phase_a$manifest`, an artifact `.rds` file, a
+`phase_a_artifacts/` directory, or a saved session directory can be supplied to a later wrapper
+call. The wrapper normalizes these surfaces before exact runtime validation.
+
+## Link one spoke
+
+For a production import, use only artifacts whose status is `ready`. This deterministic example
+uses extremely small budgets, so the code below explicitly accepts its known simulated Phase A
+artifacts as a **trusted override**. Setting `quality_gate_accepted = TRUE` tells the package to
+trust external quality review; it does not repair weak evidence or diagnostics. Do not use it to
+silence a failed real study.
+
+```{r trusted-simulation-artifacts, eval=isTRUE(get0("cmdstan_available", ifnotfound=FALSE))}
+phase_a_artifacts <- list(
+  `1` = hub_run$phase_a$manifest[["1"]],
+  `2` = spoke_2_run$phase_a$manifest[["2"]]
+)
+
+phase_a_artifacts <- lapply(phase_a_artifacts, function(artifact) {
+  artifact$quality_gate_accepted <- TRUE
+  artifact
+})
+```
+
+Now combine the hub and one spoke and request import mode. Phase B compares hub items only with
+spoke items; it does not schedule spoke--spoke pairs.
+
+```{r one-spoke-link, eval=isTRUE(get0("cmdstan_available", ifnotfound=FALSE))}
+one_spoke_samples <- linking_samples[linking_samples$set_id %in% c(1L, 2L), ]
+one_spoke_session <- tempfile("pairwisellm-one-spoke-")
+
+one_spoke <- adaptive_rank(
+  data = one_spoke_samples,
+  id_col = "ID",
+  text_col = "text",
+  judge = deterministic_judge,
+  n_steps = 10L,
+  adaptive_config = c(
+    list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = phase_a_artifacts
+    ),
+    tutorial_link_controls
+  ),
+  btl_config = tutorial_btl,
+  session_dir = one_spoke_session,
+  persist_item_log = TRUE,
+  resume = FALSE,
+  seed = 201L,
+  progress = "none"
+)
+```
+
+### Common-scale results
+
+`theta_raw_eap` and `rank_raw` describe the latest within-set scale.
+`theta_link_eap` and `rank_link` describe the common hub scale after an accepted Phase B refit.
+Lower rank numbers are better; the latent score has no external unit.
+
+```{r one-spoke-results, eval=isTRUE(get0("cmdstan_available", ifnotfound=FALSE))}
+one_spoke$summary
+
+one_spoke$items[, c(
+  "item_id", "set_id",
+  "theta_raw_eap", "rank_raw", "theta_link_eap", "theta_link_sd", "rank_link"
+)]
+```
+
+Linked values remain `NA` before the first accepted Phase B fit. Reaching `n_steps` is only reaching
+the attempted-step budget for that call; it is not evidence that the spoke is identified or ready
+to report.
+
+### Logs, probes, and blockers
+
+```{r one-spoke-logs, eval=isTRUE(get0("cmdstan_available", ifnotfound=FALSE))}
+names(one_spoke$logs)
+
+cross_set_steps <- one_spoke$logs$step_log[
+  one_spoke$logs$step_log$is_cross_set %in% TRUE,
+  c(
+    "step_id", "pair_id", "A_id", "B_id", "Y", "status",
+    "link_spoke_id", "link_stage", "is_probe_step", "judge_invalid_reason"
+  )
+]
+head(cross_set_steps)
+
+link_status <- one_spoke$logs$link_stage_log[, c(
+  "refit_id", "spoke_id", "link_estimation_mode", "hub_anchored",
+  "reliability_link_global", "linking_identified", "link_stop_eligible",
+  "link_stop_pass", "link_state_frozen", "stop_blocker_codes"
+)]
+tail(link_status)
+
+probe_status <- one_spoke$logs$link_stage_log[, c(
+  "refit_id", "spoke_id", "probe_edges_planned", "probe_edges_realized",
+  "probe_panel_shortfall", "probe_shortfall_reason", "probe_quality_pass",
+  "probe_quality_blocker_codes"
+)]
+tail(probe_status)
+
+budget_status <- one_spoke$logs$link_stage_log[, c(
+  "refit_id", "spoke_id", "B_spoke_refit_budget",
+  "n_cross_edges_active_since_last_refit", "n_cross_edges_probe_since_last_refit",
+  "stage_budget_unfilled"
+)]
+tail(budget_status)
+```
+
+The link-stage log is the authoritative diagnostic surface. `linking_identified` indicates that
+the implemented identification gate passed; `link_stop_pass` means all stopping gates passed on
+that row. Once a spoke stops, `link_state_frozen` is one-way for that run. A non-empty
+`stop_blocker_codes` value identifies unmet gates such as diagnostics, reliability, coverage,
+stability, or probe requirements.
+
+Probes are held-out hub--spoke comparisons used for calibration and stopping checks. The planned
+panel can be smaller than its target when the eligible pair domain is too small. The runner uses
+the fixed `probe_pairs_per_refit_per_spoke` cap while a spoke is active; probes do not accelerate
+just because they are the last blocker.
+
+## Import and mixed Phase A modes
+
+Import mode is fail-fast: every required set needs a compatible canonical artifact. Compatibility
+checks include the set ID, item identities, item count, schema/configuration fingerprints, exact
+within-set committed-edge evidence, and normalized BTL model variant. For example, an artifact
+created with `model_variant = "btl"` cannot be imported into a `"btl_e_b"` run. Reuse it with the
+matching variant or rerun Phase A; there is no cross-variant conversion.
+
+Mixed mode imports the sets you supply and runs Phase A for every remaining set. Here the hub is
+imported and spoke 3 is run locally:
+
+```{r mixed-mode, eval=isTRUE(get0("cmdstan_available", ifnotfound=FALSE))}
+mixed_samples <- linking_samples[linking_samples$set_id %in% c(1L, 3L), ]
+
+mixed <- adaptive_rank(
+  data = mixed_samples,
+  id_col = "ID",
+  text_col = "text",
+  judge = deterministic_judge,
+  n_steps = 6L,
+  adaptive_config = c(
+    list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "mixed",
+      phase_a_artifacts = list(`1` = phase_a_artifacts[["1"]])
+    ),
+    tutorial_link_controls
+  ),
+  btl_config = tutorial_btl,
+  session_dir = tempfile("pairwisellm-mixed-"),
+  resume = FALSE,
+  seed = 301L,
+  progress = "none"
+)
+
+mixed$phase_a$set_status
+```
+
+The expected sources are `import` for set 1 and `run` for set 3. If the run budget ends before set
+3 passes its gate, its status remains `pending_finalization` and no Phase B work is scheduled.
+
+Common import errors name the failed invariant: a missing artifact, set/item mismatch, absent
+within-set evidence, different fit configuration, insufficient reliability, or incompatible model
+variant. Treat the full error as a data provenance problem; do not catch it and silently start a
+new link.
+
+Useful message fragments map directly to corrective action:
+
+| Message fragment | What to check |
+|---|---|
+| `configured for import but no artifact was provided` | Supply every required set or use mixed mode. |
+| `global_item_id mapping mismatch` | Reconcile the artifact with the combined input identities. |
+| `item-count metadata mismatch` | Use the exact Phase A item set, without adding or dropping rows. |
+| `item_id mapping mismatch` | Restore the original row IDs and order for that set. |
+| `missing reliability_EAP_within` | Rerun/finalize Phase A or perform a documented external review. |
+| `reliability gate failed` | Continue Phase A or justify a trusted external quality decision. |
+| `evidence-domain availability failure` | Recreate the artifact with canonical committed-edge history. |
+
+Configuration- or model-variant mismatches similarly require the matching Phase A configuration;
+the error reports the expected and observed surfaces.
+
+## Link multiple spokes concurrently
+
+First produce the third canonical artifact. As above, the trusted flag is appropriate here only
+because the fixture and its deterministic truth are under our control.
+
+```{r third-artifact, eval=isTRUE(get0("cmdstan_available", ifnotfound=FALSE))}
+spoke_3_run <- adaptive_rank(
+  data = spoke_3_samples,
+  id_col = "ID",
+  text_col = "text",
+  judge = deterministic_judge,
+  n_steps = 6L,
+  btl_config = tutorial_btl,
+  session_dir = file.path(phase_a_root, "spoke-3"),
+  persist_item_log = TRUE,
+  resume = FALSE,
+  seed = 103L,
+  progress = "none"
+)
+
+spoke_3_artifact <- spoke_3_run$phase_a$manifest[["3"]]
+spoke_3_artifact$quality_gate_accepted <- TRUE
+multi_artifacts <- c(phase_a_artifacts, list(`3` = spoke_3_artifact))
+```
+
+`link_multi_spoke` is the only multi-spoke run mode. All active spokes share the judge parameters,
+but each has its own evidence counts, allocation, diagnostics, blockers, and frozen state.
+
+```{r multi-spoke, eval=isTRUE(get0("cmdstan_available", ifnotfound=FALSE))}
+multi_spoke <- adaptive_rank(
+  data = linking_samples,
+  id_col = "ID",
+  text_col = "text",
+  judge = deterministic_judge,
+  n_steps = 16L,
+  adaptive_config = c(
+    list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = multi_artifacts,
+      min_cross_set_pairs_per_spoke_per_refit = 1L
+    ),
+    tutorial_link_controls
+  ),
+  btl_config = tutorial_btl,
+  session_dir = tempfile("pairwisellm-multi-spoke-"),
+  resume = FALSE,
+  seed = 401L,
+  progress = "none"
+)
+
+multi_cross <- multi_spoke$logs$step_log[
+  multi_spoke$logs$step_log$is_cross_set %in% TRUE &
+    !is.na(multi_spoke$logs$step_log$pair_id),
+  c("step_id", "set_i", "set_j", "link_spoke_id", "link_stage")
+]
+head(multi_cross)
+
+latest_by_spoke <- multi_spoke$logs$link_stage_log[
+  !duplicated(multi_spoke$logs$link_stage_log$spoke_id, fromLast = TRUE),
+  c(
+    "spoke_id", "B_spoke_refit_budget", "linking_identified",
+    "link_stop_pass", "link_state_frozen", "stop_blocker_codes"
+  )
+]
+latest_by_spoke
+```
+
+Every committed cross-set row has exactly one hub endpoint. Spokes run concurrently in the sense
+that one controller advances all active spokes and allocates work among them; a single comparison
+still involves only one spoke. One spoke can freeze while another continues.
+
+## Persistence, interruption, and resume
+
+With `session_dir`, the wrapper writes state, step, round, link-stage, metadata, optional BTL fit,
+Phase A artifacts, and optional per-refit item logs. Writes are atomic at the individual-file
+level. Completed refits, terminal events, the end of an ordinary call, and configured checkpoints
+are saved. An abrupt process termination can lose attempts since the most recent checkpoint.
+
+```{r linking-persistence, eval=isTRUE(get0("cmdstan_available", ifnotfound=FALSE))}
+validate_session_dir(one_spoke_session)[c(
+  "schema_version", "package_version", "n_items"
+)]
+
+saved_state <- load_adaptive_session(one_spoke_session)
+summarize_adaptive(saved_state)
+
+before_steps <- nrow(one_spoke$logs$step_log)
+resumed_one_spoke <- adaptive_rank(
+  data = one_spoke_samples,
+  id_col = "ID",
+  text_col = "text",
+  judge = deterministic_judge,
+  n_steps = 2L,
+  adaptive_config = c(
+    list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = phase_a_artifacts
+    ),
+    tutorial_link_controls
+  ),
+  btl_config = tutorial_btl,
+  session_dir = one_spoke_session,
+  persist_item_log = TRUE,
+  resume = TRUE,
+  progress = "none"
+)
+
+c(
+  before = before_steps,
+  after = nrow(resumed_one_spoke$logs$step_log)
+)
+```
+
+Resume is strict. The supplied IDs and order must exactly match the saved state. Stale or corrupt
+schemas, incompatible artifacts, changed link configuration, or inconsistent probe/frozen state
+abort with an actionable error rather than silently starting over. Use `resume = FALSE` only with
+a new or empty directory when you intentionally want a new study. For expensive LLM runs, set
+`checkpoint_every_steps` according to how many completed calls you can afford to repeat.
+
+## A detailed live-LLM workflow
+
+The following is a **live-API example and is not evaluated**. It uses the OpenAI configuration
+recorded as tested with package 1.3.1 on 2026-09-03. A tested configuration is evidence about that
+dated request shape, not a promise that the provider still offers the model. Check
+[Backends and Tested Model Configurations](model-compatibility.html) and the provider catalog
+before a long run.
+
+Set `OPENAI_API_KEY` outside the script. Replace `real_linking_samples` with a data frame containing
+unique `ID`, text, integer-like `set_id`, and globally unique `global_item_id` columns. Keep a copy
+of that input in its exact row order for resume.
+
+```{r live-llm-one-spoke, eval=FALSE}
+library(pairwiseLLM)
+
+stopifnot(nzchar(Sys.getenv("OPENAI_API_KEY")))
+
+real_linking_samples <- utils::read.csv(
+  "writing-samples-to-link.csv",
+  stringsAsFactors = FALSE
+)
+stopifnot(!anyDuplicated(real_linking_samples$ID))
+stopifnot(!anyDuplicated(real_linking_samples$global_item_id))
+stopifnot(length(unique(real_linking_samples$set_id)) == 2L)
+
+live_link <- adaptive_rank(
+  data = real_linking_samples,
+  id_col = "ID",
+  text_col = "text",
+  backend = "openai",
+  model = "gpt-5.6-luna",
+  endpoint = "responses",
+  trait_name = "Overall writing quality",
+  trait_description = paste(
+    "Prefer the response that is clearer, better organized, better supported,",
+    "and more effective for its intended audience."
+  ),
+  judge_args = list(
+    reasoning = "none"
+  ),
+  n_steps = 200L,
+  adaptive_config = list(
+    run_mode = "link_one_spoke",
+    hub_id = 1L,
+    phase_a_mode = "run",
+    max_pairs_after_stop = 0L
+  ),
+  session_dir = "adaptive-link-live",
+  persist_item_log = TRUE,
+  checkpoint_every_steps = 10L,
+  resume = TRUE,
+  seed = 20260904L,
+  progress = "refits",
+  save_outputs = TRUE
+)
+```
+
+This single high-level call builds the LLM judge, performs or continues Phase A, enters Phase B only
+when all required Phase A sets are ready, persists state, and returns reporting views. Do not add
+tutorial thresholds from the offline fixture. The defaults provide the package's current quality
+and stopping policy.
+
+Inspect both progress and quality before reporting a linked ranking:
+
+```{r live-llm-inspection, eval=FALSE}
+live_link$phase_a$set_status
+live_link$summary
+
+live_link$items[, c(
+  "item_id", "set_id", "theta_link_eap", "theta_link_sd", "rank_link"
+)]
+
+live_link$logs$step_log[, c(
+  "step_id", "status", "judge_backend", "judge_model", "judge_endpoint",
+  "judge_invalid_reason", "llm_status_code", "llm_error_message",
+  "prompt_tokens", "completion_tokens", "total_tokens"
+)] |>
+  tail()
+
+live_link$logs$link_stage_log[, c(
+  "refit_id", "spoke_id", "linking_identified", "link_stop_pass",
+  "link_state_frozen", "probe_edges_realized", "probe_quality_pass",
+  "stop_blocker_codes"
+)] |>
+  tail()
+```
+
+`include_raw = TRUE` can preserve serialized raw provider responses for deeper auditing, but those
+payloads may contain submitted text and increase storage. Enable it only under an appropriate data
+retention policy. Invalid API, refusal, or parse responses consume attempted steps but do not
+commit comparisons or update either ranking model. Inspect `status`, `judge_invalid_reason`, and
+provider error fields before adding more budget.
+
+Continue the exact study with the same input and configuration:
+
+```{r live-llm-resume, eval=FALSE}
+live_link <- adaptive_rank(
+  data = real_linking_samples,
+  id_col = "ID",
+  text_col = "text",
+  backend = "openai",
+  model = "gpt-5.6-luna",
+  endpoint = "responses",
+  trait_name = "Overall writing quality",
+  trait_description = paste(
+    "Prefer the response that is clearer, better organized, better supported,",
+    "and more effective for its intended audience."
+  ),
+  judge_args = list(reasoning = "none"),
+  n_steps = 100L,
+  adaptive_config = list(
+    run_mode = "link_one_spoke",
+    hub_id = 1L,
+    phase_a_mode = "run",
+    max_pairs_after_stop = 0L
+  ),
+  session_dir = "adaptive-link-live",
+  persist_item_log = TRUE,
+  checkpoint_every_steps = 10L,
+  resume = TRUE,
+  progress = "refits"
+)
+```
+
+For independently completed Phase A jobs, change `phase_a_mode` to `"import"` and set
+`phase_a_artifacts` to their wrapper outputs or session directories. For partial reuse, use
+`"mixed"` and supply only the completed sets. For more than one spoke, change `run_mode` to
+`"link_multi_spoke"`; no other mode switch is required.
+
+Live comparisons usually dominate monetary cost and elapsed time. Phase A reuse avoids repeating
+within-set judgments when the same compatible artifacts are linked again. Phase B cost grows with
+active spokes, selected cross-set comparisons, held-out probes, invalid responses, and any extra
+steps needed to clear diagnostics or stopping blockers. Bayesian refits add local computation.
+
+## Troubleshooting a spoke that did not link
+
+Use this order; it separates input failures from an ordinary incomplete run.
+
+1. Check `out$phase_a$set_status`. Every required set must be `ready`; otherwise resume the named
+   `run` source or replace the failed imported artifact.
+2. Confirm `set_id`, `global_item_id`, the input IDs, and row order match the artifacts and any
+   resumed session exactly.
+3. Read the import error. Model-variant, config-hash, evidence-domain, and item mismatches require
+   a matching artifact or a new Phase A run, not coercion.
+4. Filter committed cross-set rows in `step_log`. No rows can indicate Phase A gating, candidate
+   starvation, insufficient eligible anchors, or exhausted pair domains.
+5. Inspect the latest `link_stage_log` row for the spoke. Read `stop_blocker_codes`, diagnostic and
+   reliability fields, active/probe edge counts, coverage, shortfalls, and allocated budget.
+6. If probes are short, inspect `probe_panel_shortfall` and `probe_shortfall_reason`; a tiny hub,
+   spoke, or eligible-anchor pool can make the planned panel infeasible.
+7. Treat `n_steps` exhaustion as an incomplete call. Resume with more budget only after ruling out
+   repeated invalid judgments, persistent non-identification, or structural coverage problems.
+8. If the session fails validation, preserve it for audit. Start a new directory only after the
+   incompatibility is understood; never merge serialized files by hand.
+
+Linked ranks are conditional on the observed judgments, the anchored-joint BTL model, its priors,
+and successful diagnostics. Adaptive selection directs comparisons under the implemented utility;
+it does not guarantee identification, a stable ranking, or a particular cost reduction.

@@ -1123,6 +1123,82 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
   expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))
 })
 
+test_that("adaptive_rank wrapper supports mixed Phase A and strict linking resume", {
+  samples <- make_linking_samples_df()
+  two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
+  items <- dplyr::rename(two_set, item_id = ID)
+  artifacts <- make_wrapper_import_artifacts(items)
+  fit_override <- make_deterministic_fit_fn(ids = as.character(two_set$ID))
+  judge <- function(A, B, state, ...) {
+    y <- as.integer(A$quality_score[[1L]] >= B$quality_score[[1L]])
+    list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
+  }
+
+  mixed <- pairwiseLLM::adaptive_rank(
+    data = two_set,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_override$fit_fn,
+    n_steps = 8L,
+    adaptive_config = list(
+      run_mode = "link_one_spoke",
+      hub_id = 1L,
+      phase_a_mode = "mixed",
+      phase_a_artifacts = list(`1` = artifacts[["1"]])
+    ),
+    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
+    progress = "none",
+    seed = 19L
+  )
+
+  mixed_status <- tibble::as_tibble(mixed$phase_a$set_status)
+  expect_identical(mixed_status$source[match(1L, mixed_status$set_id)], "import")
+  expect_identical(mixed_status$source[match(2L, mixed_status$set_id)], "run")
+
+  session_dir <- withr::local_tempdir()
+  link_config <- list(
+    run_mode = "link_one_spoke",
+    hub_id = 1L,
+    phase_a_mode = "import",
+    phase_a_artifacts = artifacts
+  )
+  first <- pairwiseLLM::adaptive_rank(
+    data = two_set,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_override$fit_fn,
+    n_steps = 6L,
+    adaptive_config = link_config,
+    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
+    session_dir = session_dir,
+    resume = FALSE,
+    progress = "none",
+    seed = 29L
+  )
+  resumed <- pairwiseLLM::adaptive_rank(
+    data = two_set,
+    id_col = "ID",
+    text_col = "text",
+    judge = judge,
+    fit_fn = fit_override$fit_fn,
+    n_steps = 2L,
+    adaptive_config = link_config,
+    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
+    session_dir = session_dir,
+    resume = TRUE,
+    progress = "none"
+  )
+
+  expect_gte(nrow(resumed$logs$step_log), nrow(first$logs$step_log))
+  expect_equal(
+    resumed$logs$step_log[seq_len(nrow(first$logs$step_log)), , drop = FALSE],
+    first$logs$step_log
+  )
+  expect_true(any(resumed$logs$step_log$is_cross_set %in% TRUE))
+})
+
 test_that("adaptive_rank wrapper falls back to rank_raw when linked ranks are unavailable", {
   samples <- make_linking_samples_df()
   fit_override <- make_deterministic_fit_fn(ids = as.character(samples$ID[samples$set_id %in% c(1L, 2L)]))
