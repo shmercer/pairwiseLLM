@@ -169,6 +169,18 @@ test_that("practical adaptive vignette keeps the wrapper-first within-set contra
   expect_true(grepl("load_adaptive_session(session_dir)", text, fixed = TRUE))
   expect_true(grepl("adaptive_results_history(out$state)", text, fixed = TRUE))
   expect_true(grepl("model = \"gpt-5.6-luna\"", text, fixed = TRUE))
+  expect_true(grepl('endpoint = "responses"', text, fixed = TRUE))
+  expect_true(grepl("utils::read.csv(", text, fixed = TRUE))
+  expect_true(grepl('Sys.getenv("OPENAI_API_KEY")', text, fixed = TRUE))
+  expect_true(grepl("live$items[, c(", text, fixed = TRUE))
+  expect_true(grepl("live$refits[, c(", text, fixed = TRUE))
+  expect_true(grepl("judge_invalid_reason", text, fixed = TRUE))
+  expect_true(grepl("prompt_tokens", text, fixed = TRUE))
+  expect_true(grepl("completion_tokens", text, fixed = TRUE))
+  expect_true(grepl("include_raw = TRUE", text, fixed = TRUE))
+  expect_true(grepl("resume = FALSE", text, fixed = TRUE))
+  expect_true(grepl("resume = TRUE", text, fixed = TRUE))
+  expect_gte(sum(grepl("session_dir = live_session", adaptive, fixed = TRUE)), 2L)
 
   linking_only_controls <- c(
     "run_mode =", "hub_id =", "phase_a_mode =", "phase_a_artifacts =",
@@ -182,6 +194,42 @@ test_that("practical adaptive vignette keeps the wrapper-first within-set contra
 
   expect_identical(pairwiseLLM:::adaptive_defaults(2L)$refit_pairs_target, 20L)
   expect_identical(pairwiseLLM:::adaptive_defaults(20L)$refit_pairs_target, 20L)
+})
+
+test_that("practical linking vignette keeps the wrapper-first public contract", {
+  root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  path <- file.path(root, "vignettes", "adaptive-linking.Rmd")
+  skip_if(
+    !file.exists(path),
+    "Repository vignette sources are unavailable in installed-package tests."
+  )
+
+  linking <- readLines(path, warn = FALSE)
+  text <- paste(linking, collapse = "\n")
+  pkgdown <- paste(readLines(file.path(root, "_pkgdown.yml"), warn = FALSE), collapse = "\n")
+
+  expect_gte(sum(grepl("adaptive_rank\\(", linking)), 8L)
+  expect_true(grepl('run_mode = "link_one_spoke"', text, fixed = TRUE))
+  expect_true(grepl('run_mode = "link_multi_spoke"', text, fixed = TRUE))
+  expect_true(grepl('phase_a_mode = "run"', text, fixed = TRUE))
+  expect_true(grepl('phase_a_mode = "import"', text, fixed = TRUE))
+  expect_true(grepl('phase_a_mode = "mixed"', text, fixed = TRUE))
+  expect_true(grepl("quality_gate_accepted", text, fixed = TRUE))
+  expect_true(grepl("theta_link_eap", text, fixed = TRUE))
+  expect_true(grepl("rank_link", text, fixed = TRUE))
+  expect_true(grepl("stop_blocker_codes", text, fixed = TRUE))
+  expect_true(grepl("validate_session_dir(one_spoke_session)", text, fixed = TRUE))
+  expect_true(grepl("load_adaptive_session(one_spoke_session)", text, fixed = TRUE))
+  expect_true(grepl('model = "gpt-5.6-luna"', text, fixed = TRUE))
+  expect_true(grepl('endpoint = "responses"', text, fixed = TRUE))
+  expect_true(grepl("articles/adaptive-linking.html", pkgdown, fixed = TRUE))
+
+  removed_controls <- c("multi_spoke_mode", "hub_lock_mode =")
+  expect_false(any(vapply(
+    removed_controls,
+    function(control) grepl(control, text, fixed = TRUE),
+    logical(1L)
+  )))
 })
 
 test_that("within-set design vignette tracks current adaptive contracts", {
