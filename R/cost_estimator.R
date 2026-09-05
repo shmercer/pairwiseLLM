@@ -221,7 +221,7 @@ estimate_llm_pairs_cost <- function(
   # ------------------------------------------------------------------
   # Prompt-bytes proxy for all pairs (offline)
   # ------------------------------------------------------------------
-  prompt_bytes_all <- `.prompt_bytes_for_pairs`(
+  prompt_bytes_all <- .prompt_bytes_for_pairs(
     template   = prompt_template,
     trait_name = trait_name,
     trait_desc = trait_description,
