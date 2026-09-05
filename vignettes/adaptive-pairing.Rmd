@@ -1,8 +1,8 @@
 ---
-title: "Practical Within-Set Adaptive Pairing"
+title: "Guide: Adaptive Pairing"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Practical Within-Set Adaptive Pairing}
+  %\VignetteIndexEntry{Guide: Adaptive Pairing}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -479,10 +479,10 @@ attempts do not advance that count.
 See [adaptive_rank()], [adaptive_step_log()], [adaptive_round_log()], [adaptive_item_log()],
 [save_adaptive_session()], and [validate_session_dir()] for complete argument and schema details.
 For the within-set algorithm and statistical rationale, see
-[Within-Set Adaptive Pairing Design](within-set-adaptive-design.html).
+[Design: Adaptive Pairing](within-set-adaptive-design.html).
 
 ## Citation
 
-> Mercer, S. H. (2026). *Practical within-set adaptive pairing* [R package vignette].
+> Mercer, S. H. (2026). *Guide: Adaptive Pairing* [R package vignette].
 > In *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*.
 > https://doi.org/10.32614/CRAN.package.pairwiseLLM

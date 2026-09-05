@@ -2,7 +2,7 @@ pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
 Writing Evaluation
 ================
 
-<!-- README-source-md5: 2e09f81e5cd771a0d6ed81ca0c42b6fa -->
+<!-- README-source-md5: 9fc73f393ef3288ffd662900e3da8405 -->
 
 <figure>
 <img
@@ -254,10 +254,14 @@ uncertainty, coverage, and degree information to choose each next pair.
 
 To get started, see:
 
-- **Tutorial:** Adaptive Pairing & Ranking  
+- **Guide: Adaptive Pairing**
   <https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html>
-- **Design:** Within-Set Adaptive Pairing Design
+- **Design: Adaptive Pairing**
   <https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html>
+- **Guide: Adaptive Linking**
+  <https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.html>
+- **Design: Adaptive Linking**
+  <https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.html>
 
 ------------------------------------------------------------------------
 
@@ -810,13 +814,13 @@ You can therefore:
 
 For a full tutorial on adaptive pairing, see:
 
-- **Adaptive Pairing & Ranking**
+- **Guide: Adaptive Pairing**
   <https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html>
 
 For a detailed description of the current within-set Bayesian and
 adaptive algorithms, see:
 
-- **Within-Set Adaptive Pairing Design**
+- **Design: Adaptive Pairing**
   <https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html>
 
 ------------------------------------------------------------------------

@@ -36,12 +36,14 @@ navbar:
     adaptive_pairing:
       text: "Adaptive Pairing"
       menu:
-        - text: "Adaptive Pairing & Ranking"
+        - text: "Guide: Adaptive Pairing"
           href: articles/adaptive-pairing.html
-        - text: "Practical Adaptive Linking"
-          href: articles/adaptive-linking.html
-        - text: "Design: Within-Set Adaptive Pairing"
+        - text: "Design: Adaptive Pairing"
           href: articles/within-set-adaptive-design.html
+        - text: "Guide: Adaptive Linking"
+          href: articles/adaptive-linking.html
+        - text: "Design: Adaptive Linking"
+          href: articles/adaptive-linking-design.html
 
     template_positional_bias:
       text: "Template Positional Bias"
@@ -66,8 +68,9 @@ articles:
   - title: "Adaptive Pairing"
     contents:
       - adaptive-pairing
-      - adaptive-linking
       - within-set-adaptive-design
+      - adaptive-linking
+      - adaptive-linking-design
 
   - title: "Template Positional Bias"
     contents:
