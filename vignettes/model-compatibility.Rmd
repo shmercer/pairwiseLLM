@@ -47,8 +47,8 @@ The machine-readable source is installed at
 imply incompatibility. A `true` value records a successful maintained smoke
 test for that exact mode; a live success is not evidence of batch success.
 The dated detailed result artifacts are
-`inst/extdata/model_smoke_results_2026-09-03.csv` and
-`inst/extdata/model_batch_smoke_results_2026-09-03.csv`. Standard configurations
+`inst/extdata/model_smoke_results_2026-09-05.csv` and
+`inst/extdata/model_batch_smoke_results_2026-09-05.csv`. Standard configurations
 omit `temperature` and `top_p`, so their model/provider defaults apply.
 
 ```{r registry}

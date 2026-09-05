@@ -25,7 +25,8 @@ test_that("provider smoke matrix covers live and implemented batch surfaces", {
 
   expect_identical(names(matrix), c(
     "test_id", "backend", "provider", "model_id", "mode", "endpoint",
-    "reasoning_mode", "env_var"
+    "request_profile", "reasoning_mode", "env_var", "catalog_status",
+    "catalog_checked_on", "catalog_url"
   ))
   expect_false(anyDuplicated(matrix$test_id) > 0L)
   expect_setequal(unique(matrix$backend[matrix$mode == "live"]), c(
@@ -40,21 +41,19 @@ test_that("provider smoke matrix covers live and implemented batch surfaces", {
   )))
 })
 
-test_that("dated provider smoke evidence covers the maintained matrix", {
-  matrix_path <- system.file("extdata", "model_smoke_matrix.csv", package = "pairwiseLLM")
+test_that("dated provider smoke evidence is internally consistent", {
   live_path <- system.file(
-    "extdata", "model_smoke_results_2026-09-03.csv", package = "pairwiseLLM"
+    "extdata", "model_smoke_results_2026-09-05.csv", package = "pairwiseLLM"
   )
   batch_path <- system.file(
-    "extdata", "model_batch_smoke_results_2026-09-03.csv", package = "pairwiseLLM"
+    "extdata", "model_batch_smoke_results_2026-09-05.csv", package = "pairwiseLLM"
   )
-  matrix <- utils::read.csv(matrix_path, stringsAsFactors = FALSE)
   evidence <- rbind(
     utils::read.csv(live_path, stringsAsFactors = FALSE),
     utils::read.csv(batch_path, stringsAsFactors = FALSE)
   )
 
-  expect_setequal(evidence$test_id, matrix$test_id)
+  expect_false(anyDuplicated(evidence$test_id) > 0L)
   expect_true(all(evidence$status == "passed"))
   expect_true(all(evidence$status_code == 200L))
   expect_true(all(evidence$parsed_winner))

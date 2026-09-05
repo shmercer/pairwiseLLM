@@ -39,3 +39,8 @@
 ^scripts$
 ^tasklists$
 ^prompts$
+^inst/extdata/model_smoke_results_.*[.]csv$
+^inst/extdata/model_batch_smoke_results_.*[.]csv$
+^inst/extdata/model_smoke_matrix[.]csv$
+^inst/scripts/smoke_model_compatibility.*[.]R$
+^inst/scripts/promote_model_smoke_results.*[.]R$
