@@ -1,8 +1,8 @@
 ---
-title: "Within-Set Adaptive Pairing Design"
+title: "Design: Adaptive Pairing"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Within-Set Adaptive Pairing Design}
+  %\VignetteIndexEntry{Design: Adaptive Pairing}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -18,7 +18,7 @@ This article describes the algorithm currently implemented by `pairwiseLLM` for 
 ranking one set of items. The same procedure produces the canonical within-set artifacts used by
 linking Phase A; cross-set linking in Phase B is outside this article's scope. For an operational
 tutorial, begin with
-[Practical Within-Set Adaptive Pairing](adaptive-pairing.html). The public
+[Guide: Adaptive Pairing](adaptive-pairing.html). The public
 entry points are `adaptive_rank()`, `adaptive_rank_start()`, `adaptive_rank_run_live()`, and
 `adaptive_rank_resume()`.
 

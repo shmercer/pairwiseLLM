@@ -1,8 +1,8 @@
 ---
-title: "Practical Adaptive Linking"
+title: "Guide: Adaptive Linking"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Practical Adaptive Linking}
+  %\VignetteIndexEntry{Guide: Adaptive Linking}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -25,8 +25,8 @@ Adaptive linking has two phases:
 2. **Phase B** collects selected hub--spoke comparisons and estimates spoke items on the hub scale.
 
 These phases are distinct from the within-set selection stages described in
-[Practical Within-Set Adaptive Pairing](adaptive-pairing.html). For the algorithmic rationale,
-see the adaptive-linking design article when it is available.
+[Guide: Adaptive Pairing](adaptive-pairing.html). For the algorithmic rationale,
+see [Design: Adaptive Linking](adaptive-linking-design.html).
 
 ## Public contract at a glance
 

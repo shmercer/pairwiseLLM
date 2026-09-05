@@ -318,3 +318,135 @@ test_that("within-set design vignette tracks current adaptive contracts", {
     expect_true(grepl("theta_raw ~ normal(0, 1)", stan, fixed = TRUE))
   }
 })
+
+test_that("adaptive-linking design vignette tracks the normative Phase A/B contract", {
+  root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  path <- file.path(root, "vignettes", "adaptive-linking-design.Rmd")
+  skip_if(
+    !file.exists(path),
+    "Repository vignette sources are unavailable in installed-package tests."
+  )
+
+  design <- readLines(path, warn = FALSE)
+  text <- paste(design, collapse = "\n")
+  practical <- paste(
+    readLines(file.path(root, "vignettes", "adaptive-linking.Rmd"), warn = FALSE),
+    collapse = "\n"
+  )
+  pairing_guide <- paste(
+    readLines(file.path(root, "vignettes", "adaptive-pairing.Rmd"), warn = FALSE),
+    collapse = "\n"
+  )
+  pairing_design <- paste(
+    readLines(file.path(root, "vignettes", "within-set-adaptive-design.Rmd"), warn = FALSE),
+    collapse = "\n"
+  )
+  pkgdown <- paste(readLines(file.path(root, "_pkgdown.yml"), warn = FALSE), collapse = "\n")
+  readme <- paste(readLines(file.path(root, "README.Rmd"), warn = FALSE), collapse = "\n")
+
+  vignette_titles <- c(
+    "Guide: Adaptive Pairing" = pairing_guide,
+    "Design: Adaptive Pairing" = pairing_design,
+    "Guide: Adaptive Linking" = practical,
+    "Design: Adaptive Linking" = text
+  )
+  for (title in names(vignette_titles)) {
+    source <- vignette_titles[[title]]
+    expect_true(grepl(paste0('title: "', title, '"'), source, fixed = TRUE))
+    expect_true(grepl(paste0("VignetteIndexEntry{", title, "}"), source, fixed = TRUE))
+  }
+
+  pkgdown_labels <- c(
+    'text: "Guide: Adaptive Pairing"',
+    'text: "Design: Adaptive Pairing"',
+    'text: "Guide: Adaptive Linking"',
+    'text: "Design: Adaptive Linking"'
+  )
+  pkgdown_positions <- vapply(
+    pkgdown_labels,
+    function(label) regexpr(label, pkgdown, fixed = TRUE)[[1L]],
+    integer(1L)
+  )
+  expect_true(all(pkgdown_positions > 0L))
+  expect_true(all(diff(pkgdown_positions) > 0L))
+
+  expect_true(grepl("adaptive-linking-design.html", practical, fixed = TRUE))
+  expect_true(grepl("adaptive-linking-design", pkgdown, fixed = TRUE))
+  expect_true(grepl("adaptive-linking-design.html", readme, fixed = TRUE))
+  expect_true(grepl("adaptive-linking.html", text, fixed = TRUE))
+  expect_true(grepl("within-set-adaptive-design.html", text, fixed = TRUE))
+
+  required_sections <- c(
+    "## Foundational concepts",
+    "## Phase A artifacts and validation",
+    "## Common-scale identification",
+    "## D-optimal active selection",
+    "## Probes and calibration",
+    "## Stopping, blockers, and freezing",
+    "## Persistence and resume"
+  )
+  expect_true(all(vapply(
+    required_sections,
+    function(section) grepl(section, text, fixed = TRUE),
+    logical(1L)
+  )))
+
+  acronym_definitions <- c(
+    "comparative judgment (CJ)",
+    "Bradley--Terry--Luce (BTL)",
+    "Markov chain Monte Carlo (MCMC)",
+    "expected a posteriori (EAP)",
+    "standard deviation (SD)",
+    "Effective sample size (ESS)",
+    "maximum a posteriori (MAP)",
+    "Broyden--Fletcher--Goldfarb--Shanno\n(BFGS)",
+    "Expected calibration error (ECE)",
+    "root mean squared error (RMSE)"
+  )
+  expect_true(all(vapply(
+    acronym_definitions,
+    function(definition) grepl(definition, text, fixed = TRUE),
+    logical(1L)
+  )))
+
+  normative_terms <- c(
+    "anchored-joint estimation",
+    "hard-locked hub",
+    "globally shared judge parameters",
+    'probe_acceleration_mode = "fixed_per_refit"',
+    "quality_gate_accepted = TRUE",
+    "link_d_opt_gain",
+    "coverage_priority = 1",
+    "stop_blocker_codes",
+    "link_state_frozen = TRUE",
+    "`probe_quality_pass` itself is\nnot included in `link_stop_pass`"
+  )
+  expect_true(all(vapply(
+    normative_terms,
+    function(term) grepl(term, text, fixed = TRUE),
+    logical(1L)
+  )))
+  expect_false(grepl("multi_spoke_mode|hub_lock_mode", text))
+
+  defaults <- pairwiseLLM:::.adaptive_controller_defaults(300L)
+  defaults$run_mode <- "link_multi_spoke"
+  defaults <- pairwiseLLM:::.adaptive_controller_resolve_scaled_linking_defaults(
+    controller = defaults,
+    cfg_names = character(),
+    set_ids = c(rep(1L, 100L), rep(2L, 100L), rep(3L, 100L))
+  )
+  expect_identical(defaults$link_estimation_mode, "anchored_joint")
+  expect_identical(defaults$hub_lock_mode, "hard_lock")
+  expect_identical(defaults$judge_param_mode, "global_shared")
+  expect_identical(defaults$probe_acceleration_mode, "fixed_per_refit")
+  expect_identical(defaults$probe_pairs_per_refit_per_spoke, 4L)
+  expect_identical(defaults$probe_panel_edges, 160L)
+  expect_identical(defaults$probe_edges_min_for_stop, 120L)
+  expect_identical(defaults$link_stop_reliability_min, 0.90)
+  expect_identical(defaults$probe_brier_max, 0.19)
+  expect_identical(defaults$probe_pred_rmse_max, 0.015)
+  expect_identical(defaults$theta_global_rmse_max, 0.05)
+  expect_identical(defaults$stability_window_refits, 3L)
+  expect_identical(defaults$stability_passes_required, 2L)
+  expect_identical(defaults$max_pairs_after_stop, 0L)
+})

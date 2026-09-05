@@ -1,0 +1,621 @@
+---
+title: "Design: Adaptive Linking"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Design: Adaptive Linking}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+This article describes the algorithm currently implemented by `pairwiseLLM` for placing items
+from separately ranked sets onto one common scale. For a runnable, wrapper-first tutorial, begin
+with [Guide: Adaptive Linking](adaptive-linking.html). The within-set algorithm that produces
+the required inputs is documented separately in
+[Design: Adaptive Pairing](within-set-adaptive-design.html).
+
+The public entry point is `adaptive_rank()` with `run_mode = "link_one_spoke"` or
+`run_mode = "link_multi_spoke"`. Linking has two phases:
+
+1. **Phase A** runs or imports a completed within-set analysis for every set.
+2. **Phase B** selects comparisons between a designated hub and one or more spokes, then estimates
+   spoke items on the fixed hub scale.
+
+The current linking contract uses anchored-joint estimation and globally shared judge parameters.
+It also uses a hard-locked hub, concurrent spokes, and a fixed probe effort per refit. 
+
+## Foundational concepts
+
+Pairwise comparative judgment (CJ) asks a judge to choose between two items. A
+Bradley--Terry--Luce (BTL) model represents each item by a latent location: the modeled probability
+of choosing one item over another depends on their location difference. The scale is latent because
+it has no external unit. Within-set comparisons identify relative locations inside one connected
+set, but two separately fitted sets can have unrelated origins and therefore cannot be compared
+directly.
+
+**Linking** collects comparisons across sets to put their locations onto a common scale. The
+implemented design is a hub-and-spoke system:
+
+- the **hub** is the reference set whose Phase A locations define the common scale;
+- a **spoke** is any other set whose items are estimated on that scale;
+- a **hub anchor** is a hub item selected from a region of the current ranking for recurring
+  cross-set comparisons; it is not a known standard or a fixed true score;
+- an **active pair** is a hub--spoke pair selected to update the linking fit; and
+- a **probe pair** is a reserved hub--spoke pair used to assess predictions and stopping.
+
+The Phase A Bayesian fits use Markov chain Monte Carlo (MCMC) draws. An expected a posteriori (EAP)
+estimate is the arithmetic mean of an item's retained posterior draws, and its posterior
+standard deviation (SD) summarizes model-based uncertainty. Effective sample size (ESS) and
+split rank-normalized \(\widehat R\), usually called R-hat, diagnose MCMC behavior. Phase B uses
+maximum a posteriori (MAP) optimization for the spoke locations and a Laplace approximation based
+on the local Hessian matrix for uncertainty. MCMC diagnostics therefore apply to Phase A fits;
+Phase B has a separate deterministic-fit diagnostic contract.
+
+## Glossary and units
+
+| Term | Meaning |
+|---|---|
+| set | A collection ranked internally during Phase A and identified by `set_id`. |
+| artifact | The canonical, validated Phase A record for one set. |
+| hub scale | The numerical scale defined by the hub's fixed Phase A item locations. |
+| spoke epoch | A period during which one spoke's linking contract and probe panel remain unchanged. |
+| linking refit | A Phase B update using Phase A evidence and committed active cross-set evidence. |
+| refit window | The comparisons allocated between two linking refits. |
+| routing stratum | A rank region used to form anchor, long, mid, and local candidate domains. |
+| Fisher information | Local curvature measuring how strongly a modeled observation informs free parameters. |
+| D-optimal gain | Increase in the regularized log determinant of accumulated Fisher information. |
+| frozen spoke | A spoke that passed the implemented rolling stop rule and receives no further pairs. |
+| blocker | A named unmet condition recorded in `stop_blocker_codes`. |
+
+The unit of selection is an unordered hub--spoke pair. The unit of judgment is its ordered
+presentation as item \(A\) and item \(B\). Active comparison counts, probe comparison counts, and
+attempted steps are distinct. An invalid judgment consumes an attempted step but is not committed
+to either evidence stream.
+
+## Algorithm overview
+
+```text
+validate the combined item table and linking configuration
+  -> Phase A: import or run each required within-set analysis
+  -> validate and freeze the canonical artifacts
+  -> pool Phase A evidence to estimate global judge parameters
+  -> initialize every ready spoke on the fixed hub scale
+  -> while at least one spoke remains active:
+       reserve or restore that spoke's probe panel
+       allocate active and probe effort for the refit window
+       select active pairs by routing domain and D-optimal gain
+       collect no more than the fixed per-refit probe cap
+       refit every eligible spoke, potentially in parallel
+       compute diagnostics, calibration, stability, and blockers
+       freeze each spoke whose rolling stop rule passes
+  -> return common-scale item summaries and canonical logs
+```
+
+One controller advances all active spokes. "Concurrent" means that their work is interleaved and
+their eligible refits can be dispatched together; a single judgment still compares one hub item
+with one item from exactly one spoke. Spoke--spoke comparisons are not part of the public design.
+
+## Phase A artifacts and validation
+
+Phase A produces the within-set evidence needed before any cross-set comparison is scheduled. A
+canonical artifact stores:
+
+- `set_id`, `n_items`, `n_pairs_committed`, and the source refit, round, step, and phase scope;
+- an item table containing `item_id`, `global_item_id`, `theta_raw_mean`, `theta_raw_sd`, and
+  `rank_mu_raw`;
+- the normalized BTL model identifier, its fit-contract surface, and `fit_config_hash`;
+- within-set reliability, rank agreement, and diagnostic status;
+- the exact committed within-set edge table and its content hash;
+- posterior item draws when available; and
+- judge-parameter mode and creation time.
+
+`item_id` is the row identity used by the adaptive state. `global_item_id` is the stable identity
+used to validate an item across separately produced inputs. Both mappings, the item count, all
+required summaries, and the exact within-set edge domain must agree with the current run.
+
+The fit-contract hash covers the normalized `model_variant`, judge-parameter mode, and relevant
+Bayesian fitting settings. A `btl` artifact is therefore not silently converted to `btl_e_b`, and
+an artifact produced under an incompatible configuration is rejected. This protects the likelihood
+and prior assumptions used by the linking fit; it is stricter than checking that an `.rds` file can
+be read.
+
+### Run, import, and mixed behavior
+
+`phase_a_mode` assigns a source to every required set:
+
+| Mode | Source assignment | Failure behavior |
+|---|---|---|
+| `run` | Run Phase A for every set, in ascending `set_id` order. | Unfinished sets remain `pending_finalization`. |
+| `import` | Import every set from `phase_a_artifacts`. | A missing or incompatible artifact fails before Phase B. |
+| `mixed` | Import supplied sets; run the rest. | Imports are strict; unfinished runs remain pending. |
+
+The hub must be ready before a spoke can enter Phase B. In a multi-spoke run, all required Phase A
+work is completed before Phase B begins. `out$phase_a$set_status` records `source`, `status`, and
+`validation_message`; `ready`, `pending_finalization`, and `failed` describe artifact readiness,
+not the later linking result.
+
+An imported artifact normally needs finite EAP reliability at or above
+`phase_a_required_reliability_min`. `quality_gate_accepted = TRUE` is a trusted external-review
+override for missing or low reliability. It does not change the evidence, repair MCMC diagnostics,
+or make an incompatible model variant compatible.
+
+## Common-scale identification
+
+Within a BTL likelihood, adding the same constant to every item location leaves all pairwise
+differences unchanged. Independently fitted sets therefore do not share an origin. The linking
+model resolves this location indeterminacy by treating the hub's Phase A locations as fixed
+constants and estimating spoke locations directly against them.
+
+Let \(h\in\mathcal H\) index hub items and \(x\in\mathcal S_j\) index items in spoke \(j\). The
+implementation stores the fixed hub values as `theta_hub_fixed` and the estimated spoke values as
+`theta_spoke_global_mean`. For an ordered cross-set comparison \(k\), define
+
+- \(A_k\) and \(B_k\) as the first- and second-presented items;
+- \(Y_k=1\) when \(A_k\) is selected and \(Y_k=0\) when \(B_k\) is selected;
+- \(\theta_{A_k}\) and \(\theta_{B_k}\) as their hub-scale locations;
+- \(b\) as the globally shared first-position effect; and
+- \(\epsilon\) as the globally shared lapse probability.
+
+The observation model is
+
+\[
+  q_k=\operatorname{logit}^{-1}
+  (\theta_{A_k}-\theta_{B_k}+b),
+  \qquad
+  p_k=(1-\epsilon)q_k+\frac{\epsilon}{2},
+  \qquad
+  Y_k\sim\operatorname{Bernoulli}(p_k).
+\]
+
+Here `plogis()` implements the inverse-logit function. Positive \(b\) raises the modeled
+probability of choosing the first-presented item, conditional on the location difference.
+The lapse mixture shrinks predictions toward one half. These are model parameters, not measures
+of forward/reverse response consistency.
+
+### Hard-locked hub and spoke priors
+
+For each hub item, Phase B fixes
+
+\[
+  \theta_h=\widehat\theta^{A}_h,
+\]
+
+where \(\widehat\theta^{A}_h\) is `theta_raw_mean` in the hub artifact. Hub parameters are absent
+from the free optimization block; they are not merely assigned narrow priors. Consequently Phase B
+cannot move the hub to accommodate a spoke.
+
+For spoke item \(x\), let \(m_x^A\) and \(s_x^A\) denote the Phase A `theta_raw_mean` and
+`theta_raw_sd`. The Phase B prior is
+
+\[
+  \theta_x\sim\mathcal N(m_x^A,\tau_x^2),
+  \qquad
+  \tau_x=c\max(s_x^A,s_{\min}),
+\]
+
+where \(c\) is `anchored_joint_spoke_prior_scale` and \(s_{\min}\) is
+`anchored_joint_sd_floor`. If \(s_x^A\) is non-finite, the implementation substitutes
+`anchored_joint_spoke_prior_fallback_sd` and emits a warning. The prior carries Phase A location
+and uncertainty into Phase B; active cross-set evidence and the spoke's exact Phase A within-set
+edges update the spoke locations.
+
+The implementation minimizes the negative log posterior over the vector
+\(\boldsymbol\theta_j=(\theta_x:x\in\mathcal S_j)\) using Broyden--Fletcher--Goldfarb--Shanno
+(BFGS) optimization. When optimization converges, it inverts the observed Hessian to obtain a
+Laplace covariance approximation. `theta_link_eap` is the accepted common-scale location exposed
+to users, although the deterministic Phase B value is a MAP estimate rather than an MCMC posterior
+mean. `theta_link_sd` is the corresponding marginal Hessian-based SD. The established output name
+is retained for schema compatibility.
+
+### Globally shared judge parameters
+
+Before Phase B, the runner pools the exact Phase A within-set evidence from every required set and
+fits one BTL judge surface. The resulting position effect \(b\) and lapse probability \(\epsilon\)
+are copied into every spoke's accepted state and held fixed during anchored-joint refits. Thus the
+item locations are spoke-specific but the judge parameters are global across the hub and all
+spokes. This avoids attributing a separate position or lapse process to each spoke when the same
+judge and observation contract produced all comparisons.
+
+## Routing ranks, anchors, and candidate domains
+
+Phase B constructs a linking-global score map from the fixed hub locations and the latest accepted
+spoke locations. Decreasing score, with item identifier breaking ties, supplies the global rank
+used for routing. The same stratum construction as within-set ranking divides that order into a
+fine top band and size-dependent base regions.
+
+Hub anchors are selected from hub-only ranks. Non-anchor stages use the active hub domain; the
+anchor stage may use the full hub domain. Every Phase B candidate has exactly one hub endpoint and
+one endpoint from the currently routed spoke.
+
+| Stage | Candidate domain | Design role |
+|---|---|---|
+| `anchor_link` (anchor link) | Hub anchor plus spoke item. | Revisit reference regions across the hub distribution. |
+| `long_link` (long link) | Active endpoints far apart. | Maintain broad links and coarse ordering checks. |
+| `mid_link` (mid link) | Active endpoints at intermediate distance. | Bridge broad and neighboring score regions. |
+| `local_link` (local link) | Active endpoints in nearby strata. | Resolve common-scale ordering locally. |
+
+The stage label narrows the eligible domain; it is not a separate statistical model. Reserved
+probe keys are removed from every active domain. Duplicate, recent-degree, exposure, and
+presentation-order rules are then applied. When a domain is larger than `C_max`, the controller
+uses a seeded bounded sample, preserving reproducibility for a fixed state and seed.
+
+Spoke coverage uses quantile bins of current linking-global spoke scores. A candidate involving an
+under-covered bin receives `coverage_priority = 1`; if any such candidates exist, selection is
+restricted to that subset before utility ordering. This is a discrete coverage rule, not a numeric
+addition to D-optimal gain.
+
+## D-optimal active selection
+
+The active selector asks which eligible pair would produce the largest local increase in
+information about the free spoke parameters. For a candidate hub item \(h\) and spoke item \(x\),
+it averages the two presentation orientations,
+
+\[
+  \bar p_{hx}=\frac{1}{2}p(h\text{ in }A,x\text{ in }B)
+              +\frac{1}{2}p(x\text{ in }A,h\text{ in }B),
+\]
+
+and uses the implemented information scale
+
+\[
+  w_{hx}=\bar p_{hx}(1-\bar p_{hx}).
+\]
+
+Let \(\mathbf e_x\) be the vector with one at spoke item \(x\)'s position in the free block and
+zero elsewhere. The candidate's rank-one information contribution is
+
+\[
+  \mathbf I_{hx}=w_{hx}\mathbf e_x\mathbf e_x^\mathsf T.
+\]
+
+Let \(\mathbf I_t\) be the information accumulated from committed active pairs for the spoke in
+the current refit window. With numerical ridge \(r=10^{-6}\), the stored D-optimal gain is
+
+\[
+  U_{hx}=\log\det(\mathbf I_t+\mathbf I_{hx}+r\mathbf I)
+          -\log\det(\mathbf I_t+r\mathbf I),
+\]
+
+where \(\mathbf I\) is the identity matrix. The code uses the equivalent rank-one
+`log1p()` calculation when possible and falls back to direct log determinants. Because each
+cross-set observation has only one free spoke endpoint, the anchored-joint information state can
+be stored as a diagonal vector. It is updated only after a valid active comparison; probes and
+invalid attempts do not enter it.
+
+Within the coverage-prioritized pool, candidates are ordered by decreasing `link_d_opt_gain`, then
+lexicographically by `i` and `j`. An unavailable or entirely non-finite gain aborts selection. The
+selector does not silently replace D-optimal ordering with TrueSkill ambiguity or random choice.
+
+### Conceptual selection example
+
+Suppose two eligible pairs address spoke items \(x_1\) and \(x_2\). Current accumulated diagonal
+information is \((4,1)\), so \(x_2\) is less informed. If both pairs have \(\bar p=0.5\), then
+\(w=0.25\). Ignoring the tiny ridge for illustration, their gains are approximately
+
+\[
+  \log(1+0.25/4)=0.061,
+  \qquad
+  \log(1+0.25/1)=0.223.
+\]
+
+The pair involving \(x_2\) ranks first because it increases the information determinant more. In
+a real step, candidate strata, reserved probes, coverage priority, duplicate controls, and all
+other filters are applied before this comparison of gains.
+
+## Probes and calibration
+
+At the beginning of a spoke epoch, the controller constructs a deterministic held-out panel across
+hub and spoke rank bins. `probe_panel_edges` is a target, not a promise: the realized panel can be
+smaller when the unique legal cross-product is too small. `probe_panel_shortfall` and
+`probe_shortfall_reason` make that limitation visible.
+
+Probe keys are reserved from active selection for the epoch. While a spoke is active, the runner
+may collect at most `probe_pairs_per_refit_per_spoke` held-out pairs per refit window. The public
+path uses `probe_acceleration_mode = "fixed_per_refit"`; a probe-only blocker does not increase
+that cap. The active-floor logic protects a minimum amount of active work in a window, so probe
+collection cannot consume the whole linking budget. A frozen spoke receives neither active nor
+probe pairs.
+
+For realized probe outcomes \(y_k\in\{0,1\}\) and predictions \(p_k\), the Brier score is
+
+\[
+  \operatorname{Brier}=\frac{1}{K}\sum_{k=1}^{K}(y_k-p_k)^2,
+\]
+
+where \(K\) is the number of valid realized probe edges. Lower values indicate better squared
+probability error on this panel. Expected calibration error (ECE) partitions predictions into five
+probability bins and computes the observation-weighted mean absolute difference between bin-average
+outcomes and predictions. ECE is descriptive and depends on the realized panel and binning.
+
+The runner also records:
+
+- fractions of predictions near 0.5, in a midrange, and at extremes;
+- unique hub and spoke endpoints represented;
+- hub and spoke rank bins represented;
+- the near-boundary Brier score;
+- lagged probe-prediction root mean squared error (RMSE); and
+- panel size, realization, reallocation, and shortfall fields.
+
+These form `probe_quality_pass` and `probe_quality_blocker_codes`, a diagnostic assessment of panel
+composition and calibration. In the current stop implementation, `probe_quality_pass` itself is
+not included in `link_stop_pass`. The stopping conjunction instead uses the total Brier threshold,
+minimum realized probe edges, and lagged probe-prediction RMSE described below. Users should still
+inspect probe-quality blockers before interpreting a linked result.
+
+## Refits, diagnostics, and identification
+
+Each spoke has its own accepted item state, active-edge count, probe panel, accumulated information,
+diagnostics, and stop history. At a Phase B refit, the anchored-joint fit uses the spoke's exact
+Phase A within-set edges plus all valid active hub--spoke edges retained for that spoke. Hub within-set
+evidence supports artifact validation and pooled judge estimation; fixed hub locations mean those
+edges do not add free hub parameters to the per-spoke optimization.
+
+The Phase B deterministic diagnostic gate requires all of the following:
+
+- BFGS optimization reports convergence;
+- all required fitted summaries are finite;
+- the Hessian is positive definite; and
+- finite non-negative marginal uncertainty is available.
+
+`link_diagnostics_converged_pass`, `link_diagnostics_finite_summary_pass`, and
+`link_diagnostics_uncertainty_pass` expose these checks. Divergence, R-hat, and ESS columns are
+R missing values (`NA`) for MAP/Laplace Phase B fits because those are MCMC diagnostics. A failed
+deterministic fit does not masquerade as a successful MCMC fit.
+
+### Reliability and routing identification
+
+For active hub and spoke items, let \(\widehat\mu_i\) be the accepted common-scale mean and
+\(v_i\) its estimated marginal posterior variance. Define
+
+\[
+  V_\mu=\operatorname{Var}_i(\widehat\mu_i),
+  \qquad
+  \overline V_{\mathrm{post}}=\frac{1}{n}\sum_i v_i,
+  \qquad
+  R_{\mathrm{link}}=\frac{V_\mu}{V_\mu+\overline V_{\mathrm{post}}}.
+\]
+
+The implementation applies small denominator guards and returns an undefined value when the
+decomposition is not numerically meaningful. `reliability_link_global` is conditional on the
+model, prior, active item domain, and marginal approximation. It is not classical test-score
+reliability and does not establish validity or independence of judgments.
+
+`linking_identified` becomes true for a spoke when both
+
+\[
+  R_{\mathrm{link}}\geq
+  \texttt{link_identified_reliability_min}
+  \quad\text{and}\quad
+  \rho_{\mathrm{rank}}(\mu^{\mathrm{TrueSkill}},\widehat\theta^{\mathrm{link}})
+  \geq\texttt{link_rank_corr_min},
+\]
+
+where \(\rho_{\mathrm{rank}}\) is Spearman rank correlation and
+\(\mu^{\mathrm{TrueSkill}}\) is the
+current TrueSkill mean. This flag changes routing, including long-link tapering. It is not formal
+proof of statistical identification.
+
+## Budgets and concurrent spokes
+
+The default active refit budget derives from the adaptive refit target. Stage floors are applied
+first, the remainder is divided by the configured anchor/long/mid/local fractions, and deterministic
+largest-remainder rules resolve integers. When `linking_identified` is true, the long target is
+multiplied by `long_link_taper_multiplier` subject to `long_link_taper_floor`; released work is
+redistributed according to current blocker weights.
+
+Feasibility checks can shrink a stage target when its legal domain cannot fill the nominal quota.
+The log distinguishes nominal budget, feasible budget, released work, and
+`stage_budget_unfilled`. A shortfall does not authorize illegal duplicates or spoke--spoke pairs.
+
+In `link_multi_spoke` mode, every active spoke first receives
+`min_cross_set_pairs_per_spoke_per_refit` when capacity permits. Remaining active comparisons are
+allocated in proportion to the sum of the top D-optimal gains for that spoke, using at most
+`multi_spoke_budget_top_k` candidates. If all utility masses are zero, allocation uses equal
+weights. Candidate capacity caps the allocation. This is concurrent utility-based scheduling, not
+parallel judgments and not a guarantee of equal comparisons per spoke.
+
+The Bayesian Phase A and Phase B refit dispatcher may use `future` workers when parallel refitting
+is configured and available. Results are restored in deterministic spoke order. Parallel execution
+does not change the evidence or sharing contract.
+
+## Stopping, blockers, and freezing
+
+Stopping is evaluated at linking refits, separately for each spoke. A row becomes
+`link_stop_eligible` only when:
+
+- a comparable lagged refit exists in the same spoke epoch;
+- `min_refits_in_phase_b` has been reached;
+- the deterministic link diagnostics pass;
+- common-scale reliability is defined; and
+- at least `probe_edges_min_for_stop` held-out probes have been realized.
+
+An eligible row passes the instantaneous stopping conjunction when:
+
+\[
+  \begin{aligned}
+  &R_{\mathrm{link}}\geq R_{\min},\\
+  &\operatorname{Brier}\leq B_{\max},\\
+  &\operatorname{RMSE}_{\mathrm{probe,lag}}\leq P_{\max},\\
+  &\operatorname{RMSE}_{\theta,\mathrm{lag}}\leq T_{\max},\\
+  &\text{hub anchored}=\texttt{TRUE}.
+  \end{aligned}
+\]
+
+Here \(R_{\min}\), \(B_{\max}\), \(P_{\max}\), and \(T_{\max}\) are the logged
+`*_used` thresholds. Probe RMSE compares current and lagged predicted probabilities on the realized
+probe panel. Theta RMSE compares current and lagged common-scale locations over the configured
+direct-evidence spoke scope. These stability statistics measure change between fitted states, not
+agreement with an external truth.
+
+Only eligible results enter a rolling window of `stability_window_refits`. `link_stop_pass` becomes
+true when the window is full and at least `stability_passes_required` entries passed. The passes
+need not be consecutive. A passing spoke is frozen once: `link_state_frozen = TRUE` and
+`link_state_frozen_refit_id` record the transition. With `max_pairs_after_stop = 0`, no later pair
+is scheduled for it. Other spokes continue until they independently freeze, starve, or the caller's
+attempted-step budget ends.
+
+`stop_blocker_codes` is a comma-separated audit summary. Current values include:
+
+| Code | Meaning |
+|---|---|
+| `diagnostics_failed` | The applicable link-fit diagnostic contract did not pass. |
+| `lag_not_eligible` | No comparable lagged refit exists in the current epoch. |
+| `min_refits_not_met` | The spoke has not reached the minimum Phase B refit index. |
+| `probe_edges_min_for_stop` | Too few held-out probe edges have been realized. |
+| `reliability_link_global` | Reliability is undefined or below its stopping threshold. |
+| `probe_brier` | Probe Brier score is unavailable or above its threshold. |
+| `probe_pred_rmse_lagged` | Lagged probe prediction RMSE is unavailable or above threshold. |
+| `theta_global_rmse_lagged` | Lagged common-scale theta RMSE is unavailable or above threshold. |
+| `hub_not_anchored` | The required hub-anchor invariant is not satisfied. |
+| `none` | No blocker in this stop conjunction is active. |
+
+Reaching `n_steps` only exhausts the attempted-step allowance for that call. It does not set
+`link_stop_pass`, invent an accepted fit, or imply that every spoke is ready. Invalid judgments can
+consume this allowance without increasing active or probe evidence. Candidate starvation and
+unfilled budgets remain visible in the step and link-stage logs.
+
+## Code-derived defaults
+
+Fixed contract values and size-scaled rules are resolved in the controller. The following tables
+are generated from the implementation for a representative run with one 100-item hub and two
+100-item spokes. Contract fields in the first table describe the current normative path and are not
+additional public choices; documented public controls can override the numeric thresholds.
+
+```{r linking-fixed-defaults, echo=FALSE}
+link_defaults <- pairwiseLLM:::.adaptive_controller_defaults(300L)
+link_defaults$run_mode <- "link_multi_spoke"
+link_defaults <- pairwiseLLM:::.adaptive_controller_resolve_scaled_linking_defaults(
+  controller = link_defaults,
+  cfg_names = character(),
+  set_ids = c(rep(1L, 100L), rep(2L, 100L), rep(3L, 100L))
+)
+
+fixed_default_names <- c(
+  "link_estimation_mode", "judge_param_mode",
+  "link_identified_reliability_min", "link_stop_reliability_min",
+  "link_rank_corr_min", "stability_window_refits",
+  "stability_passes_required", "min_refits_in_phase_b",
+  "probe_brier_max", "probe_pred_rmse_max", "theta_global_rmse_max",
+  "max_pairs_after_stop"
+)
+fixed_defaults <- data.frame(
+  contract_or_control = fixed_default_names,
+  default = vapply(
+    link_defaults[fixed_default_names],
+    function(x) paste(x, collapse = ", "),
+    character(1L)
+  ),
+  row.names = NULL
+)
+knitr::kable(fixed_defaults)
+```
+
+```{r linking-scaled-defaults, echo=FALSE}
+scaled_default_names <- c(
+  "probe_pairs_per_refit_per_spoke", "probe_panel_edges",
+  "probe_edges_min_for_stop"
+)
+scaled_defaults <- data.frame(
+  resolved_control = scaled_default_names,
+  value_for_100_item_max_spoke = vapply(
+    link_defaults[scaled_default_names],
+    as.integer,
+    integer(1L)
+  ),
+  rule = c(
+    "max(4, ceiling(0.0035 * maximum spoke size))",
+    "max(160, ceiling(0.12 * maximum spoke size))",
+    "max(120, ceiling(0.106 * maximum spoke size))"
+  ),
+  row.names = NULL
+)
+knitr::kable(scaled_defaults)
+```
+
+The resolved thresholds used for a particular run are repeated in `link_stage_log`. Audit those
+`*_used` fields rather than assuming that a run used package defaults.
+
+## Logs and user-visible outputs
+
+The three canonical log surfaces have different units:
+
+- `step_log` has one row per attempted judgment. Linking fields include set endpoints, spoke,
+  stage, probe flags, predictive probability, D-optimal gain, filters, outcome validity, and token
+  metadata where available.
+- `round_log` has one row per Bayesian within-set refit. It remains the Phase A model and stopping
+  audit surface.
+- `link_stage_log` has one row per spoke per linking refit. It records the estimation contract,
+  hub lock, judge sharing, active/probe budgets, information summaries, diagnostics, calibration,
+  reliability, stability, blockers, stopping, and freezing.
+
+`out$items` exposes within-set values in `theta_raw_eap`, `theta_raw_sd`, and `rank_raw`. Accepted
+common-scale values appear in `theta_link_eap`, `theta_link_sd`, interval fields, and `rank_link`.
+They remain `NA` until a Phase B state has been accepted for the item. `out$phase_a` exposes the
+artifact manifest and per-set readiness, while `out$summary` and `out$logs$link_stage_log` expose
+the current linking status.
+
+The log schemas intentionally retain some transform-era columns for old-session compatibility.
+On anchored-joint rows, transform-only fields are normalized to typed missing values. Their
+presence in a persisted schema does not make them current configuration choices.
+
+## Persistence and resume
+
+When `session_dir` is supplied, the runner persists state, metadata, step, round, and link-stage
+logs, the latest fit, Phase A artifacts, and optional item logs. Each file replacement is atomic;
+the collection is checkpointed after completed refits, terminal events, the ordinary end of a
+call, and the configured step cadence. A process failure can lose attempts after the last complete
+checkpoint.
+
+`validate_session_dir()` validates metadata and canonical log schemas. `load_adaptive_session()`
+also rebuilds derived evidence indices and checks probe state. `resume = TRUE` then requires:
+
+- identical item identifiers and row order;
+- compatible schema and package state;
+- the same linking mode, hub, model contract, and required Phase A evidence;
+- unchanged artifact identities and hashes;
+- consistent spoke epochs, accepted states, Fisher-information counts, probe panels, and realized
+  probe indices; and
+- consistent frozen and stopping state.
+
+An incompatible or corrupt session aborts with the violated invariant. The runner does not silently
+discard saved work, create a new probe panel, or restart Phase A. Use `resume = FALSE` with a new or
+empty directory only when intentionally starting a new study.
+
+Compatibility loaders can backfill fields needed to read older sessions and can normalize legacy
+log names. Historical transform estimators, soft hub locks, free hub locks, alternative probe
+acceleration schedules, and independent-spoke routing are not public options for new runs.
+
+## Interpretation and evidence
+
+The design intends to preserve a stable reference scale, direct active effort toward locally
+informative spoke parameters, and reserve independent comparisons for calibration. Those goals
+follow from the routing and estimation rules; they are not empirical findings about every judge,
+item pool, or budget.
+
+The package computes conditional model diagnostics and reproducible audit fields. Passing them
+does not guarantee an unbiased judge, correct model specification, representative probe panel,
+external validity, or minimum ranking error. Non-passing or unavailable diagnostics identify a
+reason not to accept the automated stop; they do not diagnose the substantive cause on their own.
+Evaluate content coverage, subgroup behavior, presentation effects, invalid-response patterns, and
+external criteria alongside the package logs.
+
+## Foundational references
+
+Bradley, R. A., & Terry, M. E. (1952). Rank analysis of incomplete block designs: I. The method of
+paired comparisons. *Biometrika, 39*(3/4), 324--345.
+
+Brier, G. W. (1950). Verification of forecasts expressed in terms of probability. *Monthly Weather
+Review, 78*(1), 1--3.
+
+Fedorov, V. V. (1972). *Theory of Optimal Experiments*. Academic Press.
+
+Luce, R. D. (1959). *Individual Choice Behavior: A Theoretical Analysis*. Wiley.
+
+> Mercer, S. H. (2026). *Adaptive-linking design* [R package vignette]. In *pairwiseLLM: Pairwise
+> comparison tools for large language model-based writing evaluation* (Version 1.3.1).
