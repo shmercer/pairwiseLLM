@@ -203,3 +203,35 @@ test_that("summarize_items resolves sort defaults and legacy aliases for new ite
   logs_no_sortable <- list(item_log_list = list(tibble::tibble(refit_id = 1L, item_id = "A", x = 1)))
   expect_error(summarize_items(logs_no_sortable), "`sort_by` must be a column in the item log")
 })
+
+test_that("summarize_items preserves distinct legacy and current schemas", {
+  legacy <- tibble::tibble(
+    refit_id = 1L,
+    ID = c("A", "B"),
+    theta_mean = c(0.4, 0.1),
+    rank_mean = c(1.25, 1.75),
+    deg = c(4L, 4L),
+    posA_prop = c(0.5, 0.5)
+  )
+  current <- tibble::tibble(
+    refit_id = 1L,
+    item_id = c("A", "B"),
+    theta_raw_eap = c(0.4, 0.1),
+    theta_raw_sd = c(0.2, 0.3),
+    rank_raw = c(1L, 2L),
+    degree = c(4L, 4L),
+    pos_count_A = c(2L, 2L),
+    pos_count_B = c(2L, 2L)
+  )
+
+  legacy_out <- summarize_items(list(item_log_list = list(legacy)))
+  current_out <- summarize_items(list(item_log_list = list(current)))
+
+  expect_identical(names(legacy_out), names(legacy))
+  expect_identical(names(current_out), names(current))
+  expect_false("rank_mean" %in% names(current_out))
+  expect_identical(
+    summarize_items(list(item_log_list = list(current)), sort_by = "rank_mean")$item_id,
+    c("A", "B")
+  )
+})

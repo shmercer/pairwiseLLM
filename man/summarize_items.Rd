@@ -37,9 +37,21 @@ column in \code{c("rank_link", "rank_raw", "rank_mean", "theta_link_eap",
 }
 \value{
 A tibble with one row per item per refit. Columns reflect the
-canonical item log schema (for example \code{refit_id}, \code{ID},
-\code{theta_mean}, \code{rank_mean}, \code{deg}, and \code{posA_prop}).
-Rank percentiles summarize per-draw induced ranks (lower is better). When
+supplied item-log schema. Standalone and legacy logs use fields such as
+\code{ID}, \code{theta_mean}, \code{rank_mean}, \code{deg}, and
+\code{posA_prop}. Current adaptive logs use \code{item_id},
+\code{theta_raw_eap}, \code{theta_raw_sd}, \code{rank_raw},
+\code{degree}, \code{pos_count_A}, and \code{pos_count_B}; linking logs
+can also include \code{theta_link_eap}, \code{theta_link_sd}, and
+\code{rank_link}. The function is a view and does not rename these fields.
+
+In standalone logs, \code{rank_mean} is the posterior mean of per-draw
+induced ranks. In current adaptive logs, \code{rank_raw} is the rank of
+the EAP scores. They are not the same statistic, although a request to
+sort a current log by the legacy name \code{"rank_mean"} maps to
+\code{"rank_raw"} for compatibility. Similarly, legacy sorting requests
+for \code{"theta_mean"} and \code{"theta_sd"} map to
+\code{"theta_raw_eap"} and \code{"theta_raw_sd"}. When
 \code{include_optional = FALSE}, optional columns such as repeated-pair or
 adjacency diagnostics are dropped if present.
 }

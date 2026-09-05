@@ -14,6 +14,10 @@
 #' The estimator does not require a provider tokenizer.
 #' Input tokens are estimated from the byte length of the fully constructed
 #' prompt and calibrated on the pilot's observed \code{prompt_tokens}.
+#' Expected remaining completion tokens use the arithmetic mean of usable
+#' pilot completion counts. Budget completion tokens use the type-7 sample
+#' quantile selected by \code{budget_quantile}. These are token-use estimates;
+#' the function does not supply, validate, or refresh provider prices.
 #'
 #' @param pairs Tibble or data frame with at least columns \code{ID1},
 #'   \code{text1}, \code{ID2}, \code{text2}. Typically created by
@@ -41,9 +45,11 @@
 #' @param seed Optional integer seed used for pilot sampling when
 #'   \code{test_strategy} is not \code{"first"}.
 #' @param cost_per_million_input Cost per one million input tokens (prompt
-#'   tokens), in your currency of choice.
+#'   tokens), in your currency of choice. Supply a current price for the
+#'   selected provider, model, endpoint, and execution mode.
 #' @param cost_per_million_output Cost per one million output tokens
 #'   (completion tokens). Reasoning/thinking tokens are treated as output.
+#'   Supply and verify this price as for \code{cost_per_million_input}.
 #' @param batch_discount Numeric scalar multiplier applied to the estimated cost
 #'   for the remaining pairs when \code{mode = "batch"}. For example, if batch
 #'   pricing is 50 percent of live pricing, use \code{batch_discount = 0.5}.
@@ -68,6 +74,24 @@
 #'   \item{remaining_pairs}{Remaining pairs (when
 #'     \code{return_remaining_pairs = TRUE}).}
 #' }
+#'
+#' @details Pilot pairs are selected from \code{pairs} and are excluded from
+#'   \code{remaining_pairs} whether their calls succeed or fail. Calibration
+#'   uses successful normalized rows with non-missing input-token counts and a
+#'   missing or 200 status. Completion estimates use the analogous usable
+#'   completion-token rows. With no usable input counts, calibration falls back
+#'   to one token per four prompt bytes; with one row it uses a zero-intercept
+#'   ratio; with multiple distinct byte lengths it uses ordinary least squares;
+#'   and with multiple identical byte lengths it uses their mean token count as
+#'   a constant prediction. With no usable completion counts, completion and
+#'   total-cost estimates that depend on them are \code{NA}.
+#'
+#'   The observed pilot token totals are always priced as live calls. When
+#'   \code{mode = "batch"}, \code{batch_discount} applies only to estimated
+#'   remaining input and output tokens. The returned pilot object and remaining
+#'   pairs are not automatically merged into a later job result. Local Ollama
+#'   models are unsupported because this function estimates token-billed API
+#'   cost rather than local compute cost.
 #'
 #' @examples
 #' \dontrun{
@@ -372,44 +396,17 @@ estimate_llm_pairs_cost <- function(
   # ------------------------------------------------------------------
   # Calibrate prompt_tokens ~ prompt_bytes
   # ------------------------------------------------------------------
-  intercept <- NA_real_
-  slope <- NA_real_
-  r2 <- NA_real_
-  rmse <- NA_real_
-  n_used <- length(usable_in)
-
-  if (n_used >= 2L) {
-    df_cal <- data.frame(
-      prompt_tokens = as.numeric(pilot_results$prompt_tokens[usable_in]),
-      prompt_bytes  = as.numeric(pilot_bytes[usable_in])
-    )
-    fit <- stats::lm(prompt_tokens ~ prompt_bytes, data = df_cal)
-    co <- stats::coef(fit)
-    intercept <- unname(co[1])
-    slope <- unname(co[2])
-    preds <- stats::predict(fit, newdata = df_cal)
-    rmse <- sqrt(mean((preds - df_cal$prompt_tokens)^2))
-    r2 <- summary(fit)$r.squared
-  } else if (n_used == 1L) {
-    # One point: assume intercept 0
-    intercept <- 0
-    slope <- as.numeric(pilot_results$prompt_tokens[usable_in]) / as.numeric(pilot_bytes[usable_in])
-    r2 <- NA_real_
-    rmse <- NA_real_
-  } else {
-    # No pilot tokens: fallback to a coarse bytes->tokens rule (bytes/4)
-    intercept <- 0
-    slope <- 1 / 4
-    r2 <- NA_real_
-    rmse <- NA_real_
-  }
+  calibration <- .calibrate_prompt_tokens(
+    pilot_bytes = pilot_bytes[usable_in],
+    pilot_prompt_tokens = pilot_results$prompt_tokens[usable_in]
+  )
 
   # ------------------------------------------------------------------
   # Estimate remaining tokens
   # ------------------------------------------------------------------
   bytes_remaining <- prompt_bytes_all[remaining_idx]
   est_remaining_prompt_tokens <- if (length(bytes_remaining) > 0L) {
-    pmax(0, as.numeric(round(intercept + slope * as.numeric(bytes_remaining))))
+    .predict_prompt_tokens(calibration, bytes_remaining)
   } else {
     numeric(0)
   }
@@ -489,14 +486,6 @@ estimate_llm_pairs_cost <- function(
     budget_cost_input = as.numeric(budget_cost_input),
     budget_cost_output = as.numeric(budget_cost_output),
     budget_cost_total = as.numeric(budget_cost_total)
-  )
-
-  calibration <- list(
-    method = "lm(prompt_tokens ~ prompt_bytes)",
-    coefficients = c(intercept = intercept, slope = slope),
-    n_used = n_used,
-    r_squared = r2,
-    rmse = rmse
   )
 
   out <- list(
@@ -646,13 +635,25 @@ print.pairwiseLLM_cost_estimate <- function(x, ...) {
     ))
   }
 
-  if (n == 1L || length(unique(pilot_bytes)) == 1L) {
+  if (n == 1L) {
     slope <- if (pilot_bytes[1] > 0) pilot_prompt_tokens[1] / pilot_bytes[1] else 0
     return(list(
       method = "single_point_ratio",
       coefficients = c(intercept = 0, slope = slope),
       n_used = 1L,
       rmse = NA_real_,
+      r_squared = NA_real_
+    ))
+  }
+
+  if (length(unique(pilot_bytes)) == 1L) {
+    intercept <- mean(pilot_prompt_tokens)
+    rmse <- sqrt(mean((pilot_prompt_tokens - intercept)^2))
+    return(list(
+      method = "constant_mean",
+      coefficients = c(intercept = intercept, slope = 0),
+      n_used = n,
+      rmse = rmse,
       r_squared = NA_real_
     ))
   }
