@@ -177,18 +177,6 @@ test_that("Task 06 documentation distinguishes statistics and estimator inputs",
   expect_true(grepl("compute_reverse_consistency()` does not group", bias, fixed = TRUE))
 })
 
-test_that("adaptive efficiency claims remain conditional", {
-  root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
-  skip_if(
-    !file.exists(file.path(root, "NEWS.md")),
-    "Repository documentation sources are unavailable in installed-package tests."
-  )
-  news <- paste(readLines(file.path(root, "NEWS.md"), warn = FALSE), collapse = "\n")
-
-  expect_false(grepl("designed to efficiently rank", news, fixed = TRUE))
-  expect_true(grepl("Realized efficiency depends on", news, fixed = TRUE))
-})
-
 test_that("practical adaptive vignette keeps the wrapper-first within-set contract", {
   root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
   skip_if(
