@@ -153,6 +153,30 @@ test_that("corrected documentation examples retain their contracts", {
   expect_identical(pairwiseLLM:::adaptive_defaults(20L)$refit_pairs_target, 20L)
 })
 
+test_that("Task 06 documentation distinguishes statistics and estimator inputs", {
+  root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  skip_if(
+    !file.exists(file.path(root, "README.Rmd")),
+    "Repository documentation sources are unavailable in installed-package tests."
+  )
+  readme <- paste(readLines(file.path(root, "README.Rmd"), warn = FALSE), collapse = "\n")
+  bias <- paste(
+    readLines(file.path(root, "vignettes", "prompt-template-bias.Rmd"), warn = FALSE),
+    collapse = "\n"
+  )
+  getting_started <- paste(
+    readLines(file.path(root, "vignettes", "getting-started.Rmd"), warn = FALSE),
+    collapse = "\n"
+  )
+
+  expect_true(grepl("Uses the mean and the selected `budget_quantile`", readme, fixed = TRUE))
+  expect_false(grepl("using median output tokens", getting_started, fixed = TRUE))
+  expect_true(grepl("exact paired test", bias, fixed = TRUE))
+  expect_true(grepl("non-significant test as evidence", bias, fixed = TRUE))
+  expect_true(grepl("provider calls ran were not recorded", bias, fixed = TRUE))
+  expect_true(grepl("compute_reverse_consistency()` does not group", bias, fixed = TRUE))
+})
+
 test_that("practical adaptive vignette keeps the wrapper-first within-set contract", {
   root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
   skip_if(

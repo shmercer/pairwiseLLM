@@ -394,7 +394,7 @@ the rest of the job by calibrating input tokens from prompt byte length.
 
 The output includes both:
 
-- **Expected cost** (using median output tokens from usable pilot calls)
+- **Expected cost** (using mean output tokens from usable pilot calls)
 - **Budget cost** (using a high quantile of pilot output tokens, controlled by `budget_quantile`)
 
 If you are running a discounted batch workflow, set `mode = "batch"` and supply a `batch_discount` multiplier.
@@ -427,6 +427,25 @@ est <- estimate_llm_pairs_cost(
 est$summary
 ```
 
+### Deterministic calculation example
+
+Suppose a two-pair live pilot records input-token counts of 20 and 40 and
+completion-token counts of 10 and 30. The prompt-byte calibration predicts 60
+and 80 input tokens for the two remaining pairs. With
+`budget_quantile = 0.9`, R's type-7 sample quantile of `c(10, 30)` is 28.
+
+At input and output prices of 1 currency unit per million tokens and
+`batch_discount = 0.5`, the estimator calculates:
+
+- observed live pilot tokens: 60 input and 40 output;
+- remaining expected tokens: 140 input and `mean(c(10, 30)) * 2 = 40` output;
+- remaining budget output tokens: `28 * 2 = 56`;
+- expected cost: `(60 + 40 + 0.5 * (140 + 40)) / 1e6 = 0.000190`; and
+- budget cost: `(60 + 40 + 0.5 * (140 + 56)) / 1e6 = 0.000198`.
+
+The pilot observations are included once at live prices. They are not averaged
+into the estimated remaining count and are not discounted.
+
 Avoid paying twice: reuse pilot results
 
 The estimator returns the original pilot output object and the pairs not
@@ -455,6 +474,8 @@ Notes:
 - The estimator does not require a provider tokenizer; it uses prompt byte length calibrated on the pilot.
 - Ollama is not supported in the estimator (local models do not incur token costs).
 - Reasoning/thinking tokens are treated as output tokens for pricing.
+- Supply current prices for the selected provider, model, endpoint, and mode;
+  the package does not maintain or validate a pricing catalog.
 
 ---
 

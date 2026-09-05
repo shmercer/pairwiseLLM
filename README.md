@@ -2,7 +2,7 @@ pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
 Writing Evaluation
 ================
 
-<!-- README-source-md5: 9fc73f393ef3288ffd662900e3da8405 -->
+<!-- README-source-md5: c6ab31d11fa69f0709c0c91f631eedd0 -->
 
 <figure>
 <img
@@ -482,10 +482,12 @@ and cost with `estimate_llm_pairs_cost()`. The estimator:
   `prompt_tokens` and `completion_tokens`
 - Uses the pilot to calibrate a **prompt-bytes → input-tokens** model
   for the remaining pairs
-- Uses the median and the selected `budget_quantile` of usable pilot
+- Uses the mean and the selected `budget_quantile` of usable pilot
   output tokens to estimate the remaining calls, then adds the observed
   pilot token totals without applying a batch discount to those live
   pilot calls.
+- Requires you to supply current provider prices; it estimates token use
+  and does not maintain or validate a pricing catalog.
 
 ### Example (batch pricing discount + budget cost)
 
@@ -646,7 +648,15 @@ bias <- check_positional_bias(cons)
 
 cons$summary
 bias$summary
+
+# Descriptive position-1 selection proportion (not a hypothesis test):
+with(bias$summary, total_pos1_wins / total_comparisons)
 ```
+
+`prop_consistent` measures agreement on the underlying winner after
+reversal. It is distinct from positional preference. `p_sample1_overall`
+is an exact paired test among inconsistent pairs; a non-significant
+result is not evidence that positional preference is absent.
 
 ### Positional-bias tested templates
 

@@ -117,6 +117,90 @@ testthat::test_that("estimate_llm_pairs_cost handles missing output tokens in pi
   testthat::expect_false(is.na(s$est_remaining_completion_tokens_budget))
 })
 
+testthat::test_that("cost worked example uses mean, p90, and live pilot pricing", {
+  pairs <- tibble::tibble(
+    ID1 = paste0("A", 1:4),
+    text1 = vapply(c(10L, 20L, 30L, 40L), function(n) paste(rep("x", n), collapse = ""), character(1)),
+    ID2 = paste0("B", 1:4),
+    text2 = ""
+  )
+  template <- "{TRAIT_NAME}{TRAIT_DESCRIPTION}{SAMPLE_1}{SAMPLE_2}"
+
+  est <- estimate_llm_pairs_cost(
+    pairs = pairs,
+    model = "worked-example",
+    trait_name = "",
+    trait_description = "",
+    prompt_template = template,
+    mode = "batch",
+    n_test = 2L,
+    test_strategy = "first",
+    cost_per_million_input = 1,
+    cost_per_million_output = 1,
+    batch_discount = 0.5,
+    budget_quantile = 0.9,
+    .submit_fun = function(pairs, ...) {
+      bytes <- nchar(pairs$text1, type = "bytes")
+      tibble::tibble(
+        ID1 = pairs$ID1,
+        ID2 = pairs$ID2,
+        better_id = pairs$ID1,
+        status_code = 200L,
+        prompt_tokens = 2L * bytes,
+        completion_tokens = c(10L, 30L)
+      )
+    }
+  )
+
+  s <- est$summary
+  expect_equal(est$calibration$method, "lm")
+  expect_equal(s$pilot_prompt_tokens, 60)
+  expect_equal(s$pilot_completion_tokens, 40)
+  expect_equal(s$est_remaining_prompt_tokens, 140)
+  expect_equal(s$est_remaining_completion_tokens_expected, 40)
+  expect_equal(s$est_remaining_completion_tokens_budget, 56)
+  expect_equal(s$expected_total_prompt_tokens, 200)
+  expect_equal(s$expected_total_completion_tokens, 80)
+  expect_equal(s$budget_total_completion_tokens, 96)
+  expect_equal(s$expected_cost_total, 190 / 1e6)
+  expect_equal(s$budget_cost_total, 198 / 1e6)
+})
+
+testthat::test_that("constant pilot byte lengths use a finite mean calibration", {
+  pairs <- tibble::tibble(
+    ID1 = letters[1:4],
+    text1 = "same",
+    ID2 = LETTERS[1:4],
+    text2 = "length"
+  )
+
+  est <- estimate_llm_pairs_cost(
+    pairs = pairs,
+    model = "m",
+    trait_name = "t",
+    trait_description = "d",
+    n_test = 2L,
+    test_strategy = "first",
+    cost_per_million_input = 1,
+    cost_per_million_output = 1,
+    .submit_fun = function(pairs, ...) {
+      tibble::tibble(
+        ID1 = pairs$ID1,
+        ID2 = pairs$ID2,
+        better_id = pairs$ID1,
+        status_code = 200L,
+        prompt_tokens = c(10L, 14L),
+        completion_tokens = 5L
+      )
+    }
+  )
+
+  expect_equal(est$calibration$method, "constant_mean")
+  expect_equal(est$calibration$coefficients, c(intercept = 12, slope = 0))
+  expect_equal(est$calibration$n_used, 2L)
+  expect_equal(est$summary$est_remaining_prompt_tokens, 24)
+})
+
 testthat::test_that("estimate_llm_pairs_cost validates inputs", {
   pairs <- tibble::tibble(ID1 = "A", text1 = "A", ID2 = "B", text2 = "B")
   td <- trait_description("overall_quality")
@@ -482,6 +566,11 @@ testthat::test_that("Internal helpers function correctly", {
   # Case: >1 input (linear model)
   res2 <- pairwiseLLM:::.calibrate_prompt_tokens(c(100, 200), c(10, 20))
   testthat::expect_equal(res2$method, "lm")
+
+  # Case: multiple observations at one byte length use a constant mean.
+  res_constant <- pairwiseLLM:::.calibrate_prompt_tokens(c(100, 100), c(20, 30))
+  testthat::expect_equal(res_constant$method, "constant_mean")
+  testthat::expect_equal(res_constant$coefficients, c(intercept = 25, slope = 0))
 
   # .predict_prompt_tokens
   calib <- list(coefficients = c(intercept = 5, slope = 0.1))

@@ -1,6 +1,7 @@
 test_that("trait_description returns built-in name and description", {
   overall <- trait_description("overall_quality")
   org <- trait_description("organization")
+  irrc <- trait_description("IRRC")
 
   # Now returns a list with name + description
   expect_type(overall, "list")
@@ -21,6 +22,9 @@ test_that("trait_description returns built-in name and description", {
 
   expect_true(grepl("organ", org$name, ignore.case = TRUE))
   expect_true(grepl("organ", org$description, ignore.case = TRUE))
+  expect_identical(irrc$name, "Overall Writing Quality")
+  expect_true(grepl("Prompt Task", irrc$description, fixed = TRUE))
+  expect_true(grepl("Development of Explanation", irrc$description, fixed = TRUE))
 })
 
 test_that("trait_description returns custom name and description

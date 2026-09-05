@@ -12,7 +12,10 @@ trait_description(
 }
 \arguments{
 \item{name}{Character identifier for a built-in trait. One of
-\code{"overall_quality"} or \code{"organization"}.
+\code{"overall_quality"}, \code{"organization"}, or \code{"IRRC"}.
+\code{"IRRC"} is case-sensitive and returns an overall-writing rubric
+spanning prompt task, development of explanation, organization, and
+language use.
 Ignored if \code{custom_description} is supplied.}
 
 \item{custom_name}{Optional short label to use when supplying a

@@ -12,7 +12,9 @@ sample_reverse_pairs(pairs, reverse_pct = NULL, n_reverse = NULL, seed = NULL)
 
 \item{reverse_pct}{Optional proportion of rows to reverse
 (between 0 and 1). If \code{n_reverse} is also supplied,
-\code{n_reverse} takes precedence and \code{reverse_pct} is ignored.}
+\code{n_reverse} takes precedence and \code{reverse_pct} is ignored. For
+values strictly between 0 and 1, the row count is
+\code{round(nrow(pairs) * reverse_pct)}.}
 
 \item{n_reverse}{Optional absolute number of rows to reverse.
 If supplied, this takes precedence over \code{reverse_pct}.}

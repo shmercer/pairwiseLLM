@@ -68,7 +68,9 @@
 
 ### Adaptive pairing & ranking framework
 
-* Introduced a full adaptive pairing / adaptive ranking framework designed to efficiently rank large sets of writing samples using uncertainty-aware pair selection and Bayesian inference.
+* Introduced an adaptive pairing / adaptive ranking framework designed to
+  reduce unnecessary comparisons through uncertainty-aware pair selection and
+  Bayesian inference.
 
 * Added `adaptive_rank()`, the primary user-facing wrapper that runs the complete adaptive workflow end-to-end, including warm start, adaptive pairing rounds, Bayesian BTL refits, diagnostics, and stopping.
 

@@ -21,6 +21,10 @@
 #'
 #' The output \code{details} contains exactly one row per unordered pair key,
 #' which keeps it compatible with \code{\link{check_positional_bias}}.
+#' Columns other than \code{ID1}, \code{ID2}, and \code{better_id} are not
+#' grouping variables. Split results by model, template, trait, reasoning or
+#' thinking condition, and any intended replicate unit before calling this
+#' function; otherwise their judgments are pooled in the per-key majority.
 #'
 #' @param main_results A data frame or tibble containing pairwise
 #'   comparison results for the "forward" ordering of pairs, with
@@ -177,11 +181,11 @@ compute_reverse_consistency <- function(main_results, reverse_results) {
   )
 }
 
-#' Check positional bias and bootstrap consistency reliability
+#' Check positional preference and bootstrap reversal agreement
 #'
-#' This function diagnoses positional bias in LLM-based paired comparison data
-#' and provides a bootstrapped confidence interval for the overall consistency
-#' of forward vs. reverse comparisons.
+#' This function diagnoses positional preference in LLM-based paired comparison
+#' data and provides a bootstrapped confidence interval for the overall
+#' agreement of forward vs. reverse comparisons.
 #'
 #' It is designed to work with the output of
 #' \code{\link{compute_reverse_consistency}}, but will also accept a tibble
@@ -203,6 +207,21 @@ compute_reverse_consistency <- function(main_results, reverse_results) {
 #' @param seed Optional integer seed for reproducible bootstrapping. If
 #'   \code{NULL} (default), the current RNG state is used.
 #'
+#' @details Each row of \code{details} is one unordered pair after any
+#'   duplicate judgments have been reduced to a per-direction majority by
+#'   \code{compute_reverse_consistency()}. The agreement estimate and its
+#'   percentile bootstrap interval therefore use unordered pairs as the unit
+#'   of analysis and treat those rows as independently resampled units. This
+#'   assumption may be inappropriate when pairs share items.
+#'
+#'   The direction-specific binomial tests likewise treat unordered-pair
+#'   outcomes within a direction as independent. The overall test is paired:
+#'   among inconsistent pairs, it compares the number for which position 1
+#'   won both presentations with the number for which position 2 won both.
+#'   This is the exact conditional form of McNemar's test. It returns
+#'   \code{NA} when there are no informative inconsistent pairs. A large
+#'   p-value is not evidence that positional preference is absent.
+#'
 #' @return A list with two elements:
 #'   \describe{
 #'     \item{summary}{A tibble with:
@@ -216,9 +235,9 @@ compute_reverse_consistency <- function(main_results, reverse_results) {
 #'               main (forward) comparisons
 #'         \item \code{p_sample1_rev}: analogous p-value for the reverse
 #'               comparisons
-#'         \item \code{p_sample1_overall}: p-value from a binomial test for
-#'               the null that position 1 wins 50\% of the time across
-#'               \emph{all} (forward + reverse) comparisons
+#'         \item \code{p_sample1_overall}: p-value from the paired exact test
+#'               that position-1 and position-2 inconsistencies are equally
+#'               likely
 #'         \item \code{total_pos1_wins}: total number of wins by position 1
 #'               across forward + reverse comparisons
 #'         \item \code{total_comparisons}: total number of valid forward +
@@ -381,15 +400,9 @@ check_positional_bias <- function(consistency,
     NA_real_
   }
 
-  # ---- overall position-1 bias test (forward + reverse combined) ----
+  # Counts retained for a descriptive overall position-1 proportion.
   total_pos1_wins <- wins_sample1_main + wins_sample1_rev
   total_comparisons <- n_valid_main + n_valid_rev
-
-  p_sample1_overall <- if (total_comparisons > 0L) {
-    stats::binom.test(total_pos1_wins, total_comparisons, p = 0.5)$p.value
-  } else {
-    NA_real_
-  }
 
   # Inconsistent pairs & positional bias counts
   inconsistent <- details |>
@@ -419,6 +432,14 @@ check_positional_bias <- function(consistency,
     details$is_pos2_bias <- FALSE
     n_pos1_bias <- 0L
     n_pos2_bias <- 0L
+  }
+
+  # Exact paired test among informative discordant pairs (exact McNemar form).
+  n_informative_discordant <- n_pos1_bias + n_pos2_bias
+  p_sample1_overall <- if (n_informative_discordant > 0L) {
+    stats::binom.test(n_pos1_bias, n_informative_discordant, p = 0.5)$p.value
+  } else {
+    NA_real_
   }
 
   summary <- tibble::tibble(

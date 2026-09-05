@@ -2,7 +2,7 @@
 % Please edit documentation in R/reverse_consistency.R
 \name{check_positional_bias}
 \alias{check_positional_bias}
-\title{Check positional bias and bootstrap consistency reliability}
+\title{Check positional preference and bootstrap reversal agreement}
 \usage{
 check_positional_bias(
   consistency,
@@ -45,9 +45,9 @@ null hypothesis that SAMPLE_1 wins 50\\% of the time in the
 main (forward) comparisons
 \item \code{p_sample1_rev}: analogous p-value for the reverse
 comparisons
-\item \code{p_sample1_overall}: p-value from a binomial test for
-the null that position 1 wins 50\\% of the time across
-\emph{all} (forward + reverse) comparisons
+\item \code{p_sample1_overall}: p-value from the paired exact test
+that position-1 and position-2 inconsistencies are equally
+likely
 \item \code{total_pos1_wins}: total number of wins by position 1
 across forward + reverse comparisons
 \item \code{total_comparisons}: total number of valid forward +
@@ -72,14 +72,29 @@ inconsistent and position 1 wins in both directions
 }
 }
 \description{
-This function diagnoses positional bias in LLM-based paired comparison data
-and provides a bootstrapped confidence interval for the overall consistency
-of forward vs. reverse comparisons.
+This function diagnoses positional preference in LLM-based paired comparison
+data and provides a bootstrapped confidence interval for the overall
+agreement of forward vs. reverse comparisons.
 }
 \details{
 It is designed to work with the output of
 \code{\link{compute_reverse_consistency}}, but will also accept a tibble
 that looks like its \code{$details} component.
+
+Each row of \code{details} is one unordered pair after any
+duplicate judgments have been reduced to a per-direction majority by
+\code{compute_reverse_consistency()}. The agreement estimate and its
+percentile bootstrap interval therefore use unordered pairs as the unit
+of analysis and treat those rows as independently resampled units. This
+assumption may be inappropriate when pairs share items.
+
+The direction-specific binomial tests likewise treat unordered-pair
+outcomes within a direction as independent. The overall test is paired:
+among inconsistent pairs, it compares the number for which position 1
+won both presentations with the number for which position 2 won both.
+This is the exact conditional form of McNemar's test. It returns
+\code{NA} when there are no informative inconsistent pairs. A large
+p-value is not evidence that positional preference is absent.
 }
 \examples{
 # Simple synthetic example

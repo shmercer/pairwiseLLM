@@ -63,10 +63,12 @@ fewer pairs are supplied.}
 \code{test_strategy} is not \code{"first"}.}
 
 \item{cost_per_million_input}{Cost per one million input tokens (prompt
-tokens), in your currency of choice.}
+tokens), in your currency of choice. Supply a current price for the
+selected provider, model, endpoint, and execution mode.}
 
 \item{cost_per_million_output}{Cost per one million output tokens
-(completion tokens). Reasoning/thinking tokens are treated as output.}
+(completion tokens). Reasoning/thinking tokens are treated as output.
+Supply and verify this price as for \code{cost_per_million_input}.}
 
 \item{batch_discount}{Numeric scalar multiplier applied to the estimated cost
 for the remaining pairs when \code{mode = "batch"}. For example, if batch
@@ -114,6 +116,28 @@ distribution.
 The estimator does not require a provider tokenizer.
 Input tokens are estimated from the byte length of the fully constructed
 prompt and calibrated on the pilot's observed \code{prompt_tokens}.
+Expected remaining completion tokens use the arithmetic mean of usable
+pilot completion counts. Budget completion tokens use the type-7 sample
+quantile selected by \code{budget_quantile}. These are token-use estimates;
+the function does not supply, validate, or refresh provider prices.
+
+Pilot pairs are selected from \code{pairs} and are excluded from
+\code{remaining_pairs} whether their calls succeed or fail. Calibration
+uses successful normalized rows with non-missing input-token counts and a
+missing or 200 status. Completion estimates use the analogous usable
+completion-token rows. With no usable input counts, calibration falls back
+to one token per four prompt bytes; with one row it uses a zero-intercept
+ratio; with multiple distinct byte lengths it uses ordinary least squares;
+and with multiple identical byte lengths it uses their mean token count as
+a constant prediction. With no usable completion counts, completion and
+total-cost estimates that depend on them are \code{NA}.
+
+The observed pilot token totals are always priced as live calls. When
+\code{mode = "batch"}, \code{batch_discount} applies only to estimated
+remaining input and output tokens. The returned pilot object and remaining
+pairs are not automatically merged into a later job result. Local Ollama
+models are unsupported because this function estimates token-billed API
+cost rather than local compute cost.
 }
 \examples{
 \dontrun{
