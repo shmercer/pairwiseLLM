@@ -93,7 +93,7 @@ refits <- summarize_refits(fit)
 items <- summarize_items(fit)
 
 refits[, c(
-  "refit_id", "total_pairs_done", "diagnostics_pass",
+  "round_id", "total_pairs", "diagnostics_pass",
   "divergences", "max_rhat", "min_ess_bulk"
 )]
 items[, c("ID", "theta_mean", "theta_sd", "rank_mean", "deg")]
