@@ -4,8 +4,8 @@
 
 This vignette demonstrates how to use **pairwiseLLM** for **Batch API
 workflows** (server-side batching), which are distinct from the live API
-calls described in the [Getting
-Started](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+calls described in the [Getting Started with
+pairwiseLLM](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
 vignette.
 
 Batch workflows are ideal for large-scale jobs because they:
@@ -45,9 +45,8 @@ Vertex is supported on the live path only via `backend = "vertex"` with
 > native Batch API compatible with this workflow. For those providers,
 > use the **live** API wrapper
 > [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
-> as described in the [Getting
-> Started](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
-> vignette.
+> as described in [Getting Started with
+> pairwiseLLM](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html).
 
 In this vignette, we will cover:
 
@@ -62,12 +61,14 @@ In this vignette, we will cover:
 
 For basic function usage, see the companion vignette:
 
-- [`vignette("getting-started")`](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+- [Getting Started with
+  pairwiseLLM](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
 
 For prompt evaluation and positional-bias diagnostics, see the companion
 vignette:
 
-- [`vignette("prompt-template-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
+- [Prompt Template Positional Bias
+  Testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
 
 ## 2. Setup and API Keys
 
@@ -91,8 +92,9 @@ your run plan:
 | Gemini    | `GEMINI_API_KEY`     |
 
 This vignette only covers batch-capable providers. Vertex live requests
-use a separate `VERTEX_API_KEY` surface and are documented in
-[`vignette("getting-started")`](https://shmercer.github.io/pairwiseLLM/articles/getting-started.md).
+use a separate `VERTEX_API_KEY` surface and are documented in [Getting
+Started with
+pairwiseLLM](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html).
 
 Check which are set:
 

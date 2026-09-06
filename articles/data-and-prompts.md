@@ -145,7 +145,7 @@ names(bayes_data)
 Standalone Bayesian BTL uses the stricter canonical schema returned by
 [`build_btl_results_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_btl_results_data.md);
 see [Standalone Bayesian BTL with
-CmdStan](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.md).
+CmdStan](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.html).
 
 Adaptive ranking is a separate branch.
 [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
@@ -173,12 +173,12 @@ format.
 
 ## Related documentation
 
-See [Getting
-Started](https://shmercer.github.io/pairwiseLLM/articles/getting-started.md)
+See [Getting Started with
+pairwiseLLM](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
 for the basic fixed-pair workflow, [Provider Controls and
-Recovery](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.md)
+Recovery](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html)
 for live and batch failures, and [Guide: Adaptive
-Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md)
+Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html)
 for adaptive state and logs.
 
 ## Citation

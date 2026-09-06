@@ -15,9 +15,9 @@ Adaptive linking has two phases:
 
 These phases are distinct from the within-set selection stages described
 in [Guide: Adaptive
-Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md).
+Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html).
 For the algorithmic rationale, see [Design: Adaptive
-Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.md).
+Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.html).
 
 ## Public contract at a glance
 
@@ -549,7 +549,7 @@ the OpenAI configuration recorded as tested with package 1.3.1 on
 2026-09-05. A tested configuration is evidence about that dated request
 shape, not a promise that the provider still offers the model. Check
 [Backends and Tested Model
-Configurations](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.md)
+Configurations](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html)
 and the provider catalog before a long run.
 
 Set `OPENAI_API_KEY` outside the script. Replace `real_linking_samples`

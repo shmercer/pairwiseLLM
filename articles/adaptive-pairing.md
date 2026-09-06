@@ -401,7 +401,7 @@ request shape shown here was recorded as tested with pairwiseLLM 1.3.1
 on 2026-09-05. That is dated evidence about this configuration, not a
 promise that the provider still offers the model. Check [Backends and
 Tested Model
-Configurations](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.md)
+Configurations](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html)
 and the provider catalog before a long run.
 
 Set `OPENAI_API_KEY` outside the script. Replace `real_samples` with a
@@ -596,7 +596,7 @@ See \[adaptive_rank()\], \[adaptive_step_log()\],
 \[save_adaptive_session()\], and \[validate_session_dir()\] for complete
 argument and schema details. For the within-set algorithm and
 statistical rationale, see [Design: Adaptive
-Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.md).
+Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html).
 
 ## Citation
 

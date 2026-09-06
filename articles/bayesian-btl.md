@@ -150,7 +150,7 @@ abort explicitly. Sampling failures and poor diagnostics should be
 investigated rather than converted to partial rankings.
 
 For adaptive selection and stopping, use [Guide: Adaptive
-Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md).
+Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html).
 For fixed-pair frequentist alternatives, see
 [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
 and

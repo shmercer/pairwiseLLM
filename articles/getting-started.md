@@ -19,11 +19,13 @@ A typical workflow:
 
 For prompt evaluation and positional-bias diagnostics, see:
 
-- [`vignette("prompt-template-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
+- [Prompt Template Positional Bias
+  Testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
 
 For advanced batch processing workflows, see:
 
-- [`vignette("advanced-batch-workflows")`](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html)
+- [Advanced: Submitting and Polling Multiple
+  Batches](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html)
 
 ------------------------------------------------------------------------
 
@@ -201,7 +203,7 @@ set_prompt_template(file = "my_template.txt")
 
 For named registration, replacement, removal, and the schemas used in
 later steps, see [Data Schemas and Prompt
-Management](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.md).
+Management](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.html).
 
 ------------------------------------------------------------------------
 
@@ -585,7 +587,7 @@ Most users use the unified interface, but backend helpers are available.
 
 Reasoning/thinking constraints, partial-result handling, retries, and
 local-resource guidance are covered in [Provider Controls and
-Recovery](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.md).
+Recovery](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html).
 
 ------------------------------------------------------------------------
 
@@ -631,10 +633,10 @@ and then poll/download all of them with
 
 Use
 [`compute_reverse_consistency()`](https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.md) +
-[`check_positional_bias()`](https://shmercer.github.io/pairwiseLLM/reference/check_positional_bias.md)
-(see
-[vignette(“prompt-template-bias”)](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
-for a full example).
+[`check_positional_bias()`](https://shmercer.github.io/pairwiseLLM/reference/check_positional_bias.md);
+see [Prompt Template Positional Bias
+Testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
+for a full example.
 
 ------------------------------------------------------------------------
 

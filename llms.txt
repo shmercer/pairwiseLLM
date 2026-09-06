@@ -1,8 +1,5 @@
 # pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
 
-pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
-Writing Evaluation ================
-
 ![pairwiseLLM banner](reference/figures/pairwiseLLM-banner.jpg)
 
 pairwiseLLM banner
@@ -28,32 +25,6 @@ It includes:
 
 ------------------------------------------------------------------------
 
-## Vignettes
-
-Several vignettes are available to demonstrate functionality.
-
-For basic function usage, see:
-
-- [`vignette("getting-started")`](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
-
-For data schemas, prompt management, provider controls, recovery, and
-Bayesian BTL, see:
-
-- [`vignette("data-and-prompts")`](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.md)
-- [`vignette("provider-controls-and-recovery")`](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.md)
-- [`vignette("bayesian-btl")`](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.md)
-
-For advanced batch processing workflows, see:
-
-- [`vignette("advanced-batch-workflows")`](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html)
-
-For information on prompt evaluation and positional-bias diagnostics,
-see:
-
-- [`vignette("prompt-template-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
-
-------------------------------------------------------------------------
-
 ## Backends and model identifiers
 
 `pairwiseLLM` generally forwards the `model` identifier to the selected
@@ -64,7 +35,8 @@ tested that exact configuration, and whether the provider currently
 offers the model.
 
 The dated, machine-readable compatibility record is described in
-[`vignette("model-compatibility")`](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.md).
+[Backends and Tested Model
+Configurations](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html).
 Absence from that record does not imply incompatibility. Preview
 identifiers and reasoning controls can change independently of the
 package.
@@ -244,9 +216,68 @@ At a high level, `pairwiseLLM` workflows follow this structure:
 
 The package provides helpers for each step.
 
-See
-[`vignette("data-and-prompts")`](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.md)
+See [Data Schemas and Prompt
+Management](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.html)
 for the exact transitions between these schemas.
+
+------------------------------------------------------------------------
+
+## Vignettes
+
+Start with the introductory workflow, then choose a practical guide or
+design article for your task.
+
+### Start here
+
+- [Getting Started with
+  pairwiseLLM](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+  — install the package, prepare pairs and prompts, call supported
+  backends, and fit basic models.
+
+### Data, providers, and batch workflows
+
+- [Data Schemas and Prompt
+  Management](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.html)
+  — understand data transitions and manage built-in or custom prompt
+  templates.
+- [Provider Controls and
+  Recovery](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html)
+  — configure provider-specific controls and recover from partial or
+  failed jobs.
+- [Backends and Tested Model
+  Configurations](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html)
+  — distinguish implemented backends, accepted identifiers, tested
+  configurations, and availability.
+- [Advanced: Submitting and Polling Multiple
+  Batches](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html)
+  — split, submit, resume, and combine multi-batch jobs.
+
+### Adaptive ranking and linking
+
+- [Guide: Adaptive
+  Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html)
+  — run, inspect, save, and resume an adaptive within-set ranking.
+- [Design: Adaptive
+  Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html)
+  — understand the within-set selection, refitting, and stopping design.
+- [Guide: Adaptive
+  Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.html)
+  — place separately ranked sets on a common scale with a practical
+  hub-and-spoke workflow.
+- [Design: Adaptive
+  Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.html)
+  — understand anchored-joint estimation, candidate selection, probes,
+  and stopping.
+
+### Modeling and bias
+
+- [Standalone Bayesian BTL with
+  CmdStan](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.html)
+  — fit and diagnose Bayesian Bradley–Terry–Luce models outside the
+  adaptive workflow.
+- [Prompt Template Positional Bias
+  Testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
+  — evaluate forward/reverse consistency and positional preference.
 
 ------------------------------------------------------------------------
 
@@ -259,14 +290,14 @@ uncertainty, coverage, and degree information to choose each next pair.
 
 To get started, see:
 
-- **Guide: Adaptive Pairing**
-  <https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html>
-- **Design: Adaptive Pairing**
-  [`vignette("within-set-adaptive-design")`](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.md)
-- **Guide: Adaptive Linking**
-  [`vignette("adaptive-linking")`](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.md)
-- **Design: Adaptive Linking**
-  [`vignette("adaptive-linking-design")`](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.md)
+- [Guide: Adaptive
+  Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html)
+- [Design: Adaptive
+  Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html)
+- [Guide: Adaptive
+  Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.html)
+- [Design: Adaptive
+  Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.html)
 
 ------------------------------------------------------------------------
 
@@ -688,8 +719,9 @@ result is not evidence that positional preference is absent.
 ### Positional-bias tested templates
 
 Five included templates have been tested across different backend
-providers. Complete details are presented in a vignette:
-[`vignette("prompt-template-bias")`](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
+providers. Complete details are presented in [Prompt Template Positional
+Bias
+Testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html).
 
 ------------------------------------------------------------------------
 
@@ -857,14 +889,14 @@ You can therefore:
 
 For a full tutorial on adaptive pairing, see:
 
-- **Guide: Adaptive Pairing**
-  <https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html>
+- [Guide: Adaptive
+  Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html)
 
 For a detailed description of the current within-set Bayesian and
 adaptive algorithms, see:
 
-- **Design: Adaptive Pairing**
-  [`vignette("within-set-adaptive-design")`](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.md)
+- [Design: Adaptive
+  Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html)
 
 ------------------------------------------------------------------------
 

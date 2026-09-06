@@ -4,10 +4,10 @@ This article describes the algorithm currently implemented by
 `pairwiseLLM` for placing items from separately ranked sets onto one
 common scale. For a runnable, wrapper-first tutorial, begin with [Guide:
 Adaptive
-Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.md).
+Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.html).
 The within-set algorithm that produces the required inputs is documented
 separately in [Design: Adaptive
-Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.md).
+Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html).
 
 The public entry point is
 [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)

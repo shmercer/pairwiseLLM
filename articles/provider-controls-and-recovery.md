@@ -4,7 +4,7 @@ This article explains the package’s reasoning/thinking controls and how
 to recover useful work after provider failures. Model availability
 changes independently of package behavior. Consult [Backends and Tested
 Model
-Configurations](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.md)
+Configurations](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html)
 for the dated registry rather than treating examples here as a current
 model catalog. The release registry used here was tested on 2026-09-05
 with pairwiseLLM 1.3.1.
@@ -129,8 +129,9 @@ registry.
 Do not resubmit merely because a remote job is still pending. Poll the
 existing job first. If a job reaches a terminal failure, preserve its
 status/error payload, isolate the affected request IDs, and submit only
-those requests after correcting the cause. See [Advanced Batch
-Workflows](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.md)
+those requests after correcting the cause. See [Advanced: Submitting and
+Polling Multiple
+Batches](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html)
 for the complete unevaluated API flow.
 
 ## Adaptive recovery

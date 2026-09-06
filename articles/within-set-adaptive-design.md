@@ -5,7 +5,7 @@ This article describes the algorithm currently implemented by
 procedure produces the canonical within-set artifacts used by linking
 Phase A; cross-set linking in Phase B is outside this article’s scope.
 For an operational tutorial, begin with [Guide: Adaptive
-Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md).
+Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html).
 The public entry points are
 [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md),
 [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md),

@@ -78,10 +78,10 @@
     
 <p>This article explains the package’s reasoning/thinking controls and
 how to recover useful work after provider failures. Model availability
-changes independently of package behavior. Consult <a href="model-compatibility.html">Backends and Tested Model
-Configurations</a> for the dated registry rather than treating examples
-here as a current model catalog. The release registry used here was
-tested on 2026-09-05 with pairwiseLLM 1.3.1.</p>
+changes independently of package behavior. Consult <a href="https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html">Backends
+and Tested Model Configurations</a> for the dated registry rather than
+treating examples here as a current model catalog. The release registry
+used here was tested on 2026-09-05 with pairwiseLLM 1.3.1.</p>
 <div class="section level2">
 <h2 id="controls-by-backend">Controls by backend<a class="anchor" aria-label="anchor" href="#controls-by-backend"></a>
 </h2>
@@ -259,8 +259,9 @@ reload that registry.</p>
 <p>Do not resubmit merely because a remote job is still pending. Poll
 the existing job first. If a job reaches a terminal failure, preserve
 its status/error payload, isolate the affected request IDs, and submit
-only those requests after correcting the cause. See <a href="advanced-batch-workflows.html">Advanced Batch Workflows</a> for
-the complete unevaluated API flow.</p>
+only those requests after correcting the cause. See <a href="https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html">Advanced:
+Submitting and Polling Multiple Batches</a> for the complete unevaluated
+API flow.</p>
 </div>
 <div class="section level2">
 <h2 id="adaptive-recovery">Adaptive recovery<a class="anchor" aria-label="anchor" href="#adaptive-recovery"></a>

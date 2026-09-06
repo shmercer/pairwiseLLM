@@ -82,7 +82,7 @@
 <p>This vignette demonstrates how to use <strong>pairwiseLLM</strong>
 for <strong>Batch API workflows</strong> (server-side batching), which
 are distinct from the live API calls described in the <a href="https://shmercer.github.io/pairwiseLLM/articles/getting-started.html">Getting
-Started</a> vignette.</p>
+Started with pairwiseLLM</a> vignette.</p>
 <p>Batch workflows are ideal for large-scale jobs because they:</p>
 <ul>
 <li>Allow submitting thousands of pairs at once<br>
@@ -129,8 +129,8 @@ forcing you to write your own polling loops.</p>
 <strong>Ollama</strong> do not currently support a native Batch API
 compatible with this workflow. For those providers, use the
 <strong>live</strong> API wrapper <code><a href="../reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> as
-described in the <a href="https://shmercer.github.io/pairwiseLLM/articles/getting-started.html">Getting
-Started</a> vignette.</p>
+described in <a href="https://shmercer.github.io/pairwiseLLM/articles/getting-started.html">Getting
+Started with pairwiseLLM</a>.</p>
 </blockquote>
 <p>In this vignette, we will cover:</p>
 <ul>
@@ -148,12 +148,14 @@ can enable them in your own project.</p>
 </blockquote>
 <p>For basic function usage, see the companion vignette:</p>
 <ul>
-<li><a href="https://shmercer.github.io/pairwiseLLM/articles/getting-started.html"><code>vignette("getting-started")</code></a></li>
+<li><a href="https://shmercer.github.io/pairwiseLLM/articles/getting-started.html">Getting
+Started with pairwiseLLM</a></li>
 </ul>
 <p>For prompt evaluation and positional-bias diagnostics, see the
 companion vignette:</p>
 <ul>
-<li><a href="https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html"><code>vignette("prompt-template-bias")</code></a></li>
+<li><a href="https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html">Prompt
+Template Positional Bias Testing</a></li>
 </ul>
 </div>
 <div class="section level2">
@@ -190,7 +192,8 @@ your run plan:</p>
 </table>
 <p>This vignette only covers batch-capable providers. Vertex live
 requests use a separate <code>VERTEX_API_KEY</code> surface and are
-documented in <code><a href="../articles/getting-started.html">vignette("getting-started")</a></code>.</p>
+documented in <a href="https://shmercer.github.io/pairwiseLLM/articles/getting-started.html">Getting
+Started with pairwiseLLM</a>.</p>
 <p>Check which are set:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span>

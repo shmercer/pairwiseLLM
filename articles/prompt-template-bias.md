@@ -24,11 +24,13 @@ The vignette also shows how to:
 
 For basic function usage, see:
 
-- [`vignette("getting-started")`](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+- [Getting Started with
+  pairwiseLLM](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
 
 For advanced batch processing workflows, see:
 
-- [`vignette("advanced-batch-workflows")`](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html)
+- [Advanced: Submitting and Polling Multiple
+  Batches](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html)
 
 ------------------------------------------------------------------------
 
