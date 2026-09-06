@@ -3773,13 +3773,29 @@ test_that("pooled backfill enforces duplicate caps and preserves candidate count
     A_id = rep("h1", 10L),
     B_id = rep("s21", 10L)
   )
-  state$refit_meta$link_stage_exhausted_by_refit_spoke <- list(
-    `1::2` = list(anchor_link = TRUE, long_link = TRUE, mid_link = TRUE, local_link = TRUE)
-  )
-
+  # Keep the spoke eligible and enter backfill explicitly. Exhausting every
+  # stage retires the spoke before the selector can reach the mocked pool.
   out <- testthat::with_mocked_bindings(
+    .adaptive_link_budget_map_for_refit = function(...) {
+      list(`2` = list(
+        B_spoke_refit_budget = 4L,
+        B_spoke_refit_budget_source = "single_spoke_controller"
+      ))
+    },
     .adaptive_round_compute_quotas = function(round_id, n_items, controller) {
       stats::setNames(c(1L, 1L, 1L, 1L), c("anchor_link", "long_link", "mid_link", "local_link"))
+    },
+    .adaptive_link_stage_progress = function(state, spoke_id, stage_quotas, stage_order, refit_id) {
+      list(
+        active_stage = "pooled_backfill",
+        backfill_active = TRUE,
+        stage_quotas = stage_quotas,
+        stage_realized = stats::setNames(rep.int(0L, length(stage_order)), stage_order),
+        budget_remaining_actual = 4L
+      )
+    },
+    generate_stage_candidates_from_state = function(...) {
+      rlang::abort("This test must select from the pooled backfill fixture.")
     },
     .adaptive_link_candidate_pool = function(
       state, controller, spoke_id, include_utility = TRUE, C_max = NULL, seed = 1L
@@ -3804,8 +3820,8 @@ test_that("pooled backfill enforces duplicate caps and preserves candidate count
   )
 
   expect_false(isTRUE(out$candidate_starved))
-  expect_false(identical(c(as.integer(out$i), as.integer(out$j)), c(1L, 3L)))
-  expect_gt(as.integer(out$n_candidates_generated), 0L)
-  expect_gt(as.integer(out$n_candidates_after_duplicates), 0L)
-  expect_gt(as.integer(out$n_candidates_scored), 0L)
+  expect_setequal(state$item_ids[c(out$i, out$j)], c("h2", "s22"))
+  expect_identical(as.integer(out$n_candidates_generated), 2L)
+  expect_identical(as.integer(out$n_candidates_after_duplicates), 1L)
+  expect_identical(as.integer(out$n_candidates_scored), 1L)
 })
