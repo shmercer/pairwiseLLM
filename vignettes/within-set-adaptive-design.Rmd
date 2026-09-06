@@ -588,24 +588,7 @@ degree concentration, posterior diagnostics, and stop gates together. A high fin
 \(R_{\mathrm{EAP}}\) alone is not sufficient evidence that judgments are valid or that important
 subgroups, score regions, or presentation conditions were adequately represented.
 
-## Applied Example
+## Citation
 
-For an applied example, Mercer and Reed used `pairwiseLLM` to conduct separate within-wave adaptive
-comparative-judgment analyses of student writing, fit the default position-and-lapse BTL model, and
-report the likelihood, priors, centering, MCMC settings, EAP reliability criterion, and realized
-comparison degree. See Mercer, S. H., and Reed, D. K. (2026), *Validity of Large Language Model Comparative
-Judgment for Universal Writing Screening*, [EdArXiv preprint](https://osf.io/preprints/edarxiv/4k9r8_v1).
-
-## Foundational References
-
-Bradley, R. A., & Terry, M. E. (1952). Rank analysis of incomplete block designs: I. The method of
-paired comparisons. *Biometrika, 39*(3/4), 324--345.
-
-Luce, R. D. (1959). *Individual Choice Behavior: A Theoretical Analysis*. Wiley.
-
-Pollitt, A. (2012). The method of adaptive comparative judgement. *Assessment in Education:
-Principles, Policy & Practice, 19*(3), 281--300.
-
-> Mercer, S. H. (2026). *Within-set adaptive pairing design* [R package vignette]. In
-> *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*
-> (Version 1.3.1).
+> Mercer, S. H. (2026). *Design: Adaptive pairing* [R package vignette]. Comprehensive R Archive
+> Network. https://doi.org/10.32614/CRAN.package.pairwiseLLM

@@ -666,3 +666,8 @@ Use this order; it separates input failures from an ordinary incomplete run.
 Linked ranks are conditional on the observed judgments, the anchored-joint BTL model, its priors,
 and successful diagnostics. Adaptive selection directs comparisons under the implemented utility;
 it does not guarantee identification, a stable ranking, or a particular cost reduction.
+
+## Citation
+
+> Mercer, S. H. (2026). *Guide: Adaptive linking* [R package vignette]. Comprehensive R Archive
+> Network. https://doi.org/10.32614/CRAN.package.pairwiseLLM

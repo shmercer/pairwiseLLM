@@ -83,10 +83,12 @@ data("example_writing_pairs", package = "pairwiseLLM")
 
 elo_data <- build_elo_data(example_writing_pairs)
 
-fit <- fit_elo_model(elo_data, runs = 5, verbose = FALSE)
-fit$elo
-fit$reliability
-fit$reliability_weighted
+if (requireNamespace("EloChoice", quietly = TRUE)) {
+  fit <- fit_elo_model(elo_data, runs = 5, verbose = FALSE)
+  fit$elo
+  fit$reliability
+  fit$reliability_weighted
+}
 
 }
 \references{

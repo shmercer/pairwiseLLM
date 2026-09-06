@@ -101,3 +101,8 @@ semantics that this package does not currently implement and test. Likewise,
 Ollama names such as `qwen3:32b`, `gemma3:27b`, and
 `mistral-small3.2:24b` are only dated, environment-dependent local examples,
 not claims about what another Ollama installation provides.
+
+## Citation
+
+> Mercer, S. H. (2026). *Backends and tested model configurations* [R package vignette].
+> Comprehensive R Archive Network. https://doi.org/10.32614/CRAN.package.pairwiseLLM

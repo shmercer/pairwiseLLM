@@ -815,6 +815,10 @@ test_that("submit_gemini_pairs_live resume logic skips existing pairs", {
 })
 
 test_that("submit_gemini_pairs_live runs parallel logic (coverage test)", {
+  skip_if_not_installed("future")
+  skip_if_not_installed("future.apply")
+  skip_if_not_installed("readr")
+
   pairs <- tibble::tibble(
     ID1 = c("A", "B", "C"),
     ID2 = c("D", "E", "F"),
@@ -1205,6 +1209,9 @@ test_that("submit_gemini_pairs_live handles resume files without custom IDs", {
 })
 
 test_that("submit_gemini_pairs_live reports parallel worker errors", {
+  skip_if_not_installed("future")
+  skip_if_not_installed("future.apply")
+
   pairs <- tibble::tibble(
     ID1 = c("A", "B"),
     text1 = "a",

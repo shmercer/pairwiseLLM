@@ -5,7 +5,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-<!-- README-source-md5: 09a690f9f619059ff7d03d949e106063 -->
+<!-- README-source-md5: 145fcaa96935ac086a6caa45e0cf6ee1 -->
 
 ![pairwiseLLM banner](man/figures/pairwiseLLM-banner.jpg)
 
@@ -801,6 +801,14 @@ For a detailed description of the current within-set Bayesian and adaptive algor
 |---------|----------|-----------|
 | **Live** | small or interactive runs | `submit_llm_pairs`, `llm_compare_pair` |
 | **Batch** | large jobs, cost control | `llm_submit_pairs_batch`, `llm_download_batch_results` |
+
+---
+
+## Research Studies Using pairwiseLLM
+
+Mercer, S., & Reed, D. K. (2026). *Validity of large language model comparative judgment for
+universal writing screening* [Preprint]. EdArXiv.
+https://osf.io/preprints/edarxiv/4k9r8_v2
 
 ---
 

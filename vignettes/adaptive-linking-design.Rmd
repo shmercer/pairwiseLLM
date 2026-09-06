@@ -605,17 +605,7 @@ reason not to accept the automated stop; they do not diagnose the substantive ca
 Evaluate content coverage, subgroup behavior, presentation effects, invalid-response patterns, and
 external criteria alongside the package logs.
 
-## Foundational references
+## Citation
 
-Bradley, R. A., & Terry, M. E. (1952). Rank analysis of incomplete block designs: I. The method of
-paired comparisons. *Biometrika, 39*(3/4), 324--345.
-
-Brier, G. W. (1950). Verification of forecasts expressed in terms of probability. *Monthly Weather
-Review, 78*(1), 1--3.
-
-Fedorov, V. V. (1972). *Theory of Optimal Experiments*. Academic Press.
-
-Luce, R. D. (1959). *Individual Choice Behavior: A Theoretical Analysis*. Wiley.
-
-> Mercer, S. H. (2026). *Adaptive-linking design* [R package vignette]. In *pairwiseLLM: Pairwise
-> comparison tools for large language model-based writing evaluation* (Version 1.3.1).
+> Mercer, S. H. (2026). *Design: Adaptive linking* [R package vignette]. Comprehensive R Archive
+> Network. https://doi.org/10.32614/CRAN.package.pairwiseLLM

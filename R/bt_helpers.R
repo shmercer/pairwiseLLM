@@ -34,11 +34,14 @@
 #' data("example_writing_pairs")
 #' bt <- build_bt_data(example_writing_pairs)
 #'
-#' fit1 <- fit_bt_model(bt, engine = "sirt")
-#' fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
-#'
-#' summarize_bt_fit(fit1)
-#' summarize_bt_fit(fit2)
+#' if (requireNamespace("sirt", quietly = TRUE)) {
+#'   fit1 <- fit_bt_model(bt, engine = "sirt")
+#'   summarize_bt_fit(fit1)
+#' }
+#' if (requireNamespace("BradleyTerry2", quietly = TRUE)) {
+#'   fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+#'   summarize_bt_fit(fit2)
+#' }
 #'
 #' @import tibble
 #' @seealso [build_bt_data()], [fit_bt_model()]

@@ -132,6 +132,5 @@ vignettes, bug reports, or version control.
 
 ## Citation
 
-> Mercer, S. H. (2026). *Provider controls and recovery* [R package vignette]. In
-> *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*
-> (Version 1.3.1). https://doi.org/10.32614/CRAN.package.pairwiseLLM
+> Mercer, S. H. (2026). *Provider controls and recovery* [R package vignette]. Comprehensive R
+> Archive Network. https://doi.org/10.32614/CRAN.package.pairwiseLLM

@@ -155,10 +155,12 @@ build_elo_data <- function(results) {
 #'
 #' elo_data <- build_elo_data(example_writing_pairs)
 #'
-#' fit <- fit_elo_model(elo_data, runs = 5, verbose = FALSE)
-#' fit$elo
-#' fit$reliability
-#' fit$reliability_weighted
+#' if (requireNamespace("EloChoice", quietly = TRUE)) {
+#'   fit <- fit_elo_model(elo_data, runs = 5, verbose = FALSE)
+#'   fit$elo
+#'   fit$reliability
+#'   fit$reliability_weighted
+#' }
 #'
 #' @seealso [build_bt_data()], [fit_bt_model()]
 #' @family frequentist models
