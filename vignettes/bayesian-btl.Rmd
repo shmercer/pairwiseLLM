@@ -132,7 +132,8 @@ diagnostics with reported results. Missing CmdStan, invalid schemas, unknown IDs
 empty data, invalid subset sizes, and unsupported variants abort explicitly. Sampling failures and
 poor diagnostics should be investigated rather than converted to partial rankings.
 
-For adaptive selection and stopping, use [Guide: Adaptive Pairing](adaptive-pairing.html). For
+For adaptive selection and stopping, use
+[Guide: Adaptive Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html). For
 fixed-pair frequentist alternatives, see `fit_bt_model()` and `fit_elo_model()`.
 
 ## Citation

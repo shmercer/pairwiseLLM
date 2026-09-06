@@ -343,6 +343,56 @@ test_that("README output records the current README source hash", {
   expect_identical(recorded, expected)
 })
 
+test_that("README article navigation is portable and uses descriptive labels", {
+  root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  skip_if(
+    !file.exists(file.path(root, "README.Rmd")),
+    "Repository documentation sources are unavailable in installed-package tests."
+  )
+  source <- readLines(file.path(root, "README.Rmd"), warn = FALSE)
+  readme <- paste(source, collapse = "\n")
+  concepts_start <- match("## Core Concepts", source)
+  vignettes_start <- match("## Vignettes", source)
+  vignettes_end <- match("## Adaptive pairing & ranking (overview)", source)
+
+  expect_false(any(grepl("^title:", source)))
+  expect_identical(sum(grepl("^# pairwiseLLM:", source)), 1L)
+  expect_false(grepl('vignette("', readme, fixed = TRUE))
+  expect_false(anyNA(c(concepts_start, vignettes_start, vignettes_end)))
+  expect_lt(concepts_start, vignettes_start)
+  expect_lt(vignettes_start, vignettes_end)
+
+  vignette_navigation <- paste(
+    source[seq.int(vignettes_start + 1L, vignettes_end - 1L)],
+    collapse = "\n"
+  )
+
+  article_slugs <- c(
+    "getting-started",
+    "data-and-prompts",
+    "provider-controls-and-recovery",
+    "bayesian-btl",
+    "advanced-batch-workflows",
+    "prompt-template-bias",
+    "model-compatibility",
+    "within-set-adaptive-design",
+    "adaptive-linking",
+    "adaptive-linking-design"
+  )
+  article_urls <- paste0(
+    "https://shmercer.github.io/pairwiseLLM/articles/",
+    article_slugs,
+    ".html"
+  )
+  expect_true(all(vapply(
+    article_urls,
+    grepl,
+    logical(1L),
+    x = vignette_navigation,
+    fixed = TRUE
+  )))
+})
+
 test_that("corrected documentation examples retain their contracts", {
   root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
   skip_if(
@@ -605,7 +655,7 @@ test_that("adaptive-linking design vignette tracks the normative Phase A/B contr
 
   expect_true(grepl("adaptive-linking-design.html", practical, fixed = TRUE))
   expect_true(grepl("adaptive-linking-design", pkgdown, fixed = TRUE))
-  expect_true(grepl('vignette("adaptive-linking-design")', readme, fixed = TRUE))
+  expect_true(grepl("articles/adaptive-linking-design.html", readme, fixed = TRUE))
   expect_true(grepl("adaptive-linking.html", text, fixed = TRUE))
   expect_true(grepl("within-set-adaptive-design.html", text, fixed = TRUE))
 
