@@ -117,9 +117,16 @@ test_that("Task 07 export audit and reference grouping cover every export", {
 
 test_that("every exported function has workflow links and family metadata", {
   root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  pairing_source <- file.path(root, "R", "pairing.R")
   skip_if(
-    !file.exists(file.path(root, "NAMESPACE")),
-    "Repository sources are unavailable in installed-package tests."
+    !file.exists(file.path(root, "NAMESPACE")) || !file.exists(pairing_source),
+    "Repository Roxygen sources are unavailable in installed-package tests."
+  )
+  pairing_lines <- readLines(pairing_source, warn = FALSE)
+  skip_if(
+    !any(grepl("^make_pairs <- function", pairing_lines)) ||
+      !any(grepl("^#' @export", pairing_lines)),
+    "Original repository Roxygen sources are unavailable in coverage tests."
   )
   exports <- sub(
     "^export\\((.*)\\)$", "\\1",
