@@ -10,8 +10,9 @@ This is an update from CRAN version 1.1.0 to version 1.3.1.
 - Local minimum-dependency check with `_R_CHECK_DEPENDS_ONLY_=true`: status OK.
 - Local suggested-dependency check with `_R_CHECK_SUGGESTS_ONLY_=true`: status OK.
 
-Winbuilder and any additional external platform checks will be completed by the
-maintainer before submission; no unverified external result is reported here.
+-Winbuilder: completed with 0 errors, 0 warnings, and 1 note [R Under development (unstable) (2026-09-04 r90492 ucrt)]
+
+-Rhub on GitHub CI with macOS-latest(release), windows-latest(release), ubuntu-latest(devel), ubuntu-latest(release), ubuntu-latest(oldrel-1): completed with 0 errors, 0 warnings, and 0 notes.
 
 ## R CMD check results
 
