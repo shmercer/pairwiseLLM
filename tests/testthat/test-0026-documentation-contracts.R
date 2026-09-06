@@ -301,6 +301,21 @@ test_that("Task 09 release documentation keeps navigation and citation contracts
   ))
 })
 
+test_that("standalone Bayesian BTL vignette uses current summary columns", {
+  root <- normalizePath(testthat::test_path("..", ".."), mustWork = TRUE)
+  vignette <- paste(
+    readLines(file.path(root, "vignettes", "bayesian-btl.Rmd"), warn = FALSE),
+    collapse = "\n"
+  )
+
+  expect_true(grepl(
+    '"round_id", "total_pairs", "diagnostics_pass"',
+    vignette,
+    fixed = TRUE
+  ))
+  expect_false(grepl('"total_pairs_done"', vignette, fixed = TRUE))
+})
+
 test_that("README output records the current README source hash", {
   root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
   skip_if(
