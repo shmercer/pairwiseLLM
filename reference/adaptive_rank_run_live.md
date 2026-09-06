@@ -329,12 +329,12 @@ head(step_view)
 #> # A tibble: 6 × 97
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-09-06 22:06:41       1     1     5 S01   S05       5     1 S05  
-#> 2       2 2026-09-06 22:06:42       2     5     8 S05   S08       8     5 S08  
-#> 3       3 2026-09-06 22:06:42       3     8     6 S08   S06       6     8 S06  
-#> 4       4 2026-09-06 22:06:42       4     6     2 S06   S02       2     6 S02  
-#> 5       5 2026-09-06 22:06:42       5     2     4 S02   S04       4     2 S04  
-#> 6       6 2026-09-06 22:06:42       6     4     3 S04   S03       3     4 S03  
+#> 1       1 2026-09-06 23:42:13       1     1     5 S01   S05       5     1 S05  
+#> 2       2 2026-09-06 23:42:14       2     5     8 S05   S08       8     5 S08  
+#> 3       3 2026-09-06 23:42:14       3     8     6 S08   S06       6     8 S06  
+#> 4       4 2026-09-06 23:42:14       4     6     2 S06   S02       2     6 S02  
+#> 5       5 2026-09-06 23:42:14       5     2     4 S02   S04       4     2 S04  
+#> 6       6 2026-09-06 23:42:14       6     4     3 S04   S03       3     4 S03  
 #> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,
