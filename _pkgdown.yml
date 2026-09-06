@@ -10,7 +10,7 @@ template:
 
 navbar:
   structure:
-    left: [home, reference, usage_guides, adaptive_pairing, template_positional_bias, changelog]
+    left: [home, get_started, detailed_guides, reference, changelog]
     right: [search, github]
 
   components:
@@ -23,11 +23,13 @@ navbar:
       text: Reference
       href: reference/index.html
 
-    usage_guides:
-      text: "Usage Guides"
+    get_started:
+      text: "Get Started"
+      href: articles/getting-started.html
+
+    detailed_guides:
+      text: "Detailed Guides"
       menu:
-        - text: "Getting Started with pairwiseLLM"
-          href: articles/getting-started.html
         - text: "Data Schemas and Prompt Management"
           href: articles/data-and-prompts.html
         - text: "Provider Controls and Recovery"
@@ -36,12 +38,6 @@ navbar:
           href: articles/model-compatibility.html
         - text: "Advanced: Submitting and Polling Multiple Batches"
           href: articles/advanced-batch-workflows.html
-        - text: "Standalone Bayesian BTL with CmdStan"
-          href: articles/bayesian-btl.html
-
-    adaptive_pairing:
-      text: "Adaptive Pairing"
-      menu:
         - text: "Guide: Adaptive Pairing"
           href: articles/adaptive-pairing.html
         - text: "Design: Adaptive Pairing"
@@ -50,10 +46,10 @@ navbar:
           href: articles/adaptive-linking.html
         - text: "Design: Adaptive Linking"
           href: articles/adaptive-linking-design.html
-
-    template_positional_bias:
-      text: "Template Positional Bias"
-      href: articles/prompt-template-bias.html
+        - text: "Standalone Bayesian BTL with CmdStan"
+          href: articles/bayesian-btl.html
+        - text: "Prompt Template Positional Bias Testing"
+          href: articles/prompt-template-bias.html
 
     changelog:
       text: Changelog
@@ -65,14 +61,16 @@ navbar:
       aria-label: GitHub
 
 articles:
-  - title: "Usage Guides"
+  - title: "Getting Started"
     contents:
       - getting-started
+
+  - title: "Provider and Batch Workflows"
+    contents:
       - data-and-prompts
       - provider-controls-and-recovery
       - model-compatibility
       - advanced-batch-workflows
-      - bayesian-btl
 
   - title: "Adaptive Pairing"
     contents:
@@ -81,8 +79,9 @@ articles:
       - adaptive-linking
       - adaptive-linking-design
 
-  - title: "Template Positional Bias"
+  - title: "Modeling and Bias"
     contents:
+      - bayesian-btl
       - prompt-template-bias
 
 reference:

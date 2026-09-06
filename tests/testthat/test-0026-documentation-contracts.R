@@ -234,6 +234,92 @@ test_that("all R Markdown chunks parse, including unevaluated examples", {
   }
 })
 
+test_that("Task 09 release documentation keeps navigation and citation contracts", {
+  root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  skip_if(
+    !file.exists(file.path(root, "README.Rmd")),
+    "Repository documentation sources are unavailable in installed-package tests."
+  )
+
+  readme <- paste(readLines(file.path(root, "README.Rmd"), warn = FALSE), collapse = "\n")
+  pkgdown <- paste(readLines(file.path(root, "_pkgdown.yml"), warn = FALSE), collapse = "\n")
+  description <- read.dcf(file.path(root, "DESCRIPTION"))
+  vignette_paths <- list.files(
+    file.path(root, "vignettes"), pattern = "[.]Rmd$", full.names = TRUE
+  )
+  vignette_text <- lapply(vignette_paths, function(path) {
+    paste(readLines(path, warn = FALSE), collapse = "\n")
+  })
+
+  expect_identical(unname(description[1L, "Version"]), "1.3.1")
+  expect_true(grepl("badge/dynamic/regex", readme, fixed = TRUE))
+  expect_true(grepl("raw.githubusercontent.com", readme, fixed = TRUE))
+  expect_true(grepl("## Research Studies Using pairwiseLLM", readme, fixed = TRUE))
+  expect_true(grepl("https://osf.io/preprints/edarxiv/4k9r8_v2", readme, fixed = TRUE))
+  expect_false(grepl("https://osf.io/preprints/edarxiv/4k9r8_v1", readme, fixed = TRUE))
+
+  expect_true(grepl("detailed_guides", pkgdown, fixed = TRUE))
+  expect_true(grepl("Detailed Guides", pkgdown, fixed = TRUE))
+  expect_false(grepl("provider_batch", pkgdown, fixed = TRUE))
+  expect_false(grepl("modeling_bias", pkgdown, fixed = TRUE))
+  expect_false(grepl("template_positional_bias", pkgdown, fixed = TRUE))
+  expect_true(grepl("articles/prompt-template-bias.html", pkgdown, fixed = TRUE))
+
+  expect_length(vignette_paths, 11L)
+  expect_true(all(vapply(vignette_text, function(text) {
+    normalized <- gsub("\n> ", " ", text, fixed = TRUE)
+    grepl("Citation", normalized, fixed = TRUE) &&
+      grepl("[R package vignette]. Comprehensive R Archive Network", normalized, fixed = TRUE) &&
+      grepl("https://doi.org/10.32614/CRAN.package.pairwiseLLM", text, fixed = TRUE)
+  }, logical(1L))))
+
+  design_text <- paste(
+    vignette_text[grepl("(within-set-adaptive|adaptive-linking-design)[.]Rmd$", vignette_paths)],
+    collapse = "\n"
+  )
+  expect_false(grepl("## Applied Example", design_text, fixed = TRUE))
+  expect_false(grepl("## Foundational References", design_text, fixed = TRUE))
+  expect_false(grepl("## Foundational references", design_text, fixed = TRUE))
+  expect_false(grepl("4k9r8_v1", design_text, fixed = TRUE))
+
+  elo_source <- paste(
+    readLines(file.path(root, "R", "elo_model.R"), warn = FALSE), collapse = "\n"
+  )
+  expect_true(grepl(
+    'if (requireNamespace("EloChoice", quietly = TRUE))', elo_source, fixed = TRUE
+  ))
+  bt_helper_source <- paste(
+    readLines(file.path(root, "R", "bt_helpers.R"), warn = FALSE), collapse = "\n"
+  )
+  expect_true(grepl(
+    'if (requireNamespace("sirt", quietly = TRUE))', bt_helper_source, fixed = TRUE
+  ))
+  expect_true(grepl(
+    'if (requireNamespace("BradleyTerry2", quietly = TRUE))',
+    bt_helper_source,
+    fixed = TRUE
+  ))
+})
+
+test_that("standalone Bayesian BTL vignette uses current summary columns", {
+  root <- normalizePath(testthat::test_path("..", ".."), mustWork = TRUE)
+  skip_if(
+    !file.exists(file.path(root, "vignettes", "bayesian-btl.Rmd")),
+    "Repository documentation sources are unavailable in installed-package tests."
+  )
+  vignette <- paste(
+    readLines(file.path(root, "vignettes", "bayesian-btl.Rmd"), warn = FALSE),
+    collapse = "\n"
+  )
+
+  expect_true(grepl(
+    '"round_id", "total_pairs", "diagnostics_pass"',
+    vignette,
+    fixed = TRUE
+  ))
+  expect_false(grepl('"total_pairs_done"', vignette, fixed = TRUE))
+})
+
 test_that("README output records the current README source hash", {
   root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
   skip_if(

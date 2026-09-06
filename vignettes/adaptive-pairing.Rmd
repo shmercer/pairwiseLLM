@@ -526,6 +526,5 @@ For the within-set algorithm and statistical rationale, see
 
 ## Citation
 
-> Mercer, S. H. (2026). *Guide: Adaptive Pairing* [R package vignette].
-> In *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*.
-> https://doi.org/10.32614/CRAN.package.pairwiseLLM
+> Mercer, S. H. (2026). *Guide: Adaptive pairing* [R package vignette]. Comprehensive R Archive
+> Network. https://doi.org/10.32614/CRAN.package.pairwiseLLM

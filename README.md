@@ -2,7 +2,7 @@ pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
 Writing Evaluation
 ================
 
-<!-- README-source-md5: 09a690f9f619059ff7d03d949e106063 -->
+<!-- README-source-md5: 145fcaa96935ac086a6caa45e0cf6ee1 -->
 
 <figure>
 <img src="man/figures/pairwiseLLM-banner.jpg"
@@ -851,6 +851,14 @@ adaptive algorithms, see:
 |-----------|---------------------------|--------------------------------------------------------|
 | **Live**  | small or interactive runs | `submit_llm_pairs`, `llm_compare_pair`                 |
 | **Batch** | large jobs, cost control  | `llm_submit_pairs_batch`, `llm_download_batch_results` |
+
+------------------------------------------------------------------------
+
+## Research Studies Using pairwiseLLM
+
+Mercer, S., & Reed, D. K. (2026). *Validity of large language model
+comparative judgment for universal writing screening* \[Preprint\].
+EdArXiv. <https://osf.io/preprints/edarxiv/4k9r8_v2>
 
 ------------------------------------------------------------------------
 

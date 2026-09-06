@@ -6,6 +6,8 @@ llm_submit_pairs_multi_batch <- pairwiseLLM::llm_submit_pairs_multi_batch
 llm_resume_multi_batches <- pairwiseLLM::llm_resume_multi_batches
 
 test_that("llm_submit_pairs_multi_batch splits pairs correctly and writes registry", {
+  skip_if_not_installed("readr")
+
   # Prepare a small set of pairs
   pairs <- tibble::tibble(
     ID1 = c("A", "B", "C", "D"),
@@ -214,6 +216,8 @@ test_that("llm_resume_multi_batches processes OpenAI jobs and cleans up JSON fil
 })
 
 test_that("llm_resume_multi_batches processes Anthropic jobs and writes results CSV", {
+  skip_if_not_installed("readr")
+
   # Create a dummy job list for Anthropic
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
@@ -410,6 +414,8 @@ test_that("llm_resume_multi_batches loads jobs from registry when jobs is NULL",
 })
 
 test_that("llm_resume_multi_batches writes combined results CSV when requested", {
+  skip_if_not_installed("readr")
+
   # Prepare a dummy job list with a single OpenAI job that immediately completes
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
@@ -638,6 +644,8 @@ test_that("openai download retries on 5xx errors and succeeds", {
 })
 
 test_that("llm_resume_multi_batches writes combined results CSV to absolute path", {
+  skip_if_not_installed("readr")
+
   # Prepare a dummy openai job
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
@@ -705,6 +713,8 @@ test_that("llm_resume_multi_batches writes combined results CSV to absolute path
 })
 
 test_that("llm_resume_multi_batches updates registry when write_registry=TRUE", {
+  skip_if_not_installed("readr")
+
   # Create initial registry and jobs list
   tmpdir <- tempfile("registry_update_")
   dir.create(tmpdir, recursive = TRUE)
@@ -847,6 +857,8 @@ test_that("custom tag_prefix and tag_suffix are forwarded to parse_anthropic_bat
 })
 
 test_that("llm_resume_multi_batches validates inputs when jobs and output_dir missing", {
+  skip_if_not_installed("readr")
+
   # Expect error if both jobs and output_dir are NULL
   expect_error(
     llm_resume_multi_batches(
@@ -1219,6 +1231,8 @@ test_that("llm_resume_multi_batches handles Gemini top-level state field", {
 })
 
 test_that("llm_resume_multi_batches writes combined CSV to nested relative path", {
+  skip_if_not_installed("readr")
+
   # Create a dummy job that finishes immediately
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
@@ -1327,6 +1341,8 @@ test_that("llm_resume_multi_batches propagates unexpected OpenAI download errors
 })
 
 test_that("llm_resume_multi_batches writes combined CSV to default path", {
+  skip_if_not_installed("readr")
+
   # Create a simple job that completes immediately
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
@@ -1392,6 +1408,8 @@ test_that("llm_resume_multi_batches writes combined CSV to default path", {
 })
 
 test_that("llm_resume_multi_batches errors when registry is missing", {
+  skip_if_not_installed("readr")
+
   # Use a temporary directory without a registry file
   tmpdir <- tempfile("no_registry_")
   dir.create(tmpdir, recursive = TRUE)
@@ -1525,6 +1543,8 @@ test_that("llm_resume_multi_batches handles Gemini failure states and cleans up"
 })
 
 test_that("llm_resume_multi_batches infers output_dir and writes registry", {
+  skip_if_not_installed("readr")
+
   tmpdir <- tempfile("registry_infer_")
   dir.create(tmpdir, recursive = TRUE)
   output_path <- file.path(tmpdir, "batch_01_output.jsonl")
@@ -2256,6 +2276,8 @@ test_that("llm_resume_multi_batches logs Anthropic status and cleans up files", 
 })
 
 test_that("llm_resume_multi_batches logs Gemini errors and writes results", {
+  skip_if_not_installed("readr")
+
   tmpdir <- tempfile("gemini_verbose_")
   dir.create(tmpdir, recursive = TRUE)
   input_path <- file.path(tmpdir, "batch_01_input.jsonl")
@@ -2327,6 +2349,8 @@ test_that("llm_resume_multi_batches logs Gemini errors and writes results", {
 })
 
 test_that("llm_resume_multi_batches logs combined results output when verbose", {
+  skip_if_not_installed("readr")
+
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
   writeLines("{}", con = input_path)
