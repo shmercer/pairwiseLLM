@@ -9,7 +9,7 @@ NULL
 #' \code{\link{parse_openai_batch_output}}.
 #'
 #' It supports both the Chat Completions endpoint ("/v1/chat/completions") and
-#' the Responses endpoint ("/v1/responses", for example gpt-5.1 with reasoning),
+#' the Responses endpoint ("/v1/responses", for example gpt-5.6 with reasoning),
 #' using the same prompt template and model / parameter rules as the batch
 #' pipeline.
 #'
@@ -20,18 +20,16 @@ NULL
 #'   \item Visible assistant output into the \code{content} column.
 #' }
 #'
-#' **Temperature Defaults:**
-#' If `temperature` is not provided in `...`:
-#' * It defaults to `0` (deterministic) for standard models or when reasoning is
-#'   disabled.
-#' * It remains `NULL` when reasoning is enabled, as the API does not support
-#'   temperature in that mode.
+#' **Sampling defaults:**
+#' If `temperature` or `top_p` is not provided in `...`, the corresponding
+#' field is omitted so the model/provider default applies. Reasoning modes that
+#' do not support sampling parameters continue to require them to be `NULL`.
 #'
 #' @param ID1 Character ID for the first sample.
 #' @param text1 Character string containing the first sample's text.
 #' @param ID2 Character ID for the second sample.
 #' @param text2 Character string containing the second sample's text.
-#' @param model OpenAI model name (e.g. "gpt-4.1", "gpt-5.2-2025-12-11").
+#' @param model OpenAI model name (e.g. "gpt-4.1", "gpt-5.6-sol").
 #' @param trait_name Short label for the trait (e.g. "Overall Quality").
 #' @param trait_description Full-text definition of the trait.
 #' @param prompt_template Prompt template string.
@@ -43,8 +41,9 @@ NULL
 #' @param include_raw Logical; if TRUE, adds a \code{raw_response} column.
 #' @param ... Additional OpenAI parameters, for example
 #'   \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},
-#'   \code{service_tier}, \code{pair_uid}, and (optionally)
-#'   \code{include_thoughts}. When
+#'   \code{service_tier}, \code{max_output_tokens}, \code{pair_uid}, and
+#'   (optionally) \code{include_thoughts}. \code{max_output_tokens} must be a
+#'   positive integer and is supported only by the Responses endpoint. When
 #'   \code{pair_uid} is supplied, it is used verbatim as \code{custom_id}.
 #'   The same validation rules for
 #'   gpt-5 models are applied as in \code{\link{build_openai_batch_requests}}.
@@ -87,15 +86,14 @@ NULL
 #'   ID2 = "B", text2 = "Text B...",
 #'   model = "gpt-4.1",
 #'   trait_name = "clarity",
-#'   trait_description = "Which text is clearer?",
-#'   temperature = 0
+#'   trait_description = "Which text is clearer?"
 #' )
 #'
-#' # 2. Reasoning comparison using GPT-5.2
+#' # 2. Reasoning comparison using GPT-5.6 Sol
 #' res_reasoning <- openai_compare_pair_live(
 #'   ID1 = "A", text1 = "Text A...",
 #'   ID2 = "B", text2 = "Text B...",
-#'   model = "gpt-5.2-2025-12-11",
+#'   model = "gpt-5.6-sol",
 #'   trait_name = "clarity",
 #'   trait_description = "Which text is clearer?",
 #'   endpoint = "responses",
@@ -106,6 +104,8 @@ NULL
 #' print(res_reasoning$thoughts)
 #' }
 #'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 openai_compare_pair_live <- function(
   ID1,
@@ -136,6 +136,23 @@ openai_compare_pair_live <- function(
   pair_uid <- dots$pair_uid %||% NULL
   top_p <- dots$top_p %||% NULL
   logprobs <- dots$logprobs %||% NULL
+  max_output_tokens <- dots$max_output_tokens %||% NULL
+
+  if (!is.null(max_output_tokens)) {
+    valid_max_output_tokens <- is.numeric(max_output_tokens) &&
+      length(max_output_tokens) == 1L &&
+      !is.na(max_output_tokens) &&
+      is.finite(max_output_tokens) &&
+      max_output_tokens >= 1 &&
+      max_output_tokens == floor(max_output_tokens)
+    if (!valid_max_output_tokens) {
+      rlang::abort("`max_output_tokens` must be a positive integer.")
+    }
+    if (!identical(endpoint, "responses")) {
+      rlang::abort("`max_output_tokens` is supported only by the OpenAI Responses endpoint.")
+    }
+    max_output_tokens <- as.integer(max_output_tokens)
+  }
 
   reasoning_effort <- normalize_openai_reasoning(
     model = model,
@@ -148,24 +165,10 @@ openai_compare_pair_live <- function(
     service_tier <- NULL
   }
 
-  # Determine temperature default
-  is_gpt5_base <- model %in% c("gpt-5", "gpt-5-mini", "gpt-5-nano")
-  is_gpt5_reasoning <- is_gpt5_series_model(model) && !is_gpt5_base
-
-  reasoning_active <- if (is_gpt5_reasoning) {
-    !is.null(reasoning_effort) && !identical(reasoning_effort, "none")
-  } else if (is_gpt5_base) {
-    !is.null(reasoning_effort)
-  } else {
-    FALSE
-  }
-
   temperature <- if ("temperature" %in% names(dots)) {
     dots$temperature
-  } else if (reasoning_active) {
-    NULL # Must be NULL for reasoning
   } else {
-    0 # Default to 0 for everything else (standard or disabled reasoning)
+    NULL
   }
 
   sampling <- normalize_openai_sampling(
@@ -205,6 +208,7 @@ openai_compare_pair_live <- function(
     if (!is.null(temperature)) body$temperature <- temperature
     if (!is.null(top_p)) body$top_p <- top_p
     if (!is.null(logprobs)) body$logprobs <- logprobs
+    if (!is.null(max_output_tokens)) body$max_output_tokens <- max_output_tokens
     path <- "/responses"
   }
 
@@ -426,7 +430,7 @@ openai_compare_pair_live <- function(
 #'   trait_description = td$description,
 #'   save_path         = "results_par.csv",
 #'   parallel          = TRUE,
-#'   workers           = 4
+#'   workers           = 2
 #' )
 #'
 #' # Inspect results
@@ -450,6 +454,8 @@ openai_compare_pair_live <- function(
 #' )
 #' }
 #'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 submit_openai_pairs_live <- function(
   pairs,

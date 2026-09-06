@@ -1,3 +1,13 @@
+.llm_multi_require_readr <- function() {
+  if (!requireNamespace("readr", quietly = TRUE)) {
+    rlang::abort(paste0(
+      "Package 'readr' is required to load or write multi-batch CSV files. ",
+      "Install it with: install.packages(\"readr\")"
+    ))
+  }
+  invisible(TRUE)
+}
+
 #' Multi‑batch submission and polling wrappers
 #'
 #' These functions provide higher‑level wrappers around the existing
@@ -25,8 +35,10 @@
 #' @param trait_name,trait_description,prompt_template Parameters forwarded
 #'   to [run_openai_batch_pipeline()], [run_anthropic_batch_pipeline()], or
 #'   [run_gemini_batch_pipeline()].  See those functions for details.
-#' @param backend One of `"openai"`, `"anthropic"`, or `"gemini"`.  Determines
-#'   which provider pipeline is used for each batch.
+#' @param backend One of `"openai"`, `"anthropic"`, or `"gemini"`. Determines
+#'   which provider pipeline is used for each batch. If `"vertex"` is
+#'   supplied, this function aborts explicitly because Vertex batch mode is not
+#'   implemented in this series.
 #' @param batch_size Integer giving the maximum number of pairs per batch.
 #'   Exactly one of `batch_size` or `n_segments` must be supplied; if
 #'   `batch_size` is supplied, the number of segments is computed as
@@ -91,7 +103,7 @@
 #' # and print progress messages as each batch is created.
 #' job_info <- llm_submit_pairs_multi_batch(
 #'   pairs             = pairs,
-#'   model             = "gemini-3-pro-preview",
+#'   model             = "gemini-3.5-flash-lite",
 #'   trait_name        = "writing_quality",
 #'   trait_description = "Which text shows better writing quality?",
 #'   n_segments        = 5,
@@ -119,6 +131,8 @@
 #' head(results$combined)
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 llm_submit_pairs_multi_batch <- function(
   pairs,
@@ -136,7 +150,26 @@ llm_submit_pairs_multi_batch <- function(
   ...,
   openai_max_retries = 3
 ) {
-  backend <- match.arg(backend)
+  if (isTRUE(write_registry)) {
+    .llm_multi_require_readr()
+  }
+
+  backend <- as.character(backend)
+  if (length(backend) < 1L || is.na(backend[1L]) || !nzchar(backend[1L])) {
+    rlang::abort("`backend` must be a non-empty character scalar.")
+  }
+  backend <- tolower(backend[1L])
+
+  if (identical(backend, "vertex")) {
+    rlang::abort(
+      paste0(
+        "`backend = \"vertex\"` is not supported by `llm_submit_pairs_multi_batch()` ",
+        "because Vertex batch mode is not implemented in this series."
+      )
+    )
+  }
+
+  backend <- match.arg(backend, c("openai", "anthropic", "gemini"))
 
   # Validate input and splitting options
   if (!is.null(batch_size) && !is.null(n_segments)) {
@@ -421,6 +454,8 @@ llm_submit_pairs_multi_batch <- function(
 #' print(results$combined)
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 llm_resume_multi_batches <- function(
   jobs = NULL,
@@ -437,6 +472,12 @@ llm_resume_multi_batches <- function(
   combined_csv_path = NULL,
   openai_max_retries = 3
 ) {
+  needs_readr <- is.null(jobs) || isTRUE(write_results_csv) ||
+    isTRUE(write_registry) || isTRUE(write_combined_csv)
+  if (needs_readr) {
+    .llm_multi_require_readr()
+  }
+
   # Validate inputs; either jobs must be supplied or output_dir must be provided
   if (is.null(jobs)) {
     if (is.null(output_dir)) {
@@ -873,8 +914,8 @@ llm_resume_multi_batches <- function(
   }
 
   # Combine results into a single tibble (if any)
-  completed_results <- purrr::compact(lapply(jobs, `[[`, "results"))
-  completed_failed <- purrr::compact(lapply(jobs, `[[`, "failed_attempts"))
+  completed_results <- Filter(Negate(is.null), lapply(jobs, `[[`, "results"))
+  completed_failed <- Filter(Negate(is.null), lapply(jobs, `[[`, "failed_attempts"))
   combined <- if (length(completed_results) > 0L) {
     dplyr::bind_rows(completed_results)
   } else {

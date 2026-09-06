@@ -92,6 +92,8 @@ NULL
 #' file_obj$id
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 openai_upload_batch_file <- function(
   path,
@@ -142,6 +144,8 @@ openai_upload_batch_file <- function(
 #' batch_obj$status
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 openai_create_batch <- function(
   input_file_id,
@@ -184,6 +188,8 @@ openai_create_batch <- function(
 #' batch$status
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 openai_get_batch <- function(
   batch_id,
@@ -221,6 +227,8 @@ openai_get_batch <- function(
 #' head(res)
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 openai_download_batch_output <- function(
   batch_id,
@@ -286,6 +294,8 @@ openai_download_batch_output <- function(
 #' final$status
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 openai_poll_batch_until_complete <- function(
     batch_id,
@@ -366,7 +376,7 @@ openai_poll_batch_until_complete <- function(
 #' @param pairs Tibble of pairs with at least `ID1`, `text1`, `ID2`, `text2`.
 #'   Typically produced by [make_pairs()], [sample_pairs()], and
 #'   [randomize_pair_order()].
-#' @param model OpenAI model name (e.g. `"gpt-4.1"`, `"gpt-5.1"`).
+#' @param model OpenAI model name (e.g. `"gpt-4.1"`, `"gpt-5.6-sol"`).
 #' @param trait_name Trait name to pass to [build_openai_batch_requests()].
 #' @param trait_description Trait description to pass to
 #'   [build_openai_batch_requests()].
@@ -448,6 +458,8 @@ openai_poll_batch_until_complete <- function(
 #' print(utils::head(out$results))
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_resume_multi_batches()]
+#' @family batch backends
 #' @export
   run_openai_batch_pipeline <- function(
     pairs,
@@ -575,8 +587,8 @@ openai_poll_batch_until_complete <- function(
 #' @param pairs A data frame or tibble with columns \code{ID1}, \code{text1},
 #'   \code{ID2}, and \code{text2}.
 #' @param model Character scalar giving the OpenAI model name.
-#'   Supports standard names (e.g. \code{"gpt-4.1"}) and date-stamped versions
-#'   (e.g. \code{"gpt-5.2-2025-12-11"}).
+#'   Supports standard names (e.g. \code{"gpt-4.1"}, \code{"gpt-5.6-sol"})
+#'   and date-stamped versions (e.g. \code{"gpt-5.4-2026-01-15"}).
 #' @param trait_name Short label for the trait (e.g., "Overall Quality").
 #' @param trait_description Full-text definition of the trait.
 #' @param prompt_template Character template containing the placeholders
@@ -584,16 +596,18 @@ openai_poll_batch_until_complete <- function(
 #'   and \code{{SAMPLE_2}}. Defaults to \code{set_prompt_template()}.
 #' @param endpoint Which OpenAI endpoint to target. One of
 #'   \code{"chat.completions"} (default) or \code{"responses"}.
-#' @param temperature Optional temperature parameter. Defaults to `0` for
-#'   standard models (deterministic). Must be `NULL` for reasoning models
-#'   (enabled).
-#' @param top_p Optional top_p parameter.
+#' @param temperature Optional temperature parameter. If `NULL`, it is omitted
+#'   so the model/provider default applies. Must be `NULL` for reasoning modes
+#'   that do not support it.
+#' @param top_p Optional top-p parameter. If `NULL`, it is omitted so the
+#'   model/provider default applies.
 #' @param logprobs Optional logprobs parameter.
 #' @param reasoning Optional reasoning effort for GPT-5 series when using
 #'   the \code{/v1/responses} endpoint. For \code{"gpt-5"} and
 #'   \code{"gpt-5-mini"}, \code{"none"} is normalized to \code{"minimal"}.
-#'   For \code{"gpt-5.1/5.2"}, use \code{"none"}, \code{"low"},
-#'   \code{"medium"}, or \code{"high"}.
+#'   For later GPT-5.x reasoning models, use model-supported efforts such as
+#'   \code{"none"}, \code{"low"}, \code{"medium"}, \code{"high"},
+#'   \code{"xhigh"}, or \code{"max"}.
 #' @param include_thoughts Logical; if TRUE and using \code{responses} endpoint
 #'   with reasoning, requests a summary. Defaults \code{reasoning} to
 #'   \code{"low"} for GPT-5 series models if not specified.
@@ -627,14 +641,13 @@ openai_poll_batch_until_complete <- function(
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
-#'   endpoint          = "chat.completions",
-#'   temperature       = 0
+#'   endpoint          = "chat.completions"
 #' )
 #'
-#' # 2. GPT-5.2-2025-12-11 Responses Batch with Reasoning
+#' # 2. GPT-5.6 Sol Responses Batch with Reasoning
 #' batch_tbl_resp <- build_openai_batch_requests(
 #'   pairs = pairs,
-#'   model = "gpt-5.2-2025-12-11",
+#'   model = "gpt-5.6-sol",
 #'   trait_name = td$name,
 #'   trait_description = td$description,
 #'   prompt_template = tmpl,
@@ -647,6 +660,8 @@ openai_poll_batch_until_complete <- function(
 #' batch_tbl_resp
 #'
 #' @import tibble
+#' @seealso [llm_submit_pairs_batch()], [llm_resume_multi_batches()]
+#' @family batch backends
 #' @export
   build_openai_batch_requests <- function(pairs,
                                           model,
@@ -681,21 +696,6 @@ openai_poll_batch_until_complete <- function(
     if (endpoint == "responses" && isTRUE(include_thoughts) &&
       is.null(reasoning_effort) && !is_gpt5_series_model(model)) {
       rlang::warn("include_thoughts requested for non-reasoning model; ignores thoughts.")
-    }
-
-    is_gpt5_base <- model %in% c("gpt-5", "gpt-5-mini", "gpt-5-nano")
-    is_gpt5_reasoning <- is_gpt5_series_model(model) && !is_gpt5_base
-
-    reasoning_active <- if (is_gpt5_reasoning) {
-      !is.null(reasoning_effort) && !identical(reasoning_effort, "none")
-    } else if (is_gpt5_base) {
-      !is.null(reasoning_effort)
-    } else {
-      FALSE
-    }
-
-    if (is.null(temperature) && !reasoning_active) {
-      temperature <- 0
     }
 
     sampling <- normalize_openai_sampling(
@@ -808,6 +808,8 @@ openai_poll_batch_until_complete <- function(
 #' readLines(path)
 #'
 #' @importFrom jsonlite toJSON
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 write_openai_batch_file <- function(batch_tbl, path) {
   batch_tbl <- tibble::as_tibble(batch_tbl)
@@ -952,6 +954,8 @@ write_openai_batch_file <- function(batch_tbl, path) {
 #'
 #' @import tibble
 #' @importFrom jsonlite fromJSON
+#' @seealso [parse_anthropic_batch_output()], [parse_gemini_batch_output()]
+#' @family result normalization
 #' @export
 parse_openai_batch_output <- function(path,
                                       tag_prefix = "<BETTER_SAMPLE>",

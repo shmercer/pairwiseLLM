@@ -10,7 +10,7 @@ adaptive_defaults <- function(N) {
 
   W <- .btl_mcmc_clamp(5L, 60L, as.integer(round(2 * sqrt(N))))
   explore_rate <- .btl_mcmc_clamp(0.10, 0.25, 0.20 - 0.02 * log10(N))
-  refit_pairs_target <- .btl_mcmc_clamp(100L, 5000L, as.integer(ceiling(N / 2)))
+  refit_pairs_target <- .btl_mcmc_clamp(20L, 5000L, as.integer(ceiling(N / 2)))
   W_cap <- max(200L, min(2000L, refit_pairs_target))
   round_pairs_target <- as.integer(ceiling(refit_pairs_target / 2))
   k_base <- if (N < 60L) {
@@ -91,6 +91,9 @@ adaptive_defaults <- function(N) {
   }
   history$A_id <- as.character(history$A_id)
   history$B_id <- as.character(history$B_id)
+  if ("is_probe_step" %in% names(history)) {
+    history <- history[!(as.logical(history$is_probe_step) %in% TRUE), , drop = FALSE]
+  }
   history
 }
 
@@ -160,6 +163,547 @@ adaptive_defaults <- function(N) {
     recent[[B]] <- recent[[B]] + 1L
   }
   recent
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_recent_window_max <- function() {
+  2000L
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_live_recent_window <- function(ids) {
+  ids <- as.character(ids)
+  if (length(ids) < 1L) {
+    return(0L)
+  }
+  as.integer(adaptive_defaults(length(ids))$W_cap)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_empty <- function(ids) {
+  ids <- as.character(ids)
+  zero <- stats::setNames(rep.int(0L, length(ids)), ids)
+  list(
+    n_pairs = 0L,
+    deg = zero,
+    posA = zero,
+    posB = zero,
+    pair_count = stats::setNames(integer(), character()),
+    pair_last_order = list(),
+    recent_window_n = .adaptive_history_state_live_recent_window(ids),
+    recent_deg = zero,
+    recent_pairs = tibble::tibble(
+      A_id = character(),
+      B_id = character()
+    )
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_validate <- function(cache, ids, context = "runtime") {
+  ids <- as.character(ids)
+  required <- c(
+    "n_pairs",
+    "deg",
+    "posA",
+    "posB",
+    "pair_count",
+    "pair_last_order",
+    "recent_window_n",
+    "recent_deg",
+    "recent_pairs"
+  )
+  if (!is.list(cache)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state` must be a list."
+      )
+    )
+  }
+  missing <- setdiff(required, names(cache))
+  if (length(missing) > 0L) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state` is missing required fields: ",
+        paste(missing, collapse = ", "),
+        "."
+      )
+    )
+  }
+  n_pairs <- as.integer(cache$n_pairs %||% NA_integer_)
+  if (length(n_pairs) != 1L || is.na(n_pairs) || n_pairs < 0L) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$n_pairs` must be a single non-negative integer."
+      )
+    )
+  }
+
+  .validate_named_counts <- function(x, field) {
+    if (!is.integer(x)) {
+      rlang::abort(
+        paste0(
+          "Adaptive history-state invariant failed during ",
+          context,
+          ": `history_state$",
+          field,
+          "` must be an integer vector."
+        )
+      )
+    }
+    if (is.null(names(x)) || !identical(names(x), ids)) {
+      rlang::abort(
+        paste0(
+          "Adaptive history-state invariant failed during ",
+          context,
+          ": `history_state$",
+          field,
+          "` names must exactly match `state$item_ids`."
+        )
+      )
+    }
+    if (any(is.na(x)) || any(x < 0L)) {
+      rlang::abort(
+        paste0(
+          "Adaptive history-state invariant failed during ",
+          context,
+          ": `history_state$",
+          field,
+          "` must be non-missing and non-negative."
+        )
+      )
+    }
+  }
+
+  .validate_named_counts(cache$deg, "deg")
+  .validate_named_counts(cache$posA, "posA")
+  .validate_named_counts(cache$posB, "posB")
+  .validate_named_counts(cache$recent_deg, "recent_deg")
+
+  pair_count <- cache$pair_count %||% integer()
+  if (!is.integer(pair_count)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_count` must be an integer vector."
+      )
+    )
+  }
+  if (length(pair_count) > 0L && is.null(names(pair_count))) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_count` must be named when non-empty."
+      )
+    )
+  }
+  if (any(is.na(pair_count)) || any(pair_count < 0L)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_count` must be non-missing and non-negative."
+      )
+    )
+  }
+
+  pair_last_order <- cache$pair_last_order %||% list()
+  if (!is.list(pair_last_order)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_last_order` must be a list."
+      )
+    )
+  }
+  pair_last_names <- names(pair_last_order) %||% character()
+  if (length(pair_last_order) > 0L &&
+    (length(pair_last_names) != length(pair_last_order) || anyNA(pair_last_names) || any(pair_last_names == ""))) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_last_order` must use non-empty pair-key names."
+      )
+    )
+  }
+  invalid_last_order <- vapply(
+    pair_last_order,
+    function(value) {
+      !is.character(value) || length(value) != 2L || any(is.na(value)) || identical(value[[1L]], value[[2L]])
+    },
+    logical(1L)
+  )
+  if (any(invalid_last_order)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$pair_last_order` values must be length-2 non-self character vectors."
+      )
+    )
+  }
+
+  recent_pairs <- tibble::as_tibble(cache$recent_pairs %||% tibble::tibble())
+  if (!all(c("A_id", "B_id") %in% names(recent_pairs))) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$recent_pairs` must contain `A_id` and `B_id`."
+      )
+    )
+  }
+  recent_pairs <- recent_pairs[, c("A_id", "B_id"), drop = FALSE]
+  recent_pairs$A_id <- as.character(recent_pairs$A_id)
+  recent_pairs$B_id <- as.character(recent_pairs$B_id)
+  max_recent <- .adaptive_history_state_recent_window_max()
+  recent_window_n <- as.integer(cache$recent_window_n %||% NA_integer_)
+  if (length(recent_window_n) != 1L ||
+    is.na(recent_window_n) ||
+    recent_window_n < 0L ||
+    recent_window_n > max_recent) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$recent_window_n` must be a single integer between 0 and ",
+        max_recent,
+        "."
+      )
+    )
+  }
+  expected_recent_n <- min(n_pairs, max_recent)
+  if (!identical(nrow(recent_pairs), expected_recent_n)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": `history_state$recent_pairs` must contain exactly min(n_pairs, ",
+        max_recent,
+        ") rows."
+      )
+    )
+  }
+
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_pair_count_normalize <- function(pair_count) {
+  pair_count_raw <- pair_count %||% integer()
+  pair_count <- as.integer(pair_count_raw)
+  names(pair_count) <- names(pair_count_raw)
+  if (length(pair_count) < 1L) {
+    return(stats::setNames(integer(), character()))
+  }
+  pair_count[order(names(pair_count))]
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_pair_last_order_normalize <- function(pair_last_order) {
+  pair_last_order <- pair_last_order %||% list()
+  pair_last_names <- names(pair_last_order) %||% character()
+  if (length(pair_last_order) < 1L) {
+    return(list())
+  }
+  ord <- order(pair_last_names)
+  out <- pair_last_order[ord]
+  names(out) <- pair_last_names[ord]
+  lapply(out, as.character)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_equivalent <- function(cache, rebuilt) {
+  identical(as.integer(cache$n_pairs), as.integer(rebuilt$n_pairs)) &&
+    identical(cache$deg, rebuilt$deg) &&
+    identical(cache$posA, rebuilt$posA) &&
+    identical(cache$posB, rebuilt$posB) &&
+    identical(as.integer(cache$recent_window_n), as.integer(rebuilt$recent_window_n)) &&
+    identical(cache$recent_deg, rebuilt$recent_deg) &&
+    identical(
+      .adaptive_history_state_pair_count_normalize(cache$pair_count),
+      .adaptive_history_state_pair_count_normalize(rebuilt$pair_count)
+    ) &&
+    identical(
+      .adaptive_history_state_pair_last_order_normalize(cache$pair_last_order),
+      .adaptive_history_state_pair_last_order_normalize(rebuilt$pair_last_order)
+    ) &&
+    identical(
+      tibble::as_tibble(cache$recent_pairs)[, c("A_id", "B_id"), drop = FALSE],
+      tibble::as_tibble(rebuilt$recent_pairs)[, c("A_id", "B_id"), drop = FALSE]
+    )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_rebuild <- function(history, ids) {
+  ids <- as.character(ids)
+  history <- .adaptive_history_tbl(list(history_pairs = history))
+  counts <- .adaptive_pair_counts(history, ids)
+  deg <- as.integer(counts$deg)
+  names(deg) <- names(counts$deg)
+  posA <- as.integer(counts$posA)
+  names(posA) <- names(counts$posA)
+  posB <- as.integer(counts$posB)
+  names(posB) <- names(counts$posB)
+  pair_count <- as.integer(counts$pair_count)
+  names(pair_count) <- names(counts$pair_count)
+  recent_window_n <- .adaptive_history_state_live_recent_window(ids)
+  recent_deg <- .adaptive_recent_deg(history, ids, recent_window_n)
+  recent_deg <- as.integer(recent_deg)
+  names(recent_deg) <- ids
+  max_recent <- .adaptive_history_state_recent_window_max()
+  recent_pairs <- if (nrow(history) > 0L) {
+    recent <- utils::tail(history, n = min(nrow(history), max_recent))
+    tibble::tibble(
+      A_id = as.character(recent$A_id),
+      B_id = as.character(recent$B_id)
+    )
+  } else {
+    tibble::tibble(A_id = character(), B_id = character())
+  }
+  list(
+    n_pairs = as.integer(nrow(history)),
+    deg = deg,
+    posA = posA,
+    posB = posB,
+    pair_count = pair_count,
+    pair_last_order = counts$pair_last_order,
+    recent_window_n = recent_window_n,
+    recent_deg = recent_deg,
+    recent_pairs = recent_pairs
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_upgrade <- function(cache, ids) {
+  ids <- as.character(ids)
+  if (!is.list(cache)) {
+    return(cache)
+  }
+
+  out <- cache
+  live_window <- .adaptive_history_state_live_recent_window(ids)
+  zero <- stats::setNames(rep.int(0L, length(ids)), ids)
+
+  if (is.null(out$recent_window_n)) {
+    out$recent_window_n <- live_window
+  }
+
+  if (is.null(out$recent_deg)) {
+    recent_pairs <- tibble::as_tibble(out$recent_pairs %||% tibble::tibble())
+    if (all(c("A_id", "B_id") %in% names(recent_pairs))) {
+      rebuilt_recent <- .adaptive_recent_deg(recent_pairs, ids, live_window)
+      rebuilt_recent <- as.integer(rebuilt_recent)
+      names(rebuilt_recent) <- ids
+      out$recent_deg <- rebuilt_recent
+    } else {
+      out$recent_deg <- zero
+    }
+  }
+
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_reconcile <- function(cache, history, ids, context = "runtime") {
+  ids <- as.character(ids)
+  .adaptive_history_state_validate(cache, ids, context = context)
+  rebuilt <- .adaptive_history_state_rebuild(history, ids)
+  if (!isTRUE(.adaptive_history_state_equivalent(cache, rebuilt))) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during ",
+        context,
+        ": persisted cache diverged from canonical committed non-probe history."
+      )
+    )
+  }
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_resolve <- function(state, ids = NULL, validate_existing = FALSE, context = "runtime") {
+  ids <- as.character(ids %||% state$item_ids %||% character())
+  history <- .adaptive_history_tbl(state)
+  cache <- .adaptive_history_state_upgrade(state$history_state %||% NULL, ids)
+  if (is.null(cache)) {
+    return(.adaptive_history_state_rebuild(history, ids))
+  }
+
+  cache_ok <- tryCatch(
+    {
+      .adaptive_history_state_validate(cache, ids, context = context)
+      TRUE
+    },
+    error = function(e) {
+      if (isTRUE(validate_existing)) {
+        stop(e)
+      }
+      FALSE
+    }
+  )
+  if (!isTRUE(cache_ok)) {
+    return(.adaptive_history_state_rebuild(history, ids))
+  }
+  if (!identical(as.integer(cache$n_pairs %||% NA_integer_), as.integer(nrow(history)))) {
+    return(.adaptive_history_state_rebuild(history, ids))
+  }
+  if (isTRUE(validate_existing)) {
+    .adaptive_history_state_reconcile(cache, history, ids, context = context)
+  }
+  cache
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_counts <- function(cache, ids) {
+  ids <- as.character(ids)
+  list(
+    deg = cache$deg[ids],
+    posA = cache$posA[ids],
+    posB = cache$posB[ids],
+    pair_count = cache$pair_count,
+    pair_last_order = cache$pair_last_order
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_recent_deg <- function(cache, ids, W_cap) {
+  ids <- as.character(ids)
+  recent <- stats::setNames(rep.int(0L, length(ids)), ids)
+  W_cap <- max(0L, as.integer(W_cap %||% 0L))
+  if (W_cap < 1L) {
+    return(recent)
+  }
+
+  cache <- .adaptive_history_state_upgrade(cache, ids)
+  cache_window <- as.integer(cache$recent_window_n %||% NA_integer_)
+  if (length(cache_window) == 1L && !is.na(cache_window) && identical(cache_window, W_cap)) {
+    recent_cached <- cache$recent_deg[ids]
+    recent_cached[is.na(recent_cached)] <- 0L
+    recent_cached <- as.integer(recent_cached)
+    names(recent_cached) <- ids
+    return(recent_cached)
+  }
+
+  recent_pairs <- tibble::as_tibble(cache$recent_pairs %||% tibble::tibble())
+  if (nrow(recent_pairs) < 1L) {
+    return(recent)
+  }
+
+  n_pairs <- as.integer(cache$n_pairs %||% 0L)
+  if (W_cap > nrow(recent_pairs) && n_pairs > nrow(recent_pairs)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state recent-degree request for window ",
+        W_cap,
+        " exceeded the stored recent-pair tail. Rebuild from canonical history before reuse."
+      )
+    )
+  }
+
+  rebuilt_recent <- .adaptive_recent_deg(recent_pairs, ids, W_cap)
+  rebuilt_recent <- as.integer(rebuilt_recent)
+  names(rebuilt_recent) <- ids
+  rebuilt_recent
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_history_state_update <- function(cache, A_id, B_id) {
+  ids <- names(cache$deg %||% integer())
+  cache <- .adaptive_history_state_upgrade(cache, ids)
+  .adaptive_history_state_validate(cache, ids, context = "commit update")
+  A_id <- as.character(A_id %||% NA_character_)
+  B_id <- as.character(B_id %||% NA_character_)
+  if (!A_id %in% ids || !B_id %in% ids || identical(A_id, B_id)) {
+    rlang::abort(
+      paste0(
+        "Adaptive history-state invariant failed during commit update: invalid committed pair `",
+        A_id,
+        "` vs `",
+        B_id,
+        "`."
+      )
+    )
+  }
+
+  out <- cache
+  n_pairs_before <- as.integer(out$n_pairs)
+  out$n_pairs <- n_pairs_before + 1L
+  out$posA[[A_id]] <- out$posA[[A_id]] + 1L
+  out$posB[[B_id]] <- out$posB[[B_id]] + 1L
+  out$deg[[A_id]] <- out$deg[[A_id]] + 1L
+  out$deg[[B_id]] <- out$deg[[B_id]] + 1L
+
+  key <- make_unordered_key(A_id, B_id)
+  pair_count <- out$pair_count %||% stats::setNames(integer(), character())
+  current_count <- as.integer(pair_count[key] %||% 0L)
+  current_count[is.na(current_count)] <- 0L
+  pair_count[key] <- current_count[[1L]] + 1L
+  out$pair_count <- pair_count
+
+  pair_last_order <- out$pair_last_order %||% list()
+  pair_last_order[[key]] <- c(A_id, B_id)
+  out$pair_last_order <- pair_last_order
+
+  recent_pairs_before <- tibble::as_tibble(out$recent_pairs %||% tibble::tibble())
+  recent_window_n <- as.integer(out$recent_window_n %||% 0L)
+  recent_deg <- as.integer(out$recent_deg %||% stats::setNames(rep.int(0L, length(ids)), ids))
+  names(recent_deg) <- ids
+  if (recent_window_n > 0L) {
+    departing_row <- NULL
+    if (n_pairs_before >= recent_window_n && nrow(recent_pairs_before) >= recent_window_n) {
+      departing_idx <- nrow(recent_pairs_before) - recent_window_n + 1L
+      departing_row <- recent_pairs_before[departing_idx, , drop = FALSE]
+    }
+    recent_deg[[A_id]] <- recent_deg[[A_id]] + 1L
+    recent_deg[[B_id]] <- recent_deg[[B_id]] + 1L
+    if (!is.null(departing_row) && nrow(departing_row) == 1L) {
+      departing_a <- as.character(departing_row$A_id[[1L]])
+      departing_b <- as.character(departing_row$B_id[[1L]])
+      if (departing_a %in% ids && departing_b %in% ids && !identical(departing_a, departing_b)) {
+        recent_deg[[departing_a]] <- recent_deg[[departing_a]] - 1L
+        recent_deg[[departing_b]] <- recent_deg[[departing_b]] - 1L
+      }
+    }
+  } else {
+    recent_deg[] <- 0L
+  }
+  out$recent_deg <- recent_deg
+
+  recent_pairs <- dplyr::bind_rows(
+    recent_pairs_before,
+    tibble::tibble(A_id = A_id, B_id = B_id)
+  )
+  max_recent <- .adaptive_history_state_recent_window_max()
+  if (nrow(recent_pairs) > max_recent) {
+    recent_pairs <- utils::tail(recent_pairs, n = max_recent)
+  }
+  out$recent_pairs <- recent_pairs
+  out
 }
 
 .adaptive_low_degree_set <- function(deg) {
@@ -313,8 +857,30 @@ adaptive_defaults <- function(N) {
 }
 
 .adaptive_resolve_controller <- function(state, defaults) {
-  controller <- state$controller %||% list()
+  controller <- .adaptive_controller_resolve(state)
+  frozen_map <- .adaptive_link_state_frozen_by_spoke(controller)
+  frozen_refit_map <- .adaptive_link_state_frozen_refit_id_by_spoke(controller)
   list(
+    run_mode = as.character(controller$run_mode %||% "within_set"),
+    hub_id = as.integer(controller$hub_id %||% 1L),
+    multi_spoke_mode = as.character(controller$multi_spoke_mode %||% "independent"),
+    min_cross_set_pairs_per_spoke_per_refit = as.integer(
+      controller$min_cross_set_pairs_per_spoke_per_refit %||% 5L
+    ),
+    current_link_spoke_id = as.integer(controller$current_link_spoke_id %||% NA_integer_),
+    link_budget_refit_id = as.integer(controller$link_budget_refit_id %||% NA_integer_),
+    link_budget_map = controller$link_budget_map %||% list(),
+    link_stopped_by_spoke = controller$link_stopped_by_spoke %||% list(),
+    link_stop_refit_id_by_spoke = controller$link_stop_refit_id_by_spoke %||% list(),
+    link_state_frozen_by_spoke = frozen_map,
+    link_state_frozen_refit_id_by_spoke = frozen_refit_map,
+    link_transform_frozen_by_spoke = frozen_map,
+    link_transform_frozen_refit_id_by_spoke = frozen_refit_map,
+    B_spoke_refit_budget = as.integer(controller$B_spoke_refit_budget %||% NA_integer_),
+    B_spoke_refit_budget_source = as.character(
+      controller$B_spoke_refit_budget_source %||% NA_character_
+    ),
+    link_refit_stats_by_spoke = controller$link_refit_stats_by_spoke %||% list(),
     global_identified = isTRUE(controller$global_identified %||% FALSE),
     global_identified_reliability_min = as.double(
       controller$global_identified_reliability_min %||%
@@ -341,22 +907,326 @@ adaptive_defaults <- function(N) {
   )
 }
 
-.adaptive_posterior_pair_prob <- function(state, i_id, j_id) {
-  fit <- state$btl_fit %||% NULL
+.adaptive_selection_mode_is_linking <- function(run_mode, is_cross_set = FALSE) {
+  as.character(run_mode %||% "within_set") %in% c("link_one_spoke", "link_multi_spoke") &&
+    isTRUE(is_cross_set)
+}
+
+.adaptive_utility_mode_levels <- function() {
+  c(
+    "pairing_trueskill_u0",
+    "pairing_trueskill_u",
+    "linking_d_optimal_transform",
+    "linking_d_optimal_anchored_joint"
+  )
+}
+
+.adaptive_linking_d_optimal_utility_modes <- function() {
+  c("linking_d_optimal_transform", "linking_d_optimal_anchored_joint")
+}
+
+.adaptive_linking_utility_mode <- function(link_estimation_mode = "transform") {
+  if (identical(as.character(link_estimation_mode %||% "transform"), "anchored_joint")) {
+    return("linking_d_optimal_anchored_joint")
+  }
+  "linking_d_optimal_transform"
+}
+
+.adaptive_is_linking_d_optimal_mode <- function(utility_mode, allow_legacy = FALSE) {
+  mode <- as.character(utility_mode %||% NA_character_)
+  valid_modes <- .adaptive_linking_d_optimal_utility_modes()
+  if (isTRUE(allow_legacy)) {
+    valid_modes <- c(valid_modes, "linking_d_optimal")
+  }
+  !is.na(mode) && mode %in% valid_modes
+}
+
+.adaptive_selection_utility_mode <- function(run_mode,
+                                             is_cross_set = FALSE,
+                                             link_estimation_mode = "transform") {
+  if (.adaptive_selection_mode_is_linking(run_mode = run_mode, is_cross_set = is_cross_set)) {
+    return(.adaptive_linking_utility_mode(link_estimation_mode = link_estimation_mode))
+  }
+  "pairing_trueskill_u0"
+}
+
+.adaptive_resolve_selection_column <- function(utility_mode) {
+  mode <- as.character(utility_mode %||% NA_character_)
+  if (identical(mode, "pairing_trueskill_u0")) {
+    return("u0")
+  }
+  if (.adaptive_is_linking_d_optimal_mode(mode, allow_legacy = TRUE)) {
+    return("link_d_opt_gain")
+  }
+  NA_character_
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_select_link_stage_context_build <- function(state,
+                                                      controller,
+                                                      round,
+                                                      link_phase_b,
+                                                      link_budget_map,
+                                                      round_stage,
+                                                      ids,
+                                                      spoke_id = NA_integer_) {
+  ctx_round_stage <- as.character(round_stage %||% "warm_start")
+  ctx_generation_stage <- if (identical(ctx_round_stage, "warm_start")) {
+    if (length(ids) <= 2L) "anchor_link" else "local_link"
+  } else {
+    ctx_round_stage
+  }
+  ctx_stage_quota <- NA_integer_
+  ctx_stage_committed <- NA_integer_
+  ctx_backfill_active <- FALSE
+  ctx_stage_realized <- NULL
+
+  if (!identical(ctx_round_stage, "warm_start")) {
+    ctx_stage_quota <- as.integer(round$stage_quotas[[ctx_round_stage]] %||% NA_integer_)
+    ctx_stage_committed <- as.integer(round$stage_committed[[ctx_round_stage]] %||% 0L)
+  }
+
+  if (!(isTRUE(link_phase_b) && !is.na(as.integer(spoke_id)))) {
+    return(list(
+      round_stage = as.character(ctx_round_stage),
+      generation_stage = as.character(ctx_generation_stage),
+      stage_quota = as.integer(ctx_stage_quota),
+      stage_committed_so_far = as.integer(ctx_stage_committed),
+      stage_realized = ctx_stage_realized,
+      budget_remaining_actual = as.integer(NA_integer_),
+      backfill_active = isTRUE(ctx_backfill_active)
+    ))
+  }
+
+  refit_id <- .adaptive_link_refit_window_id(state)
+  quota_controller <- controller
+  quota_controller$current_link_spoke_id <- as.integer(spoke_id)
+  quota_controller$B_spoke_refit_budget <- as.integer(
+    link_budget_map[[as.character(spoke_id)]]$B_spoke_refit_budget %||% NA_integer_
+  )
+  quota_controller$B_spoke_refit_budget_source <- as.character(
+    link_budget_map[[as.character(spoke_id)]]$B_spoke_refit_budget_source %||%
+      "single_spoke_default"
+  )
+  stage_quotas <- .adaptive_round_compute_quotas(
+    round_id = as.integer(round$round_id %||% 1L),
+    n_items = as.integer(state$n_items),
+    controller = quota_controller
+  )
+  progress <- .adaptive_link_stage_progress(
+    state = state,
+    spoke_id = as.integer(spoke_id),
+    stage_quotas = stage_quotas,
+    stage_order = round$stage_order %||% .adaptive_stage_order(),
+    refit_id = refit_id
+  )
+  ctx_round_stage <- as.character(progress$active_stage %||% ctx_round_stage)
+  ctx_backfill_active <- isTRUE(progress$backfill_active)
+  ctx_stage_realized <- progress$stage_realized %||% NULL
+  if (identical(ctx_round_stage, "warm_start")) {
+    ctx_generation_stage <- if (length(ids) <= 2L) "anchor_link" else "local_link"
+  } else if (isTRUE(ctx_backfill_active)) {
+    ctx_generation_stage <- "pooled_backfill"
+  } else {
+    ctx_generation_stage <- as.character(ctx_round_stage)
+  }
+  if (isTRUE(ctx_backfill_active)) {
+    ctx_stage_quota <- as.integer(sum(progress$stage_quotas))
+    ctx_stage_committed <- as.integer(sum(progress$stage_realized %||% 0L))
+  } else {
+    ctx_stage_quota <- as.integer(progress$stage_quotas[[ctx_round_stage]] %||% NA_integer_)
+    ctx_stage_committed <- as.integer(progress$stage_committed[[ctx_round_stage]] %||% 0L)
+  }
+
+  list(
+    round_stage = as.character(ctx_round_stage),
+    generation_stage = as.character(ctx_generation_stage),
+    stage_quota = as.integer(ctx_stage_quota),
+    stage_committed_so_far = as.integer(ctx_stage_committed),
+    stage_realized = ctx_stage_realized,
+    budget_remaining_actual = as.integer(progress$budget_remaining_actual %||% 0L),
+    backfill_active = isTRUE(ctx_backfill_active)
+  )
+}
+
+.adaptive_long_link_gate_has_posterior <- function(state) {
+  fit <- state$btl_fit %||% list()
   draws <- fit$btl_posterior_draws %||% NULL
-  if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 1L) {
-    return(NA_real_)
+  if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 1L || ncol(draws) < 1L) {
+    return(FALSE)
   }
+
+  round_log <- tibble::as_tibble(state$round_log %||% tibble::tibble())
+  if (nrow(round_log) < 1L || !"diagnostics_pass" %in% names(round_log)) {
+    return(FALSE)
+  }
+
+  accepted <- round_log[round_log$diagnostics_pass %in% TRUE, , drop = FALSE]
+  if (nrow(accepted) < 1L) {
+    return(FALSE)
+  }
+
+  phase_scope <- .adaptive_refit_phase_a_scope(state)
+  if (isTRUE(phase_scope$active) &&
+    all(c("phase_scope", "phase_scope_set_id") %in% names(accepted))) {
+    accepted <- accepted[
+      accepted$phase_scope %in% "phase_a_set" &
+        as.integer(accepted$phase_scope_set_id) == as.integer(phase_scope$set_id),
+      ,
+      drop = FALSE
+    ]
+  }
+
+  nrow(accepted) > 0L
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_long_link_gate_draws_payload <- function(state) {
+  fit <- state$btl_fit %||% list()
+  draws <- fit$btl_posterior_draws %||% NULL
+  if (!is.matrix(draws) || !is.numeric(draws) || nrow(draws) < 1L || ncol(draws) < 1L) {
+    return(NULL)
+  }
+  draws <- .pairwiseLLM_sanitize_draws_matrix(draws, name = "btl_posterior_draws")
+  if (is.null(colnames(draws))) {
+    item_ids <- as.character(state$item_ids %||% character())
+    if (length(item_ids) != ncol(draws)) {
+      return(NULL)
+    }
+    colnames(draws) <- item_ids
+  }
+
+  n_draws <- nrow(draws)
+  beta_draws <- fit$beta_draws %||% NULL
+  if (is.null(beta_draws)) {
+    beta_draws <- rep_len(as.double(fit$beta_mean %||% 0), n_draws)
+  }
+  beta_draws <- as.double(beta_draws)
+  if (length(beta_draws) != n_draws) {
+    beta_draws <- rep_len(as.double(fit$beta_mean %||% 0), n_draws)
+  }
+  beta_draws[!is.finite(beta_draws)] <- 0
+
+  epsilon_draws <- fit$epsilon_draws %||% NULL
+  if (is.null(epsilon_draws)) {
+    epsilon_draws <- rep_len(as.double(fit$epsilon_mean %||% 0), n_draws)
+  }
+  epsilon_draws <- as.double(epsilon_draws)
+  if (length(epsilon_draws) != n_draws) {
+    epsilon_draws <- rep_len(as.double(fit$epsilon_mean %||% 0), n_draws)
+  }
+  epsilon_draws[!is.finite(epsilon_draws)] <- 0
+  epsilon_draws <- pmin(pmax(epsilon_draws, 0), 1)
+
+  list(
+    draws = draws,
+    beta_draws = beta_draws,
+    epsilon_draws = epsilon_draws
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_long_link_gate_posterior_prob_vec <- function(state,
+                                                        i_id,
+                                                        j_id,
+                                                        block_size = 2048L) {
+  i_id <- as.character(i_id)
+  j_id <- as.character(j_id)
+  if (length(i_id) != length(j_id)) {
+    rlang::abort("`i_id` and `j_id` must have the same length.")
+  }
+  if (length(i_id) < 1L) {
+    return(numeric())
+  }
+  if (length(i_id) <= 32L) {
+    return(vapply(seq_along(i_id), function(idx) {
+      .adaptive_long_link_gate_posterior_prob(
+        state = state,
+        i_id = i_id[[idx]],
+        j_id = j_id[[idx]]
+      )
+    }, numeric(1L)))
+  }
+
+  payload <- .adaptive_long_link_gate_draws_payload(state)
+  if (is.null(payload)) {
+    return(rep_len(NA_real_, length(i_id)))
+  }
+
+  draws <- payload$draws
   draw_names <- colnames(draws)
-  if (is.null(draw_names)) {
+  i_pos <- match(i_id, draw_names)
+  j_pos <- match(j_id, draw_names)
+  out <- rep_len(NA_real_, length(i_id))
+  valid <- !is.na(i_pos) & !is.na(j_pos)
+  if (!any(valid)) {
+    return(out)
+  }
+
+  block_size <- max(1L, as.integer(block_size %||% 2048L))
+  beta_draws <- as.double(payload$beta_draws)
+  epsilon_draws <- as.double(payload$epsilon_draws)
+  valid_idx <- which(valid)
+
+  for (start in seq.int(1L, length(valid_idx), by = block_size)) {
+    stop_idx <- min(start + block_size - 1L, length(valid_idx))
+    idx <- valid_idx[start:stop_idx]
+    theta_i <- draws[, i_pos[idx], drop = FALSE]
+    theta_j <- draws[, j_pos[idx], drop = FALSE]
+    eta <- sweep(theta_i - theta_j, 1L, beta_draws, "+")
+    p_draws <- stats::plogis(eta)
+    p_draws <- sweep(p_draws, 1L, 1 - epsilon_draws, "*")
+    p_draws <- sweep(p_draws, 1L, epsilon_draws * 0.5, "+")
+    finite_cols <- colSums(!is.finite(p_draws)) == 0L
+    if (any(finite_cols)) {
+      out[idx[finite_cols]] <- as.double(colMeans(p_draws[, finite_cols, drop = FALSE]))
+    }
+  }
+
+  out
+}
+
+.adaptive_long_link_gate_posterior_prob <- function(state, i_id, j_id) {
+  i_id <- as.character(i_id)
+  j_id <- as.character(j_id)
+  payload <- .adaptive_long_link_gate_draws_payload(state)
+  if (is.null(payload)) {
     return(NA_real_)
   }
-  i_col <- match(as.character(i_id), draw_names)
-  j_col <- match(as.character(j_id), draw_names)
-  if (is.na(i_col) || is.na(j_col)) {
+  if (!all(c(i_id, j_id) %in% colnames(payload$draws))) {
     return(NA_real_)
   }
-  as.double(mean(draws[, i_col] > draws[, j_col]))
+
+  theta_i <- as.double(payload$draws[, i_id, drop = TRUE])
+  theta_j <- as.double(payload$draws[, j_id, drop = TRUE])
+  if (length(theta_i) != length(theta_j) || length(theta_i) < 1L) {
+    return(NA_real_)
+  }
+
+  p_draws <- (1 - payload$epsilon_draws) *
+    stats::plogis(theta_i - theta_j + payload$beta_draws) +
+    payload$epsilon_draws * 0.5
+  p_draws <- p_draws[is.finite(p_draws)]
+  if (length(p_draws) < 1L) {
+    return(NA_real_)
+  }
+  as.double(mean(p_draws))
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_repeat_pair_has_order <- function(unordered_key, pair_count, pair_last_order) {
+  pair_count <- as.integer(pair_count)
+  pair_count[is.na(pair_count)] <- 0L
+  out <- pair_count < 1L
+  if (all(out)) {
+    return(out)
+  }
+  stored_keys <- names(pair_last_order %||% list()) %||% character()
+  out | (unordered_key %in% stored_keys)
 }
 
 .adaptive_local_priority_select <- function(cand, state, round, stage_committed_so_far, stage_quota, defaults) {
@@ -418,7 +1288,819 @@ adaptive_defaults <- function(N) {
   cand[order_idx[[1L]], , drop = FALSE]
 }
 
-.adaptive_assign_order <- function(pair, posA, posB, pair_last_order) {
+.adaptive_link_safe_theta_map <- function(state, set_id, prefer_current = FALSE) {
+  current_map <- .adaptive_link_theta_mean_map(state, set_id = set_id)
+  phase_map <- tryCatch(
+    .adaptive_link_phase_a_theta_map(state, set_id = set_id, field = "theta_raw_mean"),
+    error = function(e) stats::setNames(numeric(), character())
+  )
+  if (isTRUE(prefer_current)) {
+    if (length(current_map) > 0L) {
+      return(current_map)
+    }
+    return(phase_map)
+  }
+  if (length(phase_map) > 0L) {
+    return(phase_map)
+  }
+  current_map
+}
+
+.adaptive_link_theta_global_map_for_items <- function(state, controller, item_ids) {
+  ids <- unique(as.character(item_ids))
+  ids <- ids[!is.na(ids)]
+  if (length(ids) < 1L) {
+    return(stats::setNames(numeric(), character()))
+  }
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  prefer_current_theta <- identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
+  set_by_item <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  set_ids <- unique(as.integer(set_by_item[ids]))
+  set_ids <- set_ids[!is.na(set_ids)]
+  if (length(set_ids) < 1L) {
+    return(stats::setNames(numeric(), character()))
+  }
+  if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+    theta_global <- stats::setNames(numeric(), character())
+    hub_theta <- .adaptive_link_phase_a_theta_map(state, set_id = hub_id, field = "theta_raw_mean")
+    for (set_id in set_ids) {
+      set_items <- ids[as.integer(set_by_item[ids]) == as.integer(set_id)]
+      theta_map <- if (identical(as.integer(set_id), hub_id)) {
+        hub_theta
+      } else {
+        accepted_map <- (state$linking$anchored_joint %||% list())$accepted_state_by_spoke %||% list()
+        accepted_state <- accepted_map[[as.character(set_id)]] %||% NULL
+        if (is.null(accepted_state)) {
+          accepted_state <- .adaptive_anchored_joint_artifact_copy_init(
+            state = state,
+            spoke_id = as.integer(set_id),
+            controller = controller
+          )
+        }
+        accepted_state$theta_spoke_global_mean %||% stats::setNames(numeric(), character())
+      }
+      theta_vals <- as.double(theta_map[set_items])
+      names(theta_vals) <- as.character(set_items)
+      theta_global <- c(theta_global, theta_vals)
+    }
+    return(theta_global[!duplicated(names(theta_global))])
+  }
+
+  link_stats <- controller$link_refit_stats_by_spoke %||% list()
+  theta_global <- stats::setNames(numeric(), character())
+  for (set_id in set_ids) {
+    theta_map <- .adaptive_link_safe_theta_map(
+      state,
+      set_id = as.integer(set_id),
+      prefer_current = prefer_current_theta
+    )
+    if (length(theta_map) < 1L) {
+      next
+    }
+    if (!identical(as.integer(set_id), hub_id)) {
+      stats_row <- link_stats[[as.character(set_id)]] %||% list()
+      transform_mode <- .adaptive_link_transform_state_for_spoke(controller, as.integer(set_id))
+      delta <- as.double(stats_row$delta_spoke_mean %||% 0)
+      if (!is.finite(delta)) {
+        delta <- 0
+      }
+      log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% NA_real_)
+      alpha <- if (identical(transform_mode, "shift_scale") && is.finite(log_alpha)) exp(log_alpha) else 1
+      theta_vals <- delta + alpha * as.double(theta_map)
+      names(theta_vals) <- names(theta_map)
+      theta_map <- theta_vals
+    }
+    theta_global <- c(theta_global, theta_map)
+  }
+  theta_global[!duplicated(names(theta_global))]
+}
+
+.adaptive_link_model_d_prob <- function(theta_a, theta_b, beta, epsilon) {
+  theta_a <- as.double(theta_a)
+  theta_b <- as.double(theta_b)
+  beta <- as.double(beta)
+  epsilon <- as.double(epsilon)
+  if (!is.finite(theta_a) || !is.finite(theta_b)) {
+    return(NA_real_)
+  }
+  if (!is.finite(beta)) {
+    beta <- 0
+  }
+  if (!is.finite(epsilon)) {
+    epsilon <- 0
+  }
+  epsilon <- max(0, min(1, epsilon))
+  p_base <- stats::plogis(theta_a - theta_b + beta)
+  as.double((1 - epsilon) * p_base + epsilon * 0.5)
+}
+
+.adaptive_link_model_d_prob_vec <- function(theta_a, theta_b, beta, epsilon) {
+  theta_a <- as.double(theta_a)
+  theta_b <- as.double(theta_b)
+  beta <- as.double(beta)
+  epsilon <- as.double(epsilon)
+  if (!is.finite(beta)) {
+    beta <- 0
+  }
+  if (!is.finite(epsilon)) {
+    epsilon <- 0
+  }
+  epsilon <- max(0, min(1, epsilon))
+  out <- rep_len(NA_real_, length(theta_a))
+  valid <- is.finite(theta_a) & is.finite(theta_b)
+  if (!any(valid)) {
+    return(out)
+  }
+  p_base <- stats::plogis(theta_a[valid] - theta_b[valid] + beta)
+  out[valid] <- as.double((1 - epsilon) * p_base + epsilon * 0.5)
+  out
+}
+
+.adaptive_link_model_d_pbar <- function(theta_h, theta_x, beta, epsilon) {
+  p_hx <- .adaptive_link_model_d_prob(theta_a = theta_h, theta_b = theta_x, beta = beta, epsilon = epsilon)
+  p_xh <- .adaptive_link_model_d_prob(theta_a = theta_x, theta_b = theta_h, beta = beta, epsilon = epsilon)
+  if (!is.finite(p_hx) || !is.finite(p_xh)) {
+    return(NA_real_)
+  }
+  as.double(0.5 * p_hx + 0.5 * p_xh)
+}
+
+.adaptive_link_model_d_pbar_vec <- function(theta_h, theta_x, beta, epsilon) {
+  p_hx <- .adaptive_link_model_d_prob_vec(theta_a = theta_h, theta_b = theta_x, beta = beta, epsilon = epsilon)
+  p_xh <- .adaptive_link_model_d_prob_vec(theta_a = theta_x, theta_b = theta_h, beta = beta, epsilon = epsilon)
+  out <- rep_len(NA_real_, length(theta_h))
+  valid <- is.finite(p_hx) & is.finite(p_xh)
+  if (!any(valid)) {
+    return(out)
+  }
+  out[valid] <- as.double(0.5 * p_hx[valid] + 0.5 * p_xh[valid])
+  out
+}
+
+.adaptive_link_info_gradient <- function(transform_mode, alpha, theta_raw_x) {
+  mode <- as.character(transform_mode %||% "shift_only")
+  if (identical(mode, "shift_scale")) {
+    alpha <- as.double(alpha)
+    theta_raw_x <- as.double(theta_raw_x)
+    if (!is.finite(alpha) || alpha <= 0) {
+      alpha <- 1
+    }
+    if (!is.finite(theta_raw_x)) {
+      theta_raw_x <- 0
+    }
+    return(matrix(c(1, alpha * theta_raw_x), nrow = 2L, ncol = 1L))
+  }
+  matrix(1, nrow = 1L, ncol = 1L)
+}
+
+.adaptive_link_candidate_endpoint_roles <- function(candidates, set_map, hub_id, spoke_id) {
+  cand <- tibble::as_tibble(candidates)
+  i_id <- as.character(cand$i)
+  j_id <- as.character(cand$j)
+  i_set <- unname(as.integer(set_map[i_id]))
+  j_set <- unname(as.integer(set_map[j_id]))
+  hub_item <- ifelse(
+    !is.na(i_set) & i_set == as.integer(hub_id),
+    i_id,
+    ifelse(!is.na(j_set) & j_set == as.integer(hub_id), j_id, NA_character_)
+  )
+  spoke_item <- ifelse(
+    !is.na(i_set) & i_set == as.integer(spoke_id),
+    i_id,
+    ifelse(!is.na(j_set) & j_set == as.integer(spoke_id), j_id, NA_character_)
+  )
+
+  list(
+    i_id = i_id,
+    j_id = j_id,
+    i_set = i_set,
+    j_set = j_set,
+    hub_item = as.character(hub_item),
+    spoke_item = as.character(spoke_item)
+  )
+}
+
+.adaptive_link_logdet_spd <- function(mat, ridge = 1e-6) {
+  x <- as.matrix(mat)
+  if (!is.numeric(x) || nrow(x) != ncol(x) || nrow(x) < 1L) {
+    return(NA_real_)
+  }
+  x <- (x + t(x)) / 2
+  ridge <- as.double(ridge %||% 1e-6)
+  if (!is.finite(ridge) || ridge <= 0) {
+    ridge <- 1e-6
+  }
+  x <- x + diag(ridge, nrow(x))
+  vals <- tryCatch(
+    eigen(x, symmetric = TRUE, only.values = TRUE)$values,
+    error = function(e) rep(NA_real_, nrow(x))
+  )
+  if (length(vals) != nrow(x) || any(!is.finite(vals)) || any(vals <= 0)) {
+    return(NA_real_)
+  }
+  as.double(sum(log(vals)))
+}
+
+.adaptive_link_d_opt_gain_logdet_from_start <- function(it,
+                                                        ipair,
+                                                        logdet_start = NA_real_,
+                                                        ridge = 1e-6) {
+  it <- as.matrix(it)
+  ipair <- as.matrix(ipair)
+  if (nrow(it) != ncol(it) || nrow(ipair) != ncol(ipair) || nrow(it) != nrow(ipair)) {
+    return(NA_real_)
+  }
+  logdet_start <- as.double(logdet_start %||% NA_real_)
+  if (!is.finite(logdet_start)) {
+    logdet_start <- .adaptive_link_logdet_spd(it, ridge = ridge)
+  }
+  logdet_end <- .adaptive_link_logdet_spd(it + ipair, ridge = ridge)
+  if (!is.finite(logdet_start) || !is.finite(logdet_end)) {
+    return(NA_real_)
+  }
+  as.double(logdet_end - logdet_start)
+}
+
+.adaptive_link_d_opt_gain_logdet <- function(it, ipair, ridge = 1e-6) {
+  .adaptive_link_d_opt_gain_logdet_from_start(
+    it = it,
+    ipair = ipair,
+    logdet_start = NA_real_,
+    ridge = ridge
+  )
+}
+
+.adaptive_link_d_opt_rank1_prepare <- function(it, ridge = 1e-6) {
+  x <- as.matrix(it)
+  if (!is.numeric(x) || nrow(x) != ncol(x) || nrow(x) < 1L) {
+    return(list(ok = FALSE, inv = NULL, inv_diag = NULL))
+  }
+  x <- (x + t(x)) / 2
+  ridge <- as.double(ridge %||% 1e-6)
+  if (!is.finite(ridge) || ridge <= 0) {
+    ridge <- 1e-6
+  }
+  x_ridge <- x + diag(ridge, nrow(x))
+  chol_x <- tryCatch(chol(x_ridge), error = function(e) NULL)
+  if (is.null(chol_x)) {
+    return(list(ok = FALSE, inv = NULL, inv_diag = NULL))
+  }
+  inv_x <- tryCatch(chol2inv(chol_x), error = function(e) NULL)
+  if (is.null(inv_x) || !is.matrix(inv_x) || any(!is.finite(inv_x))) {
+    return(list(ok = FALSE, inv = NULL, inv_diag = NULL))
+  }
+  list(
+    ok = TRUE,
+    inv = inv_x,
+    inv_diag = diag(inv_x)
+  )
+}
+
+.adaptive_link_d_opt_gain_from_quadform <- function(info_scale, quadform) {
+  info_scale <- as.double(info_scale)
+  quadform <- as.double(quadform)
+  out <- rep_len(NA_real_, length(info_scale))
+  valid <- is.finite(info_scale) & is.finite(quadform)
+  if (!any(valid)) {
+    return(out)
+  }
+  update_term <- info_scale[valid] * quadform[valid]
+  keep <- is.finite(update_term) & (1 + update_term) > 0
+  if (!any(keep)) {
+    return(out)
+  }
+  out_valid <- rep_len(NA_real_, sum(valid))
+  out_valid[keep] <- log1p(update_term[keep])
+  out[valid] <- out_valid
+  out
+}
+
+.adaptive_link_d_opt_rank1_gain_transform <- function(prepared,
+                                                      info_scale,
+                                                      transform_mode,
+                                                      alpha,
+                                                      theta_raw_x) {
+  if (!isTRUE(prepared$ok)) {
+    return(rep_len(NA_real_, length(info_scale)))
+  }
+  mode <- as.character(transform_mode %||% "shift_only")
+  inv <- prepared$inv
+  if (identical(mode, "shift_scale")) {
+    if (!is.matrix(inv) || any(dim(inv) != c(2L, 2L))) {
+      return(rep_len(NA_real_, length(info_scale)))
+    }
+    theta_term <- as.double(alpha) * as.double(theta_raw_x)
+    quadform <- inv[1L, 1L] +
+      2 * inv[1L, 2L] * theta_term +
+      inv[2L, 2L] * (theta_term^2)
+    return(.adaptive_link_d_opt_gain_from_quadform(info_scale, quadform))
+  }
+  if (!is.matrix(inv) || any(dim(inv) != c(1L, 1L))) {
+    return(rep_len(NA_real_, length(info_scale)))
+  }
+  .adaptive_link_d_opt_gain_from_quadform(
+    info_scale = info_scale,
+    quadform = rep_len(inv[1L, 1L], length(info_scale))
+  )
+}
+
+.adaptive_link_d_opt_rank1_gain_diag <- function(prepared, info_scale, diag_index) {
+  if (!isTRUE(prepared$ok)) {
+    return(rep_len(NA_real_, length(info_scale)))
+  }
+  diag_index <- as.integer(diag_index)
+  inv_diag <- as.double(prepared$inv_diag %||% numeric())
+  quadform <- rep_len(NA_real_, length(diag_index))
+  valid <- !is.na(diag_index) & diag_index >= 1L & diag_index <= length(inv_diag)
+  if (!any(valid)) {
+    return(rep_len(NA_real_, length(info_scale)))
+  }
+  quadform[valid] <- inv_diag[diag_index[valid]]
+  .adaptive_link_d_opt_gain_from_quadform(info_scale, quadform)
+}
+
+.adaptive_link_d_opt_diag_prepare <- function(it_diag, ridge = 1e-6) {
+  diag_vals <- as.double(it_diag %||% numeric())
+  if (length(diag_vals) < 1L || any(!is.finite(diag_vals))) {
+    return(list(ok = FALSE, inv_diag = NULL, logdet = NA_real_, trace = NA_real_))
+  }
+  ridge <- as.double(ridge %||% 1e-6)
+  if (!is.finite(ridge) || ridge <= 0) {
+    ridge <- 1e-6
+  }
+  shifted <- diag_vals + ridge
+  if (any(!is.finite(shifted)) || any(shifted <= 0)) {
+    return(list(ok = FALSE, inv_diag = NULL, logdet = NA_real_, trace = NA_real_))
+  }
+  list(
+    ok = TRUE,
+    inv_diag = 1 / shifted,
+    logdet = as.double(sum(log(shifted))),
+    trace = as.double(sum(diag_vals))
+  )
+}
+
+.adaptive_link_d_opt_gain_diag_state <- function(it_diag, info_scale, diag_index, ridge = 1e-6) {
+  prepared <- .adaptive_link_d_opt_diag_prepare(it_diag, ridge = ridge)
+  if (!isTRUE(prepared$ok)) {
+    return(rep_len(NA_real_, length(info_scale)))
+  }
+  diag_index <- as.integer(diag_index)
+  quadform <- rep_len(NA_real_, length(diag_index))
+  valid <- !is.na(diag_index) & diag_index >= 1L & diag_index <= length(prepared$inv_diag)
+  if (!any(valid)) {
+    return(rep_len(NA_real_, length(info_scale)))
+  }
+  quadform[valid] <- prepared$inv_diag[diag_index[valid]]
+  .adaptive_link_d_opt_gain_from_quadform(info_scale, quadform)
+}
+
+.adaptive_link_d_opt_entry_uses_diag <- function(entry, dim_n = NULL) {
+  diag_vals <- entry$it_diag %||% NULL
+  if (is.null(diag_vals)) {
+    return(FALSE)
+  }
+  diag_vals <- as.double(diag_vals)
+  dim_n <- as.integer(dim_n %||% length(diag_vals))
+  length(diag_vals) == dim_n && all(is.finite(diag_vals))
+}
+
+.adaptive_link_d_opt_matrix_dim <- function(transform_mode,
+                                           link_estimation_mode = "transform",
+                                           free_block_dim = NULL) {
+  if (identical(as.character(link_estimation_mode %||% "transform"), "anchored_joint")) {
+    dim_n <- as.integer(free_block_dim %||% NA_integer_)
+    if (!is.finite(dim_n) || is.na(dim_n) || dim_n < 1L) {
+      rlang::abort("Anchored-joint D-optimal state requires a positive `free_block_dim`.")
+    }
+    return(dim_n)
+  }
+  if (identical(as.character(transform_mode %||% "shift_only"), "shift_scale")) {
+    return(2L)
+  }
+  1L
+}
+
+.adaptive_link_d_opt_state_key <- function(refit_id, spoke_id) {
+  paste0(as.integer(refit_id), "::", as.integer(spoke_id))
+}
+
+.adaptive_link_d_opt_state_get <- function(controller,
+                                           refit_id,
+                                           spoke_id,
+                                           transform_mode,
+                                           link_estimation_mode = "transform",
+                                           free_block_dim = NULL,
+                                           ridge = 1e-6) {
+  map <- controller$link_d_opt_it_by_spoke %||% list()
+  key <- .adaptive_link_d_opt_state_key(refit_id = refit_id, spoke_id = spoke_id)
+  dim_n <- .adaptive_link_d_opt_matrix_dim(
+    transform_mode = transform_mode,
+    link_estimation_mode = link_estimation_mode,
+    free_block_dim = free_block_dim
+  )
+  entry <- map[[key]] %||% list()
+  if (identical(as.character(link_estimation_mode %||% "transform"), "anchored_joint")) {
+    it_diag <- as.double(entry$it_diag %||% numeric())
+    it <- entry$it %||% NULL
+    if (length(it_diag) != dim_n || any(!is.finite(it_diag))) {
+      if (is.matrix(it) && nrow(it) == dim_n && ncol(it) == dim_n) {
+        off_diag <- it
+        diag(off_diag) <- 0
+        if (all(abs(off_diag) <= sqrt(.Machine$double.eps), na.rm = TRUE)) {
+          it_diag <- as.double(diag(it))
+          it <- NULL
+        } else {
+          it_diag <- NULL
+        }
+      } else {
+        it_diag <- rep(0, dim_n)
+        it <- NULL
+      }
+    }
+    if (!is.null(it_diag)) {
+      diag_info <- .adaptive_link_d_opt_diag_prepare(it_diag, ridge = ridge)
+      logdet_start <- as.double(entry$it_logdet_start %||% diag_info$logdet %||% NA_real_)
+      n_pairs <- as.integer(entry$it_n_pairs_accumulated %||% 0L)
+      if (!is.finite(n_pairs) || n_pairs < 0L) {
+        n_pairs <- 0L
+      }
+      return(list(
+        key = key,
+        it_diag = as.double(it_diag),
+        it_n_pairs_accumulated = n_pairs,
+        it_logdet_start = as.double(logdet_start)
+      ))
+    }
+  }
+
+  it <- entry$it %||% matrix(0, nrow = dim_n, ncol = dim_n)
+  if (!is.matrix(it) || nrow(it) != dim_n || ncol(it) != dim_n) {
+    it <- matrix(0, nrow = dim_n, ncol = dim_n)
+  }
+  it <- (it + t(it)) / 2
+  n_pairs <- as.integer(entry$it_n_pairs_accumulated %||% 0L)
+  if (!is.finite(n_pairs) || n_pairs < 0L) {
+    n_pairs <- 0L
+  }
+  logdet_start <- as.double(entry$it_logdet_start %||% NA_real_)
+  if (!is.finite(logdet_start)) {
+    logdet_start <- .adaptive_link_logdet_spd(matrix(0, nrow = dim_n, ncol = dim_n), ridge = ridge)
+  }
+  list(
+    key = key,
+    it = it,
+    it_n_pairs_accumulated = n_pairs,
+    it_logdet_start = as.double(logdet_start)
+  )
+}
+
+.adaptive_link_predictive_utility_context <- function(state, controller, spoke_id, candidates = NULL) {
+  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  out <- list(
+    link_estimation_mode = link_estimation_mode,
+    set_map = set_map,
+    hub_id = hub_id,
+    accepted_state = NULL,
+    judge_params = NULL,
+    theta_global = NULL
+  )
+  if (identical(link_estimation_mode, "anchored_joint")) {
+    out$accepted_state <- .adaptive_link_anchored_joint_resolve_state(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      controller = controller
+    )
+    out$judge_params <- .adaptive_link_anchored_joint_judge_params(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      controller = controller,
+      accepted_state = out$accepted_state
+    )
+    return(out)
+  }
+
+  item_ids <- if (is.null(candidates)) {
+    character()
+  } else {
+    unique(c(as.character(candidates$i), as.character(candidates$j)))
+  }
+  out$theta_global <- .adaptive_link_theta_global_map_for_items(
+    state = state,
+    controller = controller,
+    item_ids = item_ids
+  )
+  out
+}
+
+.adaptive_link_attach_predictive_utility_cached <- function(candidates,
+                                                            state,
+                                                            controller,
+                                                            spoke_id,
+                                                            utility_context) {
+  attach_fun <- .adaptive_link_attach_predictive_utility
+  if ("utility_context" %in% names(formals(attach_fun))) {
+    return(attach_fun(
+      candidates = candidates,
+      state = state,
+      controller = controller,
+      spoke_id = as.integer(spoke_id),
+      utility_context = utility_context
+    ))
+  }
+  attach_fun(
+    candidates = candidates,
+    state = state,
+    controller = controller,
+    spoke_id = as.integer(spoke_id)
+  )
+}
+
+.adaptive_link_attach_predictive_utility <- function(candidates,
+                                                     state,
+                                                     controller,
+                                                     spoke_id,
+                                                     utility_context = NULL) {
+  cand <- tibble::as_tibble(candidates)
+  if (nrow(cand) < 1L || is.na(spoke_id)) {
+    return(cand)
+  }
+  n_cand <- nrow(cand)
+  i_id <- as.character(cand$i)
+  j_id <- as.character(cand$j)
+  utility_context <- utility_context %||% .adaptive_link_predictive_utility_context(
+    state = state,
+    controller = controller,
+    spoke_id = as.integer(spoke_id),
+    candidates = cand
+  )
+  link_estimation_mode <- as.character(utility_context$link_estimation_mode %||%
+    controller$link_estimation_mode %||% "transform")
+  set_map <- utility_context$set_map %||%
+    stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  hub_id <- as.integer(utility_context$hub_id %||% controller$hub_id %||% 1L)
+  endpoint_roles <- .adaptive_link_candidate_endpoint_roles(
+    candidates = cand,
+    set_map = set_map,
+    hub_id = hub_id,
+    spoke_id = as.integer(spoke_id)
+  )
+  if (identical(link_estimation_mode, "anchored_joint")) {
+    accepted_state <- utility_context$accepted_state
+    judge_params <- utility_context$judge_params
+  } else {
+    theta_global <- utility_context$theta_global %||% stats::setNames(numeric(), character())
+    if (length(theta_global) < 2L) {
+      cand$link_p <- NA_real_
+      cand$link_u <- NA_real_
+      return(cand)
+    }
+    missing_theta_ids <- unique(c(i_id, j_id)[!(c(i_id, j_id) %in% names(theta_global))])
+    if (length(missing_theta_ids) > 0L) {
+      theta_global[[missing_theta_ids[[1L]]]]
+    }
+    judge_params <- utility_context$judge_params
+    if (is.null(judge_params)) {
+      startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(state, spoke_id = as.integer(spoke_id))
+      judge_params <- .adaptive_link_judge_params(
+        state,
+        controller,
+        scope = "link",
+        allow_cold_start_fallback = isTRUE(startup_gap),
+        expected_link_params = !isTRUE(startup_gap)
+      )
+    }
+  }
+  epsilon <- as.double(judge_params$epsilon %||% 0)
+  beta <- as.double(judge_params$beta %||% 0)
+  if (!is.finite(epsilon)) {
+    epsilon <- 0
+  }
+  if (!is.finite(beta)) {
+    beta <- 0
+  }
+  epsilon <- max(0, min(1, epsilon))
+
+  if (identical(link_estimation_mode, "anchored_joint")) {
+    i_set <- unname(as.integer(set_map[i_id]))
+    j_set <- unname(as.integer(set_map[j_id]))
+    theta_i <- ifelse(
+      !is.na(i_set) & i_set == hub_id,
+      as.double(accepted_state$theta_hub_fixed[i_id]),
+      as.double(accepted_state$theta_spoke_global_mean[i_id])
+    )
+    theta_j <- ifelse(
+      !is.na(j_set) & j_set == hub_id,
+      as.double(accepted_state$theta_hub_fixed[j_id]),
+      as.double(accepted_state$theta_spoke_global_mean[j_id])
+    )
+  } else {
+    theta_i <- unname(as.double(theta_global[i_id]))
+    theta_j <- unname(as.double(theta_global[j_id]))
+  }
+  p_link <- .adaptive_link_model_d_prob_vec(
+    theta_a = theta_i,
+    theta_b = theta_j,
+    beta = beta,
+    epsilon = epsilon
+  )
+  cand$link_p <- as.double(p_link)
+  cand$link_u <- as.double(p_link * (1 - p_link))
+  refit_id <- .adaptive_link_refit_window_id(state)
+  if (identical(link_estimation_mode, "anchored_joint")) {
+    spoke_items <- as.character(names(accepted_state$theta_spoke_global_mean))
+    free_block_dim <- length(spoke_items)
+    it_state <- .adaptive_link_d_opt_state_get(
+      controller = controller,
+      refit_id = refit_id,
+      spoke_id = as.integer(spoke_id),
+      transform_mode = NA_character_,
+      link_estimation_mode = "anchored_joint",
+      free_block_dim = free_block_dim
+    )
+    theta_h <- unname(as.double(accepted_state$theta_hub_fixed[endpoint_roles$hub_item]))
+    theta_x <- unname(as.double(accepted_state$theta_spoke_global_mean[endpoint_roles$spoke_item]))
+    spoke_idx <- unname(as.integer(match(endpoint_roles$spoke_item, spoke_items)))
+    valid_gain <- is.finite(theta_h) & is.finite(theta_x) & !is.na(spoke_idx)
+    link_d_opt_gain <- rep_len(NA_real_, n_cand)
+    if (any(valid_gain)) {
+      spoke_idx_valid <- spoke_idx[valid_gain]
+      pbar <- .adaptive_link_model_d_pbar_vec(
+        theta_h = theta_h[valid_gain],
+        theta_x = theta_x[valid_gain],
+        beta = beta,
+        epsilon = epsilon
+      )
+      info_scale <- as.double(pbar * (1 - pbar))
+      valid_idx <- which(valid_gain)
+      fast_gain <- if (!is.null(it_state$it_diag)) {
+        .adaptive_link_d_opt_gain_diag_state(
+          it_diag = it_state$it_diag,
+          info_scale = info_scale,
+          diag_index = spoke_idx_valid,
+          ridge = 1e-6
+        )
+      } else {
+        prepared <- .adaptive_link_d_opt_rank1_prepare(it_state$it, ridge = 1e-6)
+        .adaptive_link_d_opt_rank1_gain_diag(
+          prepared = prepared,
+          info_scale = info_scale,
+          diag_index = spoke_idx_valid
+        )
+      }
+      if (length(fast_gain) > 0L) {
+        link_d_opt_gain[valid_idx] <- fast_gain
+      }
+      fallback_pos <- which(is.na(fast_gain))
+      if (length(fallback_pos) > 0L) {
+        it_current <- if (!is.null(it_state$it_diag)) {
+          diag(as.double(it_state$it_diag), nrow = free_block_dim)
+        } else {
+          it_state$it
+        }
+        logdet_current <- .adaptive_link_logdet_spd(it_current, ridge = 1e-6)
+        for (pos in fallback_pos) {
+          idx <- valid_idx[[pos]]
+          ipair <- matrix(0, nrow = free_block_dim, ncol = free_block_dim)
+          ipair[spoke_idx_valid[[pos]], spoke_idx_valid[[pos]]] <- info_scale[[pos]]
+          link_d_opt_gain[[idx]] <- .adaptive_link_d_opt_gain_logdet_from_start(
+            it = it_current,
+            ipair = ipair,
+            logdet_start = logdet_current,
+            ridge = 1e-6
+          )
+        }
+      }
+    }
+    cand$link_d_opt_gain <- link_d_opt_gain
+    return(cand)
+  }
+
+  transform_mode <- .adaptive_link_transform_state_for_spoke(controller, as.integer(spoke_id))
+  stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[as.character(spoke_id)]] %||% list()
+  delta <- as.double(stats_row$delta_spoke_mean %||% 0)
+  if (!is.finite(delta)) {
+    delta <- 0
+  }
+  log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% NA_real_)
+  alpha <- if (identical(transform_mode, "shift_scale") && is.finite(log_alpha)) exp(log_alpha) else 1
+  it_state <- .adaptive_link_d_opt_state_get(
+    controller = controller,
+    refit_id = refit_id,
+    spoke_id = as.integer(spoke_id),
+    transform_mode = transform_mode
+  )
+  prepared <- .adaptive_link_d_opt_rank1_prepare(it_state$it, ridge = 1e-6)
+  theta_hub_map <- .adaptive_link_safe_theta_map(
+    state = state,
+    set_id = hub_id,
+    prefer_current = identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
+  )
+  theta_spoke_raw_map <- .adaptive_link_safe_theta_map(
+    state = state,
+    set_id = as.integer(spoke_id),
+    prefer_current = identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
+  )
+  theta_h <- unname(as.double(theta_hub_map[endpoint_roles$hub_item]))
+  theta_raw_x <- unname(as.double(theta_spoke_raw_map[endpoint_roles$spoke_item]))
+  valid_gain <- is.finite(theta_h) & is.finite(theta_raw_x)
+  link_d_opt_gain <- rep_len(NA_real_, n_cand)
+  if (any(valid_gain)) {
+    theta_raw_x_valid <- theta_raw_x[valid_gain]
+    theta_x <- as.double(delta + alpha * theta_raw_x_valid)
+    pbar <- .adaptive_link_model_d_pbar_vec(
+      theta_h = theta_h[valid_gain],
+      theta_x = theta_x,
+      beta = beta,
+      epsilon = epsilon
+    )
+    info_scale <- as.double(pbar * (1 - pbar))
+    valid_idx <- which(valid_gain)
+    fast_gain <- .adaptive_link_d_opt_rank1_gain_transform(
+      prepared = prepared,
+      info_scale = info_scale,
+      transform_mode = transform_mode,
+      alpha = alpha,
+      theta_raw_x = theta_raw_x_valid
+    )
+    if (length(fast_gain) > 0L) {
+      link_d_opt_gain[valid_idx] <- fast_gain
+    }
+    fallback_pos <- which(is.na(fast_gain))
+    if (length(fallback_pos) > 0L) {
+      logdet_current <- .adaptive_link_logdet_spd(it_state$it, ridge = 1e-6)
+      for (pos in fallback_pos) {
+        idx <- valid_idx[[pos]]
+        g <- .adaptive_link_info_gradient(
+          transform_mode = transform_mode,
+          alpha = alpha,
+          theta_raw_x = theta_raw_x_valid[[pos]]
+        )
+        ipair <- as.matrix(info_scale[[pos]] * (g %*% t(g)))
+        link_d_opt_gain[[idx]] <- .adaptive_link_d_opt_gain_logdet_from_start(
+          it = it_state$it,
+          ipair = ipair,
+          logdet_start = logdet_current,
+          ridge = 1e-6
+        )
+      }
+    }
+  }
+  cand$link_d_opt_gain <- link_d_opt_gain
+  cand
+}
+
+.adaptive_link_predictive_prob_oriented <- function(state, controller, spoke_id, A_id, B_id) {
+  if (is.na(spoke_id) || is.na(A_id) || is.na(B_id)) {
+    return(NA_real_)
+  }
+  theta_global <- .adaptive_link_theta_global_map_for_items(
+    state = state,
+    controller = controller,
+    item_ids = c(as.character(A_id), as.character(B_id))
+  )
+  if (length(theta_global) < 2L) {
+    return(NA_real_)
+  }
+
+  if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
+    judge_params <- .adaptive_link_anchored_joint_judge_params(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      controller = controller
+    )
+  } else {
+    startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(state, spoke_id = as.integer(spoke_id))
+    judge_params <- .adaptive_link_judge_params(
+      state,
+      controller,
+      scope = "link",
+      allow_cold_start_fallback = isTRUE(startup_gap),
+      expected_link_params = !isTRUE(startup_gap)
+    )
+  }
+  epsilon <- as.double(judge_params$epsilon %||% 0)
+  beta <- as.double(judge_params$beta %||% 0)
+  if (!is.finite(epsilon)) {
+    epsilon <- 0
+  }
+  if (!is.finite(beta)) {
+    beta <- 0
+  }
+  epsilon <- max(0, min(1, epsilon))
+
+  theta_A <- as.double(theta_global[[as.character(A_id)]] %||% NA_real_)
+  theta_B <- as.double(theta_global[[as.character(B_id)]] %||% NA_real_)
+  if (!is.finite(theta_A) || !is.finite(theta_B)) {
+    return(NA_real_)
+  }
+
+  .adaptive_link_model_d_prob(theta_a = theta_A, theta_b = theta_B, beta = beta, epsilon = epsilon)
+}
+
+.adaptive_assign_order <- function(pair, posA, posB, pair_last_order, seed_base = 1L) {
   i_id <- as.character(pair$i)
   j_id <- as.character(pair$j)
   key <- make_unordered_key(i_id, j_id)
@@ -440,7 +2122,8 @@ adaptive_defaults <- function(N) {
     return(c(A_id = j_id, B_id = i_id))
   }
 
-  ordered <- sort(c(i_id, j_id))
+  seed <- .adaptive_pair_seed(seed_base = seed_base, unordered_key = key, offset = 0L)
+  ordered <- withr::with_seed(seed, sample(c(i_id, j_id), size = 2L, replace = FALSE))
   c(A_id = ordered[[1L]], B_id = ordered[[2L]])
 }
 
@@ -448,18 +2131,21 @@ adaptive_defaults <- function(N) {
   stage,
   state,
   config,
-  controller,
+  controller = NULL,
   generation_stage = NULL,
   round,
-  history,
+  history_state,
   counts,
   step_id,
   seed_base,
   candidates = NULL
 ) {
+  controller <- controller %||% .adaptive_controller_resolve(state)
   generation_stage <- as.character(generation_stage %||% .adaptive_round_active_stage(state) %||% "warm_start")
   ids <- as.character(state$trueskill_state$items$item_id)
-  candidates <- tibble::as_tibble(candidates %||% tibble::tibble(i = character(), j = character()))
+  candidates <- candidates %||% tibble::tibble(i = character(), j = character())
+  filter_counts <- attr(candidates, "candidate_filter_counts", exact = TRUE) %||% list()
+  candidates <- tibble::as_tibble(candidates)
 
   n_generated <- nrow(candidates)
   long_gate_pass <- NA
@@ -471,6 +2157,10 @@ adaptive_defaults <- function(N) {
       selected = NULL,
       counts = list(
         n_candidates_generated = 0L,
+        n_candidates_after_route_filters = as.integer(filter_counts$n_candidates_after_route_filters %||% NA_integer_),
+        n_candidates_after_active_domain = as.integer(filter_counts$n_candidates_after_active_domain %||% NA_integer_),
+        n_candidates_after_stage_filters = as.integer(filter_counts$n_candidates_after_stage_filters %||% NA_integer_),
+        n_candidates_after_exposure_filters = as.integer(filter_counts$n_candidates_after_exposure_filters %||% 0L),
         n_candidates_after_hard_filters = 0L,
         n_candidates_after_duplicates = 0L,
         n_candidates_after_star_caps = 0L,
@@ -488,21 +2178,20 @@ adaptive_defaults <- function(N) {
   candidates <- dplyr::filter(candidates, .data$i != .data$j)
   if (nrow(candidates) > 0L) {
     candidates <- score_candidates_u0(candidates, state$trueskill_state)
-    candidates$p <- vapply(seq_len(nrow(candidates)), function(idx) {
-      trueskill_win_probability(candidates$i[[idx]], candidates$j[[idx]], state$trueskill_state)
-    }, numeric(1L))
+    if (!"p" %in% names(candidates)) {
+      candidates$p <- vapply(seq_len(nrow(candidates)), function(idx) {
+        trueskill_win_probability(candidates$i[[idx]], candidates$j[[idx]], state$trueskill_state)
+      }, numeric(1L))
+    }
   }
   if (nrow(candidates) > 0L) {
     unordered_key <- make_unordered_key(candidates$i, candidates$j)
     pair_count <- counts$pair_count[unordered_key]
-    pair_count[is.na(pair_count)] <- 0L
-    has_order <- vapply(seq_along(unordered_key), function(idx) {
-      if (pair_count[[idx]] < 1L) {
-        return(TRUE)
-      }
-      last_order <- counts$pair_last_order[[unordered_key[[idx]]]]
-      !is.null(last_order) && length(last_order) == 2L
-    }, logical(1L))
+    has_order <- .adaptive_repeat_pair_has_order(
+      unordered_key = unordered_key,
+      pair_count = pair_count,
+      pair_last_order = counts$pair_last_order
+    )
     candidates <- candidates[has_order, , drop = FALSE]
   }
 
@@ -510,21 +2199,29 @@ adaptive_defaults <- function(N) {
   if (isTRUE(gate_active) && nrow(candidates) > 0L) {
     p_long_low <- as.double(controller$p_long_low)
     p_long_high <- as.double(controller$p_long_high)
-    p_gate <- vapply(seq_len(nrow(candidates)), function(idx) {
-      .adaptive_posterior_pair_prob(state, candidates$i[[idx]], candidates$j[[idx]])
-    }, numeric(1L))
-    posterior_available <- is.finite(p_gate)
-    if (!all(posterior_available)) {
-      p_gate[!posterior_available] <- candidates$p[!posterior_available]
-      long_gate_reason <- "posterior_unavailable"
+    posterior_available <- isTRUE(.adaptive_long_link_gate_has_posterior(state))
+    if (isTRUE(posterior_available)) {
+      p_gate <- .adaptive_long_link_gate_posterior_prob_vec(
+        state = state,
+        i_id = as.character(candidates$i),
+        j_id = as.character(candidates$j)
+      )
+    } else {
+      p_gate <- as.double(candidates$p)
+    }
+    if (any(!is.finite(p_gate))) {
+      posterior_available <- FALSE
+      p_gate <- as.double(candidates$p)
     }
     keep <- p_gate >= p_long_low & p_gate <= p_long_high
-    if (any(keep)) {
-      if (all(posterior_available)) {
-        long_gate_reason <- NA_character_
-      }
+    if (isTRUE(posterior_available)) {
+      long_gate_reason <- if (any(keep)) "posterior_inside_gate" else "posterior_extreme"
     } else {
-      long_gate_reason <- if (all(posterior_available)) "posterior_extreme" else "posterior_unavailable"
+      long_gate_reason <- if (any(keep)) {
+        "posterior_unavailable_fallback"
+      } else {
+        "posterior_unavailable_fallback_trueskill_extreme"
+      }
     }
     long_gate_pass <- any(keep)
     candidates <- candidates[keep, , drop = FALSE]
@@ -532,8 +2229,13 @@ adaptive_defaults <- function(N) {
   n_after_hard <- nrow(candidates)
 
   cap_count <- ceiling(config$cap_frac * config$W_cap)
-  recent_deg <- .adaptive_recent_deg(history, ids, config$W_cap)
+  recent_deg <- .adaptive_history_state_recent_deg(history_state, ids, config$W_cap)
   allow_repeats <- identical(stage$dup_policy, "relaxed")
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  link_phase_b <- .adaptive_link_mode_active(controller) &&
+    identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")
+  dup_max_obs_active <- if (isTRUE(link_phase_b)) 1L else config$dup_max_obs
+  dup_max_obs_relaxed_active <- if (isTRUE(link_phase_b)) 1L else config$dup_max_obs_relaxed
 
   .apply_downstream_filters <- function(candidates_in) {
     star_override_used_local <- FALSE
@@ -551,9 +2253,9 @@ adaptive_defaults <- function(N) {
     after_dup <- .adaptive_duplicate_filter(
       candidates = candidates_in,
       pair_count = counts$pair_count,
-      dup_max_obs = if (allow_repeats) config$dup_max_obs_relaxed else config$dup_max_obs,
+      dup_max_obs = if (allow_repeats) dup_max_obs_relaxed_active else dup_max_obs_active,
       allow_repeats = allow_repeats,
-      dup_max_obs_default = config$dup_max_obs,
+      dup_max_obs_default = dup_max_obs_active,
       dup_p_margin = config$dup_p_margin,
       p_vals = candidates_in$p,
       u0_vals = candidates_in$u0,
@@ -647,12 +2349,14 @@ adaptive_defaults <- function(N) {
 
   n_after_star <- nrow(candidates)
 
-  candidates$u <- candidates$u0
-
   list(
     selected = candidates,
     counts = list(
       n_candidates_generated = n_generated,
+      n_candidates_after_route_filters = as.integer(filter_counts$n_candidates_after_route_filters %||% NA_integer_),
+      n_candidates_after_active_domain = as.integer(filter_counts$n_candidates_after_active_domain %||% NA_integer_),
+      n_candidates_after_stage_filters = as.integer(filter_counts$n_candidates_after_stage_filters %||% NA_integer_),
+      n_candidates_after_exposure_filters = as.integer(n_after_hard),
       n_candidates_after_hard_filters = n_after_hard,
       n_candidates_after_duplicates = n_after_dup,
       n_candidates_after_star_caps = n_after_star,
@@ -673,6 +2377,216 @@ adaptive_defaults <- function(N) {
 
 #' @keywords internal
 #' @noRd
+.adaptive_filter_link_backfill_candidates <- function(
+  candidates,
+  counts,
+  round,
+  recent_deg,
+  defaults
+) {
+  cand <- tibble::as_tibble(candidates)
+  n_generated <- nrow(cand)
+  if (n_generated < 1L) {
+    return(list(
+      candidates = cand,
+      counts = list(
+        n_candidates_generated = 0L,
+        n_candidates_after_route_filters = NA_integer_,
+        n_candidates_after_active_domain = NA_integer_,
+        n_candidates_after_stage_filters = NA_integer_,
+        n_candidates_after_exposure_filters = 0L,
+        n_candidates_after_hard_filters = 0L,
+        n_candidates_after_duplicates = 0L,
+        n_candidates_after_star_caps = 0L,
+        n_candidates_scored = 0L
+      ),
+      star_caps = list(rejects = 0L, reject_items = character(), reject_items_count = 0L)
+    ))
+  }
+
+  cap_count <- ceiling(defaults$cap_frac * defaults$W_cap)
+  cand_hard <- .adaptive_round_exposure_filter(
+    cand,
+    round = round,
+    recent_deg = recent_deg,
+    defaults = defaults,
+    allow_repeat_pressure = FALSE
+  )
+  n_after_hard <- nrow(cand_hard)
+  p_vals <- if ("p" %in% names(cand_hard)) as.double(cand_hard$p) else rep_len(NA_real_, n_after_hard)
+  u0_vals <- if ("u0" %in% names(cand_hard)) as.double(cand_hard$u0) else rep_len(NA_real_, n_after_hard)
+  u0_quantile <- if ("u0" %in% names(cand_hard) && n_after_hard > 0L) {
+    stats::quantile(cand_hard$u0, probs = defaults$q, names = FALSE, type = 7)
+  } else {
+    NULL
+  }
+  cand_dup <- .adaptive_duplicate_filter(
+    candidates = cand_hard,
+    pair_count = counts$pair_count,
+    dup_max_obs = defaults$dup_max_obs,
+    allow_repeats = FALSE,
+    dup_max_obs_default = defaults$dup_max_obs,
+    dup_p_margin = defaults$dup_p_margin,
+    p_vals = p_vals,
+    u0_vals = u0_vals,
+    u0_quantile = u0_quantile
+  )
+  n_after_dup <- nrow(cand_dup)
+  star_filtered <- .adaptive_star_cap_filter(cand_dup, recent_deg, cap_count)
+  cand_final <- star_filtered$candidates
+  n_after_star <- nrow(cand_final)
+
+  list(
+    candidates = cand_final,
+    counts = list(
+      n_candidates_generated = as.integer(n_generated),
+      n_candidates_after_route_filters = NA_integer_,
+      n_candidates_after_active_domain = NA_integer_,
+      n_candidates_after_stage_filters = NA_integer_,
+      n_candidates_after_exposure_filters = as.integer(n_after_hard),
+      n_candidates_after_hard_filters = as.integer(n_after_hard),
+      n_candidates_after_duplicates = as.integer(n_after_dup),
+      n_candidates_after_star_caps = as.integer(n_after_star),
+      n_candidates_scored = as.integer(n_after_star)
+    ),
+    star_caps = list(
+      rejects = as.integer(star_filtered$rejects),
+      reject_items = as.character(star_filtered$reject_items),
+      reject_items_count = as.integer(star_filtered$reject_items_count)
+    )
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_selector_anchor_generation_memo_key <- function(generation_stage,
+                                                          link_phase_b = FALSE,
+                                                          spoke_id = NA_integer_,
+                                                          external_candidates = FALSE) {
+  if (isTRUE(external_candidates) ||
+    isTRUE(link_phase_b) ||
+    !identical(as.character(generation_stage %||% NA_character_), "anchor_link")) {
+    return(NA_character_)
+  }
+
+  paste(
+    "within_set_anchor",
+    if (is.na(as.integer(spoke_id))) "na" else as.character(as.integer(spoke_id)),
+    sep = "::"
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_selector_anchor_stage_memo_key <- function(generation_stage,
+                                                     dup_policy,
+                                                     link_phase_b = FALSE,
+                                                     spoke_id = NA_integer_,
+                                                     external_candidates = FALSE) {
+  if (isTRUE(external_candidates) ||
+    isTRUE(link_phase_b) ||
+    !identical(as.character(generation_stage %||% NA_character_), "anchor_link")) {
+    return(NA_character_)
+  }
+
+  paste(
+    "within_set_anchor",
+    as.character(dup_policy %||% "default"),
+    if (is.na(as.integer(spoke_id))) "na" else as.character(as.integer(spoke_id)),
+    sep = "::"
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_selection_coverage_meta <- function(state, controller, spoke_id, defaults) {
+  spoke_id <- as.integer(spoke_id)
+  if (is.na(spoke_id)) {
+    return(list(source = NA_character_, bins_used = NA_integer_))
+  }
+
+  coverage <- tryCatch(
+    .adaptive_link_refit_local_inputs(
+      state = state,
+      controller = controller,
+      spoke_id = spoke_id,
+      defaults = defaults
+    )$coverage,
+    error = function(e) NULL
+  )
+  source <- as.character(coverage$source %||% NA_character_)
+  bins_used <- as.integer(coverage$bins_used %||% NA_integer_)
+  if (!is.na(source) && !is.na(bins_used)) {
+    return(list(source = source, bins_used = bins_used))
+  }
+
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  hub_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == hub_id])
+  spoke_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == spoke_id])
+  if (length(spoke_ids) < 1L) {
+    return(list(source = source, bins_used = bins_used))
+  }
+
+  bins_target <- as.integer(controller$spoke_quantile_coverage_bins %||% 3L)
+  bins_used_fallback <- max(1L, bins_target)
+  while (bins_used_fallback > 1L && length(spoke_ids) < (3L * bins_used_fallback)) {
+    bins_used_fallback <- bins_used_fallback - 1L
+  }
+  if (is.na(bins_used)) {
+    bins_used <- as.integer(bins_used_fallback)
+  }
+
+  if (is.na(source)) {
+    step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+    cumulative_cross_count <- 0L
+    if (nrow(step_log) > 0L && all(c("pair_id", "is_cross_set", "link_spoke_id") %in% names(step_log))) {
+      cumulative_cross_count <- as.integer(sum(
+        !is.na(step_log$pair_id) &
+          step_log$is_cross_set %in% TRUE &
+          as.integer(step_log$link_spoke_id) == spoke_id,
+        na.rm = TRUE
+      ))
+    }
+    phase_a_rank <- tryCatch(
+      .adaptive_link_phase_a_theta_map(state, set_id = spoke_id, field = "rank_mu_raw"),
+      error = function(e) stats::setNames(numeric(), character())
+    )
+    phase_a_rank <- as.double(phase_a_rank[spoke_ids])
+    if (cumulative_cross_count < 10L && all(is.finite(phase_a_rank))) {
+      source <- "phase_a_rank_mu_raw"
+    }
+  }
+
+  if (is.na(source) && length(hub_ids) > 0L) {
+    routing_scores <- tryCatch(
+      .adaptive_link_phase_b_routing_scores(
+        state = state,
+        controller = controller,
+        active_ids = unique(c(hub_ids, spoke_ids)),
+        hub_id = hub_id
+      ),
+      error = function(e) stats::setNames(numeric(), character())
+    )
+    coverage_direct <- tryCatch(
+      .adaptive_link_spoke_coverage(
+        state = state,
+        controller = controller,
+        spoke_id = spoke_id,
+        spoke_ids = spoke_ids,
+        routing_scores = routing_scores,
+        score_source = "linking_global_score"
+      ),
+      error = function(e) NULL
+    )
+    source <- as.character(coverage_direct$source %||% source)
+    bins_used <- as.integer(coverage_direct$bins_used %||% bins_used)
+  }
+
+  list(source = as.character(source), bins_used = as.integer(bins_used))
+}
+
+#' @keywords internal
+#' @noRd
 select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
@@ -683,28 +2597,119 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   validate_trueskill_state(state$trueskill_state)
 
   ids <- as.character(state$trueskill_state$items$item_id)
-  defaults <- adaptive_defaults(length(ids))
+  controller_full <- .adaptive_controller_resolve(state)
+  phase_ctx_full <- .adaptive_link_phase_context(state, controller = controller_full)
+  effective_n <- as.integer(length(ids))
+  is_link_phase_a <- .adaptive_link_mode_active(controller_full) &&
+    !identical(as.character(phase_ctx_full$phase %||% "phase_a"), "phase_b")
+  if (isTRUE(is_link_phase_a)) {
+    active_set <- as.integer(phase_ctx_full$active_phase_a_set %||% NA_integer_)
+    if (!is.na(active_set)) {
+      scoped_n <- as.integer(sum(as.integer(state$items$set_id) == active_set, na.rm = TRUE))
+      if (is.finite(scoped_n) && scoped_n >= 2L) {
+        effective_n <- scoped_n
+      }
+    }
+  }
+  defaults <- adaptive_defaults(effective_n)
   controller <- .adaptive_resolve_controller(state, defaults)
-  history <- .adaptive_history_tbl(state)
-  counts <- .adaptive_pair_counts(history, ids)
+  # Use the full controller for linking predictive utility paths, which need
+  # transform and judge-mode fields not carried by the reduced selector view.
+  link_controller <- controller_full
+  history_state <- .adaptive_history_state_resolve(state, ids = ids)
+  counts <- .adaptive_history_state_counts(history_state, ids)
   step_id <- as.integer(step_id %||% (nrow(state$step_log) + 1L))
   if (length(step_id) != 1L || is.na(step_id) || step_id < 1L) {
     rlang::abort("`step_id` must be a positive integer.")
   }
   seed_base <- as.integer(state$meta$seed %||% 1L)
   round <- state$round %||% list()
-  round_stage <- as.character(.adaptive_round_active_stage(state) %||% "warm_start")
-  generation_stage <- if (identical(round_stage, "warm_start")) {
-    if (length(ids) <= 2L) "anchor_link" else "local_link"
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  link_phase_b <- .adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")
+  link_phase_b_concurrent <- isTRUE(link_phase_b) &&
+    identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
+  active_link_spoke <- as.integer(NA_integer_)
+  ranked_link_spokes <- integer()
+  link_budget_map <- list()
+  if (isTRUE(link_phase_b)) {
+    if (!isTRUE(round$staged_active)) {
+      base_round_stage <- "warm_start"
+    } else {
+      base_stage_index <- as.integer(round$stage_index %||% 1L)
+      base_stage_order <- as.character(round$stage_order %||% .adaptive_stage_order())
+      if (base_stage_index < 1L || base_stage_index > length(base_stage_order)) {
+        base_round_stage <- NA_character_
+      } else {
+        base_round_stage <- base_stage_order[[base_stage_index]]
+      }
+    }
   } else {
-    round_stage
+    base_round_stage <- as.character(.adaptive_round_active_stage(state) %||% "warm_start")
   }
-  stage_quota <- NA_integer_
-  stage_committed_so_far <- NA_integer_
-  if (!identical(round_stage, "warm_start")) {
-    stage_quota <- as.integer(round$stage_quotas[[round_stage]] %||% NA_integer_)
-    stage_committed_so_far <- as.integer(round$stage_committed[[round_stage]] %||% 0L)
+  if (isTRUE(link_phase_b)) {
+    eligible_spokes <- .adaptive_link_effective_active_spokes(
+      state,
+      controller = controller,
+      refit_id = .adaptive_link_refit_window_id(state),
+      exclude_exhausted = TRUE
+    )
+    link_budget_map <- .adaptive_link_budget_map_for_refit(
+      state = state,
+      controller = controller,
+      eligible_spoke_ids = eligible_spokes
+    )
+    ranked_link_spokes <- .adaptive_link_ranked_spokes(
+      state = state,
+      controller = controller,
+      eligible_spoke_ids = eligible_spokes
+    )
+    if (length(ranked_link_spokes) > 0L) {
+      active_link_spoke <- as.integer(ranked_link_spokes[[1L]])
+    }
   }
+  stage_context_memo <- new.env(parent = emptyenv())
+  stage_generation_memo <- new.env(parent = emptyenv())
+  stage_filter_memo <- new.env(parent = emptyenv())
+  .resolve_link_stage_context <- function(spoke_id = NA_integer_) {
+    memo_key <- if (isTRUE(link_phase_b) && !is.na(as.integer(spoke_id))) {
+      paste0("spoke::", as.integer(spoke_id))
+    } else {
+      "default"
+    }
+    if (exists(memo_key, envir = stage_context_memo, inherits = FALSE)) {
+      return(stage_context_memo[[memo_key]])
+    }
+    stage_context_memo[[memo_key]] <- .adaptive_select_link_stage_context_build(
+      state = state,
+      controller = controller,
+      round = round,
+      link_phase_b = link_phase_b,
+      link_budget_map = link_budget_map,
+      round_stage = base_round_stage,
+      ids = ids,
+      spoke_id = as.integer(spoke_id)
+    )
+    stage_context_memo[[memo_key]]
+  }
+  is_link_mode <- .adaptive_link_mode(state)
+  stage_ctx_initial <- if (isTRUE(link_phase_b) && !is.na(active_link_spoke)) {
+    .resolve_link_stage_context(spoke_id = as.integer(active_link_spoke))
+  } else {
+    .resolve_link_stage_context(spoke_id = NA_integer_)
+  }
+  link_progress <- if (isTRUE(link_phase_b) && !is.na(active_link_spoke)) {
+    list(
+      active_stage = as.character(stage_ctx_initial$round_stage),
+      backfill_active = isTRUE(stage_ctx_initial$backfill_active),
+      stage_realized = stage_ctx_initial$stage_realized
+    )
+  } else {
+    NULL
+  }
+  round_stage <- as.character(stage_ctx_initial$round_stage)
+  generation_stage <- as.character(stage_ctx_initial$generation_stage)
+  stage_quota <- as.integer(stage_ctx_initial$stage_quota)
+  stage_committed_so_far <- as.integer(stage_ctx_initial$stage_committed_so_far)
 
   stage_defs <- list(
     list(name = "base", W_used = defaults$W, dup_policy = "default", explore_boost = 1),
@@ -731,155 +2736,56 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   explore_rate_used <- as.double(defaults$explore_rate)
   local_priority_mode <- NA_character_
   is_explore_step <- FALSE
-  recent_deg <- .adaptive_recent_deg(history, ids, defaults$W_cap)
-
-  for (idx in seq_along(stage_defs)) {
-    stage <- stage_defs[[idx]]
-    stage$idx <- idx
-    fallback_path <- c(fallback_path, stage$name)
-    stage_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 11L)
-    stage_candidates <- if (idx == 1L && !is.null(candidates)) {
-      tibble::as_tibble(candidates)
-    } else {
-      generate_stage_candidates_from_state(
-        state = state,
-        stage_name = generation_stage,
-        fallback_name = stage$name,
-        C_max = defaults$C_max,
-        seed = stage_seed
-      )
+  selected_link_spoke_attempt <- as.integer(NA_integer_)
+  selected_round_stage <- as.character(round_stage)
+  selected_stage_quota <- as.integer(stage_quota)
+  selected_stage_committed_so_far <- as.integer(stage_committed_so_far)
+  phase_b_budget_depleted <- FALSE
+  recent_deg <- .adaptive_history_state_recent_deg(history_state, ids, defaults$W_cap)
+  .starvation_reason_from_counts <- function(counts) {
+    generated <- as.integer(counts$n_candidates_generated %||% 0L)
+    after_route <- as.integer(counts$n_candidates_after_route_filters %||% NA_integer_)
+    after_active_domain <- as.integer(counts$n_candidates_after_active_domain %||% NA_integer_)
+    after_stage <- as.integer(counts$n_candidates_after_stage_filters %||% NA_integer_)
+    after_exposure <- as.integer(counts$n_candidates_after_exposure_filters %||% NA_integer_)
+    after_hard <- as.integer(counts$n_candidates_after_hard_filters %||% 0L)
+    after_dup <- as.integer(counts$n_candidates_after_duplicates %||% 0L)
+    after_star <- as.integer(counts$n_candidates_after_star_caps %||% 0L)
+    scored <- as.integer(counts$n_candidates_scored %||% 0L)
+    if (generated <= 0L) {
+      return("few_candidates_generated")
     }
-
-    stage_out <- .adaptive_select_stage(
-      stage = stage,
-      state = state,
-      config = defaults,
-      controller = controller,
-      generation_stage = generation_stage,
-      round = round,
-      history = history,
-      counts = counts,
-      step_id = step_id,
-      seed_base = seed_base,
-      candidates = stage_candidates
-    )
-    last_counts <- stage_out$counts
-    last_star_caps <- stage_out$star_caps
-    if (!is.na(stage_out$long_gate_pass %||% NA)) {
-      last_long_gate_pass <- stage_out$long_gate_pass
-      last_long_gate_reason <- stage_out$long_gate_reason %||% NA_character_
+    if (!is.na(after_route) && after_route <= 0L) {
+      return("filtered_by_route_filters")
     }
-    last_star_override_used <- isTRUE(stage_out$star_override_used)
-    last_star_override_reason <- stage_out$star_override_reason
-    recent_deg <- stage_out$recent_deg %||% recent_deg
-
-    cand <- stage_out$selected
-    if (is.null(cand) || nrow(cand) == 0L) next
-
-    explore_rate <- defaults$explore_rate
-    if (isTRUE(controller$global_identified)) {
-      explore_rate <- explore_rate * as.double(controller$explore_taper_mult)
+    if (!is.na(after_active_domain) && after_active_domain <= 0L) {
+      return("filtered_by_active_domain")
     }
-    if (stage$explore_boost > 1) {
-      explore_rate <- min(0.50, explore_rate * stage$explore_boost)
+    if (!is.na(after_stage) && after_stage <= 0L) {
+      return("filtered_by_stage_filters")
     }
-    explore_rate_used <- as.double(explore_rate)
-
-    underrep_set <- .adaptive_underrep_set(counts$deg)
-    min_degree <- min(counts$deg)
-    quota_active <- min_degree < 2L
-    quota_eps <- defaults$quota_eps
-    quota_pick <- FALSE
-    if (quota_active) {
-      quota_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 1L)
-      quota_pick <- .adaptive_with_seed(quota_seed, stats::runif(1) < quota_eps)
+    if (!is.na(after_exposure) && after_exposure <= 0L) {
+      return("filtered_by_exposure_filters")
     }
-
-    stage_is_explore <- FALSE
-    stage_explore_mode <- NA_character_
-    stage_explore_reason <- NA_character_
-
-    if (quota_pick) {
-      eligible <- cand[cand$i %in% underrep_set | cand$j %in% underrep_set, , drop = FALSE]
-      if (nrow(eligible) == 0L) next
-      cand <- eligible
-      stage_is_explore <- TRUE
-      stage_explore_reason <- "coverage_quota_override"
-    } else {
-      explore_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 2L)
-      stage_is_explore <- .adaptive_with_seed(explore_seed, stats::runif(1) < explore_rate)
-      if (stage_is_explore) {
-        stage_explore_reason <- "probabilistic"
-      }
+    if (after_hard <= 0L) {
+      return("filtered_by_hard_filters")
     }
-
-    if (stage_is_explore) {
-      underrep <- .adaptive_underrep_set(counts$deg)
-      if (length(underrep) == 0L) {
-        underrep <- ids
-      }
-
-      nonlocal_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 3L)
-      explore_nonlocal <- .adaptive_with_seed(
-        nonlocal_seed,
-        stats::runif(1) < defaults$explore_nonlocal_rate
-      )
-      stage_explore_mode <- if (explore_nonlocal) "nonlocal" else "local"
-
-      mu_vals <- state$trueskill_state$items$mu
-      names(mu_vals) <- as.character(state$trueskill_state$items$item_id)
-      rank_order <- order(-mu_vals, names(mu_vals))
-      rank_index <- stats::setNames(seq_along(rank_order), names(mu_vals)[rank_order])
-
-      selected <- NULL
-      for (attempt in seq_len(defaults$explore_resample_max)) {
-        attempt_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 100L + attempt)
-        i_id <- .adaptive_with_seed(attempt_seed, sample(underrep, size = 1L))
-        candidate <- .adaptive_select_partner(
-          cand,
-          i_id,
-          mu_vals,
-          recent_deg,
-          stage_explore_mode,
-          rank_index
-        )
-        if (!is.null(candidate)) {
-          selected <- candidate
-          break
-        }
-      }
-      if (is.null(selected)) next
-      selected_pair <- selected
-    } else {
-      if (identical(generation_stage, "local_link") && isTRUE(controller$global_identified)) {
-        prioritized <- .adaptive_local_priority_select(
-          cand = cand,
-          state = state,
-          round = round,
-          stage_committed_so_far = stage_committed_so_far %||% 0L,
-          stage_quota = stage_quota %||% nrow(cand),
-          defaults = controller
-        )
-        cand <- prioritized$candidates
-        local_priority_mode <- prioritized$mode
-      } else if (identical(generation_stage, "local_link")) {
-        local_priority_mode <- "standard"
-      } else {
-        local_priority_mode <- NA_character_
-      }
-      order_idx <- order(-cand$u0, cand$i, cand$j)
-      selected_pair <- cand[order_idx[[1L]], , drop = FALSE]
+    if (after_dup <= 0L) {
+      return("filtered_by_duplicates")
     }
-
-    is_explore_step <- stage_is_explore
-    explore_mode <- stage_explore_mode
-    explore_reason <- stage_explore_reason
-    selected_stage <- stage
-    break
+    if (after_star <= 0L) {
+      return("filtered_by_star_caps")
+    }
+    if (scored <= 0L) {
+      return("filtered_by_scoring")
+    }
+    "filtered_by_other_filters"
   }
-
-  if (is.null(selected_pair) || nrow(selected_pair) == 0L) {
-    return(list(
+  .starved_selection <- function(starved_spoke_id, starvation_reason_override = NULL) {
+    starvation_reason <- as.character(
+      starvation_reason_override %||% .starvation_reason_from_counts(last_counts %||% list())
+    )
+    list(
       i = NA_integer_,
       j = NA_integer_,
       A = NA_integer_,
@@ -890,10 +2796,10 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       candidate_starved = TRUE,
       fallback_used = "global_safe",
       fallback_path = paste(fallback_path, collapse = ">"),
-      starvation_reason = "few_candidates_generated",
+      starvation_reason = starvation_reason,
       round_id = as.integer(round$round_id %||% NA_integer_),
-      round_stage = as.character(round_stage),
-      pair_type = as.character(round_stage),
+      round_stage = as.character(selected_round_stage),
+      pair_type = as.character(selected_round_stage),
       explore_rate_used = as.double(explore_rate_used),
       local_priority_mode = as.character(local_priority_mode),
       long_gate_pass = last_long_gate_pass,
@@ -907,13 +2813,22 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       stratum_i = NA_integer_,
       stratum_j = NA_integer_,
       dist_stratum = NA_integer_,
-      stage_committed_so_far = stage_committed_so_far,
-      stage_quota = stage_quota,
+      dist_stratum_global = NA_integer_,
+      coverage_bins_used = NA_integer_,
+      coverage_source = NA_character_,
+      link_spoke_id_selected = as.integer(starved_spoke_id),
+      stage_committed_so_far = as.integer(selected_stage_committed_so_far),
+      stage_quota = as.integer(selected_stage_quota),
       n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
+      n_candidates_after_route_filters = last_counts$n_candidates_after_route_filters %||% NA_integer_,
+      n_candidates_after_active_domain = last_counts$n_candidates_after_active_domain %||% NA_integer_,
+      n_candidates_after_stage_filters = last_counts$n_candidates_after_stage_filters %||% NA_integer_,
+      n_candidates_after_exposure_filters = last_counts$n_candidates_after_exposure_filters %||% 0L,
       n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
       n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,
       n_candidates_after_star_caps = last_counts$n_candidates_after_star_caps %||% 0L,
       n_candidates_scored = last_counts$n_candidates_scored %||% 0L,
+      hard_filter_collapse_stage = as.character(starvation_reason %||% NA_character_),
       deg_i = NA_integer_,
       deg_j = NA_integer_,
       recent_deg_i = NA_integer_,
@@ -926,11 +2841,465 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       U0_ij = NA_real_,
       star_cap_rejects = as.integer(last_star_caps$rejects %||% 0L),
       star_cap_reject_items = as.integer(last_star_caps$reject_items_count %||% 0L)
+    )
+  }
+
+  for (idx in seq_along(stage_defs)) {
+    stage <- stage_defs[[idx]]
+    stage$idx <- idx
+    fallback_path <- c(fallback_path, stage$name)
+    attempt_spokes <- if (isTRUE(link_phase_b_concurrent) && length(ranked_link_spokes) > 0L &&
+      !(idx == 1L && !is.null(candidates))) {
+      as.integer(ranked_link_spokes)
+    } else {
+      as.integer(NA_integer_)
+    }
+    stage_selected <- FALSE
+
+    for (spoke_attempt in attempt_spokes) {
+      ctx_spoke_id <- if (isTRUE(link_phase_b) && !is.na(active_link_spoke)) {
+        if (isTRUE(link_phase_b_concurrent) && !is.na(spoke_attempt)) {
+          as.integer(spoke_attempt)
+        } else {
+          as.integer(active_link_spoke)
+        }
+      } else {
+        NA_integer_
+      }
+      stage_ctx <- if (isTRUE(link_phase_b) && !is.na(ctx_spoke_id)) {
+        .resolve_link_stage_context(spoke_id = as.integer(ctx_spoke_id))
+      } else {
+        .resolve_link_stage_context(spoke_id = NA_integer_)
+      }
+      attempt_round_stage <- as.character(stage_ctx$round_stage)
+      attempt_generation_stage <- as.character(stage_ctx$generation_stage)
+      attempt_stage_quota <- as.integer(stage_ctx$stage_quota)
+      attempt_stage_committed_so_far <- as.integer(stage_ctx$stage_committed_so_far)
+      attempt_budget_remaining_actual <- as.integer(stage_ctx$budget_remaining_actual %||% NA_integer_)
+      attempt_backfill_active <- isTRUE(stage_ctx$backfill_active)
+      if (isTRUE(link_phase_b) &&
+        !isTRUE(attempt_backfill_active) &&
+        is.finite(attempt_budget_remaining_actual) &&
+        attempt_budget_remaining_actual <= 0L) {
+        phase_b_budget_depleted <- TRUE
+        selected_link_spoke_attempt <- as.integer(ctx_spoke_id)
+        selected_round_stage <- as.character(attempt_round_stage)
+        selected_stage_quota <- as.integer(attempt_stage_quota)
+        selected_stage_committed_so_far <- as.integer(attempt_stage_committed_so_far)
+        next
+      }
+      stage_seed <- .adaptive_stage_seed(
+        seed_base,
+        step_id,
+        stage$idx,
+        offset = 11L + ifelse(is.na(spoke_attempt), 0L, as.integer(spoke_attempt))
+      )
+      uses_external_candidates <- idx == 1L && !is.null(candidates)
+      generation_memo_key <- .adaptive_selector_anchor_generation_memo_key(
+        generation_stage = attempt_generation_stage,
+        link_phase_b = link_phase_b,
+        spoke_id = ctx_spoke_id,
+        external_candidates = uses_external_candidates
+      )
+      if (!is.na(generation_memo_key) &&
+        exists(generation_memo_key, envir = stage_generation_memo, inherits = FALSE)) {
+        stage_candidates <- stage_generation_memo[[generation_memo_key]]
+      } else {
+        stage_candidates <- if (isTRUE(link_phase_b) && isTRUE(attempt_backfill_active)) {
+          .adaptive_link_candidate_pool(
+            state = state,
+            controller = link_controller,
+            spoke_id = ifelse(is.na(spoke_attempt), active_link_spoke, as.integer(spoke_attempt)),
+            include_utility = FALSE,
+            C_max = defaults$C_max,
+            seed = stage_seed
+          )
+        } else if (uses_external_candidates) {
+          tibble::as_tibble(candidates)
+        } else if (isTRUE(link_phase_b_concurrent)) {
+          generate_stage_candidates_from_state(
+            state = state,
+            stage_name = attempt_generation_stage,
+            fallback_name = stage$name,
+            C_max = defaults$C_max,
+            seed = stage_seed,
+            link_spoke_id = ifelse(is.na(spoke_attempt), NA_integer_, as.integer(spoke_attempt))
+          )
+        } else {
+          generate_stage_candidates_from_state(
+            state = state,
+            stage_name = attempt_generation_stage,
+            fallback_name = stage$name,
+            C_max = defaults$C_max,
+            seed = stage_seed
+          )
+        }
+        if (!is.na(generation_memo_key)) {
+          stage_generation_memo[[generation_memo_key]] <- stage_candidates
+        }
+      }
+      if (isTRUE(link_phase_b) && nrow(stage_candidates) > 0L) {
+        metadata_spoke_id <- as.integer(
+          if (!is.na(ctx_spoke_id)) ctx_spoke_id else active_link_spoke
+        )
+        coverage_values <- .adaptive_link_selection_coverage_meta(
+          state = state,
+          controller = link_controller,
+          spoke_id = metadata_spoke_id,
+          defaults = defaults
+        )
+        if (!"link_spoke_id" %in% names(stage_candidates)) {
+          stage_candidates$link_spoke_id <- rep.int(NA_integer_, nrow(stage_candidates))
+        }
+        stage_candidates$link_spoke_id <- as.integer(stage_candidates$link_spoke_id)
+        missing_spoke_id <- is.na(stage_candidates$link_spoke_id)
+        stage_candidates$link_spoke_id[missing_spoke_id] <- as.integer(metadata_spoke_id)
+
+        if (!"coverage_source" %in% names(stage_candidates)) {
+          stage_candidates$coverage_source <- rep.int(NA_character_, nrow(stage_candidates))
+        }
+        stage_candidates$coverage_source <- as.character(stage_candidates$coverage_source)
+        missing_coverage_source <- is.na(stage_candidates$coverage_source)
+        stage_candidates$coverage_source[missing_coverage_source] <- as.character(
+          coverage_values$source %||% NA_character_
+        )
+
+        if (!"coverage_bins_used" %in% names(stage_candidates)) {
+          stage_candidates$coverage_bins_used <- rep.int(NA_integer_, nrow(stage_candidates))
+        }
+        stage_candidates$coverage_bins_used <- as.integer(stage_candidates$coverage_bins_used)
+        missing_coverage_bins <- is.na(stage_candidates$coverage_bins_used)
+        stage_candidates$coverage_bins_used[missing_coverage_bins] <- as.integer(
+          coverage_values$bins_used %||% NA_integer_
+        )
+      }
+
+      if (isTRUE(link_phase_b) && isTRUE(attempt_backfill_active)) {
+        blocker_spoke_id <- ifelse(is.na(spoke_attempt), active_link_spoke, as.integer(spoke_attempt))
+        blocker_stats_map <- link_controller$link_refit_stats_by_spoke %||% list()
+        blocker_stats <- blocker_stats_map[[as.character(blocker_spoke_id)]] %||% list()
+        blocker_stage_weights <- .adaptive_link_blocker_stage_weights(
+          blocker_weights = .adaptive_link_blocker_weights_for_spoke(
+            controller = link_controller,
+            spoke_id = blocker_spoke_id
+          ),
+          linking_identified = isTRUE(blocker_stats$link_identified %||% FALSE)
+        )
+        backfill_filtered <- .adaptive_filter_link_backfill_candidates(
+          candidates = stage_candidates,
+          counts = counts,
+          round = round,
+          recent_deg = recent_deg,
+          defaults = defaults
+        )
+        last_counts <- backfill_filtered$counts
+        last_star_caps <- backfill_filtered$star_caps
+        stage_candidates <- backfill_filtered$candidates
+        if (nrow(stage_candidates) == 0L) {
+          next
+        }
+        stage_candidates <- .adaptive_link_attach_predictive_utility(
+          candidates = stage_candidates,
+          state = state,
+          controller = link_controller,
+          spoke_id = blocker_spoke_id
+        )
+        set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+        order_idx <- .adaptive_link_backfill_order(
+          stage_candidates,
+          hub_id = as.integer(link_controller$hub_id %||% 1L),
+          set_map = set_map,
+          blocker_stage_weights = blocker_stage_weights,
+          spoke_id = blocker_spoke_id
+        )
+        if (length(order_idx) < 1L) {
+          next
+        }
+        selected_pair <- tibble::as_tibble(stage_candidates[order_idx[[1L]], , drop = FALSE])
+        selected_link_spoke_attempt <- as.integer(spoke_attempt %||% active_link_spoke)
+        selected_round_stage <- as.character(selected_pair$link_stage[[1L]] %||% attempt_round_stage)
+        selected_stage_quota <- as.integer(
+          stage_ctx$stage_quota %||%
+            link_progress$stage_quotas[[selected_round_stage]] %||%
+            NA_integer_
+        )
+        selected_stage_committed_so_far <- as.integer(
+          stage_ctx$stage_realized[[selected_round_stage]] %||% 0L
+        )
+        selected_stage <- stage
+        stage_selected <- TRUE
+        break
+      }
+
+      stage_filter_memo_key <- .adaptive_selector_anchor_stage_memo_key(
+        generation_stage = attempt_generation_stage,
+        dup_policy = stage$dup_policy,
+        link_phase_b = link_phase_b,
+        spoke_id = ctx_spoke_id,
+        external_candidates = uses_external_candidates
+      )
+      if (!is.na(stage_filter_memo_key) &&
+        exists(stage_filter_memo_key, envir = stage_filter_memo, inherits = FALSE)) {
+        stage_out <- stage_filter_memo[[stage_filter_memo_key]]
+      } else {
+        stage_out <- .adaptive_select_stage(
+          stage = stage,
+          state = state,
+          config = defaults,
+          controller = controller,
+          generation_stage = attempt_generation_stage,
+          round = round,
+          history_state = history_state,
+          counts = counts,
+          step_id = step_id,
+          seed_base = seed_base,
+          candidates = stage_candidates
+        )
+        if (!is.na(stage_filter_memo_key)) {
+          stage_filter_memo[[stage_filter_memo_key]] <- stage_out
+        }
+      }
+      last_counts <- stage_out$counts
+      last_star_caps <- stage_out$star_caps
+      if (!is.na(stage_out$long_gate_pass %||% NA)) {
+        last_long_gate_pass <- stage_out$long_gate_pass
+        last_long_gate_reason <- stage_out$long_gate_reason %||% NA_character_
+      }
+      last_star_override_used <- isTRUE(stage_out$star_override_used)
+      last_star_override_reason <- stage_out$star_override_reason
+      recent_deg <- stage_out$recent_deg %||% recent_deg
+
+      cand <- stage_out$selected
+      if (is.null(cand) || nrow(cand) == 0L) {
+        next
+      }
+      spoke_for_utility <- as.integer(NA_integer_)
+      if (isTRUE(is_link_mode) && isTRUE(link_phase_b)) {
+        spoke_for_utility <- if ("link_spoke_id" %in% names(cand)) {
+          as.integer(unique(stats::na.omit(as.integer(cand$link_spoke_id)))[1L] %||% NA_integer_)
+        } else {
+          as.integer(if (!is.na(spoke_attempt)) spoke_attempt else active_link_spoke)
+        }
+        if (!is.na(spoke_for_utility) &&
+          isTRUE((link_controller$link_state_frozen_by_spoke %||% list())[[as.character(spoke_for_utility)]])) {
+          rlang::abort(
+            paste0(
+              "Selector invariant failed: frozen spoke_id=",
+              as.integer(spoke_for_utility),
+              " remained eligible for live Phase B candidate ordering."
+            )
+          )
+        }
+        cand <- .adaptive_link_attach_predictive_utility(
+          candidates = cand,
+          state = state,
+          controller = link_controller,
+          spoke_id = as.integer(spoke_for_utility)
+        )
+      }
+
+      explore_rate <- defaults$explore_rate
+      if (isTRUE(controller$global_identified)) {
+        explore_rate <- explore_rate * as.double(controller$explore_taper_mult)
+      }
+      if (stage$explore_boost > 1) {
+        explore_rate <- min(0.50, explore_rate * stage$explore_boost)
+      }
+      explore_rate_used <- as.double(explore_rate)
+
+      underrep_set <- .adaptive_underrep_set(counts$deg)
+      min_degree <- min(counts$deg)
+      quota_active <- min_degree < 2L
+      quota_eps <- defaults$quota_eps
+      quota_pick <- FALSE
+      if (quota_active) {
+        quota_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 1L)
+        quota_pick <- .adaptive_with_seed(quota_seed, stats::runif(1) < quota_eps)
+      }
+
+      stage_is_explore <- FALSE
+      stage_explore_mode <- NA_character_
+      stage_explore_reason <- NA_character_
+      stage_local_priority_mode <- NA_character_
+
+      if (quota_pick) {
+        eligible <- cand[cand$i %in% underrep_set | cand$j %in% underrep_set, , drop = FALSE]
+        if (nrow(eligible) == 0L) {
+          next
+        }
+        cand <- eligible
+        stage_is_explore <- TRUE
+        stage_explore_reason <- "coverage_quota_override"
+      } else {
+        explore_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 2L)
+        stage_is_explore <- .adaptive_with_seed(explore_seed, stats::runif(1) < explore_rate)
+        if (stage_is_explore) {
+          stage_explore_reason <- "probabilistic"
+        }
+      }
+
+      if (stage_is_explore) {
+        underrep <- .adaptive_underrep_set(counts$deg)
+        if (length(underrep) == 0L) {
+          underrep <- ids
+        }
+
+        nonlocal_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 3L)
+        explore_nonlocal <- .adaptive_with_seed(
+          nonlocal_seed,
+          stats::runif(1) < defaults$explore_nonlocal_rate
+        )
+        stage_explore_mode <- if (explore_nonlocal) "nonlocal" else "local"
+
+        mu_vals <- state$trueskill_state$items$mu
+        names(mu_vals) <- as.character(state$trueskill_state$items$item_id)
+        rank_order <- order(-mu_vals, names(mu_vals))
+        rank_index <- stats::setNames(seq_along(rank_order), names(mu_vals)[rank_order])
+
+        selected <- NULL
+        for (attempt in seq_len(defaults$explore_resample_max)) {
+          attempt_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 100L + attempt)
+          i_id <- .adaptive_with_seed(attempt_seed, sample(underrep, size = 1L))
+          candidate <- .adaptive_select_partner(
+            cand,
+            i_id,
+            mu_vals,
+            recent_deg,
+            stage_explore_mode,
+            rank_index
+          )
+          if (!is.null(candidate)) {
+            selected <- candidate
+            break
+          }
+        }
+        if (is.null(selected)) {
+          next
+        }
+        selected_pair <- selected
+      } else {
+        if (!isTRUE(is_link_mode) &&
+          identical(attempt_generation_stage, "local_link") &&
+          isTRUE(controller$global_identified)) {
+          prioritized <- .adaptive_local_priority_select(
+            cand = cand,
+            state = state,
+            round = round,
+            stage_committed_so_far = attempt_stage_committed_so_far %||% 0L,
+            stage_quota = attempt_stage_quota %||% nrow(cand),
+            defaults = controller
+          )
+          cand <- prioritized$candidates
+          stage_local_priority_mode <- prioritized$mode
+        } else if (!isTRUE(is_link_mode) && identical(attempt_generation_stage, "local_link")) {
+          stage_local_priority_mode <- "standard"
+        } else {
+          stage_local_priority_mode <- NA_character_
+        }
+        selected_utility_mode <- .adaptive_selection_utility_mode(
+          run_mode = controller$run_mode,
+          is_cross_set = isTRUE(is_link_mode) && isTRUE(link_phase_b),
+          link_estimation_mode = link_controller$link_estimation_mode %||% controller$link_estimation_mode
+        )
+        if (isTRUE(is_link_mode) && isTRUE(link_phase_b)) {
+          # Linking mode keeps canonical candidate generation/filtering via
+          # TrueSkill and hard invariants; this call only applies the
+          # linking-specific final ordering priority.
+          order_idx <- .adaptive_linking_selection_order(
+            cand,
+            utility_mode = selected_utility_mode,
+            stage_name = attempt_generation_stage,
+            spoke_id = as.integer(spoke_attempt %||% active_link_spoke)
+          )
+        } else {
+          utility_col <- .adaptive_resolve_selection_column(selected_utility_mode)
+          utility <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
+            as.double(cand[[utility_col]])
+          } else {
+            rep_len(NA_real_, nrow(cand))
+          }
+          if (!any(is.finite(utility))) {
+            tie_utility <- if ("u0" %in% names(cand)) as.double(cand$u0) else rep_len(NA_real_, nrow(cand))
+            if (any(is.finite(tie_utility))) {
+              tie_utility[!is.finite(tie_utility)] <- -Inf
+              order_idx <- order(-tie_utility, cand$i, cand$j)
+            } else {
+              order_idx <- order(cand$i, cand$j)
+            }
+          } else {
+            utility[!is.finite(utility)] <- -Inf
+            order_idx <- order(-utility, cand$i, cand$j)
+          }
+        }
+        selected_pair <- cand[order_idx[[1L]], , drop = FALSE]
+      }
+
+      is_explore_step <- stage_is_explore
+      explore_mode <- stage_explore_mode
+      explore_reason <- stage_explore_reason
+      local_priority_mode <- stage_local_priority_mode
+      selected_stage <- stage
+      selected_link_spoke_attempt <- as.integer(spoke_attempt %||% NA_integer_)
+      selected_round_stage <- as.character(attempt_round_stage)
+      selected_stage_quota <- as.integer(attempt_stage_quota)
+      selected_stage_committed_so_far <- as.integer(attempt_stage_committed_so_far)
+      stage_selected <- TRUE
+      break
+    }
+
+    if (isTRUE(stage_selected)) {
+      break
+    }
+  }
+
+  if (is.null(selected_pair) || nrow(selected_pair) == 0L) {
+    starved_spoke_id <- if (!is.na(selected_link_spoke_attempt)) {
+      as.integer(selected_link_spoke_attempt)
+    } else {
+      as.integer(active_link_spoke %||% NA_integer_)
+    }
+    starvation_reason <- if (isTRUE(link_phase_b) && isTRUE(phase_b_budget_depleted)) {
+      "all_eligible_spokes_infeasible"
+    } else {
+      NULL
+    }
+    return(.starved_selection(
+      starved_spoke_id = as.integer(starved_spoke_id),
+      starvation_reason_override = starvation_reason
     ))
   }
 
   selected_pair <- tibble::as_tibble(selected_pair)
-  order_vals <- .adaptive_assign_order(selected_pair, counts$posA, counts$posB, counts$pair_last_order)
+  if (!identical(selected_round_stage, "warm_start")) {
+    count_fields <- c(
+      "n_candidates_generated",
+      "n_candidates_after_hard_filters",
+      "n_candidates_after_duplicates",
+      "n_candidates_after_star_caps",
+      "n_candidates_scored"
+    )
+    count_vals <- vapply(
+      count_fields,
+      function(field) as.integer(last_counts[[field]] %||% 0L),
+      integer(1L)
+    )
+    if (all(count_vals <= 0L)) {
+      rlang::abort(
+        paste0(
+          "Selector invariant failed: committed selection for stage `",
+          selected_round_stage,
+          "` cannot have zero candidate accounting."
+        )
+      )
+    }
+  }
+  order_vals <- .adaptive_assign_order(
+    selected_pair,
+    counts$posA,
+    counts$posB,
+    counts$pair_last_order,
+    seed_base = seed_base
+  )
   i_id <- as.character(selected_pair$i[[1L]])
   j_id <- as.character(selected_pair$j[[1L]])
 
@@ -938,9 +3307,6 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   sigma_vals <- state$trueskill_state$items$sigma
   names(mu_vals) <- as.character(state$trueskill_state$items$item_id)
   names(sigma_vals) <- as.character(state$trueskill_state$items$item_id)
-
-  p_ij <- trueskill_win_probability(i_id, j_id, state$trueskill_state)
-  u0_ij <- p_ij * (1 - p_ij)
 
   idx_map <- state$item_index %||% stats::setNames(seq_along(ids), ids)
   per_round_uses <- round$per_round_item_uses %||% integer()
@@ -957,6 +3323,86 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   } else {
     NA_integer_
   }
+  dist_stratum_global <- .adaptive_selected_dist_stratum_global(selected_pair)
+  coverage_meta <- .adaptive_selected_coverage_meta(selected_pair)
+  selected_spoke_id <- as.integer(coverage_meta$link_spoke_id %||% NA_integer_)
+  if (is.na(selected_spoke_id) && !is.na(selected_link_spoke_attempt)) {
+    selected_spoke_id <- as.integer(selected_link_spoke_attempt)
+  }
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+  set_i_selected <- as.integer(set_map[[i_id]] %||% NA_integer_)
+  set_j_selected <- as.integer(set_map[[j_id]] %||% NA_integer_)
+  selected_is_cross_set <- !is.na(set_i_selected) && !is.na(set_j_selected) && set_i_selected != set_j_selected
+  if (isTRUE(selected_is_cross_set) && is.na(selected_spoke_id) && isTRUE(is_link_mode)) {
+    hub_id <- as.integer(link_controller$hub_id %||% 1L)
+    if (identical(set_i_selected, hub_id)) {
+      selected_spoke_id <- set_j_selected
+    } else if (identical(set_j_selected, hub_id)) {
+      selected_spoke_id <- set_i_selected
+    }
+  }
+  if (isTRUE(selected_is_cross_set) &&
+    isTRUE(link_phase_b) &&
+    !is.na(selected_spoke_id) &&
+    (is.na(coverage_meta$coverage_source) || is.na(coverage_meta$coverage_bins_used))) {
+    coverage_fallback <- .adaptive_link_selection_coverage_meta(
+      state = state,
+      controller = link_controller,
+      spoke_id = as.integer(selected_spoke_id),
+      defaults = defaults
+    )
+    if (is.na(coverage_meta$coverage_source)) {
+      coverage_meta$coverage_source <- as.character(
+        coverage_fallback$source %||% NA_character_
+      )
+    }
+    if (is.na(coverage_meta$coverage_bins_used)) {
+      coverage_meta$coverage_bins_used <- as.integer(
+        coverage_fallback$bins_used %||% NA_integer_
+      )
+    }
+    if (is.na(coverage_meta$link_spoke_id)) {
+      coverage_meta$link_spoke_id <- as.integer(selected_spoke_id)
+    }
+  }
+  A_id <- as.character(order_vals[["A_id"]] %||% NA_character_)
+  B_id <- as.character(order_vals[["B_id"]] %||% NA_character_)
+  p_ij_ts <- trueskill_win_probability(A_id, B_id, state$trueskill_state)
+  p_ij <- as.double(p_ij_ts)
+  utility_mode <- .adaptive_selection_utility_mode(
+    run_mode = controller$run_mode,
+    is_cross_set = isTRUE(selected_is_cross_set),
+    link_estimation_mode = link_controller$link_estimation_mode %||% controller$link_estimation_mode
+  )
+  if (isTRUE(is_link_mode) && !is.na(selected_spoke_id)) {
+    p_link_oriented <- .adaptive_link_predictive_prob_oriented(
+      state = state,
+      controller = link_controller,
+      spoke_id = as.integer(selected_spoke_id),
+      A_id = as.character(A_id),
+      B_id = as.character(B_id)
+    )
+    if (is.finite(p_link_oriented)) {
+      p_ij <- as.double(p_link_oriented)
+    }
+  }
+  u0_ij <- as.double(p_ij * (1 - p_ij))
+  selected_link_u <- if ("link_u" %in% names(selected_pair)) {
+    as.double(selected_pair$link_u[[1L]] %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  selected_link_d_opt_gain <- if ("link_d_opt_gain" %in% names(selected_pair)) {
+    as.double(selected_pair$link_d_opt_gain[[1L]] %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  hard_filter_collapse_stage <- if ((last_counts$n_candidates_generated %||% 0L) > 0L &&
+    (last_counts$n_candidates_after_hard_filters %||% 0L) <= 0L) {
+    as.character(.starvation_reason_from_counts(last_counts))
+  } else {
+    NA_character_
+  }
 
   list(
     i = as.integer(idx_map[[i_id]]),
@@ -971,8 +3417,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     fallback_path = paste(fallback_path, collapse = ">"),
     starvation_reason = NA_character_,
     round_id = as.integer(round$round_id %||% NA_integer_),
-    round_stage = as.character(round_stage),
-    pair_type = as.character(round_stage),
+    round_stage = as.character(selected_round_stage),
+    pair_type = as.character(selected_round_stage),
     explore_rate_used = as.double(explore_rate_used),
     local_priority_mode = as.character(local_priority_mode),
     long_gate_pass = last_long_gate_pass,
@@ -986,13 +3432,22 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     stratum_i = stratum_i,
     stratum_j = stratum_j,
     dist_stratum = dist_stratum,
-    stage_committed_so_far = stage_committed_so_far,
-    stage_quota = stage_quota,
+    dist_stratum_global = as.integer(dist_stratum_global),
+    coverage_bins_used = as.integer(coverage_meta$coverage_bins_used),
+    coverage_source = as.character(coverage_meta$coverage_source),
+    link_spoke_id_selected = as.integer(selected_spoke_id),
+    stage_committed_so_far = as.integer(selected_stage_committed_so_far),
+    stage_quota = as.integer(selected_stage_quota),
     n_candidates_generated = last_counts$n_candidates_generated %||% 0L,
+    n_candidates_after_route_filters = last_counts$n_candidates_after_route_filters %||% NA_integer_,
+    n_candidates_after_active_domain = last_counts$n_candidates_after_active_domain %||% NA_integer_,
+    n_candidates_after_stage_filters = last_counts$n_candidates_after_stage_filters %||% NA_integer_,
+    n_candidates_after_exposure_filters = last_counts$n_candidates_after_exposure_filters %||% 0L,
     n_candidates_after_hard_filters = last_counts$n_candidates_after_hard_filters %||% 0L,
     n_candidates_after_duplicates = last_counts$n_candidates_after_duplicates %||% 0L,
     n_candidates_after_star_caps = last_counts$n_candidates_after_star_caps %||% 0L,
     n_candidates_scored = last_counts$n_candidates_scored %||% 0L,
+    hard_filter_collapse_stage = as.character(hard_filter_collapse_stage),
     deg_i = as.integer(counts$deg[[i_id]]),
     deg_j = as.integer(counts$deg[[j_id]]),
     recent_deg_i = as.integer(recent_deg[[i_id]]),
@@ -1003,6 +3458,9 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     sigma_j = as.double(sigma_vals[[j_id]]),
     p_ij = as.double(p_ij),
     U0_ij = as.double(u0_ij),
+    link_u = as.double(selected_link_u),
+    link_d_opt_gain = as.double(selected_link_d_opt_gain),
+    utility_mode = as.character(utility_mode),
     star_cap_rejects = as.integer(last_star_caps$rejects %||% 0L),
     star_cap_reject_items = as.integer(last_star_caps$reject_items_count %||% 0L)
   )

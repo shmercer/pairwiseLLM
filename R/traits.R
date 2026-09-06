@@ -6,7 +6,10 @@
 #' \code{{TRAIT_DESCRIPTION}} placeholders.
 #'
 #' @param name Character identifier for a built-in trait. One of
-#'   \code{"overall_quality"} or \code{"organization"}.
+#'   \code{"overall_quality"}, \code{"organization"}, or \code{"IRRC"}.
+#'   \code{"IRRC"} is case-sensitive and returns an overall-writing rubric
+#'   spanning prompt task, development of explanation, organization, and
+#'   language use.
 #'   Ignored if \code{custom_description} is supplied.
 #' @param custom_name Optional short label to use when supplying a
 #'   \code{custom_description}. Defaults to "Custom trait" if
@@ -35,8 +38,11 @@
 #' custom_td$name
 #' custom_td$description
 #'
+#' @seealso [set_prompt_template()], [build_prompt()]
+#' @family prompts and traits
 #' @export
-trait_description <- function(name = c("overall_quality", "organization"),
+trait_description <- function(name = c("overall_quality", "organization",
+                                      "IRRC"),
                               custom_name = NULL,
                               custom_description = NULL) {
   # Custom trait path
@@ -53,17 +59,27 @@ trait_description <- function(name = c("overall_quality", "organization"),
 
   trait_name <- switch(name,
     overall_quality = "Overall Quality",
-    organization    = "Organization"
+    organization    = "Organization",
+    IRRC = "Overall Writing Quality"
   )
 
   trait_desc <- switch(name,
     overall_quality =
-      "Overall quality of the writing, considering how well ideas are expressed,
-      how clearly the writing is organized, and how effective the language and
-      conventions are.",
+"Overall quality of the writing, considering how well ideas are expressed,
+how clearly the writing is organized, and how effective the language and
+conventions are.",
     organization =
-      "How clearly the writing is organized, including logical sequencing of
-      ideas and effective use of transitions."
+"How clearly the writing is organized, including logical sequencing of
+ideas and effective use of transitions.",
+    IRRC =
+"How well a piece of writing meets expectations across four traits: 
+Prompt Task (clearly addressing all parts of the topic, demonstrating 
+an understanding of the topic and purpose), Development of Explanation 
+(fully and specifically explaining the topic with relevant supporting 
+evidence), Organization (introducing, connecting, grouping, and concluding 
+ideas clearly), and Language Use (using effective word choice and 
+well-controlled sentence structure, varying word choice and sentence 
+structure)."
   )
 
   list(

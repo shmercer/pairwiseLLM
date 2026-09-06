@@ -21,6 +21,10 @@ A tibble with 190 rows and 12 variables:
 \item{model}{Model label for provenance.}
 }
 }
+\source{
+Deterministically derived from \code{example_writing_pairs} by
+\code{data-raw/example_writing_samples.R} in the source repository.
+}
 \usage{
 data("example_writing_results")
 }

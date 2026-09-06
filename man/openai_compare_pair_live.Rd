@@ -30,7 +30,7 @@ openai_compare_pair_live(
 
 \item{text2}{Character string containing the second sample's text.}
 
-\item{model}{OpenAI model name (e.g. "gpt-4.1", "gpt-5.2-2025-12-11").}
+\item{model}{OpenAI model name (e.g. "gpt-4.1", "gpt-5.6-sol").}
 
 \item{trait_name}{Short label for the trait (e.g. "Overall Quality").}
 
@@ -51,8 +51,9 @@ openai_compare_pair_live(
 
 \item{...}{Additional OpenAI parameters, for example
 \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},
-\code{service_tier}, \code{pair_uid}, and (optionally)
-\code{include_thoughts}. When
+\code{service_tier}, \code{max_output_tokens}, \code{pair_uid}, and
+(optionally) \code{include_thoughts}. \code{max_output_tokens} must be a
+positive integer and is supported only by the Responses endpoint. When
 \code{pair_uid} is supplied, it is used verbatim as \code{custom_id}.
 The same validation rules for
 gpt-5 models are applied as in \code{\link{build_openai_batch_requests}}.
@@ -95,7 +96,7 @@ analogue of \code{\link{build_openai_batch_requests}} plus
 }
 \details{
 It supports both the Chat Completions endpoint ("/v1/chat/completions") and
-the Responses endpoint ("/v1/responses", for example gpt-5.1 with reasoning),
+the Responses endpoint ("/v1/responses", for example gpt-5.6 with reasoning),
 using the same prompt template and model / parameter rules as the batch
 pipeline.
 
@@ -106,14 +107,10 @@ column.
 \item Visible assistant output into the \code{content} column.
 }
 
-\strong{Temperature Defaults:}
-If \code{temperature} is not provided in \code{...}:
-\itemize{
-\item It defaults to \code{0} (deterministic) for standard models or when reasoning is
-disabled.
-\item It remains \code{NULL} when reasoning is enabled, as the API does not support
-temperature in that mode.
-}
+\strong{Sampling defaults:}
+If \code{temperature} or \code{top_p} is not provided in \code{...}, the corresponding
+field is omitted so the model/provider default applies. Reasoning modes that
+do not support sampling parameters continue to require them to be \code{NULL}.
 }
 \examples{
 \dontrun{
@@ -125,15 +122,14 @@ res <- openai_compare_pair_live(
   ID2 = "B", text2 = "Text B...",
   model = "gpt-4.1",
   trait_name = "clarity",
-  trait_description = "Which text is clearer?",
-  temperature = 0
+  trait_description = "Which text is clearer?"
 )
 
-# 2. Reasoning comparison using GPT-5.2
+# 2. Reasoning comparison using GPT-5.6 Sol
 res_reasoning <- openai_compare_pair_live(
   ID1 = "A", text1 = "Text A...",
   ID2 = "B", text2 = "Text B...",
-  model = "gpt-5.2-2025-12-11",
+  model = "gpt-5.6-sol",
   trait_name = "clarity",
   trait_description = "Which text is clearer?",
   endpoint = "responses",
@@ -145,3 +141,23 @@ print(res_reasoning$thoughts)
 }
 
 }
+\seealso{
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}}, \code{\link[=llm_compare_pair]{llm_compare_pair()}}
+
+Other live backends:
+\code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}},
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}},
+\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}},
+\code{\link[=llm_compare_pair]{llm_compare_pair()}},
+\code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}},
+\code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}},
+\code{\link[=submit_llm_pairs]{submit_llm_pairs()}},
+\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
+\code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
+\code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
+\code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}
+}
+\concept{live backends}

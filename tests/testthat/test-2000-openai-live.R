@@ -3,8 +3,6 @@
 # Tests for openai_compare_pair_live() and submit_openai_pairs_live()
 # =====================================================================
 
-skip_if_no_psock()
-
 trait_description <- pairwiseLLM:::trait_description
 set_prompt_template <- pairwiseLLM:::set_prompt_template
 openai_compare_pair_live <- pairwiseLLM::openai_compare_pair_live
@@ -209,7 +207,7 @@ testthat::test_that("openai_compare_pair_live enforces gpt-5.1/5.2 + reasoning c
       reasoning = "low",
       temperature = 0
     ),
-    regexp = "gpt-5.1/5.2"
+    regexp = "GPT-5.x"
   )
 
   # 2. GPT-5.2 date-stamped should error
@@ -224,7 +222,7 @@ testthat::test_that("openai_compare_pair_live enforces gpt-5.1/5.2 + reasoning c
       reasoning = "medium",
       top_p = 0.5
     ),
-    regexp = "gpt-5.1/5.2"
+    regexp = "GPT-5.x"
   )
 
   # Allowed case
@@ -263,7 +261,7 @@ testthat::test_that("openai_compare_pair_live enforces gpt-5.1/5.2 + reasoning c
 
 # ---------------------------------------------------------------------
 
-testthat::test_that("openai_compare_pair_live allows other gpt-5* models with temp=0", {
+testthat::test_that("openai_compare_pair_live uses model-default sampling when omitted", {
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -279,7 +277,7 @@ testthat::test_that("openai_compare_pair_live allows other gpt-5* models with te
     usage = list(input_tokens = 1L, output_tokens = 1L, total_tokens = 2L)
   )
 
-  # Capture request body to check temperature
+  # Capture request body to check omitted sampling fields
   captured_body <- NULL
 
   testthat::with_mocked_bindings(
@@ -302,8 +300,8 @@ testthat::test_that("openai_compare_pair_live allows other gpt-5* models with te
         include_raw = TRUE
       )
       testthat::expect_equal(res$better_id, "B")
-      # Check that temperature was defaulted to 0
-      testthat::expect_equal(captured_body$temperature, 0)
+      testthat::expect_false("temperature" %in% names(captured_body))
+      testthat::expect_false("top_p" %in% names(captured_body))
     }
   )
 })
@@ -1240,6 +1238,7 @@ testthat::test_that("submit_openai_pairs_live: Sequential Save Error Handling", 
 })
 
 testthat::test_that("submit_openai_pairs_live: Parallel Execution & Save Error", {
+  skip_if_no_psock()
   testthat::skip_if_not_installed("future")
   testthat::skip_if_not_installed("future.apply")
   testthat::skip_if_not_installed("readr")
@@ -1277,15 +1276,14 @@ testthat::test_that("submit_openai_pairs_live: Parallel Execution & Save Error",
         )
       })
 
-      # Verify we got failures from the workers
       testthat::expect_equal(nrow(res$failed_pairs), 2L)
-      # The error message comes from the worker tryCatch
       testthat::expect_true(all(grepl("Error", res$failed_pairs$error_message)))
     }
   )
 })
 
 testthat::test_that("submit_openai_pairs_live: Parallel Save Strips raw_response", {
+  skip_if_no_psock()
   testthat::skip_if_not_installed("future")
   testthat::skip_if_not_installed("future.apply")
   testthat::skip_if_not_installed("readr")
@@ -1293,10 +1291,6 @@ testthat::test_that("submit_openai_pairs_live: Parallel Save Strips raw_response
   td <- trait_description("overall_quality")
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
   tmp_file <- tempfile(fileext = ".csv")
-
-  # Parallel execution with include_raw = TRUE.
-  # The workers will fail (fake key), returning a tibble WITH `raw_response`.
-  # The main process must strip this column before saving (Line 566).
 
   testthat::expect_warning(
     submit_openai_pairs_live(
@@ -1306,7 +1300,7 @@ testthat::test_that("submit_openai_pairs_live: Parallel Save Strips raw_response
       include_raw = TRUE,
       api_key = "FAKE_KEY"
     ),
-    regexp = NA # Should NOT warn about save failure
+    regexp = NA
   )
 
   testthat::expect_true(file.exists(tmp_file))

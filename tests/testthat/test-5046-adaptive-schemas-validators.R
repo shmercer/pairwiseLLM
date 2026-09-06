@@ -54,6 +54,13 @@ make_legacy_schema_state <- function() {
 test_that("pairs/results/failed schemas validate and reject key malformed rows", {
   expect_true("base" %in% pairwiseLLM:::.adaptive_fallback_used_levels())
   expect_true("unknown" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
+  expect_true("filtered_by_route_filters" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
+  expect_true("filtered_by_active_domain" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
+  expect_true("filtered_by_stage_filters" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
+  expect_true("filtered_by_exposure_filters" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
+  expect_true("filtered_by_hard_filters" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
+  expect_true("filtered_by_star_caps" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
+  expect_true("filtered_by_scoring" %in% pairwiseLLM:::.adaptive_starvation_reason_levels())
 
   expect_no_error(pairwiseLLM:::validate_pairs_tbl(make_valid_pairs_tbl()))
   expect_no_error(pairwiseLLM:::validate_results_tbl(make_valid_results_tbl()))
@@ -397,4 +404,176 @@ test_that("validate_state rejects non-adaptive and too-short canonical ids", {
   bad_ids$item_ids <- "A"
   bad_ids$n_items <- 1L
   expect_error(pairwiseLLM:::validate_state(bad_ids), "at least two item ids")
+})
+
+test_that("validate_state enforces linking identifiers and mode guards", {
+  items <- tibble::tibble(
+    item_id = c("a", "b", "c", "d"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("ga", "gb", "gc", "gd")
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 1L,
+    adaptive_config = list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L
+    )
+  )
+  expect_no_error(pairwiseLLM:::validate_state(state))
+
+  bad_global <- state
+  bad_global$items$global_item_id[[1]] <- bad_global$items$global_item_id[[2]]
+  expect_error(pairwiseLLM:::validate_state(bad_global), "global_item_id")
+
+  bad_link <- state
+  bad_link$linking$hub_id <- 99L
+  expect_error(pairwiseLLM:::validate_state(bad_link), "must match one observed")
+
+  bad_run_mode <- state
+  bad_run_mode$linking$run_mode <- "invalid"
+  expect_error(pairwiseLLM:::validate_state(bad_run_mode), "must be within_set, link_one_spoke, or link_multi_spoke")
+
+  bad_items_cols <- state
+  bad_items_cols$items <- dplyr::select(bad_items_cols$items, -set_id)
+  expect_error(pairwiseLLM:::validate_state(bad_items_cols), "must include columns")
+
+  bad_global_ids <- state
+  bad_global_ids$global_item_ids <- "only_one"
+  expect_error(pairwiseLLM:::validate_state(bad_global_ids), "one value per item")
+
+  bad_link_list <- state
+  bad_link_list$linking <- "oops"
+  expect_error(pairwiseLLM:::validate_state(bad_link_list), "must be a list")
+
+  bad_concurrent <- state
+  bad_concurrent$controller$multi_spoke_mode <- "concurrent"
+  bad_concurrent$controller$link_estimation_mode <- "transform"
+  bad_concurrent$linking$run_mode <- "link_multi_spoke"
+  bad_concurrent$controller$link_refit_mode <- "joint_refit"
+  bad_concurrent$controller$hub_lock_mode <- "free"
+  expect_no_error(pairwiseLLM:::validate_state(bad_concurrent))
+  resolved_bad <- pairwiseLLM:::.adaptive_controller_resolve(bad_concurrent)
+  expect_identical(resolved_bad$link_estimation_mode, "anchored_joint")
+  expect_identical(resolved_bad$hub_lock_mode, "hard_lock")
+  expect_identical(resolved_bad$multi_spoke_mode, "concurrent")
+})
+
+test_that("controller config rejects removed Phase B mode fields for new runs", {
+  items <- tibble::tibble(
+    item_id = c("h1", "h2", "s21", "s22"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("gh1", "gh2", "gs21", "gs22")
+  )
+
+  expect_no_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(
+        run_mode = "link_one_spoke",
+        hub_id = 1L
+      ),
+      n_items = nrow(items),
+      set_ids = items$set_id
+    )
+  )
+
+  removed <- c(
+    "link_estimation_mode",
+    "link_transform_policy",
+    "link_refit_mode",
+    "hub_lock_mode",
+    "probe_acceleration_mode",
+    "multi_spoke_mode",
+    "judge_param_mode",
+    "theta_global_rmse_scope",
+    "phase_a_import_failure_policy",
+    "phase_a_compatible_model_ids",
+    "phase_a_compatible_config_hashes",
+    "phase_a_set_source"
+  )
+  for (field in removed) {
+    cfg <- list(run_mode = "link_one_spoke", hub_id = 1L)
+    cfg[[field]] <- "removed"
+    expect_error(
+      pairwiseLLM:::.adaptive_validate_controller_config(
+        adaptive_config = cfg,
+        n_items = nrow(items),
+        set_ids = items$set_id
+      ),
+      field,
+      fixed = TRUE
+    )
+  }
+})
+
+test_that("controller config exposes only current public Phase B fields", {
+  defaults <- pairwiseLLM:::.adaptive_controller_defaults(8L)
+  keys <- pairwiseLLM:::.adaptive_controller_public_keys()
+
+  expect_false(isTRUE(defaults$within_phase_b_within_set_steps_allowed))
+  expect_true(isTRUE(defaults$hub_anchor_required_phase_b))
+  expect_true(is.na(defaults$probe_panel_edges))
+  expect_true(all(c("hub_anchor_required_phase_b", "probe_panel_edges") %in% keys))
+  expect_false("within_phase_b_within_set_steps_allowed" %in% keys)
+
+  validated <- pairwiseLLM:::.adaptive_validate_controller_config(
+    adaptive_config = list(
+      hub_anchor_required_phase_b = FALSE,
+      probe_panel_edges = 12L
+    ),
+    n_items = 8L,
+    set_ids = c(1L, 2L)
+  )
+
+  expect_false(isTRUE(validated$hub_anchor_required_phase_b))
+  expect_identical(validated$probe_panel_edges, 12L)
+})
+
+test_that("linking probe defaults scale with spoke set size", {
+  set_ids <- c(rep(1L, 20L), rep(2L, 1000L), rep(3L, 1200L))
+  items <- tibble::tibble(
+    item_id = paste0("item", seq_along(set_ids)),
+    set_id = set_ids,
+    global_item_id = paste0("g", seq_along(set_ids))
+  )
+  state <- pairwiseLLM::adaptive_rank_start(
+    items,
+    seed = 7L,
+    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+  )
+  validated <- state$controller
+
+  expect_identical(validated$probe_acceleration_mode, "fixed_per_refit")
+  expect_identical(validated$probe_edges_min_for_stop, 128L)
+  expect_identical(validated$probe_panel_edges, 160L)
+  expect_identical(validated$probe_pairs_per_refit_per_spoke, 5L)
+
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(probe_acceleration_mode = "active_floor_plus_sole_blocker"),
+      n_items = 8L,
+      set_ids = c(1L, 1L, 2L, 2L, 2L, 2L, 2L, 2L)
+    ),
+    "probe_acceleration_mode"
+  )
+})
+
+test_that("controller config hard-gates unsupported Phase B public controls", {
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(probe_edges_count_toward_active_constraints = TRUE),
+      n_items = 8L,
+      set_ids = c(1L, 2L)
+    ),
+    "probe_edges_count_toward_active_constraints"
+  )
+
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      adaptive_config = list(allow_spoke_spoke_cross_set = TRUE),
+      n_items = 8L,
+      set_ids = c(1L, 2L, 3L)
+    ),
+    "allow_spoke_spoke_cross_set"
+  )
 })

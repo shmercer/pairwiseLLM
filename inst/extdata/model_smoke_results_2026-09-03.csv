@@ -1,0 +1,8 @@
+"test_id","backend","provider","model_id","mode","endpoint","reasoning_mode","env_var","package_version","test_date","started_at_utc","duration_seconds","status","status_code","parsed_winner","error"
+"openai_chat_live","openai","OpenAI","gpt-4.1","live","chat.completions","none","OPENAI_API_KEY","1.3.1","2026-09-03","2026-09-03 17:36:40 UTC",2.5394139289856,"passed",200,TRUE,
+"openai_responses_live","openai","OpenAI","gpt-5.6-luna","live","responses","none","OPENAI_API_KEY","1.3.1","2026-09-03","2026-09-03 17:36:42 UTC",1.84460592269897,"passed",200,TRUE,
+"anthropic_standard_live","anthropic","Anthropic","claude-haiku-4-5-20251001","live","messages","none","ANTHROPIC_API_KEY","1.3.1","2026-09-03","2026-09-03 17:36:44 UTC",1.01161456108093,"passed",200,TRUE,
+"anthropic_thinking_live","anthropic","Anthropic","claude-haiku-4-5-20251001","live","messages","enabled","ANTHROPIC_API_KEY","1.3.1","2026-09-03","2026-09-03 17:36:45 UTC",2.24802827835083,"passed",200,TRUE,
+"gemini_thinking_live","gemini","Google","gemini-3.5-flash-lite","live","generateContent","thinking_level=low","GEMINI_API_KEY","1.3.1","2026-09-03","2026-09-03 17:36:47 UTC",0.816091775894165,"passed",200,TRUE,
+"vertex_standard_live","vertex","Google","gemini-2.5-flash","live","generateContent","thinking_budget=0","VERTEX_API_KEY","1.3.1","2026-09-03","2026-09-03 17:36:48 UTC",0.816841602325439,"passed",200,TRUE,
+"together_standard_live","together","Together AI","deepseek-ai/DeepSeek-V4-Flash-0731","live","chat.completions","none","TOGETHER_API_KEY","1.3.1","2026-09-03","2026-09-03 17:36:49 UTC",2.04663610458374,"passed",200,TRUE,

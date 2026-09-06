@@ -1,4 +1,4 @@
-test_that("pair selection does not depend on BTL posterior draws", {
+test_that("within-set pair selection does not depend on BTL posterior draws outside long-link gating", {
   items <- make_test_items(5)
   judge <- make_deterministic_judge("i_wins")
 

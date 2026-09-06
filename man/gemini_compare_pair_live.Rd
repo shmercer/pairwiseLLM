@@ -19,6 +19,7 @@ gemini_compare_pair_live(
   top_p = NULL,
   top_k = NULL,
   max_output_tokens = NULL,
+  service_tier = "standard",
   api_version = "v1beta",
   include_raw = FALSE,
   include_thoughts = FALSE,
@@ -35,7 +36,7 @@ gemini_compare_pair_live(
 
 \item{text2}{Character containing the second sample text.}
 
-\item{model}{Gemini model identifier (for example \code{"gemini-3-pro-preview"} or
+\item{model}{Gemini model identifier (for example \code{"gemini-3.5-flash-lite"} or
 \code{"gemini-3-flash-preview"}). The value is interpolated into the path
 \code{"/{api_version}/models/<model>:generateContent"}.}
 
@@ -55,7 +56,8 @@ This controls the maximum depth of internal reasoning.
 \itemize{
 \item For Gemini 3 Flash models (for example \code{"gemini-3-flash-preview"}),
 \code{"minimal"} is supported and is passed through as \code{"minimal"}.
-\item For non-Flash Gemini 3 models (for example \code{"gemini-3-pro-preview"}),
+\item For models not matched by the package's Gemini 3 Flash-name
+detector (for example \code{"gemini-3.5-flash-lite"}),
 \code{"minimal"} is not supported.
 \item For backward compatibility with earlier Gemini 3 Pro usage,
 \code{"low"} maps to \code{"low"} and both \code{"medium"} and \code{"high"} map to \code{"high"}.
@@ -71,6 +73,10 @@ parameter is omitted and Gemini uses its own default (currently 1.0).}
 
 \item{max_output_tokens}{Optional maximum output token count. If \code{NULL},
 omitted.}
+
+\item{service_tier}{Gemini Developer API service tier. Use \code{"standard"}
+(default) or \code{NULL} for the provider default request, or \code{"flex"} /
+\code{"priority"} to encode the documented Gemini \code{serviceTier} request field.}
 
 \item{api_version}{API version to use, default \code{"v1beta"}. For plain text
 pairwise comparisons v1beta is recommended.}
@@ -142,13 +148,13 @@ still using the final answer content to detect the \verb{<BETTER_SAMPLE>} tag.
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Gemini 3 Pro example (existing behavior)
+# Dated tested Gemini Developer API configuration
 res <- gemini_compare_pair_live(
   ID1               = "S01",
   text1             = "Text 1",
   ID2               = "S02",
   text2             = "Text 2",
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -179,3 +185,23 @@ res_flash
 }
 
 }
+\seealso{
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}}, \code{\link[=llm_compare_pair]{llm_compare_pair()}}
+
+Other live backends:
+\code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}},
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}},
+\code{\link[=llm_compare_pair]{llm_compare_pair()}},
+\code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}},
+\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}},
+\code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}},
+\code{\link[=submit_llm_pairs]{submit_llm_pairs()}},
+\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
+\code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
+\code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
+\code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}
+}
+\concept{live backends}

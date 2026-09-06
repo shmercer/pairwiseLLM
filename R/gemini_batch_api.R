@@ -318,7 +318,7 @@
 #'   \code{text1}, \code{ID2}, \code{text2}. Typically created by
 #'   \code{\link{make_pairs}}, \code{\link{sample_pairs}}, and
 #'   \code{\link{randomize_pair_order}}.
-#' @param model Gemini model name, for example \code{"gemini-3-pro-preview"}.
+#' @param model Gemini model name, for example \code{"gemini-3.5-flash-lite"}.
 #'   This parameter is not embedded in each request object (the model is
 #'   provided via the path), but is included here for symmetry with other
 #'   backends and potential validation.
@@ -335,7 +335,8 @@
 #'   \itemize{
 #'     \item For Gemini 3 Flash models (for example \code{"gemini-3-flash-preview"}),
 #'       \code{"minimal"} is supported and is passed through as \code{"minimal"}.
-#'     \item For non-Flash Gemini 3 models (for example \code{"gemini-3-pro-preview"}),
+#'     \item For models not matched by the package's Gemini 3 Flash-name
+#'       detector (for example \code{"gemini-3.5-flash-lite"}),
 #'       \code{"minimal"} is not supported.
 #'     \item For backward compatibility with earlier Gemini 3 Pro usage,
 #'       \code{"low"} maps to \code{"low"} and both \code{"medium"} and \code{"high"}
@@ -348,6 +349,10 @@
 #' @param top_p Optional nucleus sampling parameter. If \code{NULL}, omitted.
 #' @param top_k Optional top-k sampling parameter. If \code{NULL}, omitted.
 #' @param max_output_tokens Optional integer. If \code{NULL}, omitted.
+#' @param service_tier Gemini Developer API service tier. Use \code{"standard"}
+#'   (default) or \code{NULL} for provider default behavior, or \code{"flex"} /
+#'   \code{"priority"} to encode the documented Gemini \code{serviceTier}
+#'   request field.
 #' @param include_thoughts Logical; if \code{TRUE}, sets
 #'   \code{thinkingConfig.includeThoughts = TRUE} so that Gemini returns
 #'   visible chain-of-thought. For most pairwise scoring use cases this should
@@ -373,10 +378,10 @@
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # Gemini 3 Pro example (existing behavior)
+#' # Dated tested Gemini Developer API configuration
 #' reqs <- build_gemini_batch_requests(
 #'   pairs             = pairs,
-#'   model             = "gemini-3-pro-preview",
+#'   model             = "gemini-3.5-flash-lite",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
@@ -399,6 +404,8 @@
 #'
 #' reqs_flash
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 build_gemini_batch_requests <- function(
   pairs,
@@ -412,10 +419,12 @@ build_gemini_batch_requests <- function(
   top_p = NULL,
   top_k = NULL,
   max_output_tokens = NULL,
+  service_tier = "standard",
   include_thoughts = FALSE,
   ...
 ) {
   thinking_level <- match.arg(thinking_level, c("minimal", "low", "medium", "high"))
+  service_tier <- normalize_gemini_service_tier(service_tier)
 
   pairs <- tibble::as_tibble(pairs)
   required_cols <- c("ID1", "text1", "ID2", "text2")
@@ -496,7 +505,7 @@ build_gemini_batch_requests <- function(
 
     generation_config$thinkingConfig <- thinking_config
 
-    list(
+    req <- list(
       contents = list(
         list(
           role = "user",
@@ -507,6 +516,12 @@ build_gemini_batch_requests <- function(
       ),
       generationConfig = generation_config
     )
+
+    if (!is.null(service_tier)) {
+      req$serviceTier <- service_tier
+    }
+
+    req
   }
 
   out <- vector("list", nrow(pairs))
@@ -548,7 +563,7 @@ build_gemini_batch_requests <- function(
 #'   \code{list(contents = ..., generationConfig = ...)}. You can obtain this
 #'   list from the output of \code{\link{build_gemini_batch_requests}} via
 #'   \code{batch$request}.
-#' @param model Gemini model name, for example \code{"gemini-3-pro-preview"}.
+#' @param model Gemini model name, for example \code{"gemini-3.5-flash-lite"}.
 #' @param api_key Optional Gemini API key. Defaults to
 #'   \code{Sys.getenv("GEMINI_API_KEY")}.
 #' @param api_version API version string for the path; defaults to
@@ -574,7 +589,7 @@ build_gemini_batch_requests <- function(
 #'
 #' batch_tbl <- build_gemini_batch_requests(
 #'   pairs             = pairs,
-#'   model             = "gemini-3-pro-preview",
+#'   model             = "gemini-3.5-flash-lite",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
@@ -592,13 +607,15 @@ build_gemini_batch_requests <- function(
 #' \dontrun{
 #' batch <- gemini_create_batch(
 #'   requests = requests,
-#'   model    = "gemini-3-pro-preview"
+#'   model    = "gemini-3.5-flash-lite"
 #' )
 #'
 #' batch$name
 #' batch$metadata$state
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 gemini_create_batch <- function(
   requests,
@@ -675,6 +692,8 @@ gemini_create_batch <- function(
 #' batch$metadata$state
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 gemini_get_batch <- function(
   batch_name,
@@ -728,6 +747,8 @@ gemini_get_batch <- function(
 #' final_batch$metadata$state
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 gemini_poll_batch_until_complete <- function(
   batch_name,
@@ -861,6 +882,8 @@ gemini_poll_batch_until_complete <- function(
 #' readLines(out_file, warn = FALSE)
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 gemini_download_batch_results <- function(
   batch,
@@ -1020,6 +1043,8 @@ gemini_download_batch_results <- function(
 #' results
 #' }
 #'
+#' @seealso [parse_openai_batch_output()], [parse_anthropic_batch_output()]
+#' @family result normalization
 #' @export
 parse_gemini_batch_output <- function(results_path, requests_tbl) {
   if (!file.exists(results_path)) {
@@ -1208,7 +1233,7 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #' \code{\link{run_anthropic_batch_pipeline}}.
 #'
 #' @param pairs Tibble/data frame of pairs.
-#' @param model Gemini model name, for example \code{"gemini-3-pro-preview"} or
+#' @param model Gemini model name, for example \code{"gemini-3.5-flash-lite"} or
 #'   \code{"gemini-3-flash-preview"}.
 #' @param trait_name Trait name.
 #' @param trait_description Trait description.
@@ -1222,7 +1247,8 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #'   \itemize{
 #'     \item For Gemini 3 Flash models (for example \code{"gemini-3-flash-preview"}),
 #'       \code{"minimal"} is supported and is passed through as \code{"minimal"}.
-#'     \item For non-Flash Gemini 3 models (for example \code{"gemini-3-pro-preview"}),
+#'     \item For models not matched by the package's Gemini 3 Flash-name
+#'       detector (for example \code{"gemini-3.5-flash-lite"}),
 #'       \code{"minimal"} is not supported.
 #'     \item For backward compatibility with earlier Gemini 3 Pro usage,
 #'       \code{"low"} maps to \code{"low"} and both \code{"medium"} and \code{"high"}
@@ -1244,6 +1270,10 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #'   [gemini_compare_pair_live()]. Parsed results will include a `thoughts`
 #'   column when visible thoughts are returned by the API (currently batch
 #'   typically only exposes `thoughtSignature` + `thoughtsTokenCount`).
+#' @param service_tier Gemini Developer API service tier forwarded to
+#'   \code{\link{build_gemini_batch_requests}}. Use \code{"standard"} (default)
+#'   or \code{NULL} for provider default behavior, or \code{"flex"} /
+#'   \code{"priority"} to request the documented Gemini service tier.
 #' @param ... Additional arguments forwarded to
 #'   \code{\link{build_gemini_batch_requests}} (for example
 #'   \code{temperature}, \code{top_p}, \code{top_k},
@@ -1277,10 +1307,10 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # Run the full Gemini batch pipeline (Gemini 3 Pro example)
+#' # Run the full Gemini batch pipeline
 #' res <- run_gemini_batch_pipeline(
 #'   pairs             = pairs,
-#'   model             = "gemini-3-pro-preview",
+#'   model             = "gemini-3.5-flash-lite",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
@@ -1314,6 +1344,8 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #' res_flash$results
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 run_gemini_batch_pipeline <- function(
   pairs,
@@ -1337,6 +1369,7 @@ run_gemini_batch_pipeline <- function(
   api_version = "v1beta",
   verbose = TRUE,
   include_thoughts = FALSE,
+  service_tier = "standard",
   ...
 ) {
   if (!is.character(model) || length(model) != 1L || !nzchar(model)) {
@@ -1362,6 +1395,7 @@ run_gemini_batch_pipeline <- function(
     trait_description = trait_description,
     prompt_template   = prompt_template,
     thinking_level    = thinking_level,
+    service_tier      = service_tier,
     include_thoughts  = include_thoughts,
     ...
   )

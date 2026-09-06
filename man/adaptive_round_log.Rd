@@ -4,10 +4,15 @@
 \alias{adaptive_round_log}
 \title{Adaptive round log accessor.}
 \usage{
-adaptive_round_log(state)
+adaptive_round_log(state, reconstruct_deferred = FALSE)
 }
 \arguments{
 \item{state}{Adaptive state.}
+
+\item{reconstruct_deferred}{Logical; when \code{TRUE}, reconstruct deferred
+audit-only posterior summaries from stored refit payloads when available.
+By default, returns the canonical stored \code{round_log} without
+reconstruction.}
 }
 \value{
 A tibble with one row per completed posterior refit round.
@@ -35,8 +40,10 @@ Core columns:
 \code{global_identified_reliability_min},
 \code{global_identified_rank_corr_min}, \code{long_quota_raw},
 \code{long_quota_effective}, \code{long_quota_removed},
-\code{realloc_to_mid}, \code{realloc_to_local}.
+\code{realloc_to_mid}, \code{realloc_to_local},
+\code{phase_scope}, \code{phase_scope_set_id}, \code{phase_scope_n_items}.
 \item Coverage/imbalance: \code{mean_degree}, \code{min_degree},
+\code{mean_degree_scope}, \code{min_degree_scope},
 \code{pos_balance_sd}, \code{star_cap_rejects_since_last_refit},
 \code{star_cap_reject_rate_since_last_refit},
 \code{recent_deg_median_since_last_refit},
@@ -57,16 +64,22 @@ Core columns:
 \code{divergences_max_allowed}, \code{max_rhat},
 \code{max_rhat_allowed}, \code{min_ess_bulk},
 \code{ess_bulk_required}, \code{near_stop_active},
-\code{reliability_EAP}, \code{eap_reliability_min}, \code{eap_pass},
-\code{theta_sd_eap}, \code{rho_theta}, \code{lag_eligible},
-\code{theta_corr_min}, \code{theta_corr_pass}, \code{delta_sd_theta},
+\code{reliability_EAP}, \code{reliability_EAP_scope},
+\code{eap_reliability_min}, \code{eap_pass}, \code{eap_pass_scope},
+\code{theta_sd_eap}, \code{theta_sd_eap_scope},
+\code{rho_theta}, \code{rho_theta_scope},
+\code{lag_eligible}, \code{lag_eligible_scope},
+\code{theta_corr_min}, \code{theta_corr_pass}, \code{theta_corr_pass_scope},
+\code{delta_sd_theta}, \code{delta_sd_theta_scope},
 \code{theta_sd_rel_change_max}, \code{delta_sd_theta_pass},
-\code{rho_rank}, \code{rank_spearman_min}, \code{rho_rank_pass}.
+\code{delta_sd_theta_pass_scope}, \code{rho_rank}, \code{rho_rank_scope},
+\code{rank_spearman_min}, \code{rho_rank_pass}, \code{rho_rank_pass_scope}.
 \item Refit execution metadata: \code{mcmc_chains},
 \code{mcmc_parallel_chains}, \code{mcmc_core_fraction},
 \code{mcmc_cores_detected_physical}, \code{mcmc_cores_detected_logical},
 \code{mcmc_threads_per_chain}, \code{mcmc_cmdstanr_version}.
-\item Stop output: \code{stop_decision}, \code{stop_reason}.
+\item Stop output: \code{stop_decision}, \code{stop_reason},
+\code{max_pairs_after_stop}, \code{pairs_committed_after_stop}.
 }
 }
 \examples{
@@ -77,10 +90,12 @@ adaptive_round_log(state)
 \seealso{
 \code{\link[=adaptive_get_logs]{adaptive_get_logs()}}, \code{\link[=summarize_refits]{summarize_refits()}}, \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}
 
-Other adaptive logs: 
-\code{\link{adaptive_get_logs}()},
-\code{\link{adaptive_item_log}()},
-\code{\link{adaptive_results_history}()},
-\code{\link{adaptive_step_log}()}
+Other adaptive logs:
+\code{\link[=adaptive_get_logs]{adaptive_get_logs()}},
+\code{\link[=adaptive_item_log]{adaptive_item_log()}},
+\code{\link[=adaptive_results_history]{adaptive_results_history()}},
+\code{\link[=adaptive_step_log]{adaptive_step_log()}},
+\code{\link[=summarize_items]{summarize_items()}},
+\code{\link[=summarize_refits]{summarize_refits()}}
 }
 \concept{adaptive logs}

@@ -75,6 +75,7 @@ export(submit_llm_pairs)
 export(submit_ollama_pairs_live)
 export(submit_openai_pairs_live)
 export(submit_together_pairs_live)
+export(submit_vertex_pairs_live)
 export(summarize_adaptive)
 export(summarize_bt_fit)
 export(summarize_items)
@@ -82,19 +83,24 @@ export(summarize_refits)
 export(together_compare_pair_live)
 export(trait_description)
 export(validate_session_dir)
+export(vertex_compare_pair_live)
 export(write_openai_batch_file)
 import(dplyr)
 import(tibble)
 importFrom(curl,form_file)
-importFrom(httr2,req_auth_bearer_token)
-importFrom(httr2,req_body_json)
-importFrom(httr2,req_body_multipart)
-importFrom(httr2,req_perform)
-importFrom(httr2,request)
-importFrom(httr2,resp_body_json)
-importFrom(httr2,resp_body_raw)
-importFrom(httr2,resp_body_string)
-importFrom(httr2,resp_status)
-importFrom(jsonlite,fromJSON)
-importFrom(jsonlite,toJSON)
+importFrom(httr2,
+  req_auth_bearer_token,
+  req_body_json,
+  req_body_multipart,
+  req_perform,
+  request,
+  resp_body_json,
+  resp_body_raw,
+  resp_body_string,
+  resp_status
+)
+importFrom(jsonlite,
+  fromJSON,
+  toJSON
+)
 importFrom(stats,aggregate)

@@ -26,6 +26,8 @@ make_fit_contract_fixture <- function() {
 
 test_that("fit contract validator catches missing and malformed fields", {
   fit <- make_fit_contract_fixture()
+  expect_true(all(c("theta_p2.5", "theta_p5", "theta_p50", "theta_p95", "theta_p97.5") %in% names(fit)))
+  expect_equal(fit$theta_p50, stats::setNames(c(0.15, 0.35), c("A", "B")))
 
   missing <- fit
   missing$diagnostics <- NULL
@@ -65,7 +67,10 @@ test_that("fit contract validator rejects malformed types across scalar and draw
 
   bad_n_items <- fit
   bad_n_items$n_items <- 3L
-  expect_error(pairwiseLLM:::validate_btl_fit_contract(bad_n_items, ids = c("A", "B")), "must match `theta_draws` columns")
+  expect_error(
+    pairwiseLLM:::validate_btl_fit_contract(bad_n_items, ids = c("A", "B")),
+    "must match `theta_draws` columns"
+  )
 
   bad_eps_type <- fit
   bad_eps_type$epsilon_draws <- "x"
@@ -149,7 +154,13 @@ test_that("adaptive mcmc helper functions cover config and diagnostics branches"
 
   draws_mat <- matrix(c(1, 2, 3, 4), nrow = 2)
   colnames(draws_mat) <- c("theta[1]", "theta[2]")
-  expect_error(pairwiseLLM:::.btl_mcmc_unpack_draws(matrix(1, nrow = 1, ncol = 1), model_variant = "btl"), "column names")
+  expect_error(
+    pairwiseLLM:::.btl_mcmc_unpack_draws(
+      matrix(1, nrow = 1, ncol = 1),
+      model_variant = "btl"
+    ),
+    "column names"
+  )
 
   td <- pairwiseLLM:::.btl_mcmc_theta_draws(list(theta = draws_mat), item_id = c("A", "B"))
   expect_identical(colnames(td), c("A", "B"))
@@ -253,6 +264,15 @@ test_that("mcmc core detection, config resolution, and variant inference hit fal
   ))
   expect_identical(cfg_clamped$parallel_chains, 2L)
 
+  cfg_default <- testthat::with_mocked_bindings(
+    .btl_mcmc_detect_cores = function() {
+      list(physical = 32L, logical = 64L, effective = 32L)
+    },
+    pairwiseLLM:::.btl_mcmc_resolve_cmdstan_config(list(chains = 8L)),
+    .package = "pairwiseLLM"
+  )
+  expect_identical(cfg_default$parallel_chains, 2L)
+
   mat_e <- matrix(1, nrow = 2, ncol = 2)
   colnames(mat_e) <- c("theta[1]", "epsilon")
   expect_identical(pairwiseLLM:::.btl_mcmc_infer_variant(mat_e), "btl_e")
@@ -292,11 +312,13 @@ test_that("fit_bayes_btl_mcmc_adaptive succeeds with deterministic model_fn and 
   fake_fit <- list(
     draws = function(variables, format) draws_matrix,
     diagnostic_summary = function() tibble::tibble(num_divergent = c(0L, 1L)),
-    summary = function(variables) tibble::tibble(
-      rhat = c(1.0, 1.01),
-      ess_bulk = c(500, 600),
-      ess_tail = c(400, 500)
-    )
+    summary = function(variables) {
+      tibble::tibble(
+        rhat = c(1.0, 1.01),
+        ess_bulk = c(500, 600),
+        ess_tail = c(400, 500)
+      )
+    }
   )
   fake_model_fn <- function(stan_file, cpp_options) {
     list(sample = function(...) fake_fit)
@@ -485,6 +507,34 @@ test_that("fit contract validator covers additional scalar and diagnostics branc
   bad_diag_list <- fit
   bad_diag_list$diagnostics <- 1L
   expect_error(pairwiseLLM:::validate_btl_fit_contract(bad_diag_list, ids = c("A", "B")), "must be a list")
+
+  bad_inference_contract <- fit
+  bad_inference_contract$inference_contract <- "bad"
+  expect_error(
+    pairwiseLLM:::validate_btl_fit_contract(bad_inference_contract, ids = c("A", "B")),
+    "inference_contract"
+  )
+})
+
+test_that("fit contract inference metadata helper validates allowed values", {
+  inferred <- pairwiseLLM:::.btl_contract_inference_contract(list(
+    judge_param_mode = "phase_specific",
+    phase_levels = c("phase2", "phase3"),
+    judge_scope_levels = c("within", "link"),
+    phase_boundary_detected = TRUE
+  ))
+  expect_identical(inferred$judge_param_mode, "phase_specific")
+  expect_identical(sort(inferred$judge_scope_levels), c("link", "within"))
+  expect_true(isTRUE(inferred$phase_boundary_detected))
+
+  expect_error(
+    pairwiseLLM:::.btl_contract_inference_contract(list(judge_param_mode = "bad")),
+    "judge_param_mode"
+  )
+  expect_error(
+    pairwiseLLM:::.btl_contract_inference_contract(list(judge_scope_levels = "bad")),
+    "judge_scope_levels"
+  )
 })
 
 test_that("build_item_log covers draw-matrix colname fallback branch", {
@@ -502,6 +552,29 @@ test_that("build_item_log covers draw-matrix colname fallback branch", {
   out <- pairwiseLLM:::build_item_log(state, fit = fit)
   expect_identical(nrow(out), 2L)
   expect_true(all(c("ID", "theta_mean", "rank_mean") %in% names(out)))
+})
+
+test_that("adaptive item log can reuse fit-contract theta summaries", {
+  state <- adaptive_rank_start(make_test_items(3), seed = 1L)
+  ids <- as.character(state$item_ids)
+  theta_mean <- stats::setNames(c(0.3, 0.1, -0.2), ids)
+  state$btl_fit <- list(
+    theta_mean = theta_mean,
+    theta_sd = stats::setNames(c(0.11, 0.12, 0.13), ids),
+    theta_p2.5 = stats::setNames(theta_mean - 0.2, ids),
+    theta_p5 = stats::setNames(theta_mean - 0.1, ids),
+    theta_p50 = stats::setNames(theta_mean, ids),
+    theta_p95 = stats::setNames(theta_mean + 0.1, ids),
+    theta_p97.5 = stats::setNames(theta_mean + 0.2, ids)
+  )
+
+  item_log <- pairwiseLLM:::.adaptive_build_item_log_refit(state, refit_id = 1L)
+
+  expect_equal(item_log$item_id, ids)
+  expect_equal(item_log$theta_raw_eap, unname(theta_mean))
+  expect_equal(item_log$theta_raw_sd, c(0.11, 0.12, 0.13))
+  expect_equal(item_log$`theta_raw_p2.5`, unname(theta_mean - 0.2))
+  expect_equal(item_log$`theta_raw_p97.5`, unname(theta_mean + 0.2))
 })
 
 test_that("mcmc draw unpacking, diagnostics notes, and fit-contract conversion cover additional error branches", {
@@ -694,9 +767,9 @@ test_that("fit_bayes_btl_mcmc and adaptive fit entrypoints cover input guard rai
     testthat::with_mocked_bindings(
       .btl_mcmc_require_cmdstanr = function() invisible(TRUE),
       validate_btl_mcmc_config = function(config) invisible(config),
-      .btl_mcmc_resolve_cmdstan_config = function(cmdstan) list(
-        chains = 1L, parallel_chains = 1L, threads_per_chain = 1L
-      ),
+      .btl_mcmc_resolve_cmdstan_config = function(cmdstan) {
+        list(chains = 1L, parallel_chains = 1L, threads_per_chain = 1L)
+      },
       stan_file_for_variant = function(model_variant) "fake.stan",
       .package = "pairwiseLLM",
       {
@@ -803,7 +876,13 @@ test_that("adaptive mcmc fit helper covers cmdstan guards and missing-draw branc
       },
       .package = "pairwiseLLM",
       {
-        pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config = cfg_bad_int, model_fn = function(...) list(sample = function(...) NULL))
+        pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(
+          bt_data,
+          config = cfg_bad_int,
+          model_fn = function(...) {
+            list(sample = function(...) NULL)
+          }
+        )
       }
     ),
     "positive integers"
@@ -819,13 +898,22 @@ test_that("adaptive mcmc fit helper covers cmdstan guards and missing-draw branc
       },
       .package = "pairwiseLLM",
       {
-        pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(bt_data, config = cfg_bad_pc, model_fn = function(...) list(sample = function(...) NULL))
+        pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(
+          bt_data,
+          config = cfg_bad_pc,
+          model_fn = function(...) {
+            list(sample = function(...) NULL)
+          }
+        )
       }
     ),
     "positive integer"
   )
 
-  cfg_bad_out <- pairwiseLLM:::btl_mcmc_config(2L, list(model_variant = "btl_e_b", cmdstan = list(output_dir = NA_character_)))
+  cfg_bad_out <- pairwiseLLM:::btl_mcmc_config(
+    2L,
+    list(model_variant = "btl_e_b", cmdstan = list(output_dir = NA_character_))
+  )
   expect_error(
     testthat::with_mocked_bindings(
       .btl_mcmc_require_cmdstanr = function() invisible(TRUE),
@@ -839,11 +927,22 @@ test_that("adaptive mcmc fit helper covers cmdstan guards and missing-draw branc
         pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(
           bt_data = bt_data,
           config = cfg_bad_out,
-          model_fn = function(stan_file, cpp_options) list(sample = function(...) list(
-            draws = function(variables, format) cbind(`theta[1]` = c(0.1, 0.2), `theta[2]` = c(0.2, 0.3), epsilon = c(0.1, 0.2), beta = c(0.0, 0.1)),
-            diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
-            summary = function(variables) tibble::tibble(rhat = 1, ess_bulk = 1000, ess_tail = 1000)
-          ))
+          model_fn = function(stan_file, cpp_options) {
+            list(sample = function(...) {
+              list(
+                draws = function(variables, format) {
+                  cbind(
+                    `theta[1]` = c(0.1, 0.2),
+                    `theta[2]` = c(0.2, 0.3),
+                    epsilon = c(0.1, 0.2),
+                    beta = c(0.0, 0.1)
+                  )
+                },
+                diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
+                summary = function(variables) tibble::tibble(rhat = 1, ess_bulk = 1000, ess_tail = 1000)
+              )
+            })
+          }
         )
       }
     ),
@@ -864,11 +963,17 @@ test_that("adaptive mcmc fit helper covers cmdstan guards and missing-draw branc
         pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(
           bt_data = bt_data,
           config = cfg,
-          model_fn = function(stan_file, cpp_options) list(sample = function(...) list(
-            draws = function(variables, format) cbind(epsilon = c(0.1, 0.2), beta = c(0.0, 0.1)),
-            diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
-            summary = function(variables) tibble::tibble(rhat = 1, ess_bulk = 1000, ess_tail = 1000)
-          ))
+          model_fn = function(stan_file, cpp_options) {
+            list(sample = function(...) {
+              list(
+                draws = function(variables, format) {
+                  cbind(epsilon = c(0.1, 0.2), beta = c(0.0, 0.1))
+                },
+                diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
+                summary = function(variables) tibble::tibble(rhat = 1, ess_bulk = 1000, ess_tail = 1000)
+              )
+            })
+          }
         )
       }
     ),
@@ -888,11 +993,20 @@ test_that("adaptive mcmc fit helper covers cmdstan guards and missing-draw branc
       pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive(
         bt_data = bt_data,
         config = cfg_btl,
-        model_fn = function(stan_file, cpp_options) list(sample = function(...) list(
-          draws = function(variables, format) cbind(`theta[1]` = c(0.1, 0.2), `theta[2]` = c(0.2, 0.3)),
-          diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
-          summary = function(variables) tibble::tibble(rhat = 1, ess_bulk = 1000, ess_tail = 1000)
-        ))
+        model_fn = function(stan_file, cpp_options) {
+          list(sample = function(...) {
+            list(
+              draws = function(variables, format) {
+                cbind(
+                  `theta[1]` = c(0.1, 0.2),
+                  `theta[2]` = c(0.2, 0.3)
+                )
+              },
+              diagnostic_summary = function() tibble::tibble(num_divergent = 0L),
+              summary = function(variables) tibble::tibble(rhat = 1, ess_bulk = 1000, ess_tail = 1000)
+            )
+          })
+        }
       )
     }
   )

@@ -18,7 +18,7 @@ gemini_create_batch(
 list from the output of \code{\link{build_gemini_batch_requests}} via
 \code{batch$request}.}
 
-\item{model}{Gemini model name, for example \code{"gemini-3-pro-preview"}.}
+\item{model}{Gemini model name, for example \code{"gemini-3.5-flash-lite"}.}
 
 \item{api_key}{Optional Gemini API key. Defaults to
 \code{Sys.getenv("GEMINI_API_KEY")}.}
@@ -58,7 +58,7 @@ tmpl <- set_prompt_template()
 
 batch_tbl <- build_gemini_batch_requests(
   pairs             = pairs,
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -76,7 +76,7 @@ requests[[1]]
 \dontrun{
 batch <- gemini_create_batch(
   requests = requests,
-  model    = "gemini-3-pro-preview"
+  model    = "gemini-3.5-flash-lite"
 )
 
 batch$name
@@ -84,3 +84,32 @@ batch$metadata$state
 }
 
 }
+\seealso{
+\code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}}, \code{\link[=llm_download_batch_results]{llm_download_batch_results()}}
+
+Other batch backends:
+\code{\link[=anthropic_create_batch]{anthropic_create_batch()}},
+\code{\link[=anthropic_download_batch_results]{anthropic_download_batch_results()}},
+\code{\link[=anthropic_get_batch]{anthropic_get_batch()}},
+\code{\link[=anthropic_poll_batch_until_complete]{anthropic_poll_batch_until_complete()}},
+\code{\link[=build_anthropic_batch_requests]{build_anthropic_batch_requests()}},
+\code{\link[=build_gemini_batch_requests]{build_gemini_batch_requests()}},
+\code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}},
+\code{\link[=gemini_download_batch_results]{gemini_download_batch_results()}},
+\code{\link[=gemini_get_batch]{gemini_get_batch()}},
+\code{\link[=gemini_poll_batch_until_complete]{gemini_poll_batch_until_complete()}},
+\code{\link[=llm_download_batch_results]{llm_download_batch_results()}},
+\code{\link[=llm_resume_multi_batches]{llm_resume_multi_batches()}},
+\code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}},
+\code{\link[=llm_submit_pairs_multi_batch]{llm_submit_pairs_multi_batch()}},
+\code{\link[=openai_create_batch]{openai_create_batch()}},
+\code{\link[=openai_download_batch_output]{openai_download_batch_output()}},
+\code{\link[=openai_get_batch]{openai_get_batch()}},
+\code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}},
+\code{\link[=openai_upload_batch_file]{openai_upload_batch_file()}},
+\code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}},
+\code{\link[=run_gemini_batch_pipeline]{run_gemini_batch_pipeline()}},
+\code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}},
+\code{\link[=write_openai_batch_file]{write_openai_batch_file()}}
+}
+\concept{batch backends}

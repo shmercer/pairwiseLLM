@@ -252,7 +252,10 @@
 
 .adaptive_apply_sort_and_top_n <- function(summary, sort_by, top_n) {
   top_n <- .adaptive_summary_validate_last_n(top_n)
-  descending <- sort_by %in% c("theta_mean", "theta_sd", "degree", "pos_A_rate")
+  descending <- sort_by %in% c(
+    "theta_mean", "theta_sd", "degree", "pos_A_rate",
+    "theta_raw_eap", "theta_raw_sd", "theta_link_eap", "theta_link_sd"
+  )
 
   summary <- summary |>
     dplyr::mutate(
@@ -291,7 +294,9 @@
 #'   \item identity: \code{refit_id}, \code{round_id_at_refit},
 #'   \code{step_id_at_refit}
 #'   \item run scale: \code{total_pairs_done}, \code{new_pairs_since_last_refit},
-#'   \code{n_unique_pairs_seen}
+#'   \code{new_active_pairs_since_last_refit},
+#'   \code{new_probe_pairs_since_last_refit},
+#'   \code{new_total_cross_pairs_since_last_refit}, \code{n_unique_pairs_seen}
 #'   \item candidate health: \code{proposed_pairs_mode},
 #'   \code{starve_rate_since_last_refit}, \code{fallback_rate_since_last_refit},
 #'   \code{fallback_used_mode}, \code{starvation_reason_mode}
@@ -339,6 +344,8 @@
 #' # Drop optional diagnostics if you want a compact core summary:
 #' summarize_refits(logs, include_optional = FALSE)
 #'
+#' @seealso [adaptive_get_logs()], [adaptive_step_log()]
+#' @family adaptive logs
 #' @export
 summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
   last_n <- .adaptive_summary_validate_last_n(last_n)
@@ -368,6 +375,9 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
       "n_items",
       "total_pairs_done",
       "new_pairs_since_last_refit",
+      "new_active_pairs_since_last_refit",
+      "new_probe_pairs_since_last_refit",
+      "new_total_cross_pairs_since_last_refit",
       "n_unique_pairs_seen",
       "divergences",
       "max_rhat",
@@ -422,12 +432,26 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #' @param bind Logical; when \code{TRUE}, stack all refits into a single table.
 #' @param top_n Optional positive integer; return only the top \code{n} rows
 #'   after sorting.
-#' @param sort_by Column used for sorting. Defaults to \code{"rank_mean"}.
+#' @param sort_by Column used for sorting. When \code{NULL}, the first available
+#'   column in \code{c("rank_link", "rank_raw", "rank_mean", "theta_link_eap",
+#'   "theta_raw_eap", "theta_mean", "theta_sd", "degree", "pos_A_rate")} is used.
 #' @param include_optional Logical; include optional diagnostic columns.
 #' @return A tibble with one row per item per refit. Columns reflect the
-#'   canonical item log schema (for example \code{refit_id}, \code{ID},
-#'   \code{theta_mean}, \code{rank_mean}, \code{deg}, and \code{posA_prop}).
-#'   Rank percentiles summarize per-draw induced ranks (lower is better). When
+#'   supplied item-log schema. Standalone and legacy logs use fields such as
+#'   \code{ID}, \code{theta_mean}, \code{rank_mean}, \code{deg}, and
+#'   \code{posA_prop}. Current adaptive logs use \code{item_id},
+#'   \code{theta_raw_eap}, \code{theta_raw_sd}, \code{rank_raw},
+#'   \code{degree}, \code{pos_count_A}, and \code{pos_count_B}; linking logs
+#'   can also include \code{theta_link_eap}, \code{theta_link_sd}, and
+#'   \code{rank_link}. The function is a view and does not rename these fields.
+#'
+#'   In standalone logs, \code{rank_mean} is the posterior mean of per-draw
+#'   induced ranks. In current adaptive logs, \code{rank_raw} is the rank of
+#'   the EAP scores. They are not the same statistic, although a request to
+#'   sort a current log by the legacy name \code{"rank_mean"} maps to
+#'   \code{"rank_raw"} for compatibility. Similarly, legacy sorting requests
+#'   for \code{"theta_mean"} and \code{"theta_sd"} map to
+#'   \code{"theta_raw_eap"} and \code{"theta_raw_sd"}. When
 #'   \code{include_optional = FALSE}, optional columns such as repeated-pair or
 #'   adjacency diagnostics are dropped if present.
 #'
@@ -466,13 +490,15 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #' # Sort and take the top rows:
 #' summarize_items(logs, sort_by = "rank_mean", top_n = 2)
 #'
+#' @seealso [adaptive_get_logs()], [adaptive_step_log()]
+#' @family adaptive logs
 #' @export
 summarize_items <- function(state,
     posterior = NULL,
     refit = NULL,
     bind = FALSE,
     top_n = NULL,
-    sort_by = c("rank_mean", "theta_mean", "theta_sd", "degree", "pos_A_rate"),
+    sort_by = NULL,
     include_optional = TRUE) {
   if (!is.logical(include_optional) ||
     length(include_optional) != 1L ||
@@ -484,7 +510,6 @@ summarize_items <- function(state,
   }
 
   top_n <- .adaptive_summary_validate_last_n(top_n)
-  sort_by <- match.arg(sort_by)
   source <- .adaptive_summary_extract_source(state)
 
   item_log_list <- NULL
@@ -553,8 +578,30 @@ summarize_items <- function(state,
     item_log <- item_log |> dplyr::select(-dplyr::any_of(optional))
   }
 
+  if (is.null(sort_by)) {
+    preferred <- c(
+      "rank_link", "rank_raw", "rank_mean",
+      "theta_link_eap", "theta_raw_eap", "theta_mean",
+      "theta_sd", "degree", "pos_A_rate"
+    )
+    matched <- preferred[preferred %in% names(item_log)]
+    sort_by <- if (length(matched) > 0L) matched[[1L]] else NA_character_
+  } else {
+    if (!is.character(sort_by) || length(sort_by) != 1L || is.na(sort_by) || sort_by == "") {
+      rlang::abort("`sort_by` must be NULL or a single non-empty column name.")
+    }
+  }
+
   if (!sort_by %in% names(item_log)) {
-    rlang::abort("`sort_by` must be a column in the item log.")
+    if (identical(sort_by, "rank_mean") && "rank_raw" %in% names(item_log)) {
+      sort_by <- "rank_raw"
+    } else if (identical(sort_by, "theta_mean") && "theta_raw_eap" %in% names(item_log)) {
+      sort_by <- "theta_raw_eap"
+    } else if (identical(sort_by, "theta_sd") && "theta_raw_sd" %in% names(item_log)) {
+      sort_by <- "theta_raw_sd"
+    } else {
+      rlang::abort("`sort_by` must be a column in the item log.")
+    }
   }
 
   item_log <- .adaptive_apply_sort_and_top_n(

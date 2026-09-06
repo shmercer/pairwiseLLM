@@ -105,3 +105,11 @@ print(res$prompt_tokens)
 unlink(tf)
 
 }
+\seealso{
+\code{\link[=parse_anthropic_batch_output]{parse_anthropic_batch_output()}}, \code{\link[=parse_gemini_batch_output]{parse_gemini_batch_output()}}
+
+Other result normalization:
+\code{\link[=parse_anthropic_batch_output]{parse_anthropic_batch_output()}},
+\code{\link[=parse_gemini_batch_output]{parse_gemini_batch_output()}}
+}
+\concept{result normalization}

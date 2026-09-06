@@ -34,12 +34,44 @@ test_that("score_candidates_u0 adds utility and validates ids", {
   scored <- pairwiseLLM:::score_candidates_u0(candidates, state)
 
   expect_true("u0" %in% names(scored))
+  expect_true("p" %in% names(scored))
   expect_equal(nrow(scored), nrow(candidates))
   expect_true(all(scored$u0 >= 0 & scored$u0 <= 0.25 + 1e-8))
+  expect_equal(scored$p[1], pairwiseLLM:::trueskill_win_probability("1", "2", state))
+  expect_equal(scored$p[2], pairwiseLLM:::trueskill_win_probability("2", "3", state))
+  expect_equal(scored$u0, scored$p * (1 - scored$p))
 
   bad_candidates <- tibble::tibble(i = "1", j = "999")
   expect_error(
     pairwiseLLM:::score_candidates_u0(bad_candidates, state),
     "must be present"
+  )
+})
+
+test_that("vectorized trueskill probabilities match scalar helper and validate shape", {
+  items <- tibble::tibble(
+    item_id = c("1", "2", "3"),
+    mu = c(2, 0, -1),
+    sigma = c(1, 1.5, 0.5)
+  )
+  state <- pairwiseLLM:::new_trueskill_state(items, mu0 = 0, sigma0 = 1, beta = 1)
+
+  p_vec <- pairwiseLLM:::.trueskill_win_probability_vec(
+    i = c("1", "1", "2"),
+    j = c("2", "3", "3"),
+    trueskill_state = state
+  )
+
+  expect_equal(p_vec[[1L]], pairwiseLLM:::trueskill_win_probability("1", "2", state))
+  expect_equal(p_vec[[2L]], pairwiseLLM:::trueskill_win_probability("1", "3", state))
+  expect_equal(p_vec[[3L]], pairwiseLLM:::trueskill_win_probability("2", "3", state))
+
+  expect_error(
+    pairwiseLLM:::.trueskill_win_probability_vec(
+      i = c("1", "2"),
+      j = "3",
+      trueskill_state = state
+    ),
+    "same length"
   )
 })

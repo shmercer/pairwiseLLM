@@ -20,13 +20,14 @@ run_gemini_batch_pipeline(
   api_version = "v1beta",
   verbose = TRUE,
   include_thoughts = FALSE,
+  service_tier = "standard",
   ...
 )
 }
 \arguments{
 \item{pairs}{Tibble/data frame of pairs.}
 
-\item{model}{Gemini model name, for example \code{"gemini-3-pro-preview"} or
+\item{model}{Gemini model name, for example \code{"gemini-3.5-flash-lite"} or
 \code{"gemini-3-flash-preview"}.}
 
 \item{trait_name}{Trait name.}
@@ -44,7 +45,8 @@ requests via \code{generationConfig$thinkingConfig$thinkingLevel}.
 \itemize{
 \item For Gemini 3 Flash models (for example \code{"gemini-3-flash-preview"}),
 \code{"minimal"} is supported and is passed through as \code{"minimal"}.
-\item For non-Flash Gemini 3 models (for example \code{"gemini-3-pro-preview"}),
+\item For models not matched by the package's Gemini 3 Flash-name
+detector (for example \code{"gemini-3.5-flash-lite"}),
 \code{"minimal"} is not supported.
 \item For backward compatibility with earlier Gemini 3 Pro usage,
 \code{"low"} maps to \code{"low"} and both \code{"medium"} and \code{"high"}
@@ -75,6 +77,11 @@ file.}
 \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}. Parsed results will include a \code{thoughts}
 column when visible thoughts are returned by the API (currently batch
 typically only exposes \code{thoughtSignature} + \code{thoughtsTokenCount}).}
+
+\item{service_tier}{Gemini Developer API service tier forwarded to
+\code{\link{build_gemini_batch_requests}}. Use \code{"standard"} (default)
+or \code{NULL} for provider default behavior, or \code{"flex"} /
+\code{"priority"} to request the documented Gemini service tier.}
 
 \item{...}{Additional arguments forwarded to
 \code{\link{build_gemini_batch_requests}} (for example
@@ -125,10 +132,10 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Run the full Gemini batch pipeline (Gemini 3 Pro example)
+# Run the full Gemini batch pipeline
 res <- run_gemini_batch_pipeline(
   pairs             = pairs,
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -163,3 +170,32 @@ res_flash$results
 }
 
 }
+\seealso{
+\code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}}, \code{\link[=llm_download_batch_results]{llm_download_batch_results()}}
+
+Other batch backends:
+\code{\link[=anthropic_create_batch]{anthropic_create_batch()}},
+\code{\link[=anthropic_download_batch_results]{anthropic_download_batch_results()}},
+\code{\link[=anthropic_get_batch]{anthropic_get_batch()}},
+\code{\link[=anthropic_poll_batch_until_complete]{anthropic_poll_batch_until_complete()}},
+\code{\link[=build_anthropic_batch_requests]{build_anthropic_batch_requests()}},
+\code{\link[=build_gemini_batch_requests]{build_gemini_batch_requests()}},
+\code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}},
+\code{\link[=gemini_create_batch]{gemini_create_batch()}},
+\code{\link[=gemini_download_batch_results]{gemini_download_batch_results()}},
+\code{\link[=gemini_get_batch]{gemini_get_batch()}},
+\code{\link[=gemini_poll_batch_until_complete]{gemini_poll_batch_until_complete()}},
+\code{\link[=llm_download_batch_results]{llm_download_batch_results()}},
+\code{\link[=llm_resume_multi_batches]{llm_resume_multi_batches()}},
+\code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}},
+\code{\link[=llm_submit_pairs_multi_batch]{llm_submit_pairs_multi_batch()}},
+\code{\link[=openai_create_batch]{openai_create_batch()}},
+\code{\link[=openai_download_batch_output]{openai_download_batch_output()}},
+\code{\link[=openai_get_batch]{openai_get_batch()}},
+\code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}},
+\code{\link[=openai_upload_batch_file]{openai_upload_batch_file()}},
+\code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}},
+\code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}},
+\code{\link[=write_openai_batch_file]{write_openai_batch_file()}}
+}
+\concept{batch backends}

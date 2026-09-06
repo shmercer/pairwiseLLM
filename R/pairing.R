@@ -27,6 +27,8 @@
 #' pairs_example <- make_pairs(example_writing_samples)
 #' nrow(pairs_example) # should be choose(10, 2) = 45
 #'
+#' @seealso [read_samples_df()], [read_samples_dir()]
+#' @family pairing and data
 #' @export
 make_pairs <- function(samples) {
   samples <- tibble::as_tibble(samples)
@@ -105,6 +107,8 @@ make_pairs <- function(samples) {
 #' pairs_ex_sample <- sample_pairs(pairs_ex, pair_pct = 0.10, seed = 1)
 #' nrow(pairs_ex_sample)
 #'
+#' @seealso [read_samples_df()], [read_samples_dir()]
+#' @family pairing and data
 #' @export
 sample_pairs <- function(pairs,
                          pair_pct = 1,
@@ -145,7 +149,9 @@ sample_pairs <- function(pairs,
 #'   \code{text1}, \code{ID2}, and \code{text2}.
 #' @param reverse_pct Optional proportion of rows to reverse
 #'   (between 0 and 1). If \code{n_reverse} is also supplied,
-#'   \code{n_reverse} takes precedence and \code{reverse_pct} is ignored.
+#'   \code{n_reverse} takes precedence and \code{reverse_pct} is ignored. For
+#'   values strictly between 0 and 1, the row count is
+#'   \code{round(nrow(pairs) * reverse_pct)}.
 #' @param n_reverse Optional absolute number of rows to reverse.
 #'   If supplied, this takes precedence over \code{reverse_pct}.
 #' @param seed Optional integer seed for reproducible sampling.
@@ -161,6 +167,8 @@ sample_pairs <- function(pairs,
 #' # Reverse 20% of the pairs
 #' rev20 <- sample_reverse_pairs(pairs, reverse_pct = 0.2, seed = 123)
 #'
+#' @seealso [read_samples_df()], [read_samples_dir()]
+#' @family pairing and data
 #' @export
 sample_reverse_pairs <- function(pairs,
                                  reverse_pct = NULL,
@@ -271,6 +279,7 @@ sample_reverse_pairs <- function(pairs,
 #' \code{\link{sample_reverse_pairs}} and
 #' \code{\link{compute_reverse_consistency}} for reverse-order checks.
 #'
+#' @family pairing and data
 #' @export
 randomize_pair_order <- function(pairs, seed = NULL) {
   pairs <- tibble::as_tibble(pairs)
@@ -334,6 +343,8 @@ randomize_pair_order <- function(pairs, seed = NULL) {
 #' head(pairs[, c("ID1", "ID2")])
 #' head(pairs_alt[, c("ID1", "ID2")])
 #'
+#' @seealso [read_samples_df()], [read_samples_dir()]
+#' @family pairing and data
 #' @export
 alternate_pair_order <- function(pairs) {
   pairs <- tibble::as_tibble(pairs)

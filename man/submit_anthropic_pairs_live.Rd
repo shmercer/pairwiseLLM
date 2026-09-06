@@ -82,7 +82,8 @@ packages.}
 \item{workers}{Integer; the number of parallel workers (threads) to use if
 \code{parallel = TRUE}. Defaults to 1.
 \strong{Guidance:} Anthropic rate limits vary significantly by tier. Start
-conservatively (e.g., 2-4 workers) to avoid HTTP 429 errors.}
+conservatively (at most 2 workers) to avoid HTTP 429 errors and respect
+shared check-farm resources.}
 
 \item{...}{Additional Anthropic parameters (for example \code{temperature},
 \code{top_p}, \code{max_tokens}) passed on to
@@ -123,9 +124,8 @@ making it easier to debug or retry specific failures.
 Temperature and extended-thinking behaviour are controlled by
 \code{\link{anthropic_compare_pair_live}}:
 \itemize{
-\item When \code{reasoning = "none"} (no extended thinking), the default
-\code{temperature} is \code{0} (deterministic) unless you explicitly
-supply a different \code{temperature} via \code{...}.
+\item When \code{reasoning = "none"} (no extended thinking), omitted
+\code{temperature} and \code{top_p} values use model/provider defaults.
 \item When \code{reasoning = "enabled"} (extended thinking), Anthropic
 requires \code{temperature = 1}. If you supply a different value, an
 error is raised by \code{\link{anthropic_compare_pair_live}}.
@@ -135,7 +135,7 @@ If you set \code{include_thoughts = TRUE} while \code{reasoning = "none"},
 the underlying calls upgrade to \code{reasoning = "enabled"}, which in turn
 implies \code{temperature = 1} and adds a \code{thinking} block to the API
 request. When \code{include_thoughts = FALSE} (the default), and you leave
-\code{reasoning = "none"}, the effective default temperature is \code{0}.
+\code{reasoning = "none"}, omitted sampling values use model defaults.
 }
 \examples{
 \dontrun{
@@ -171,7 +171,7 @@ res_par <- submit_anthropic_pairs_live(
   prompt_template   = tmpl,
   save_path         = "results_par.csv",
   parallel          = TRUE,
-  workers           = 4
+  workers           = 2
 )
 
 # Inspect results
@@ -185,3 +185,23 @@ if (nrow(res_par$failed_pairs) > 0) {
 }
 
 }
+\seealso{
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}}, \code{\link[=llm_compare_pair]{llm_compare_pair()}}
+
+Other live backends:
+\code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}},
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}},
+\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}},
+\code{\link[=llm_compare_pair]{llm_compare_pair()}},
+\code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}},
+\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}},
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}},
+\code{\link[=submit_llm_pairs]{submit_llm_pairs()}},
+\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
+\code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
+\code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
+\code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}
+}
+\concept{live backends}

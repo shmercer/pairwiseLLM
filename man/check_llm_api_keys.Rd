@@ -15,9 +15,10 @@ configure missing ones.}
 A tibble (data frame) with one row per backend and columns:
 \describe{
 \item{backend}{Short backend identifier, e.g. \code{"openai"}, \code{"anthropic"},
-\code{"gemini"}, \code{"together"}.}
+\code{"gemini"}, \code{"vertex"}, \code{"together"}.}
 \item{service}{Human-readable service name, e.g. \code{"OpenAI"},
-\code{"Anthropic"}, \code{"Google Gemini"}, \code{"Together.ai"}.}
+\code{"Anthropic"}, \code{"Google Gemini"}, \code{"Vertex AI Gemini API"},
+\code{"Together.ai"}.}
 \item{env_var}{Name of the environment variable that is checked.}
 \item{has_key}{Logical flag indicating whether the key is set and
 non-empty.}
@@ -26,8 +27,9 @@ non-empty.}
 \description{
 This function inspects the current R session for configured API keys
 used by pairwiseLLM. It checks for known environment variables such as
-\code{OPENAI_API_KEY}, \code{ANTHROPIC_API_KEY}, and \code{GEMINI_API_KEY}, and returns
-a small tibble summarising which keys are available.
+\code{OPENAI_API_KEY}, \code{ANTHROPIC_API_KEY}, \code{GEMINI_API_KEY}, and
+\code{VERTEX_API_KEY}, and returns a small tibble summarising which keys are
+available.
 }
 \details{
 It does \strong{not} print or return the key values themselves - only whether
@@ -44,3 +46,23 @@ status <- check_llm_api_keys(verbose = FALSE)
 status
 
 }
+\seealso{
+\code{\link[=llm_compare_pair]{llm_compare_pair()}}, \code{\link[=submit_llm_pairs]{submit_llm_pairs()}}
+
+Other live backends:
+\code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}},
+\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}},
+\code{\link[=llm_compare_pair]{llm_compare_pair()}},
+\code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}},
+\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}},
+\code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}},
+\code{\link[=submit_llm_pairs]{submit_llm_pairs()}},
+\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
+\code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
+\code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
+\code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}
+}
+\concept{live backends}

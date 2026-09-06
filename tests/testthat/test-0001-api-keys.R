@@ -46,6 +46,8 @@ testthat::test_that("check_llm_api_keys returns expected structure when keys
   withr::local_envvar(c(
     OPENAI_API_KEY = "",
     ANTHROPIC_API_KEY = "",
+    GEMINI_API_KEY = "",
+    VERTEX_API_KEY = "",
     TOGETHER_API_KEY = ""
   ))
 
@@ -56,19 +58,25 @@ testthat::test_that("check_llm_api_keys returns expected structure when keys
   %in% names(status)))
 
   # Ensure we have at least the expected backends
-  testthat::expect_true(all(c("openai", "anthropic", "together") %in%
+  testthat::expect_true(all(c("openai", "anthropic", "gemini", "vertex", "together") %in%
     status$backend))
 
   openai_row <- status[status$backend == "openai", , drop = FALSE]
   anth_row <- status[status$backend == "anthropic", , drop = FALSE]
+  gemini_row <- status[status$backend == "gemini", , drop = FALSE]
+  vertex_row <- status[status$backend == "vertex", , drop = FALSE]
   together_row <- status[status$backend == "together", , drop = FALSE]
 
   testthat::expect_equal(openai_row$env_var, "OPENAI_API_KEY")
   testthat::expect_equal(anth_row$env_var, "ANTHROPIC_API_KEY")
+  testthat::expect_equal(gemini_row$env_var, "GEMINI_API_KEY")
+  testthat::expect_equal(vertex_row$env_var, "VERTEX_API_KEY")
   testthat::expect_equal(together_row$env_var, "TOGETHER_API_KEY")
 
   testthat::expect_false(openai_row$has_key)
   testthat::expect_false(anth_row$has_key)
+  testthat::expect_false(gemini_row$has_key)
+  testthat::expect_false(vertex_row$has_key)
   testthat::expect_false(together_row$has_key)
 })
 
@@ -77,6 +85,8 @@ testthat::test_that("check_llm_api_keys reports keys as present when env
   withr::local_envvar(c(
     OPENAI_API_KEY = "OPENAI_KEY_FOR_TEST",
     ANTHROPIC_API_KEY = "ANTHROPIC_KEY_FOR_TEST",
+    GEMINI_API_KEY = "GEMINI_KEY_FOR_TEST",
+    VERTEX_API_KEY = "VERTEX_KEY_FOR_TEST",
     TOGETHER_API_KEY = "TOGETHER_KEY_FOR_TEST"
   ))
 
@@ -84,10 +94,14 @@ testthat::test_that("check_llm_api_keys reports keys as present when env
 
   openai_row <- status[status$backend == "openai", , drop = FALSE]
   anth_row <- status[status$backend == "anthropic", , drop = FALSE]
+  gemini_row <- status[status$backend == "gemini", , drop = FALSE]
+  vertex_row <- status[status$backend == "vertex", , drop = FALSE]
   together_row <- status[status$backend == "together", , drop = FALSE]
 
   testthat::expect_true(openai_row$has_key)
   testthat::expect_true(anth_row$has_key)
+  testthat::expect_true(gemini_row$has_key)
+  testthat::expect_true(vertex_row$has_key)
   testthat::expect_true(together_row$has_key)
 })
 
@@ -100,6 +114,7 @@ testthat::test_that("check_llm_api_keys(verbose = TRUE) prints all-set message",
     OPENAI_API_KEY = "OPENAI_KEY_FOR_TEST",
     ANTHROPIC_API_KEY = "ANTHROPIC_KEY_FOR_TEST",
     GEMINI_API_KEY = "GEMINI_KEY_FOR_TEST",
+    VERTEX_API_KEY = "VERTEX_KEY_FOR_TEST",
     TOGETHER_API_KEY = "TOGETHER_KEY_FOR_TEST"
   ))
 
@@ -116,6 +131,7 @@ testthat::test_that("check_llm_api_keys(verbose = TRUE) prints none-set guidance
     OPENAI_API_KEY = "",
     ANTHROPIC_API_KEY = "",
     GEMINI_API_KEY = "",
+    VERTEX_API_KEY = "",
     TOGETHER_API_KEY = ""
   ))
 
@@ -128,6 +144,7 @@ testthat::test_that("check_llm_api_keys(verbose = TRUE) prints none-set guidance
   testthat::expect_true(any(grepl("OPENAI_API_KEY", msgs)))
   testthat::expect_true(any(grepl("ANTHROPIC_API_KEY", msgs)))
   testthat::expect_true(any(grepl("GEMINI_API_KEY", msgs)))
+  testthat::expect_true(any(grepl("VERTEX_API_KEY", msgs)))
   testthat::expect_true(any(grepl("TOGETHER_API_KEY", msgs)))
 })
 
@@ -136,6 +153,7 @@ testthat::test_that("check_llm_api_keys(verbose = TRUE) prints mixed status per 
     OPENAI_API_KEY = "OPENAI_KEY_FOR_TEST",
     ANTHROPIC_API_KEY = "",
     GEMINI_API_KEY = "",
+    VERTEX_API_KEY = "",
     TOGETHER_API_KEY = "TOGETHER_KEY_FOR_TEST"
   ))
 
@@ -150,35 +168,52 @@ testthat::test_that("check_llm_api_keys(verbose = TRUE) prints mixed status per 
   testthat::expect_true(any(grepl("OpenAI \\(openai\\): OPENAI_API_KEY is set\\.", msgs)))
   testthat::expect_true(any(grepl("Anthropic \\(anthropic\\): ANTHROPIC_API_KEY is not set", msgs)))
   testthat::expect_true(any(grepl("Google Gemini \\(gemini\\): GEMINI_API_KEY is not set", msgs)))
+  testthat::expect_true(any(grepl("Vertex AI Gemini API \\(vertex\\): VERTEX_API_KEY is not set", msgs)))
   testthat::expect_true(any(grepl("Together\\.ai \\(together\\): TOGETHER_API_KEY is set\\.", msgs)))
 })
 
 # ---------------------------------------------------------------------
-# Coverage for .gemini_api_key() / .together_api_key()
+# Coverage for .gemini_api_key() / .vertex_api_key() / .together_api_key()
 # ---------------------------------------------------------------------
 
-testthat::test_that(".gemini_api_key and .together_api_key prefer explicit api_key", {
+testthat::test_that(".gemini_api_key, .vertex_api_key, and .together_api_key prefer explicit api_key", {
   # Even if env vars are set, explicit argument wins
   withr::local_envvar(c(
     GEMINI_API_KEY = "GEMINI_FROM_ENV",
+    VERTEX_API_KEY = "VERTEX_FROM_ENV",
     TOGETHER_API_KEY = "TOGETHER_FROM_ENV"
   ))
 
   testthat::expect_equal(.gemini_api_key("GEMINI_EXPLICIT"), "GEMINI_EXPLICIT")
+  testthat::expect_equal(.vertex_api_key("VERTEX_EXPLICIT"), "VERTEX_EXPLICIT")
   testthat::expect_equal(.together_api_key("TOGETHER_EXPLICIT"), "TOGETHER_EXPLICIT")
 })
 
-testthat::test_that(".gemini_api_key and .together_api_key fallback to env vars and error when missing", {
+testthat::test_that(
+  ".gemini_api_key, .vertex_api_key, and .together_api_key fallback to env vars and error when missing",
+  {
   withr::local_envvar(c(
     GEMINI_API_KEY = "GEMINI_FROM_ENV",
+    VERTEX_API_KEY = "VERTEX_FROM_ENV",
     TOGETHER_API_KEY = ""
   ))
   testthat::expect_equal(.gemini_api_key(NULL), "GEMINI_FROM_ENV")
+  testthat::expect_equal(.vertex_api_key(NULL), "VERTEX_FROM_ENV")
 
   # TOGETHER: error path when nothing set
   testthat::expect_error(
     .together_api_key(NULL),
     "No API key found for Together\\.ai"
+  )
+  }
+)
+
+testthat::test_that(".vertex_api_key errors when no Vertex key is configured", {
+  withr::local_envvar(c(VERTEX_API_KEY = ""))
+
+  testthat::expect_error(
+    .vertex_api_key(NULL),
+    "No API key found for Vertex AI Gemini API"
   )
 })
 
@@ -201,7 +236,13 @@ testthat::test_that(".get_api_key treats empty string api_key like missing and u
 testthat::test_that("check_llm_api_keys provides verbose guidance when keys missing", {
   # Unset all keys
   withr::with_envvar(
-    c("OPENAI_API_KEY" = "", "ANTHROPIC_API_KEY" = "", "GEMINI_API_KEY" = "", "TOGETHER_API_KEY" = ""),
+    c(
+      "OPENAI_API_KEY" = "",
+      "ANTHROPIC_API_KEY" = "",
+      "GEMINI_API_KEY" = "",
+      "VERTEX_API_KEY" = "",
+      "TOGETHER_API_KEY" = ""
+    ),
     {
       testthat::expect_message(
         check_llm_api_keys(verbose = TRUE),
@@ -212,7 +253,13 @@ testthat::test_that("check_llm_api_keys provides verbose guidance when keys miss
 
   # Set one key
   withr::with_envvar(
-    c("OPENAI_API_KEY" = "TEST", "ANTHROPIC_API_KEY" = ""),
+    c(
+      "OPENAI_API_KEY" = "TEST",
+      "ANTHROPIC_API_KEY" = "",
+      "GEMINI_API_KEY" = "",
+      "VERTEX_API_KEY" = "",
+      "TOGETHER_API_KEY" = ""
+    ),
     {
       testthat::expect_message(
         check_llm_api_keys(verbose = TRUE),

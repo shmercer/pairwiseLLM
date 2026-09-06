@@ -237,13 +237,25 @@ test_that("adaptive rank wrapper and judge constructors cover endpoint fallback 
   )
 
   judge_llm <- pairwiseLLM::make_adaptive_judge_llm(backend = "openai", model = "gpt-test")
-  bad_struct <- judge_llm(A = tibble::tibble(item_id = "A", text = "a")[0, ], B = tibble::tibble(item_id = "B", text = "b"), state = list())
+  bad_struct <- judge_llm(
+    A = tibble::tibble(item_id = "A", text = "a")[0, ],
+    B = tibble::tibble(item_id = "B", text = "b"),
+    state = list()
+  )
   expect_identical(bad_struct$invalid_reason, "invalid_items")
 
-  bad_missing_id <- judge_llm(A = tibble::tibble(text = "a"), B = tibble::tibble(item_id = "B", text = "b"), state = list())
+  bad_missing_id <- judge_llm(
+    A = tibble::tibble(text = "a"),
+    B = tibble::tibble(item_id = "B", text = "b"),
+    state = list()
+  )
   expect_identical(bad_missing_id$invalid_reason, "invalid_items")
 
-  bad_id <- judge_llm(A = tibble::tibble(item_id = NA_character_, text = "a"), B = tibble::tibble(item_id = "B", text = "b"), state = list())
+  bad_id <- judge_llm(
+    A = tibble::tibble(item_id = NA_character_, text = "a"),
+    B = tibble::tibble(item_id = "B", text = "b"),
+    state = list()
+  )
   expect_identical(bad_id$invalid_reason, "invalid_items")
 
   out_err <- testthat::with_mocked_bindings(
@@ -302,7 +314,11 @@ test_that("adaptive run helpers cover warm-start and round-stage edge branches",
   bad_stage <- pairwiseLLM:::.adaptive_round_active_stage(list(round = list(staged_active = TRUE, stage_index = 99L)))
   expect_true(is.na(bad_stage))
 
-  fake_state <- list(round = list(stage_index = 1L, stage_order = c("anchor_link"), stage_shortfalls = list(anchor_link = 0L)))
+  fake_state <- list(round = list(
+    stage_index = 1L,
+    stage_order = c("anchor_link"),
+    stage_shortfalls = list(anchor_link = 0L)
+  ))
   advanced <- pairwiseLLM:::.adaptive_round_advance_stage(fake_state, shortfall = 2L)
   expect_identical(advanced$round$stage_shortfalls$anchor_link, 2L)
 })
@@ -311,13 +327,35 @@ test_that("adaptive_rank_run_live validates inputs", {
   state <- pairwiseLLM::adaptive_rank_start(make_test_items(2), seed = 1L)
   judge_invalid <- make_deterministic_judge("invalid")
 
-  expect_error(pairwiseLLM::adaptive_rank_run_live(list(), judge_invalid, n_steps = 1L, progress = "none"), "adaptive_state")
-  expect_error(pairwiseLLM::adaptive_rank_run_live(state, 1L, n_steps = 1L, progress = "none"), "`judge` must be a function")
-  expect_error(pairwiseLLM::adaptive_rank_run_live(state, judge_invalid, n_steps = 0L, progress = "none"), "positive integer")
-  expect_error(pairwiseLLM::adaptive_rank_run_live(state, judge_invalid, n_steps = 1L, session_dir = 1L, progress = "none"), "single string")
+  expect_error(
+    pairwiseLLM::adaptive_rank_run_live(list(), judge_invalid, n_steps = 1L, progress = "none"),
+    "adaptive_state"
+  )
+  expect_error(
+    pairwiseLLM::adaptive_rank_run_live(state, 1L, n_steps = 1L, progress = "none"),
+    "`judge` must be a function"
+  )
+  expect_error(
+    pairwiseLLM::adaptive_rank_run_live(state, judge_invalid, n_steps = 0L, progress = "none"),
+    "positive integer"
+  )
+  expect_error(
+    pairwiseLLM::adaptive_rank_run_live(state, judge_invalid, n_steps = 1L, session_dir = 1L, progress = "none"),
+    "single string"
+  )
   expect_error(
     pairwiseLLM::adaptive_rank_run_live(state, judge_invalid, n_steps = 1L, persist_item_log = 1L, progress = "none"),
     "must be TRUE or FALSE"
+  )
+  expect_error(
+    pairwiseLLM::adaptive_rank_run_live(
+      state,
+      judge_invalid,
+      n_steps = 1L,
+      checkpoint_every_steps = 0L,
+      progress = "none"
+    ),
+    "positive integer"
   )
 })
 
@@ -326,7 +364,7 @@ test_that("adaptive print and log accessors cover validation and canonicalizatio
 
   expect_identical(pairwiseLLM:::.adaptive_item_log_na_value("degree"), NA_integer_)
   expect_identical(pairwiseLLM:::.adaptive_item_log_na_value("item_id"), NA_character_)
-  expect_true(is.na(pairwiseLLM:::.adaptive_item_log_na_value("theta_mean")))
+  expect_true(is.na(pairwiseLLM:::.adaptive_item_log_na_value("theta_raw_eap")))
 
   empty_refit <- pairwiseLLM:::.adaptive_build_item_log_refit(state, refit_id = 1L)
   expect_equal(nrow(empty_refit), 0L)
@@ -335,7 +373,7 @@ test_that("adaptive print and log accessors cover validation and canonicalizatio
   state_with_bad$item_log <- 1L
   expect_error(pairwiseLLM:::.adaptive_append_item_log(state_with_bad, tibble::tibble(a = 1L)), "must be a list")
 
-  item_row <- tibble::tibble(ID = "1", deg = 2L, theta_mean = 0.1, rank_mean = 1.0)
+  item_row <- tibble::tibble(ID = "1", deg = 2L, theta_raw_eap = 0.1, rank_raw = 1L)
   canonical <- pairwiseLLM:::.adaptive_canonicalize_item_log(item_row, state, refit_id = 3L)
   expect_true(all(pairwiseLLM:::.adaptive_item_log_columns() %in% names(canonical)))
   expect_identical(canonical$refit_id[[1L]], 3L)
@@ -382,26 +420,32 @@ test_that("progress event and refit block formatting covers starved/invalid/fall
 
   starved <- tibble::tibble(
     step_id = 1L, round_stage = "anchor_link", candidate_starved = TRUE,
-    status = "starved", starvation_reason = NA_character_, fallback_used = NA_character_
+    status = "starved", starvation_reason = NA_character_, fallback_used = NA_character_,
+    run_mode = "within_set", is_probe_step = FALSE
   )
   msg_starved <- pairwiseLLM:::adaptive_progress_step_event(starved, cfg)
   expect_match(msg_starved, "candidate_starved=TRUE")
 
   invalid <- tibble::tibble(
     step_id = 2L, round_stage = "mid_link", candidate_starved = FALSE,
-    status = "invalid", starvation_reason = "", fallback_used = NA_character_
+    status = "invalid", starvation_reason = "", fallback_used = NA_character_,
+    run_mode = "within_set", is_probe_step = FALSE
   )
   msg_invalid <- pairwiseLLM:::adaptive_progress_step_event(invalid, cfg)
   expect_match(msg_invalid, "invalid judge")
 
   fallback <- tibble::tibble(
     step_id = 3L, round_stage = "local_link", candidate_starved = FALSE,
-    status = "ok", starvation_reason = NA_character_, fallback_used = "global_safe"
+    status = "ok", starvation_reason = NA_character_, fallback_used = "global_safe",
+    run_mode = "within_set", is_probe_step = FALSE
   )
   msg_fb <- pairwiseLLM:::adaptive_progress_step_event(fallback, cfg)
   expect_match(msg_fb, "fallback_used=global_safe")
 
-  expect_null(pairwiseLLM:::adaptive_progress_step_event(fallback, list(progress_show_events = FALSE, progress_errors = TRUE)))
+  expect_null(pairwiseLLM:::adaptive_progress_step_event(
+    fallback,
+    list(progress_show_events = FALSE, progress_errors = TRUE)
+  ))
 
   row <- tibble::tibble(
     refit_id = 1L,
@@ -417,8 +461,13 @@ test_that("progress event and refit block formatting covers starved/invalid/fall
     fallback_rate_since_last_refit = 0,
     fallback_used_mode = "base",
     starvation_reason_mode = NA_character_,
+    phase_scope = "phase_a_set",
+    phase_scope_set_id = 2L,
+    phase_scope_n_items = 3L,
     mean_degree = 2,
     min_degree = 1L,
+    mean_degree_scope = 2,
+    min_degree_scope = 1L,
     pos_balance_sd = 0.1,
     epsilon_mean = 0.1,
     epsilon_p2.5 = 0.05,
@@ -438,14 +487,24 @@ test_that("progress event and refit block formatting covers starved/invalid/fall
     min_ess_bulk = 500,
     ess_bulk_required = 300,
     reliability_EAP = 0.99,
+    reliability_EAP_scope = 0.99,
     eap_reliability_min = 0.95,
+    eap_pass_scope = TRUE,
+    theta_sd_eap_scope = 0.1,
     rho_rank = 0.99,
+    rho_rank_scope = 0.99,
     rank_spearman_min = 0.95,
     rho_theta = 0.99,
+    rho_theta_scope = 0.99,
     theta_corr_min = 0.95,
     delta_sd_theta = 0.01,
+    delta_sd_theta_scope = 0.01,
     theta_sd_rel_change_max = 0.05,
     lag_eligible = TRUE,
+    lag_eligible_scope = TRUE,
+    theta_corr_pass_scope = TRUE,
+    delta_sd_theta_pass_scope = TRUE,
+    rho_rank_pass_scope = TRUE,
     ci95_theta_width_mean = 0.1,
     near_tie_adj_frac = 0.1,
     cov_trace_theta = 1.1,
@@ -459,9 +518,305 @@ test_that("progress event and refit block formatting covers starved/invalid/fall
     stop_reason = "btl_converged"
   )
   block <- pairwiseLLM:::adaptive_progress_refit_block(row, cfg = list(stop_thresholds = list()))
-  expect_true(any(grepl("Decision: STOP", block)))
-  expect_true(any(grepl("Model params", block)))
+  expect_true(any(grepl("^Refit 0001  step=3", block)))
+  expect_true(any(grepl("^Pairs: new=3  committed_pairs=3$", block)))
+  expect_true(any(grepl("phase_scope=phase_a_set\\(set_id=2\\)", block)))
+  expect_true(any(grepl("^Global stop:", block)))
+  expect_true(any(grepl("reliability_EAP_scope=0.990/0.950 pass", block, fixed = TRUE)))
+  expect_true(any(grepl("rho_theta_scope=0.990/0.950 pass", block, fixed = TRUE)))
+  expect_false(any(grepl("Model params", block, fixed = TRUE)))
+  expect_false(any(grepl("chains=", block, fixed = TRUE)))
   expect_equal(length(pairwiseLLM:::adaptive_progress_refit_block(tibble::tibble(), cfg = list())), 0L)
+})
+
+test_that("adaptive progress refit block prints linking stop gates without misleading STOP", {
+  row <- tibble::tibble(
+    refit_id = 8L,
+    round_id_at_refit = 20L,
+    step_id_at_refit = 200L,
+    model_variant = "btl_e_b",
+    n_items = 100L,
+    phase_scope = "global",
+    phase_scope_set_id = NA_integer_,
+    phase_scope_n_items = 100L,
+    total_pairs_done = 200L,
+    new_pairs_since_last_refit = 25L,
+    new_active_pairs_since_last_refit = 20L,
+    new_probe_pairs_since_last_refit = 5L,
+    new_total_cross_pairs_since_last_refit = 25L,
+    n_unique_pairs_seen = 180L,
+    proposed_pairs_mode = "base",
+    starve_rate_since_last_refit = 0,
+    fallback_rate_since_last_refit = 0,
+    fallback_used_mode = "none",
+    starvation_reason_mode = NA_character_,
+    mean_degree = 4,
+    min_degree = 1,
+    mean_degree_scope = 4,
+    min_degree_scope = 1,
+    pos_balance_sd = 0.1,
+    epsilon_mean = 0.05,
+    epsilon_p2.5 = 0.01,
+    epsilon_p50 = 0.05,
+    epsilon_p97.5 = 0.09,
+    b_mean = 0.02,
+    b_p2.5 = -0.1,
+    b_p50 = 0.02,
+    b_p97.5 = 0.12,
+    diagnostics_pass = TRUE,
+    divergences = 0L,
+    divergences_max_allowed = 0L,
+    diagnostics_divergences_pass = TRUE,
+    max_rhat = 1.001,
+    max_rhat_allowed = 1.01,
+    diagnostics_rhat_pass = TRUE,
+    min_ess_bulk = 500,
+    ess_bulk_required = 400,
+    reliability_EAP = 0.95,
+    eap_reliability_min = 0.9,
+    rho_rank = 0.99,
+    rank_spearman_min = 0.95,
+    rho_theta = 0.99,
+    theta_corr_min = 0.95,
+    delta_sd_theta = 0.01,
+    theta_sd_rel_change_max = 0.2,
+    lag_eligible = TRUE,
+    ci95_theta_width_mean = 0.2,
+    near_tie_adj_frac = 0.1,
+    cov_trace_theta = 1.2,
+    top20_boundary_entropy_mean = 0.3,
+    nn_diff_sd_mean = 0.4,
+    mcmc_chains = 2L,
+    mcmc_parallel_chains = 2L,
+    mcmc_core_fraction = 0.8,
+    mcmc_threads_per_chain = 1L,
+    stop_decision = TRUE,
+    stop_reason = "btl_converged"
+  )
+  link_rows <- tibble::tibble(
+    spoke_id = c(2L, 3L),
+    link_transform_policy = "auto",
+    link_transform_state = "shift_only",
+    link_refit_mode = "shift_only",
+    hub_lock_mode = "soft_lock",
+    link_epoch_id = 1L,
+    reliability_link_global = c(0.972, 0.971),
+    link_stop_pass = c(FALSE, FALSE),
+    link_stop_eligible = c(FALSE, FALSE),
+    link_state_frozen = c(FALSE, FALSE),
+    n_pairs_cross_set_done = c(680L, 679L),
+    n_cross_edges_total_since_last_refit = c(38L, 37L),
+    n_unique_cross_pairs_seen = c(448L, 467L),
+    probe_edges_planned = c(0L, 0L),
+    probe_edges_realized = c(0L, 0L),
+    escalated_this_refit = c(FALSE, FALSE),
+    quota_long_link_removed = c(13L, 0L),
+    link_lag_eligible = c(TRUE, TRUE),
+    link_min_refit_eligible = c(TRUE, TRUE),
+    link_stop_gate_open = c(FALSE, FALSE),
+    stop_recent_pass_count = c(0L, 0L),
+    stop_recent_window_size = c(0L, 0L),
+    stability_window_refits_used = c(3L, 3L),
+    stability_passes_required_used = c(2L, 2L),
+    link_diagnostics_divergences_pass = c(TRUE, TRUE),
+    link_diagnostics_rhat_pass = c(TRUE, TRUE),
+    link_diagnostics_ess_pass = c(TRUE, TRUE),
+    probe_edges_min_for_stop_used = c(30L, 30L),
+    scale_ready = c(TRUE, TRUE),
+    reliability_stop_pass = c(TRUE, TRUE),
+    hub_anchored = c(TRUE, TRUE),
+    rank_stability_lagged = c(0.999, 0.998),
+    delta_spoke_sd = c(0.632, 0.626),
+    probe_brier_max_used = c(0.19, 0.19),
+    probe_brier_pass = c(NA, NA),
+    probe_quality_pass = c(FALSE, TRUE),
+    probe_quality_blocker_codes = c("probe_near_boundary,probe_midrange", "none"),
+    stop_blocker_codes = c("theta_global_rmse_lagged", "none"),
+    theta_global_rmse_lagged = c(0.075, 0.023),
+    theta_global_rmse_max_used = c(0.05, 0.05),
+    theta_global_rmse_pass = c(FALSE, TRUE),
+    probe_pred_rmse_lagged = c(NA_real_, NA_real_),
+    probe_pred_rmse_max_used = c(0.015, 0.015),
+    probe_pred_rmse_pass = c(NA, NA),
+    probe_brier = c(NA_real_, NA_real_)
+  )
+
+  block <- pairwiseLLM:::adaptive_progress_refit_block(
+    row,
+    cfg = list(stop_thresholds = list()),
+    link_stage_rows = link_rows
+  )
+
+  expect_true(any(grepl("^Pairs: new=25  committed_pairs=200  active=20  probe=5  total_cross=25$", block)))
+  expect_true(any(grepl("^Global:$", block)))
+  expect_true(any(grepl("^  audit_only$", block)))
+  expect_true(any(grepl("^Spokes:$", block)))
+  expect_true(any(grepl("spoke=2 active  eligible=no  gate_open=no", block, fixed = TRUE)))
+  expect_true(any(grepl("probes=0/30", block, fixed = TRUE)))
+  expect_true(any(grepl("reliability_link_global=0.972/0.900 pass", block, fixed = TRUE)))
+  expect_false(any(grepl("probe_quality=", block, fixed = TRUE)))
+  expect_false(any(grepl("stop_blockers=probe_quality", block, fixed = TRUE)))
+  expect_true(any(grepl("probe_pred_rmse_lagged=inactive/0.015 inactive", block, fixed = TRUE)))
+  expect_true(any(grepl("theta_global_rmse_lagged=0.075/0.050 fail", block, fixed = TRUE)))
+  expect_false(any(grepl("Decision: STOP", block, fixed = TRUE)))
+  expect_false(any(grepl("delta_spoke_sd=", block, fixed = TRUE)))
+  expect_false(any(grepl("probe_brier=", block, fixed = TRUE)))
+})
+
+test_that("adaptive progress refit block keeps frozen spokes compact and emits health notes only when needed", {
+  row <- tibble::tibble(
+    refit_id = 9L,
+    round_id_at_refit = 21L,
+    step_id_at_refit = 210L,
+    model_variant = "btl_e_b",
+    n_items = 100L,
+    phase_scope = "global",
+    total_pairs_done = 220L,
+    new_pairs_since_last_refit = 6L,
+    new_active_pairs_since_last_refit = 4L,
+    new_probe_pairs_since_last_refit = 2L,
+    new_total_cross_pairs_since_last_refit = 6L,
+    fallback_rate_since_last_refit = 0.25,
+    fallback_used_mode = "dup_relax",
+    starve_rate_since_last_refit = 0,
+    starvation_reason_mode = NA_character_,
+    diagnostics_pass = TRUE,
+    eap_pass = TRUE,
+    reliability_EAP = 0.95,
+    eap_reliability_min = 0.90,
+    lag_eligible = TRUE,
+    theta_corr_pass = TRUE,
+    rho_theta = 0.99,
+    theta_corr_min = 0.95,
+    delta_sd_theta_pass = TRUE,
+    delta_sd_theta = 0.01,
+    theta_sd_rel_change_max = 0.20,
+    rho_rank_pass = TRUE,
+    rho_rank = 0.99,
+    rank_spearman_min = 0.95,
+    stop_decision = FALSE
+  )
+  link_rows <- tibble::tibble(
+    spoke_id = c(2L, 3L),
+    link_state_frozen = c(FALSE, TRUE),
+    link_state_frozen_refit_id = c(NA_integer_, 8L),
+    link_transform_state = c("shift_only", "shift_only"),
+    link_stop_eligible = c(TRUE, TRUE),
+    link_stop_gate_open = c(TRUE, TRUE),
+    link_lag_eligible = c(TRUE, TRUE),
+    link_min_refit_eligible = c(TRUE, TRUE),
+    stop_recent_pass_count = c(1L, 2L),
+    stop_recent_window_size = c(2L, 3L),
+    stability_window_refits_used = c(3L, 3L),
+    stability_passes_required_used = c(2L, 2L),
+    probe_edges_realized = c(30L, 30L),
+    probe_edges_min_for_stop_used = c(30L, 30L),
+    link_diagnostics_divergences_pass = c(TRUE, TRUE),
+    link_diagnostics_rhat_pass = c(TRUE, TRUE),
+    link_diagnostics_ess_pass = c(TRUE, TRUE),
+    hub_anchored = c(TRUE, TRUE),
+    reliability_link_global = c(0.96, 0.97),
+    reliability_stop_pass = c(TRUE, TRUE),
+    probe_pred_rmse_lagged = c(0.01, 0.01),
+    probe_pred_rmse_max_used = c(0.015, 0.015),
+    probe_pred_rmse_pass = c(TRUE, TRUE),
+    theta_global_rmse_lagged = c(0.03, 0.02),
+    theta_global_rmse_max_used = c(0.05, 0.05),
+    theta_global_rmse_pass = c(TRUE, TRUE),
+    stage_budget_unfilled = c(2L, 0L),
+    probe_panel_shortfall = c(3L, 0L),
+    probe_shortfall_reason = c("probe_panel_rebuild", "none")
+  )
+
+  block <- pairwiseLLM:::adaptive_progress_refit_block(
+    row,
+    cfg = list(stop_thresholds = list()),
+    link_stage_rows = link_rows
+  )
+
+  expect_true(any(grepl("spoke=3 frozen  state=shift_only  frozen_refit=8", block, fixed = TRUE)))
+  expect_true(any(grepl(
+    "Selection: fallback=dup_relax (rate=0.25); budget_shortfall=2",
+    block,
+    fixed = TRUE
+  )))
+  expect_false(any(grepl("probe_shortfall=", block, fixed = TRUE)))
+  expect_false(any(grepl("^Diagnostics:", block)))
+})
+
+test_that("adaptive progress selection notes use stop-probe shortfall", {
+  row <- tibble::tibble(
+    refit_id = 9L,
+    step_id_at_refit = 240L,
+    new_pairs_since_last_refit = 30L,
+    total_pairs_done = 240L,
+    fallback_used_mode = NA_character_,
+    fallback_rate_since_last_refit = 0,
+    starvation_reason_mode = NA_character_,
+    budget_shortfall = 0L
+  )
+  link_rows <- tibble::tibble(
+    refit_id = c(9L, 9L),
+    spoke_id = c(2L, 3L),
+    probe_edges_realized = c(0L, 0L),
+    probe_edges_min_for_stop_used = c(30L, 30L),
+    probe_panel_shortfall = c(160L, 160L),
+    probe_shortfall_reason = c("insufficient_realization", "insufficient_realization"),
+    stage_budget_unfilled = c(0L, 0L)
+  )
+
+  notes <- pairwiseLLM:::.adaptive_progress_selection_notes(row, link_rows)
+  expect_true(any(grepl(
+    "probe_shortfall=60 (insufficient_realization)",
+    notes,
+    fixed = TRUE
+  )))
+  expect_false(any(grepl("probe_shortfall=320", notes, fixed = TRUE)))
+})
+
+test_that("adaptive progress refit block suppresses diagnostics unless problematic", {
+  row_pass <- tibble::tibble(
+    refit_id = 2L,
+    step_id_at_refit = 4L,
+    new_pairs_since_last_refit = 2L,
+    diagnostics_pass = TRUE,
+    eap_pass = TRUE,
+    reliability_EAP = 0.96,
+    eap_reliability_min = 0.90,
+    lag_eligible = FALSE,
+    stop_decision = FALSE
+  )
+  block_pass <- pairwiseLLM:::adaptive_progress_refit_block(
+    row_pass,
+    cfg = list(stop_thresholds = list())
+  )
+  expect_false(any(grepl("^Diagnostics:", block_pass)))
+
+  row_fail <- tibble::tibble(
+    refit_id = 2L,
+    step_id_at_refit = 4L,
+    new_pairs_since_last_refit = 2L,
+    diagnostics_pass = FALSE,
+    diagnostics_divergences_pass = FALSE,
+    divergences = 2L,
+    divergences_max_allowed = 0L,
+    diagnostics_rhat_pass = TRUE,
+    max_rhat = 1.001,
+    max_rhat_allowed = 1.01,
+    diagnostics_ess_pass = FALSE,
+    min_ess_bulk = 100,
+    ess_bulk_required = 400,
+    eap_pass = TRUE,
+    reliability_EAP = 0.96,
+    eap_reliability_min = 0.90,
+    lag_eligible = FALSE,
+    stop_decision = FALSE
+  )
+  block_fail <- pairwiseLLM:::adaptive_progress_refit_block(
+    row_fail,
+    cfg = list(stop_thresholds = list())
+  )
+  expect_true(any(grepl("^Diagnostics: global divergences=2/0 fail", block_fail)))
 })
 
 test_that("legacy stopping scaffold helpers abort loudly", {
@@ -515,13 +870,25 @@ test_that("adaptive select helpers cover history, strata, and duplicate branches
   expect_true(nrow(anchor_filtered) >= 0L)
   mid_global <- pairwiseLLM:::.adaptive_stage_candidate_filter(cand, "mid_link", "global_safe", rank_index, defaults)
   expect_true(nrow(mid_global) >= 0L)
-  local_expand <- pairwiseLLM:::.adaptive_stage_candidate_filter(cand, "local_link", "expand_locality", rank_index, defaults)
+  local_expand <- pairwiseLLM:::.adaptive_stage_candidate_filter(
+    cand,
+    "local_link",
+    "expand_locality",
+    rank_index,
+    defaults
+  )
   expect_true(nrow(local_expand) >= 0L)
 
   pair_count <- c("a:b" = 2L, "a:c" = 1L, "b:d" = 0L)
   no_repeat <- pairwiseLLM:::.adaptive_duplicate_filter(cand, pair_count, dup_max_obs = 2L, allow_repeats = FALSE)
   expect_true(nrow(no_repeat) <= nrow(cand))
-  relaxed_no_meta <- pairwiseLLM:::.adaptive_duplicate_filter(cand, pair_count, dup_max_obs = 3L, allow_repeats = TRUE, dup_max_obs_default = 1L)
+  relaxed_no_meta <- pairwiseLLM:::.adaptive_duplicate_filter(
+    cand,
+    pair_count,
+    dup_max_obs = 3L,
+    allow_repeats = TRUE,
+    dup_max_obs_default = 1L
+  )
   expect_true(nrow(relaxed_no_meta) <= nrow(cand))
   relaxed_meta <- pairwiseLLM:::.adaptive_duplicate_filter(
     cand, pair_count, dup_max_obs = 3L, allow_repeats = TRUE, dup_max_obs_default = 1L,
@@ -529,13 +896,7 @@ test_that("adaptive select helpers cover history, strata, and duplicate branches
   )
   expect_true(nrow(relaxed_meta) >= nrow(relaxed_no_meta))
 
-  p_na <- pairwiseLLM:::.adaptive_posterior_pair_prob(list(), "a", "b")
-  expect_true(is.na(p_na))
-  p_ok <- pairwiseLLM:::.adaptive_posterior_pair_prob(
-    list(btl_fit = list(btl_posterior_draws = `colnames<-`(matrix(c(1, 2, 3, 0), nrow = 2), c("a", "b")))),
-    "a", "b"
-  )
-  expect_true(is.finite(p_ok))
+  expect_true(is.list(pairwiseLLM:::.adaptive_resolve_controller(state, defaults)))
 })
 
 test_that("adaptive state and trueskill validators cover additional edge branches", {
@@ -556,8 +917,104 @@ test_that("adaptive state and trueskill validators cover additional edge branche
     pairwiseLLM:::.adaptive_validate_controller_config(list(p_long_low = 0.8, p_long_high = 0.2), 5L),
     "strictly less"
   )
-  cfg_ok <- pairwiseLLM:::.adaptive_validate_controller_config(list(boundary_k = 3L, p_long_low = 0.1, p_long_high = 0.9), 5L)
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(run_mode = "bad_mode"),
+      5L
+    ),
+    "must be one of"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(link_transform_mode = "bad_mode"),
+      5L
+    ),
+    "Unknown `adaptive_config` field"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(cross_set_utility = "entropy"),
+      5L
+    ),
+    "Unknown `adaptive_config` field"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(cross_set_utility = "p_times_1_minus_p"),
+      5L
+    ),
+    "Unknown `adaptive_config` field"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(allow_spoke_spoke_cross_set = "yes"),
+      5L
+    ),
+    "Unknown `adaptive_config` field"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(run_mode = "link_multi_spoke"),
+      5L,
+      set_ids = c(1L, 1L, 1L)
+    ),
+    "require multi-set input"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(
+        run_mode = "link_multi_spoke",
+        multi_spoke_mode = "concurrent",
+        link_estimation_mode = "transform",
+        link_refit_mode = "joint_refit",
+        hub_lock_mode = "free"
+      ),
+      5L,
+      set_ids = c(1L, 2L, 2L)
+    ),
+    "Unknown `adaptive_config` field"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(run_mode = "link_one_spoke", hub_id = 1L),
+      5L,
+      set_ids = c(1L, 2L, 3L)
+    ),
+    "exactly one spoke set"
+  )
+  cfg_ok <- pairwiseLLM:::.adaptive_validate_controller_config(
+    list(boundary_k = 3L, p_long_low = 0.1, p_long_high = 0.9),
+    5L
+  )
   expect_identical(cfg_ok$boundary_k, 3L)
+  cfg_link_ok <- pairwiseLLM:::.adaptive_validate_controller_config(
+    list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L
+    ),
+    5L,
+    set_ids = c(1L, 2L, 3L)
+  )
+  expect_identical(cfg_link_ok$hub_id, 1L)
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(
+        run_mode = "link_multi_spoke",
+        hub_id = 1L,
+        allow_spoke_spoke_cross_set = TRUE
+      ),
+      5L,
+      set_ids = c(1L, 2L, 3L)
+    ),
+    "Unknown `adaptive_config` field"
+  )
+  expect_error(
+    pairwiseLLM:::.adaptive_validate_controller_config(
+      list(ppc_calibration_id = NULL),
+      5L
+    ),
+    "Unknown `adaptive_config` field"
+  )
 
   resolved_num <- pairwiseLLM:::.adaptive_controller_resolve(5L)
   expect_true(is.list(resolved_num))
@@ -566,7 +1023,10 @@ test_that("adaptive state and trueskill validators cover additional edge branche
 
   ts <- pairwiseLLM:::new_trueskill_state(tibble::tibble(item_id = c("a", "b"), mu = c(25, 26), sigma = c(8, 8)))
   expect_true(inherits(ts, "trueskill_state"))
-  expect_error(pairwiseLLM:::new_trueskill_state(tibble::tibble(item_id = c("a", "b"), sigma = c(1, -1))), "must be > 0")
+  expect_error(
+    pairwiseLLM:::new_trueskill_state(tibble::tibble(item_id = c("a", "b"), sigma = c(1, -1))),
+    "must be > 0"
+  )
   expect_error(pairwiseLLM:::validate_trueskill_state(list()), "must inherit")
   expect_true(is.numeric(pairwiseLLM:::trueskill_win_probability("a", "b", ts)))
   expect_error(pairwiseLLM:::update_trueskill_state(ts, "a", "x"), "must be present")
@@ -622,9 +1082,27 @@ test_that("adaptive selector branch guards and validation errors are exercised",
   defaults <- pairwiseLLM:::adaptive_defaults(4L)
   cand <- tibble::tibble(i = c("a", "a"), j = c("b", "c"), p = c(0.5, 0.6), u0 = c(1, 1))
   rank_index <- c(a = 1L, b = 2L, c = 3L, d = 4L)
-  expect_true(nrow(pairwiseLLM:::.adaptive_stage_candidate_filter(cand, "long_link", "base", rank_index, defaults)) >= 0L)
-  expect_true(nrow(pairwiseLLM:::.adaptive_stage_candidate_filter(cand, "mid_link", "expand_locality", rank_index, defaults)) >= 0L)
-  expect_true(nrow(pairwiseLLM:::.adaptive_stage_candidate_filter(cand, "local_link", "global_safe", rank_index, defaults)) >= 0L)
+  expect_true(nrow(pairwiseLLM:::.adaptive_stage_candidate_filter(
+    cand,
+    "long_link",
+    "base",
+    rank_index,
+    defaults
+  )) >= 0L)
+  expect_true(nrow(pairwiseLLM:::.adaptive_stage_candidate_filter(
+    cand,
+    "mid_link",
+    "expand_locality",
+    rank_index,
+    defaults
+  )) >= 0L)
+  expect_true(nrow(pairwiseLLM:::.adaptive_stage_candidate_filter(
+    cand,
+    "local_link",
+    "global_safe",
+    rank_index,
+    defaults
+  )) >= 0L)
 
   dup <- pairwiseLLM:::.adaptive_duplicate_filter(
     candidates = cand,
@@ -634,20 +1112,35 @@ test_that("adaptive selector branch guards and validation errors are exercised",
   )
   expect_equal(nrow(dup), nrow(cand))
 
-  p_no_cols <- pairwiseLLM:::.adaptive_posterior_pair_prob(
-    list(btl_fit = list(btl_posterior_draws = matrix(1, nrow = 1, ncol = 2))),
-    "a", "b"
+  state$controller <- pairwiseLLM:::.adaptive_controller_defaults(length(state$item_ids))
+  state$controller$global_identified <- TRUE
+  state$controller$p_long_low <- 0.45
+  state$controller$p_long_high <- 0.55
+  state$round$staged_active <- TRUE
+  state$round$stage_index <- 2L
+  out_gate <- testthat::with_mocked_bindings(
+    trueskill_win_probability = function(i_id, j_id, state) 0.99,
+    pairwiseLLM:::select_next_pair(
+      state,
+      step_id = 1L,
+      candidates = tibble::tibble(i = "a", j = "b", p = 0.99)
+    ),
+    .package = "pairwiseLLM"
   )
-  expect_true(is.na(p_no_cols))
-  p_missing <- pairwiseLLM:::.adaptive_posterior_pair_prob(
-    list(btl_fit = list(btl_posterior_draws = `colnames<-`(matrix(1, nrow = 1, ncol = 2), c("a", "b")))),
-    "a", "x"
-  )
-  expect_true(is.na(p_missing))
+  expect_true(out_gate$long_gate_reason %in% c(
+    "posterior_unavailable_fallback",
+    "posterior_unavailable_fallback_trueskill_extreme"
+  ))
 
   lp <- pairwiseLLM:::.adaptive_local_priority_select(tibble::tibble(), state, state$round, 0L, 1L, defaults)
   expect_identical(lp$mode, "standard")
-  partner <- pairwiseLLM:::.adaptive_select_partner(cand, i_id = "a", mu = c(a = 1, b = 2, c = 3), recent_deg = c(a = 0, b = 0, c = 0), mode = "nonlocal")
+  partner <- pairwiseLLM:::.adaptive_select_partner(
+    cand,
+    i_id = "a",
+    mu = c(a = 1, b = 2, c = 3),
+    recent_deg = c(a = 0, b = 0, c = 0),
+    mode = "nonlocal"
+  )
   expect_true(is.data.frame(partner))
 
   expect_error(pairwiseLLM:::select_next_pair(list()), "adaptive_state object")
@@ -705,4 +1198,20 @@ test_that("adaptive state/trueskill additional scalar and validator branches", {
   expect_error(pairwiseLLM:::update_trueskill_state("x", "a", "b"), "must inherit")
   expect_error(pairwiseLLM:::.validate_trueskill_scalar("x", "mu0", TRUE), "finite numeric")
   expect_error(pairwiseLLM:::.validate_trueskill_scalar(0, "sigma0", FALSE), "must be > 0")
+})
+
+test_that("adaptive_rank_start remains deterministic with multi-set identifiers", {
+  items <- tibble::tibble(
+    item_id = c("a", "b", "c", "d"),
+    set_id = c(1L, 1L, 2L, 2L),
+    global_item_id = c("ga", "gb", "gc", "gd")
+  )
+  withr::local_seed(99)
+  s1 <- pairwiseLLM::adaptive_rank_start(items, seed = 123L)
+  withr::local_seed(99)
+  s2 <- pairwiseLLM::adaptive_rank_start(items, seed = 123L)
+
+  expect_equal(s1$warm_start_pairs, s2$warm_start_pairs)
+  expect_equal(s1$set_ids, s2$set_ids)
+  expect_equal(s1$global_item_ids, s2$global_item_ids)
 })

@@ -97,3 +97,40 @@ testthat::test_that("llm_submit_pairs_batch selects responses when thoughts requ
     }
   )
 })
+
+testthat::test_that("llm_submit_pairs_batch selects responses for GPT-5.6 named tiers", {
+  pairs <- tibble::tibble(
+    ID1 = "A",
+    text1 = "Text A",
+    ID2 = "B",
+    text2 = "Text B"
+  )
+
+  td <- pairwiseLLM::trait_description("overall_quality")
+  tmpl <- pairwiseLLM::set_prompt_template()
+  captured <- rlang::env(seen = character())
+
+  testthat::with_mocked_bindings(
+    run_openai_batch_pipeline = function(model, ..., endpoint) {
+      captured$seen <- c(captured$seen, model)
+      list(endpoint = endpoint, results = NULL)
+    },
+    .env = asNamespace("pairwiseLLM"),
+    {
+      for (model in c("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna")) {
+        out <- pairwiseLLM::llm_submit_pairs_batch(
+          pairs = pairs,
+          backend = "openai",
+          model = model,
+          trait_name = td$name,
+          trait_description = td$description,
+          prompt_template = tmpl,
+          include_thoughts = TRUE
+        )
+        testthat::expect_equal(out$endpoint, "responses")
+      }
+    }
+  )
+
+  testthat::expect_equal(captured$seen, c("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"))
+})

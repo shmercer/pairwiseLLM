@@ -12,7 +12,9 @@ sample_reverse_pairs(pairs, reverse_pct = NULL, n_reverse = NULL, seed = NULL)
 
 \item{reverse_pct}{Optional proportion of rows to reverse
 (between 0 and 1). If \code{n_reverse} is also supplied,
-\code{n_reverse} takes precedence and \code{reverse_pct} is ignored.}
+\code{n_reverse} takes precedence and \code{reverse_pct} is ignored. For
+values strictly between 0 and 1, the row count is
+\code{round(nrow(pairs) * reverse_pct)}.}
 
 \item{n_reverse}{Optional absolute number of rows to reverse.
 If supplied, this takes precedence over \code{reverse_pct}.}
@@ -38,3 +40,15 @@ pairs <- make_pairs(example_writing_samples)
 rev20 <- sample_reverse_pairs(pairs, reverse_pct = 0.2, seed = 123)
 
 }
+\seealso{
+\code{\link[=read_samples_df]{read_samples_df()}}, \code{\link[=read_samples_dir]{read_samples_dir()}}
+
+Other pairing and data:
+\code{\link[=alternate_pair_order]{alternate_pair_order()}},
+\code{\link[=make_pairs]{make_pairs()}},
+\code{\link[=randomize_pair_order]{randomize_pair_order()}},
+\code{\link[=read_samples_df]{read_samples_df()}},
+\code{\link[=read_samples_dir]{read_samples_dir()}},
+\code{\link[=sample_pairs]{sample_pairs()}}
+}
+\concept{pairing and data}

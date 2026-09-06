@@ -67,7 +67,7 @@ test_that("fit_bayes_btl_mcmc accepts converted non-adaptive data", {
     list(
       draws = list(theta = theta, epsilon = c(0.05, 0.06), beta = c(-0.1, 0.1)),
       model_variant = "btl_e_b",
-      diagnostics = list(divergences = 0L, max_rhat = 1.01, min_ess_bulk = 200),
+      diagnostics = list(divergences = 0L, max_rhat = 1.01, min_ess_bulk = 400),
       mcmc_config_used = list(
         chains = 1L,
         parallel_chains = 1L,
@@ -92,4 +92,15 @@ test_that("fit_bayes_btl_mcmc accepts converted non-adaptive data", {
 
   expect_s3_class(out$round_log, "tbl_df")
   expect_s3_class(out$item_summary, "tbl_df")
+  expect_true(out$fit$diagnostics_pass)
+  expect_true(out$round_log$diagnostics_pass[[1L]])
+  expect_true(out$round_log$diagnostics_divergences_pass[[1L]])
+  expect_true(out$round_log$diagnostics_rhat_pass[[1L]])
+  expect_false(is.na(out$round_log$diagnostics_ess_pass[[1L]]))
+  expect_equal(out$round_log$divergences_max_allowed[[1L]], 0L)
+  expect_equal(out$round_log$max_rhat_allowed[[1L]], 1.01)
+  expect_equal(out$round_log$ess_bulk_required[[1L]], 300)
+  expect_true(is.finite(out$round_log$reliability_EAP[[1L]]))
+  expect_equal(out$round_log$reliability_EAP_scope[[1L]], out$round_log$reliability_EAP[[1L]])
+  expect_equal(out$round_log$eap_reliability_min[[1L]], 0.95)
 })

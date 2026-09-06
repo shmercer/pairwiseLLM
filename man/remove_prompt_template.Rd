@@ -33,4 +33,13 @@ remove_prompt_template("to_delete")
 \code{\link{register_prompt_template}},
 \code{\link{get_prompt_template}},
 \code{\link{list_prompt_templates}}
+
+Other prompts and traits:
+\code{\link[=build_prompt]{build_prompt()}},
+\code{\link[=get_prompt_template]{get_prompt_template()}},
+\code{\link[=list_prompt_templates]{list_prompt_templates()}},
+\code{\link[=register_prompt_template]{register_prompt_template()}},
+\code{\link[=set_prompt_template]{set_prompt_template()}},
+\code{\link[=trait_description]{trait_description()}}
 }
+\concept{prompts and traits}

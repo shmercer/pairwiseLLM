@@ -26,6 +26,18 @@ Adaptive item log accessor.
 The underlying state stores a list of refit tables; this
 accessor can return one refit table (default: most recent) or stack all
 refits into a single tibble.
+
+Item-level summaries are domain-explicit:
+\itemize{
+\item \code{theta_raw_*}: raw/within-set posterior summaries (EAP, fixed
+quantiles, SD, rank) at the current refit.
+\item \code{theta_link_*}: linked/global posterior summaries (EAP, fixed
+quantiles, SD, rank) after transform application.
+\item During linking Phase A (\code{phase_scope = "phase_a_set"}),
+\code{theta_link_*} is typed \code{NA} by design.
+\item \code{phase_scope}, \code{phase_scope_set_id}, and
+\code{in_phase_scope} indicate which item domain is currently optimized.
+}
 }
 \examples{
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
@@ -35,10 +47,12 @@ adaptive_item_log(state)
 \seealso{
 \code{\link[=adaptive_get_logs]{adaptive_get_logs()}}, \code{\link[=summarize_items]{summarize_items()}}, \code{\link[=adaptive_round_log]{adaptive_round_log()}}
 
-Other adaptive logs: 
-\code{\link{adaptive_get_logs}()},
-\code{\link{adaptive_results_history}()},
-\code{\link{adaptive_round_log}()},
-\code{\link{adaptive_step_log}()}
+Other adaptive logs:
+\code{\link[=adaptive_get_logs]{adaptive_get_logs()}},
+\code{\link[=adaptive_results_history]{adaptive_results_history()}},
+\code{\link[=adaptive_round_log]{adaptive_round_log()}},
+\code{\link[=adaptive_step_log]{adaptive_step_log()}},
+\code{\link[=summarize_items]{summarize_items()}},
+\code{\link[=summarize_refits]{summarize_refits()}}
 }
 \concept{adaptive logs}

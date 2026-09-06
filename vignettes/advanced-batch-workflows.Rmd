@@ -31,6 +31,10 @@ Supported Batch API providers:
 - **Anthropic** (batch pipeline: `run_anthropic_batch_pipeline()`)
 - **Gemini** (batch pipeline: `run_gemini_batch_pipeline()`)
 
+Vertex AI Gemini API is intentionally excluded here. In this series,
+Vertex is supported on the live path only via `backend = "vertex"` with
+`VERTEX_API_KEY`, and generic batch wrappers reject Vertex explicitly.
+
 > **Recommended approach:** For *multiple* batches (e.g., templates × providers × models × forward/reverse), use:
 > 
 > - `llm_submit_pairs_multi_batch()` to **split + submit** jobs (no polling; writes an optional registry CSV)
@@ -68,13 +72,18 @@ library(readr)
 library(stringr)
 ```
 
-Required environment variables:
+Configure the environment variable only for each provider included in your
+run plan:
 
 | Provider | Environment Variable |
 |----------|----------------------|
 | OpenAI   | `OPENAI_API_KEY`     |
 | Anthropic | `ANTHROPIC_API_KEY` |
 | Gemini    | `GEMINI_API_KEY`    |
+
+This vignette only covers batch-capable providers. Vertex live requests
+use a separate `VERTEX_API_KEY` surface and are documented in
+`vignette("getting-started")`.
 
 Check which are set:
 
@@ -143,19 +152,16 @@ Here we define a small grid:
 
 ```{r}
 anthropic_models <- c(
-  "claude-sonnet-4-5",
-  "claude-haiku-4-5",
-  "claude-opus-4-5"
+  "claude-haiku-4-5-20251001"
 )
 
 gemini_models <- c(
-  "gemini-3-pro-preview"
+  "gemini-3.8-flash"
 )
 
 openai_models <- c(
   "gpt-4.1",
-  "gpt-4o",
-  "gpt-5.1"
+  "gpt-5.6-luna"
 )
 
 thinking_levels <- c("no_thinking", "with_thinking")
@@ -164,7 +170,7 @@ directions <- c("forward", "reverse")
 anthropic_grid <- tidyr::expand_grid(
   provider  = "anthropic",
   model     = anthropic_models,
-  thinking  = thinking_levels,
+  thinking  = "no_thinking",
   direction = directions
 )
 
@@ -178,11 +184,9 @@ gemini_grid <- tidyr::expand_grid(
 openai_grid <- tidyr::expand_grid(
   provider  = "openai",
   model     = openai_models,
-  thinking  = thinking_levels,
+  thinking  = "no_thinking",
   direction = directions
-) |>
-  # For example, only allow "with_thinking" for gpt-5.1
-  dplyr::filter(model == "gpt-5.1" | thinking == "no_thinking")
+)
 
 batch_grid <- dplyr::bind_rows(
   anthropic_grid,
@@ -252,13 +256,12 @@ submit_one_run <- function(template_id, prompt_template, provider, model, thinki
 
   if (identical(provider, "openai")) {
     # Only request thoughts for models that support them in this workflow
-    extra_args$include_thoughts <- is_thinking && grepl("^gpt-5\\.1", model)
+    extra_args$include_thoughts <- is_thinking && grepl("^gpt-5", model)
     extra_args$include_raw      <- TRUE
   } else if (identical(provider, "anthropic")) {
     extra_args$reasoning        <- if (is_thinking) "enabled" else "none"
     extra_args$include_thoughts <- is_thinking
     extra_args$include_raw      <- TRUE
-    # Optional: set deterministic temperature when not using reasoning
     # Optional: set deterministic temperature when not using reasoning
     if (!is_thinking) extra_args$temperature <- 0
   } else if (identical(provider, "gemini")) {
@@ -296,7 +299,11 @@ submit_one_run <- function(template_id, prompt_template, provider, model, thinki
 }
 
 run_results <- purrr::pmap(
-  run_plan,
+  run_plan |>
+    dplyr::select(
+      template_id, prompt_template, provider, model, thinking, direction,
+      run_dir
+    ),
   submit_one_run
 )
 
@@ -410,6 +417,5 @@ Once you have per-run results CSVs (e.g., one per template × model × thinking 
 
 # 9. Citation
 
-> Mercer, S. H. (2025). *Advanced: Submitting and polling multiple batches* [R package vignette]. 
-In *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*. 
-https://doi.org/10.32614/CRAN.package.pairwiseLLM
+> Mercer, S. H. (2026). *Advanced: Submitting and polling multiple batches* [R package vignette].
+> Comprehensive R Archive Network. https://doi.org/10.32614/CRAN.package.pairwiseLLM

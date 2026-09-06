@@ -52,16 +52,27 @@ as_pairs_tbl <- function(...) {
     "dup_relax",
     "global_safe",
     "warm_start",
+    "probe_panel_fixed_refit",
+    "probe_panel_acceleration",
+    "probe_panel_after_active_unavailable",
     "FAILED"
   )
 }
 
 .adaptive_starvation_reason_levels <- function() {
   c(
+    "filtered_by_route_filters",
+    "filtered_by_active_domain",
+    "filtered_by_stage_filters",
+    "filtered_by_exposure_filters",
+    "filtered_by_hard_filters",
     "few_candidates_generated",
     "filtered_by_duplicates",
+    "filtered_by_star_caps",
+    "filtered_by_scoring",
     "filtered_by_paircount",
     "filtered_by_other_filters",
+    "all_eligible_spokes_infeasible",
     "unknown"
   )
 }
@@ -454,11 +465,128 @@ validate_state <- function(state) {
   if (!is.data.frame(state$items)) {
     rlang::abort("`state$items` must be a data frame.")
   }
+  items <- tibble::as_tibble(state$items)
+  req_item_cols <- c("item_id", "set_id", "global_item_id")
+  missing_item_cols <- setdiff(req_item_cols, names(items))
+  if (length(missing_item_cols) > 0L) {
+    rlang::abort(paste0(
+      "`state$items` must include columns: ",
+      paste(req_item_cols, collapse = ", "),
+      ". Missing: ",
+      paste(missing_item_cols, collapse = ", "),
+      "."
+    ))
+  }
+  if (!is.character(items$item_id)) {
+    rlang::abort("`state$items$item_id` must be character.")
+  }
+  if (!.adaptive_is_integerish(items$set_id) || any(is.na(items$set_id))) {
+    rlang::abort("`state$items$set_id` must be non-missing integer-like values.")
+  }
+  if (!is.character(items$global_item_id) || any(is.na(items$global_item_id) | items$global_item_id == "")) {
+    rlang::abort("`state$items$global_item_id` must be non-missing character values.")
+  }
+  if (anyDuplicated(items$global_item_id)) {
+    rlang::abort("`state$items$global_item_id` must be unique.")
+  }
+  global_item_ids <- state$global_item_ids %||% as.character(items$global_item_id)
+  if (!is.character(global_item_ids) || length(global_item_ids) != length(state$item_ids)) {
+    rlang::abort("`state$global_item_ids` must be character with one value per item.")
+  }
+  set_ids_state <- state$set_ids %||% as.integer(items$set_id)
+  if (!.adaptive_is_integerish(set_ids_state) || length(set_ids_state) != length(state$item_ids)) {
+    rlang::abort("`state$set_ids` must be integer with one value per item.")
+  }
+  linking <- state$linking %||% list(
+    run_mode = "within_set",
+    hub_id = 1L,
+    spoke_ids = setdiff(unique(as.integer(items$set_id)), 1L),
+    is_multi_set = length(unique(as.integer(items$set_id))) > 1L,
+    phase_a = list(
+      set_status = .adaptive_phase_a_empty_state(unique(as.integer(items$set_id))),
+      artifacts = list(),
+      ready_for_phase_b = FALSE,
+      phase = "phase_a",
+      phase_b_started_at_step = NA_integer_
+    )
+  )
+  if (!is.list(linking)) {
+    rlang::abort("`state$linking` must be a list.")
+  }
+  run_mode <- as.character(linking$run_mode %||% NA_character_)
+  if (!run_mode %in% c("within_set", "link_one_spoke", "link_multi_spoke")) {
+    rlang::abort("`state$linking$run_mode` must be within_set, link_one_spoke, or link_multi_spoke.")
+  }
+  if (!.adaptive_is_integerish(linking$hub_id) || length(linking$hub_id) != 1L || is.na(linking$hub_id)) {
+    rlang::abort("`state$linking$hub_id` must be a non-missing integer value.")
+  }
+  set_ids <- unique(as.integer(items$set_id))
+  is_link_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
+  if (isTRUE(is_link_mode) && length(set_ids) < 2L) {
+    rlang::abort("Linking run modes require at least two unique `set_id` values.")
+  }
+  if (isTRUE(is_link_mode) && !as.integer(linking$hub_id) %in% set_ids) {
+    rlang::abort("`state$linking$hub_id` must match one observed `state$items$set_id` in linking mode.")
+  }
+  if (identical(run_mode, "link_one_spoke")) {
+    spoke_ids <- setdiff(set_ids, as.integer(linking$hub_id))
+    if (length(spoke_ids) != 1L) {
+      rlang::abort("`state$linking$run_mode = \"link_one_spoke\"` requires exactly one spoke set.")
+    }
+  }
+  controller <- .adaptive_controller_resolve(state)
+  if (identical(controller$hub_lock_mode, "free") &&
+    !.adaptive_hub_lock_mode_free_allowed(
+      run_mode = run_mode,
+      link_estimation_mode = controller$link_estimation_mode,
+      link_refit_mode = controller$link_refit_mode
+    )) {
+    rlang::abort(
+      paste0(
+        "`state$controller$hub_lock_mode = \"free\"` is only supported for ",
+        "`state$linking$run_mode = \"link_one_spoke\"` with ",
+        "`state$controller$link_estimation_mode = \"transform\"` and ",
+        "`state$controller$link_refit_mode = \"joint_refit\"`."
+      )
+    )
+  }
+  if (identical(run_mode, "link_multi_spoke") &&
+    identical(controller$multi_spoke_mode, "concurrent") &&
+    !controller$hub_lock_mode %in% c("hard_lock", "soft_lock")) {
+    rlang::abort(
+      "`state$controller$hub_lock_mode` must be hard_lock or soft_lock when multi_spoke_mode is concurrent."
+    )
+  }
   if (!is.null(state$trueskill_state)) {
     validate_trueskill_state(state$trueskill_state)
   }
   if (!is.data.frame(state$history_pairs)) {
     rlang::abort("`state$history_pairs` must be a data frame.")
+  }
+  if (!is.null(state$link_stage_log)) {
+    .adaptive_validate_log_schema(
+      tibble::as_tibble(state$link_stage_log),
+      schema_link_stage_log,
+      "state$link_stage_log"
+    )
+  }
+  phase_a <- linking$phase_a %||% list()
+  if (!is.list(phase_a)) {
+    rlang::abort("`state$linking$phase_a` must be a list.")
+  }
+  if (!is.data.frame(phase_a$set_status %||% tibble::tibble())) {
+    rlang::abort("`state$linking$phase_a$set_status` must be a data frame.")
+  }
+  if (!is.list(phase_a$artifacts %||% list())) {
+    rlang::abort("`state$linking$phase_a$artifacts` must be a list.")
+  }
+  phase_val <- as.character(phase_a$phase %||% "phase_a")
+  if (!phase_val %in% c("phase_a", "phase_b")) {
+    rlang::abort("`state$linking$phase_a$phase` must be phase_a or phase_b.")
+  }
+  phase_b_step <- phase_a$phase_b_started_at_step %||% NA_integer_
+  if (!.adaptive_is_integerish(phase_b_step) || length(phase_b_step) != 1L) {
+    rlang::abort("`state$linking$phase_a$phase_b_started_at_step` must be integer-like length 1.")
   }
 
   invisible(state)

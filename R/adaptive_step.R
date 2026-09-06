@@ -4,13 +4,181 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_judge_extract_value <- function(result, names) {
+  for (name in names) {
+    if (name %in% names(result)) {
+      return(result[[name]])
+    }
+  }
+  NULL
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_judge_scalar_character <- function(value) {
+  if (is.null(value)) {
+    return(NA_character_)
+  }
+  if (is.list(value) && !is.data.frame(value) && length(value) == 1L) {
+    value <- value[[1L]]
+  }
+  if (length(value) != 1L) {
+    return(NA_character_)
+  }
+  out <- suppressWarnings(as.character(value))
+  if (length(out) != 1L || is.na(out) || !nzchar(out)) {
+    return(NA_character_)
+  }
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_judge_scalar_integer <- function(value) {
+  if (is.null(value)) {
+    return(NA_integer_)
+  }
+  if (is.list(value) && !is.data.frame(value) && length(value) == 1L) {
+    value <- value[[1L]]
+  }
+  if (length(value) != 1L || is.na(value) || !.adaptive_is_integerish(value)) {
+    return(NA_integer_)
+  }
+  as.integer(value)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_judge_scalar_double <- function(value) {
+  if (is.null(value)) {
+    return(NA_real_)
+  }
+  if (is.list(value) && !is.data.frame(value) && length(value) == 1L) {
+    value <- value[[1L]]
+  }
+  if (length(value) != 1L || is.na(value)) {
+    return(NA_real_)
+  }
+  out <- suppressWarnings(as.double(value))
+  if (length(out) != 1L || is.na(out)) {
+    return(NA_real_)
+  }
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_serialize_raw_response <- function(raw_response) {
+  if (is.null(raw_response)) {
+    return(NA_character_)
+  }
+  if (is.character(raw_response) && length(raw_response) == 1L) {
+    if (is.na(raw_response) || !nzchar(raw_response)) {
+      return(NA_character_)
+    }
+    return(as.character(raw_response))
+  }
+  if (is.list(raw_response) &&
+    !is.data.frame(raw_response) &&
+    length(raw_response) == 1L &&
+    (is.null(names(raw_response)) || identical(names(raw_response), ""))) {
+    raw_response <- raw_response[[1L]]
+  }
+  if (is.null(raw_response)) {
+    return(NA_character_)
+  }
+  out <- tryCatch(
+    jsonlite::toJSON(
+      raw_response,
+      auto_unbox = TRUE,
+      dataframe = "rows",
+      null = "null",
+      na = "null",
+      digits = NA
+    ),
+    error = function(e) NA_character_
+  )
+  if (!is.character(out) || length(out) != 1L || is.na(out) || !nzchar(out)) {
+    return(NA_character_)
+  }
+  as.character(out)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_judge_optional_metadata <- function(result) {
+  if (!is.list(result) || is.data.frame(result)) {
+    return(list(
+      judge_backend = NA_character_,
+      judge_model = NA_character_,
+      judge_endpoint = NA_character_,
+      llm_status_code = NA_integer_,
+      llm_error_message = NA_character_,
+      llm_custom_id = NA_character_,
+      prompt_tokens = NA_real_,
+      completion_tokens = NA_real_,
+      total_tokens = NA_real_,
+      raw_response_json = NA_character_
+    ))
+  }
+
+  raw_response_json <- .adaptive_judge_scalar_character(
+    .adaptive_judge_extract_value(result, "raw_response_json")
+  )
+  if (is.na(raw_response_json)) {
+    raw_response_json <- .adaptive_serialize_raw_response(
+      .adaptive_judge_extract_value(result, "raw_response")
+    )
+  }
+
+  list(
+    judge_backend = .adaptive_judge_scalar_character(
+      .adaptive_judge_extract_value(result, c("judge_backend", "backend"))
+    ),
+    judge_model = .adaptive_judge_scalar_character(
+      .adaptive_judge_extract_value(result, c("judge_model", "model"))
+    ),
+    judge_endpoint = .adaptive_judge_scalar_character(
+      .adaptive_judge_extract_value(result, c("judge_endpoint", "endpoint"))
+    ),
+    llm_status_code = .adaptive_judge_scalar_integer(
+      .adaptive_judge_extract_value(result, c("llm_status_code", "status_code"))
+    ),
+    llm_error_message = .adaptive_judge_scalar_character(
+      .adaptive_judge_extract_value(result, c("llm_error_message", "error_message"))
+    ),
+    llm_custom_id = .adaptive_judge_scalar_character(
+      .adaptive_judge_extract_value(result, c("llm_custom_id", "custom_id"))
+    ),
+    prompt_tokens = .adaptive_judge_scalar_double(
+      .adaptive_judge_extract_value(result, "prompt_tokens")
+    ),
+    completion_tokens = .adaptive_judge_scalar_double(
+      .adaptive_judge_extract_value(result, "completion_tokens")
+    ),
+    total_tokens = .adaptive_judge_scalar_double(
+      .adaptive_judge_extract_value(result, "total_tokens")
+    ),
+    raw_response_json = raw_response_json
+  )
+}
+
+#' @keywords internal
+#' @noRd
 validate_judge_result <- function(result, A_id, B_id) {
+  metadata <- .adaptive_judge_optional_metadata(result)
+
   invalid <- function(reason) {
-    list(
-      Y = NA_integer_,
-      is_valid = FALSE,
-      invalid_reason = reason,
-      raw = result
+    c(
+      list(
+        Y = NA_integer_,
+        is_valid = FALSE,
+        invalid_reason = reason,
+        judge_valid = FALSE,
+        judge_invalid_reason = reason,
+        raw = result
+      ),
+      metadata
     )
   }
 
@@ -43,6 +211,18 @@ validate_judge_result <- function(result, A_id, B_id) {
       Y = y_val,
       is_valid = TRUE,
       invalid_reason = NA_character_,
+      judge_valid = TRUE,
+      judge_invalid_reason = NA_character_,
+      judge_backend = metadata$judge_backend,
+      judge_model = metadata$judge_model,
+      judge_endpoint = metadata$judge_endpoint,
+      llm_status_code = metadata$llm_status_code,
+      llm_error_message = metadata$llm_error_message,
+      llm_custom_id = metadata$llm_custom_id,
+      prompt_tokens = metadata$prompt_tokens,
+      completion_tokens = metadata$completion_tokens,
+      total_tokens = metadata$total_tokens,
+      raw_response_json = metadata$raw_response_json,
       raw = result
     ))
   }
@@ -57,6 +237,18 @@ validate_judge_result <- function(result, A_id, B_id) {
     Y = NA_integer_,
     is_valid = FALSE,
     invalid_reason = invalid_reason,
+    judge_valid = FALSE,
+    judge_invalid_reason = invalid_reason,
+    judge_backend = metadata$judge_backend,
+    judge_model = metadata$judge_model,
+    judge_endpoint = metadata$judge_endpoint,
+    llm_status_code = metadata$llm_status_code,
+    llm_error_message = metadata$llm_error_message,
+    llm_custom_id = metadata$llm_custom_id,
+    prompt_tokens = metadata$prompt_tokens,
+    completion_tokens = metadata$completion_tokens,
+    total_tokens = metadata$total_tokens,
+    raw_response_json = metadata$raw_response_json,
     raw = result
   )
 }
@@ -81,14 +273,16 @@ validate_judge_result <- function(result, A_id, B_id) {
 
   i_id <- as.character(pair$i_id[[1L]])
   j_id <- as.character(pair$j_id[[1L]])
-  history <- .adaptive_history_tbl(state)
-  counts <- .adaptive_pair_counts(history, state$item_ids)
+  history_state <- .adaptive_history_state_resolve(state, ids = state$item_ids)
+  counts <- .adaptive_history_state_counts(history_state, state$item_ids)
+  seed_base <- as.integer(state$meta$seed %||% 1L)
 
   order_vals <- .adaptive_assign_order(
     tibble::tibble(i = i_id, j = j_id),
     counts$posA,
     counts$posB,
-    counts$pair_last_order
+    counts$pair_last_order,
+    seed_base = seed_base
   )
 
   trueskill_state <- state$trueskill_state
@@ -101,8 +295,22 @@ validate_judge_result <- function(result, A_id, B_id) {
   u0_ij <- p_ij * (1 - p_ij)
 
   idx_map <- state$item_index %||% stats::setNames(seq_along(state$item_ids), state$item_ids)
-  recent_deg <- .adaptive_recent_deg(history, state$item_ids, adaptive_defaults(length(state$item_ids))$W_cap)
+  recent_deg <- .adaptive_history_state_recent_deg(
+    history_state,
+    state$item_ids,
+    adaptive_defaults(length(state$item_ids))$W_cap
+  )
   defaults <- adaptive_defaults(length(state$item_ids))
+  controller <- .adaptive_controller_resolve(state)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  set_i <- as.integer(state$items$set_id[[idx_map[[i_id]]]])
+  set_j <- as.integer(state$items$set_id[[idx_map[[j_id]]]])
+  is_cross_set <- !is.na(set_i) && !is.na(set_j) && set_i != set_j
+  utility_mode <- .adaptive_selection_utility_mode(
+    run_mode = run_mode,
+    is_cross_set = isTRUE(is_cross_set),
+    link_estimation_mode = controller$link_estimation_mode
+  )
 
   list(
     i = as.integer(idx_map[[i_id]]),
@@ -135,10 +343,15 @@ validate_judge_result <- function(result, A_id, B_id) {
     stage_committed_so_far = NA_integer_,
     stage_quota = NA_integer_,
     n_candidates_generated = NA_integer_,
+    n_candidates_after_route_filters = NA_integer_,
+    n_candidates_after_active_domain = NA_integer_,
+    n_candidates_after_stage_filters = NA_integer_,
+    n_candidates_after_exposure_filters = NA_integer_,
     n_candidates_after_hard_filters = NA_integer_,
     n_candidates_after_duplicates = NA_integer_,
     n_candidates_after_star_caps = NA_integer_,
     n_candidates_scored = NA_integer_,
+    hard_filter_collapse_stage = NA_character_,
     deg_i = as.integer(counts$deg[[i_id]]),
     deg_j = as.integer(counts$deg[[j_id]]),
     recent_deg_i = as.integer(recent_deg[[i_id]]),
@@ -149,6 +362,7 @@ validate_judge_result <- function(result, A_id, B_id) {
     sigma_j = as.double(sigma_vals[[j_id]]),
     p_ij = as.double(p_ij),
     U0_ij = as.double(u0_ij),
+    utility_mode = as.character(utility_mode),
     star_cap_rejects = 0L,
     star_cap_reject_items = 0L
   )
@@ -156,27 +370,637 @@ validate_judge_result <- function(result, A_id, B_id) {
 
 #' @keywords internal
 #' @noRd
+.adaptive_assert_step_entry_invariants <- function(state, controller = NULL, phase_ctx = NULL) {
+  if (is.null(controller)) {
+    controller <- .adaptive_controller_resolve(state)
+  } else {
+    controller <- utils::modifyList(
+      .adaptive_controller_defaults(as.integer(state$n_items %||% length(state$item_ids %||% character()))),
+      controller
+    )
+  }
+  phase_ctx <- phase_ctx %||% .adaptive_link_phase_context(state, controller = controller)
+  run_mode <- as.character(controller$run_mode %||% "within_set")
+  is_link_mode <- run_mode %in% c("link_one_spoke", "link_multi_spoke")
+  if (!isTRUE(is_link_mode)) {
+    if (identical(phase_ctx$phase, "phase_b")) {
+      rlang::abort(
+        paste0(
+          "Phase metadata and routing mode disagree: non-link run_mode cannot use phase_b routing."
+        )
+      )
+    }
+    return(invisible(TRUE))
+  }
+
+  if (identical(phase_ctx$phase, "phase_b")) {
+    configured_cross_set_utility <- as.character(controller$cross_set_utility %||% NA_character_)
+    if (!identical(configured_cross_set_utility, "linking_d_optimal")) {
+      rlang::abort(
+        paste0(
+          "Linking configuration invariant failed: `adaptive_config$cross_set_utility` must be ",
+          "`linking_d_optimal`."
+        )
+      )
+    }
+    ready_spokes <- as.integer(phase_ctx$ready_spokes %||% integer())
+    ready_spokes <- ready_spokes[!is.na(ready_spokes)]
+    if (length(ready_spokes) < 1L) {
+      rlang::abort(
+        paste0(
+          "Phase metadata and routing mode disagree: phase marked phase_b but no ready spokes are available."
+        )
+      )
+    }
+    pending <- as.integer(phase_ctx$pending_run_sets %||% integer())
+    pending <- pending[!is.na(pending)]
+    if (length(pending) > 0L) {
+      rlang::abort(
+        paste0(
+          "Phase metadata and routing mode disagree: phase marked phase_b while pending Phase A run sets remain: ",
+          paste(sort(unique(pending)), collapse = ", "),
+          "."
+        )
+      )
+    }
+  }
+
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_assert_step_row_linking_completeness <- function(step_row) {
+  row <- tibble::as_tibble(step_row)
+  if (!"posterior_win_prob_ij_pre" %in% names(row) && "posterior_win_prob_pre" %in% names(row)) {
+    row$posterior_win_prob_ij_pre <- row$posterior_win_prob_pre
+  }
+  if (nrow(row) != 1L) {
+    rlang::abort("`step_row` completeness validation expects exactly one row.")
+  }
+  required <- c("run_mode", "is_cross_set", "set_i", "set_j", "link_spoke_id", "round_stage", "link_stage")
+  missing <- setdiff(required, names(row))
+  if (length(missing) > 0L) {
+    rlang::abort(paste0(
+      "step_log append completeness failure: missing required linking columns: ",
+      paste(missing, collapse = ", "),
+      "."
+    ))
+  }
+  valid_utility_modes <- .adaptive_utility_mode_levels()
+  utility_mode <- if ("utility_mode" %in% names(row)) {
+    as.character(row$utility_mode[[1L]] %||% NA_character_)
+  } else {
+    NA_character_
+  }
+  link_estimation_mode <- if ("link_estimation_mode" %in% names(row)) {
+    as.character(row$link_estimation_mode[[1L]] %||% "transform")
+  } else {
+    "transform"
+  }
+  expected_linking_utility_mode <- .adaptive_linking_utility_mode(
+    link_estimation_mode = link_estimation_mode
+  )
+  if (!is.na(utility_mode) && !utility_mode %in% valid_utility_modes) {
+    rlang::abort(
+      paste0(
+        "step_log append completeness failure: `utility_mode` must be one of: ",
+        paste(valid_utility_modes, collapse = ", "),
+        ", or NA."
+      )
+    )
+  }
+  run_mode <- as.character(row$run_mode[[1L]] %||% "within_set")
+  if (identical(run_mode, "link_probe")) {
+    rlang::abort(
+      paste0(
+        "step_log append completeness failure: `run_mode = link_probe` is legacy-only and ",
+        "must not be emitted by the current Phase B runtime."
+      )
+    )
+  }
+  is_link_run_mode <- run_mode %in% c(
+    "link_one_spoke",
+    "link_multi_spoke",
+    "link_probe_holdout"
+  )
+  is_probe_run_mode <- identical(run_mode, "link_probe_holdout")
+  holdout_flag <- if ("is_holdout_probe_step" %in% names(row)) {
+    as.logical(row$is_holdout_probe_step[[1L]] %||% FALSE)
+  } else {
+    identical(run_mode, "link_probe_holdout")
+  }
+  drift_flag <- if ("is_drift_probe_step" %in% names(row)) {
+    as.logical(row$is_drift_probe_step[[1L]] %||% FALSE)
+  } else {
+    FALSE
+  }
+  probe_flag <- if ("is_probe_step" %in% names(row)) {
+    as.logical(row$is_probe_step[[1L]] %||% FALSE)
+  } else {
+    is_probe_run_mode
+  }
+  if (!identical(holdout_flag, identical(run_mode, "link_probe_holdout"))) {
+    rlang::abort(
+      "step_log append completeness failure: `is_holdout_probe_step` must match `run_mode`."
+    )
+  }
+  if (!identical(drift_flag, identical(run_mode, "link_probe"))) {
+    rlang::abort(
+      "step_log append completeness failure: `is_drift_probe_step` must match `run_mode`."
+    )
+  }
+  if (!identical(probe_flag, is_probe_run_mode)) {
+    rlang::abort(
+      "step_log append completeness failure: `is_probe_step` must match probe `run_mode`."
+    )
+  }
+
+  is_cross <- row$is_cross_set[[1L]]
+  if (isTRUE(is_cross)) {
+    required_cross <- c("set_i", "set_j", "link_spoke_id", "run_mode", "posterior_win_prob_ij_pre")
+    if (isTRUE(is_link_run_mode) && !isTRUE(is_probe_run_mode)) {
+      required_cross <- c(required_cross, "cross_set_utility_pre")
+    }
+    missing_or_na <- function(col) {
+      if (!col %in% names(row) || length(row[[col]]) < 1L) {
+        return(TRUE)
+      }
+      is.na(row[[col]][[1L]])
+    }
+    bad <- required_cross[vapply(required_cross, missing_or_na, logical(1L))]
+    if (length(bad) > 0L) {
+      rlang::abort(paste0(
+        "step_log append completeness failure for cross-set row: required non-NA columns missing: ",
+        paste(bad, collapse = ", "),
+        "."
+      ))
+    }
+    stage <- as.character(row$round_stage[[1L]] %||% NA_character_)
+    if (stage %in% .adaptive_stage_order() && is.na(row$link_stage[[1L]])) {
+      rlang::abort(
+        "step_log append completeness failure for cross-set row: `link_stage` must be populated for stage-routed steps."
+      )
+    }
+    if (isTRUE(is_link_run_mode) &&
+      !isTRUE(is_probe_run_mode) &&
+      !identical(utility_mode, expected_linking_utility_mode)) {
+      rlang::abort(
+        paste0(
+          "step_log append completeness failure for cross-set row: ",
+          "`utility_mode` must be ", expected_linking_utility_mode, "."
+        )
+      )
+    }
+    if (isTRUE(is_probe_run_mode) &&
+      .adaptive_is_linking_d_optimal_mode(utility_mode, allow_legacy = TRUE)) {
+      rlang::abort(
+        paste0(
+          "step_log append completeness failure for cross-set probe row: ",
+          "`utility_mode` must not use a linking D-optimal audit label."
+        )
+      )
+    }
+    if (isTRUE(is_probe_run_mode) &&
+      !is.na(row$cross_set_utility_pre[[1L]])) {
+      rlang::abort(
+        paste0(
+          "step_log append completeness failure for cross-set probe row: ",
+          "`cross_set_utility_pre` must be NA."
+        )
+      )
+    }
+    posterior_pre <- as.double(row$posterior_win_prob_ij_pre[[1L]] %||% NA_real_)
+    if (!is.finite(posterior_pre) || posterior_pre < 0 || posterior_pre > 1) {
+      rlang::abort(
+        paste0(
+          "step_log append completeness failure for cross-set row: ",
+          "`posterior_win_prob_ij_pre` must be finite in [0,1] and represent P(A wins)."
+        )
+      )
+    }
+  } else if (isFALSE(is_cross)) {
+    if (!is.na(row$link_spoke_id[[1L]])) {
+      rlang::abort(
+        "step_log append completeness failure: non-cross-set rows must set `link_spoke_id = NA`."
+      )
+    }
+    link_only_cols <- c(
+      "link_stage",
+      "delta_spoke_estimate_pre",
+      "delta_spoke_sd_pre",
+      "posterior_win_prob_ij_pre",
+      "posterior_win_prob_pre",
+      "link_transform_policy",
+      "link_transform_state",
+      "cross_set_utility_pre",
+      "log_alpha_spoke_estimate_pre",
+      "log_alpha_spoke_sd_pre",
+      "hub_lock_mode",
+      "hub_lock_kappa"
+    )
+    link_col_present <- function(col) {
+      if (!col %in% names(row) || length(row[[col]]) < 1L) {
+        return(FALSE)
+      }
+      !is.na(row[[col]][[1L]])
+    }
+    bad <- link_only_cols[vapply(link_only_cols, link_col_present, logical(1L))]
+    if (length(bad) > 0L) {
+      rlang::abort(paste0(
+        "step_log append completeness failure: non-cross-set rows must set link-only columns to NA: ",
+        paste(bad, collapse = ", "),
+        "."
+      ))
+    }
+    if (isTRUE(is_link_run_mode) &&
+      !is.na(utility_mode) &&
+      !utility_mode %in% c("pairing_trueskill_u0", "pairing_trueskill_u")) {
+      rlang::abort(
+        "step_log append completeness failure: non-cross-set rows in linking runs must use pairing utility mode or NA."
+      )
+    }
+  }
+
+  invisible(TRUE)
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_d_opt_update_after_commit <- function(state_before, state_after, step_row) {
+  row <- tibble::as_tibble(step_row)
+  if (nrow(row) != 1L) {
+    return(state_after)
+  }
+  if (!isTRUE(row$is_cross_set[[1L]] %||% FALSE)) {
+    return(state_after)
+  }
+  run_mode <- as.character(row$run_mode[[1L]] %||% "within_set")
+  if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
+    return(state_after)
+  }
+  if (.adaptive_is_linking_d_optimal_mode(
+    as.character(row$utility_mode[[1L]] %||% NA_character_),
+    allow_legacy = TRUE
+  ) &&
+    isTRUE(row$is_probe_step[[1L]] %||% FALSE)) {
+    return(state_after)
+  }
+  spoke_id <- as.integer(row$link_spoke_id[[1L]] %||% NA_integer_)
+  if (is.na(spoke_id)) {
+    return(state_after)
+  }
+  i_idx <- as.integer(row$i[[1L]] %||% NA_integer_)
+  j_idx <- as.integer(row$j[[1L]] %||% NA_integer_)
+  if (is.na(i_idx) || is.na(j_idx)) {
+    return(state_after)
+  }
+  i_id <- as.character(state_before$item_ids[[i_idx]] %||% NA_character_)
+  j_id <- as.character(state_before$item_ids[[j_idx]] %||% NA_character_)
+  if (is.na(i_id) || is.na(j_id)) {
+    return(state_after)
+  }
+  controller <- .adaptive_controller_resolve(state_after)
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  set_map <- stats::setNames(as.integer(state_before$items$set_id), as.character(state_before$items$item_id))
+  i_set <- as.integer(set_map[[i_id]] %||% NA_integer_)
+  j_set <- as.integer(set_map[[j_id]] %||% NA_integer_)
+  hub_item <- if (identical(i_set, hub_id)) i_id else if (identical(j_set, hub_id)) j_id else NA_character_
+  spoke_item <- if (identical(i_set, spoke_id)) i_id else if (identical(j_set, spoke_id)) j_id else NA_character_
+  if (is.na(hub_item) || is.na(spoke_item)) {
+    return(state_after)
+  }
+  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
+  if (identical(link_estimation_mode, "anchored_joint")) {
+    accepted_state <- .adaptive_link_anchored_joint_resolve_state(
+      state = state_before,
+      spoke_id = as.integer(spoke_id),
+      controller = controller
+    )
+    spoke_items <- as.character(names(accepted_state$theta_spoke_global_mean))
+    spoke_idx <- as.integer(match(spoke_item, spoke_items))
+    theta_h <- as.double(accepted_state$theta_hub_fixed[[as.character(hub_item)]] %||% NA_real_)
+    theta_x <- as.double(accepted_state$theta_spoke_global_mean[[as.character(spoke_item)]] %||% NA_real_)
+    if (!is.finite(theta_h) || !is.finite(theta_x) || is.na(spoke_idx)) {
+      return(state_after)
+    }
+    judge_params <- .adaptive_link_anchored_joint_judge_params(
+      state = state_before,
+      spoke_id = as.integer(spoke_id),
+      controller = controller,
+      accepted_state = accepted_state
+    )
+    pbar <- .adaptive_link_model_d_pbar(
+      theta_h = theta_h,
+      theta_x = theta_x,
+      beta = as.double(judge_params$beta %||% 0),
+      epsilon = as.double(judge_params$epsilon %||% 0)
+    )
+    if (!is.finite(pbar)) {
+      return(state_after)
+    }
+    info_scale <- as.double(pbar * (1 - pbar))
+    refit_id <- .adaptive_link_refit_window_id(state_after)
+    d_opt_state <- .adaptive_link_d_opt_state_get(
+      controller = controller,
+      refit_id = refit_id,
+      spoke_id = as.integer(spoke_id),
+      transform_mode = NA_character_,
+      link_estimation_mode = "anchored_joint",
+      free_block_dim = length(spoke_items)
+    )
+    uses_diag <- !is.null(d_opt_state$it_diag)
+    if (!isTRUE(uses_diag) &&
+      (!is.matrix(d_opt_state$it) || any(dim(d_opt_state$it) != c(length(spoke_items), length(spoke_items))))) {
+      return(state_after)
+    }
+    d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
+    current_prefix <- paste0(as.integer(refit_id), "::")
+    map_names <- names(d_opt_map)
+    if (is.null(map_names)) {
+      d_opt_map <- list()
+    } else {
+      keep <- startsWith(as.character(map_names), current_prefix)
+      d_opt_map <- d_opt_map[keep]
+    }
+    if (isTRUE(uses_diag)) {
+      d_opt_state$it_diag[[spoke_idx]] <- as.double(d_opt_state$it_diag[[spoke_idx]] + info_scale)
+    } else {
+      d_opt_state$it[spoke_idx, spoke_idx] <- as.double(d_opt_state$it[spoke_idx, spoke_idx] + info_scale)
+      d_opt_state$it <- as.matrix((d_opt_state$it + t(d_opt_state$it)) / 2)
+    }
+    d_opt_state$it_n_pairs_accumulated <- as.integer(d_opt_state$it_n_pairs_accumulated + 1L)
+    d_opt_map[[d_opt_state$key]] <- d_opt_state
+    controller$link_d_opt_it_by_spoke <- d_opt_map
+    state_after$controller <- controller
+    return(state_after)
+  }
+  transform_state <- .adaptive_link_transform_state_for_spoke(controller, as.integer(spoke_id))
+  stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[as.character(spoke_id)]] %||% list()
+  delta <- as.double(row$delta_spoke_estimate_pre[[1L]] %||% stats_row$delta_spoke_mean %||% 0)
+  if (!is.finite(delta)) {
+    delta <- 0
+  }
+  log_alpha <- as.double(row$log_alpha_spoke_estimate_pre[[1L]] %||% stats_row$log_alpha_spoke_mean %||% NA_real_)
+  alpha <- if (identical(transform_state, "shift_scale") && is.finite(log_alpha)) exp(log_alpha) else 1
+  theta_hub_map <- .adaptive_link_safe_theta_map(
+    state = state_before,
+    set_id = hub_id,
+    prefer_current = identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
+  )
+  theta_spoke_raw_map <- .adaptive_link_safe_theta_map(
+    state = state_before,
+    set_id = as.integer(spoke_id),
+    prefer_current = identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
+  )
+  theta_h <- as.double(theta_hub_map[as.character(hub_item)] %||% NA_real_)
+  theta_raw_x <- as.double(theta_spoke_raw_map[as.character(spoke_item)] %||% NA_real_)
+  if (!is.finite(theta_h) || !is.finite(theta_raw_x)) {
+    return(state_after)
+  }
+  startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(state_before, spoke_id = as.integer(spoke_id))
+  judge_params <- .adaptive_link_judge_params(
+    state_before,
+    controller,
+    scope = "link",
+    allow_cold_start_fallback = isTRUE(startup_gap),
+    expected_link_params = !isTRUE(startup_gap)
+  )
+  pbar <- .adaptive_link_model_d_pbar(
+    theta_h = theta_h,
+    theta_x = as.double(delta + alpha * theta_raw_x),
+    beta = as.double(judge_params$beta %||% 0),
+    epsilon = as.double(judge_params$epsilon %||% 0)
+  )
+  if (!is.finite(pbar)) {
+    return(state_after)
+  }
+  g <- .adaptive_link_info_gradient(
+    transform_mode = transform_state,
+    alpha = alpha,
+    theta_raw_x = theta_raw_x
+  )
+  ipair <- as.matrix(as.double(pbar * (1 - pbar)) * (g %*% t(g)))
+  refit_id <- .adaptive_link_refit_window_id(state_after)
+  d_opt_state <- .adaptive_link_d_opt_state_get(
+    controller = controller,
+    refit_id = refit_id,
+    spoke_id = as.integer(spoke_id),
+    transform_mode = transform_state
+  )
+  if (!is.matrix(d_opt_state$it) || any(dim(d_opt_state$it) != dim(ipair))) {
+    return(state_after)
+  }
+  d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
+  current_prefix <- paste0(as.integer(refit_id), "::")
+  map_names <- names(d_opt_map)
+  if (is.null(map_names)) {
+    d_opt_map <- list()
+  } else {
+    keep <- startsWith(as.character(map_names), current_prefix)
+    d_opt_map <- d_opt_map[keep]
+  }
+  d_opt_state$it <- as.matrix((d_opt_state$it + ipair + t(d_opt_state$it + ipair)) / 2)
+  d_opt_state$it_n_pairs_accumulated <- as.integer(d_opt_state$it_n_pairs_accumulated + 1L)
+  d_opt_map[[d_opt_state$key]] <- d_opt_state
+  controller$link_d_opt_it_by_spoke <- d_opt_map
+  state_after$controller <- controller
+  state_after
+}
+
+#' @keywords internal
+#' @noRd
+.adaptive_link_refit_summary_update_after_commit <- function(state_before, state_after, step_row) {
+  row <- tibble::as_tibble(step_row)
+  if (nrow(row) != 1L) {
+    return(state_after)
+  }
+  if (is.na(as.integer(row$pair_id[[1L]] %||% NA_integer_))) {
+    return(state_after)
+  }
+  if (!isTRUE(row$is_cross_set[[1L]] %||% FALSE)) {
+    return(state_after)
+  }
+  run_mode <- as.character(row$run_mode[[1L]] %||% NA_character_)
+  if (!run_mode %in% c("link_one_spoke", "link_multi_spoke", "link_probe_holdout")) {
+    return(state_after)
+  }
+  spoke_id <- as.integer(row$link_spoke_id[[1L]] %||% NA_integer_)
+  if (is.na(spoke_id)) {
+    return(state_after)
+  }
+  refit_id <- as.integer(.adaptive_link_refit_window_id(state_after))
+  key <- .adaptive_link_refit_spoke_key(refit_id = refit_id, spoke_id = spoke_id)
+  cache <- .adaptive_link_refit_summary_cache(state_after)
+  entry <- cache[[key]] %||% .adaptive_link_refit_summary_current(
+    state = state_after,
+    refit_id = refit_id,
+    spoke_id = spoke_id,
+    refit_context = list(last_refit_step = as.integer(state_after$refit_meta$last_refit_step %||% 0L))
+  )
+  entry <- .adaptive_link_refit_summary_validate(
+    entry = entry,
+    refit_id = refit_id,
+    spoke_id = spoke_id,
+    context = "cache"
+  )
+
+  ids <- as.character(state_before$item_ids %||% character())
+  a_idx <- as.integer(row$A[[1L]] %||% NA_integer_)
+  b_idx <- as.integer(row$B[[1L]] %||% NA_integer_)
+  if (is.na(a_idx) || is.na(b_idx) || a_idx < 1L || b_idx < 1L ||
+    a_idx > length(ids) || b_idx > length(ids)) {
+    rlang::abort(
+      paste0(
+        "Phase B refit summary cache invariant failed for refit_id=",
+        as.integer(refit_id),
+        ", spoke_id=",
+        as.integer(spoke_id),
+        ": committed cross-set cache update requires valid `A`/`B` item indices."
+      )
+    )
+  }
+  pair_key <- make_unordered_key(ids[[a_idx]], ids[[b_idx]])
+  pair_keys_by_spoke <- .adaptive_link_unique_cross_pair_keys(state_after)
+  pair_key_set <- sort(unique(as.character(pair_keys_by_spoke[[as.character(spoke_id)]] %||% character())))
+  if (!pair_key %in% pair_key_set) {
+    pair_key_set <- sort(c(pair_key_set, pair_key))
+  }
+  pair_keys_by_spoke[[as.character(spoke_id)]] <- pair_key_set
+
+  is_probe <- isTRUE(.adaptive_link_is_holdout_probe_rows(row)[[1L]])
+  entry$n_pairs_cross_set_done <- as.integer(entry$n_pairs_cross_set_done + 1L)
+  entry$n_unique_cross_pairs_seen <- as.integer(length(pair_key_set))
+  entry$n_cross_edges_total_since_last_refit <- as.integer(entry$n_cross_edges_total_since_last_refit + 1L)
+  if (isTRUE(is_probe)) {
+    entry$n_pairs_cross_set_probe_done <- as.integer(entry$n_pairs_cross_set_probe_done + 1L)
+    entry$n_cross_edges_probe_since_last_refit <- as.integer(entry$n_cross_edges_probe_since_last_refit + 1L)
+    if (as.character(row$fallback_used[[1L]] %||% NA_character_) %in%
+      c("probe_panel_fixed_refit", "probe_panel_acceleration")) {
+      entry$probe_panel_acceleration_used_since_last_refit <- TRUE
+    }
+  } else {
+    entry$n_pairs_cross_set_active_done <- as.integer(entry$n_pairs_cross_set_active_done + 1L)
+    entry$n_cross_edges_active_since_last_refit <- as.integer(entry$n_cross_edges_active_since_last_refit + 1L)
+    stage_name <- as.character(row$link_stage[[1L]] %||% row$round_stage[[1L]] %||% NA_character_)
+    if (!stage_name %in% .adaptive_stage_order()) {
+      return(state_after)
+    }
+    entry$stage_realized[[stage_name]] <- as.integer(entry$stage_realized[[stage_name]] %||% 0L) + 1L
+  }
+
+  entry <- .adaptive_link_refit_summary_validate(
+    entry = entry,
+    refit_id = refit_id,
+    spoke_id = spoke_id,
+    context = "cache"
+  )
+  state_after$refit_meta <- state_after$refit_meta %||% list()
+  state_after$refit_meta$link_unique_cross_pair_keys_by_spoke <- pair_keys_by_spoke
+  .adaptive_link_refit_summary_store(state_after, entry)
+}
+
+#' @keywords internal
+#' @noRd
 apply_step_update <- function(state, step) {
   out <- state
+  if (!all(names(schema_step_log) %in% names(out$step_log))) {
+    missing <- setdiff(names(schema_step_log), names(out$step_log))
+    for (col in missing) {
+      out$step_log[[col]] <- rep_len(.adaptive_schema_typed_na(schema_step_log[[col]]), nrow(out$step_log))
+    }
+    out$step_log <- out$step_log[, names(schema_step_log), drop = FALSE]
+  }
   out$step_log <- append_step_log(out$step_log, step$row)
 
   if (!isTRUE(step$is_valid)) {
     return(out)
   }
 
+  new_history <- tibble::tibble(
+    A_id = as.character(step$A_id),
+    B_id = as.character(step$B_id),
+    is_probe_step = FALSE
+  )
+  committed_results_cache <- .adaptive_committed_results_resolve(state)
+  cross_edges_cache <- .adaptive_link_cross_edges_resolve(state)
+
+  if (isTRUE(step$row$is_probe_step %||% FALSE)) {
+    out <- .adaptive_link_probe_register_commit(out, step$row)
+    out$refit_meta <- out$refit_meta %||% list()
+    out$refit_meta$committed_results_cache <- .adaptive_committed_results_update(
+      cache = committed_results_cache,
+      step_row = step$row,
+      A_id = step$A_id,
+      B_id = step$B_id,
+      Y = step$Y
+    )
+    out$refit_meta$committed_results_cache_built <- TRUE
+    out$refit_meta$link_cross_edges_by_spoke <- .adaptive_link_cross_edges_update(
+      cache = cross_edges_cache,
+      state = out,
+      step_row = step$row,
+      A_id = step$A_id,
+      B_id = step$B_id,
+      Y = step$Y
+    )
+    out$refit_meta$link_cross_edges_cache_built <- TRUE
+    out <- .adaptive_link_refit_summary_update_after_commit(
+      state_before = state,
+      state_after = out,
+      step_row = step$row
+    )
+    return(out)
+  }
+
+  history_state <- .adaptive_history_state_resolve(
+    state,
+    ids = as.character(state$item_ids)
+  )
+  out$history_pairs <- dplyr::bind_rows(out$history_pairs, new_history)
+  out$history_state <- .adaptive_history_state_update(history_state, step$A_id, step$B_id)
+  out$refit_meta$phase_a_committed_pairs_by_set <- .adaptive_phase_a_committed_pairs_update(
+    cache = out$refit_meta$phase_a_committed_pairs_by_set %||% NULL,
+    state = out,
+    A_id = step$A_id,
+    B_id = step$B_id
+  )
+  out$refit_meta$phase_a_committed_pairs_history_n <- as.integer(nrow(out$history_pairs))
+  out$linking <- out$linking %||% list()
+  out$linking$phase_a <- out$linking$phase_a %||% list()
+  out$linking$phase_a$within_set_evidence_by_set <- .adaptive_phase_a_within_set_evidence_update(
+    cache = out$linking$phase_a$within_set_evidence_by_set %||% NULL,
+    state = out,
+    step_row = step$row,
+    A_id = step$A_id,
+    B_id = step$B_id,
+    Y = step$Y
+  )
+  out$refit_meta$committed_results_cache <- .adaptive_committed_results_update(
+    cache = committed_results_cache,
+    step_row = step$row,
+    A_id = step$A_id,
+    B_id = step$B_id,
+    Y = step$Y
+  )
+  out$refit_meta$committed_results_cache_built <- TRUE
+  out$refit_meta$link_cross_edges_by_spoke <- .adaptive_link_cross_edges_update(
+    cache = cross_edges_cache,
+    state = out,
+    step_row = step$row,
+    A_id = step$A_id,
+    B_id = step$B_id,
+    Y = step$Y
+  )
+  out$refit_meta$link_cross_edges_cache_built <- TRUE
+
   winner_id <- if (step$Y == 1L) step$A_id else step$B_id
   loser_id <- if (step$Y == 1L) step$B_id else step$A_id
   out$trueskill_state <- update_trueskill_state(out$trueskill_state, winner_id, loser_id)
 
-  new_history <- tibble::tibble(
-    A_id = as.character(step$A_id),
-    B_id = as.character(step$B_id)
-  )
-  out$history_pairs <- dplyr::bind_rows(out$history_pairs, new_history)
-
   items <- out$trueskill_state$items
   item_ids <- as.character(items$item_id)
-  counts <- .adaptive_pair_counts(out$history_pairs, item_ids)
+  counts <- .adaptive_history_state_counts(out$history_state, item_ids)
   degree <- as.integer(counts$deg[item_ids])
 
   rows <- tibble::tibble(
@@ -188,7 +1012,11 @@ apply_step_update <- function(state, step) {
     degree = degree
   )
   out$item_step_log <- append_item_step_log(out$item_step_log, rows)
-  out
+  .adaptive_link_refit_summary_update_after_commit(
+    state_before = state,
+    state_after = out,
+    step_row = step$row
+  )
 }
 
 #' @keywords internal
@@ -204,26 +1032,171 @@ run_one_step <- function(state, judge, ...) {
   now_fn <- state$meta$now_fn %||% function() Sys.time()
   step_id <- as.integer(nrow(state$step_log) + 1L)
   timestamp <- now_fn()
+  controller <- .adaptive_controller_resolve(state)
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  .adaptive_assert_step_entry_invariants(state, controller = controller, phase_ctx = phase_ctx)
+  if (.adaptive_link_mode_active(controller) &&
+    identical(phase_ctx$phase, "phase_b") &&
+    isTRUE(.adaptive_link_all_spokes_stopped(state))) {
+    return(state)
+  }
+  if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
+    active_phase_b_spokes <- .adaptive_link_effective_active_spokes(
+      state = state,
+      controller = controller,
+      refit_id = .adaptive_link_refit_window_id(state),
+      exclude_exhausted = TRUE
+    )
+    if (length(active_phase_b_spokes) < 1L) {
+      return(state)
+    }
+    state$controller <- controller
+    current_refit_id <- as.integer(.adaptive_link_refit_window_id(state))
+    cached_refit_id <- as.integer(state$controller$link_budget_refit_id %||% NA_integer_)
+    cached_budget_map <- state$controller$link_budget_map %||% list()
+    if (!identical(cached_refit_id, current_refit_id) || length(cached_budget_map) < 1L) {
+      state$controller$link_budget_refit_id <- current_refit_id
+      state$controller$link_budget_map <- .adaptive_link_budget_map_for_refit(
+        state = state,
+        controller = state$controller,
+        eligible_spoke_ids = as.integer(active_phase_b_spokes)
+      )
+    }
+    controller <- state$controller
+    state <- .adaptive_link_probe_ensure_panels(
+      state,
+      controller = controller,
+      spoke_ids = as.integer(active_phase_b_spokes)
+    )
+    state <- .adaptive_link_refit_summary_ensure_current_entries(
+      state = state,
+      spoke_ids = as.integer(active_phase_b_spokes),
+      refit_id = current_refit_id
+    )
+  }
 
   if (.adaptive_warm_start_active(state)) {
     selection <- .adaptive_warm_start_selection(state, step_id = step_id)
   } else {
+    maybe_replace_with_holdout <- function(selection, allow_when_active, eligible_spoke_ids) {
+      probe_spoke_id <- .adaptive_link_probe_next_holdout_spoke(
+        state,
+        controller,
+        eligible_spoke_ids = eligible_spoke_ids,
+        allow_when_active = allow_when_active
+      )
+      if (!is.na(probe_spoke_id)) {
+        probe_selection <- .adaptive_link_probe_select_holdout(
+          state,
+          step_id = step_id,
+          spoke_id = probe_spoke_id
+        )
+        if (!is.null(probe_selection) && nrow(tibble::as_tibble(probe_selection)) != 0L) {
+          active_fallback_path <- as.character(selection$fallback_path %||% NA_character_)
+          active_fallback_path <- active_fallback_path[!is.na(active_fallback_path) & nzchar(active_fallback_path)]
+          fallback_suffix <- if (isTRUE(allow_when_active)) {
+            "probe_panel_fixed_refit"
+          } else {
+            "probe_panel_after_active_unavailable"
+          }
+          probe_selection$fallback_used <- fallback_suffix
+          probe_selection$fallback_path <- paste(
+            c(active_fallback_path, fallback_suffix),
+            collapse = ">"
+          )
+          return(probe_selection)
+        }
+      }
+      selection
+    }
+
     state <- .adaptive_refresh_round_anchors(state)
     selection <- select_next_pair(state, step_id = step_id)
+    if (.adaptive_link_mode_active(controller) &&
+      identical(phase_ctx$phase, "phase_b")) {
+      if (isTRUE(selection$candidate_starved)) {
+        selection <- maybe_replace_with_holdout(
+          selection = selection,
+          allow_when_active = FALSE,
+          eligible_spoke_ids = .adaptive_link_effective_active_spokes(
+            state = state,
+            controller = controller,
+            refit_id = .adaptive_link_refit_window_id(state),
+            exclude_exhausted = TRUE
+          )
+        )
+      } else {
+        active_spoke_id <- as.integer(selection$link_spoke_id_selected %||% NA_integer_)
+        if (is.na(active_spoke_id) &&
+          !is.na(selection$i %||% NA_integer_) &&
+          !is.na(selection$j %||% NA_integer_)) {
+          set_i <- as.integer(state$items$set_id[[selection$i]])
+          set_j <- as.integer(state$items$set_id[[selection$j]])
+          hub_id <- as.integer(controller$hub_id %||% 1L)
+          if (identical(set_i, hub_id) && !identical(set_j, hub_id)) {
+            active_spoke_id <- set_j
+          } else if (identical(set_j, hub_id) && !identical(set_i, hub_id)) {
+            active_spoke_id <- set_i
+          }
+        }
+        if (!is.na(active_spoke_id)) {
+          selection <- maybe_replace_with_holdout(
+            selection = selection,
+            allow_when_active = TRUE,
+            eligible_spoke_ids = as.integer(active_spoke_id)
+          )
+        }
+      }
+    }
   }
 
   is_valid <- FALSE
   invalid_reason <- NA_character_
   Y <- NA_integer_
 
+  i_id <- NA_character_
+  j_id <- NA_character_
   A_id <- NA_character_
   B_id <- NA_character_
+  unordered_key <- NA_character_
+  ordered_key <- NA_character_
+  judge_backend <- NA_character_
+  judge_model <- NA_character_
+  judge_endpoint <- NA_character_
+  judge_valid <- NA
+  judge_invalid_reason <- NA_character_
+  llm_status_code <- NA_integer_
+  llm_error_message <- NA_character_
+  llm_custom_id <- NA_character_
+  prompt_tokens <- NA_real_
+  completion_tokens <- NA_real_
+  total_tokens <- NA_real_
+  raw_response_json <- NA_character_
+
+  if (!isTRUE(selection$candidate_starved)) {
+    if (!is.na(selection$i)) {
+      i_id <- as.character(state$item_ids[[selection$i]])
+    }
+    if (!is.na(selection$j)) {
+      j_id <- as.character(state$item_ids[[selection$j]])
+    }
+    if (!is.na(selection$A)) {
+      A_id <- as.character(state$item_ids[[selection$A]])
+    }
+    if (!is.na(selection$B)) {
+      B_id <- as.character(state$item_ids[[selection$B]])
+    }
+    if (!is.na(i_id) && !is.na(j_id)) {
+      unordered_key <- make_unordered_key(i_id, j_id)
+    }
+    if (!is.na(A_id) && !is.na(B_id)) {
+      ordered_key <- make_ordered_key(A_id, B_id)
+    }
+  }
 
   if (!isTRUE(selection$candidate_starved) &&
     !is.na(selection$A) &&
     !is.na(selection$B)) {
-    A_id <- state$item_ids[[selection$A]]
-    B_id <- state$item_ids[[selection$B]]
 
     A_item <- state$items[state$items$item_id == A_id, , drop = FALSE]
     B_item <- state$items[state$items$item_id == B_id, , drop = FALSE]
@@ -233,6 +1206,18 @@ run_one_step <- function(state, judge, ...) {
     is_valid <- isTRUE(validated$is_valid)
     invalid_reason <- validated$invalid_reason
     Y <- as.integer(validated$Y)
+    judge_backend <- as.character(validated$judge_backend %||% NA_character_)
+    judge_model <- as.character(validated$judge_model %||% NA_character_)
+    judge_endpoint <- as.character(validated$judge_endpoint %||% NA_character_)
+    judge_valid <- as.logical(validated$judge_valid %||% NA)
+    judge_invalid_reason <- as.character(validated$judge_invalid_reason %||% NA_character_)
+    llm_status_code <- as.integer(validated$llm_status_code %||% NA_integer_)
+    llm_error_message <- as.character(validated$llm_error_message %||% NA_character_)
+    llm_custom_id <- as.character(validated$llm_custom_id %||% NA_character_)
+    prompt_tokens <- as.double(validated$prompt_tokens %||% NA_real_)
+    completion_tokens <- as.double(validated$completion_tokens %||% NA_real_)
+    total_tokens <- as.double(validated$total_tokens %||% NA_real_)
+    raw_response_json <- as.character(validated$raw_response_json %||% NA_character_)
   } else {
     invalid_reason <- "candidate_starved"
   }
@@ -246,9 +1231,182 @@ run_one_step <- function(state, judge, ...) {
   }
 
   pair_id <- if (isTRUE(is_valid)) {
-    as.integer(nrow(state$history_pairs) + 1L)
+    step_log <- tibble::as_tibble(state$step_log %||% tibble::tibble())
+    as.integer(sum(!is.na(step_log$pair_id), na.rm = TRUE) + 1L)
   } else {
     NA_integer_
+  }
+
+  run_mode <- as.character(selection$run_mode %||% controller$run_mode %||% "within_set")
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
+  link_transform_policy <- as.character(controller$link_transform_policy %||% NA_character_)
+  link_transform_state <- .adaptive_default_link_transform_state(link_transform_policy)
+  utility_mode <- as.character(selection$utility_mode %||% NA_character_)
+  hub_lock_mode <- as.character(controller$hub_lock_mode %||% NA_character_)
+  hub_lock_kappa <- as.double(controller$hub_lock_kappa %||% NA_real_)
+  set_i <- if (!is.na(selection$i)) {
+    as.integer(state$items$set_id[[selection$i]])
+  } else {
+    NA_integer_
+  }
+  set_j <- if (!is.na(selection$j)) {
+    as.integer(state$items$set_id[[selection$j]])
+  } else {
+    NA_integer_
+  }
+  is_cross_set <- if (!is.na(set_i) && !is.na(set_j)) {
+    isTRUE(set_i != set_j)
+  } else {
+    NA
+  }
+  link_spoke_id <- if (isTRUE(is_cross_set) && !is.na(hub_id)) {
+    if (identical(set_i, hub_id)) {
+      set_j
+    } else if (identical(set_j, hub_id)) {
+      set_i
+    } else {
+      NA_integer_
+    }
+  } else {
+    NA_integer_
+  }
+  selected_spoke_id <- as.integer(selection$link_spoke_id_selected %||% NA_integer_)
+  if (isTRUE(is_cross_set) && is.na(link_spoke_id)) {
+    if (!is.na(selected_spoke_id) && selected_spoke_id %in% c(set_i, set_j)) {
+      link_spoke_id <- selected_spoke_id
+    }
+  }
+  if (is.na(link_spoke_id) &&
+    isTRUE(selection$candidate_starved %||% FALSE) &&
+    !is.na(selected_spoke_id)) {
+    link_spoke_id <- selected_spoke_id
+  }
+  if (isTRUE(is_cross_set) && !is.na(link_spoke_id) &&
+    isTRUE(.adaptive_link_spoke_is_frozen(controller, link_spoke_id))) {
+    rlang::abort(
+      paste0(
+        "Phase B retirement invariant failed: runtime attempted to emit a cross-set step for frozen ",
+        "spoke_id=", as.integer(link_spoke_id),
+        "."
+      )
+    )
+  }
+  if (is.character(selection$run_mode) && length(selection$run_mode) == 1L &&
+    !is.na(selection$run_mode) && selection$run_mode != "") {
+    run_mode <- as.character(selection$run_mode)
+  }
+  link_stats <- controller$link_refit_stats_by_spoke %||% list()
+  spoke_key <- as.character(link_spoke_id)
+  spoke_stats <- if (!is.na(link_spoke_id)) link_stats[[spoke_key]] %||% list() else list()
+  if (!is.na(link_spoke_id)) {
+    link_transform_state <- as.character(spoke_stats$link_transform_state %||%
+      .adaptive_link_transform_state_for_spoke(controller, link_spoke_id))
+  }
+  link_stage <- if (isTRUE(is_cross_set) &&
+    selection$round_stage %in% c("anchor_link", "long_link", "mid_link", "local_link", "probe_panel")) {
+    selection$round_stage
+  } else {
+    NA_character_
+  }
+  is_link_run_mode <- run_mode %in% c(
+    "link_one_spoke",
+    "link_multi_spoke",
+    "link_probe_holdout"
+  )
+  is_probe_step <- isTRUE(is_cross_set) && identical(run_mode, "link_probe_holdout")
+  is_holdout_probe_step <- isTRUE(is_probe_step) && identical(run_mode, "link_probe_holdout")
+  is_drift_probe_step <- FALSE
+  if (isTRUE(is_probe_step)) {
+    utility_mode <- NA_character_
+  }
+  is_phase_b_link_ordering_step <- isTRUE(is_cross_set) &&
+    isTRUE(is_link_run_mode) &&
+    !isTRUE(is_probe_step) &&
+    identical(phase_ctx$phase, "phase_b") &&
+    !is.na(link_stage)
+  cross_set_utility_pre <- if (isTRUE(is_cross_set) &&
+    isTRUE(is_link_run_mode)) {
+    explicit_utility <- as.double(selection$cross_set_utility_pre %||% NA_real_)
+    if (is.finite(explicit_utility)) {
+      explicit_utility
+    } else if (.adaptive_is_linking_d_optimal_mode(utility_mode, allow_legacy = TRUE)) {
+      d_opt_utility <- as.double(selection$link_d_opt_gain %||% NA_real_)
+      if (isTRUE(is_phase_b_link_ordering_step) && !is.finite(d_opt_utility)) {
+        rlang::abort(sprintf(
+          paste0(
+            "run_one_step invariant failed: canonical D-opt ordering utility is missing/non-finite ",
+            "for stage=%s, spoke_id=%s while preparing `cross_set_utility_pre`."
+          ),
+          as.character(link_stage),
+          as.integer(link_spoke_id)
+        ))
+      }
+      as.double(
+        if (isTRUE(is_phase_b_link_ordering_step) || is.finite(d_opt_utility)) {
+          d_opt_utility
+        } else {
+          selection$link_u %||% selection$U0_ij %||% NA_real_
+        }
+      )
+    } else {
+      NA_real_
+    }
+  } else {
+    NA_real_
+  }
+  delta_spoke_estimate_pre <- if (isTRUE(is_cross_set)) {
+    as.double(spoke_stats$delta_spoke_mean %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  delta_spoke_sd_pre <- if (isTRUE(is_cross_set)) {
+    as.double(spoke_stats$delta_spoke_sd %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  posterior_win_prob_ij_pre <- if (isTRUE(is_cross_set)) {
+    as.double(selection$p_ij %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  posterior_win_prob_pre <- posterior_win_prob_ij_pre
+  link_transform_policy <- if (isTRUE(is_cross_set)) {
+    link_transform_policy
+  } else {
+    NA_character_
+  }
+  link_transform_state <- if (isTRUE(is_cross_set)) {
+    link_transform_state
+  } else {
+    NA_character_
+  }
+  if (!is.character(utility_mode) || length(utility_mode) != 1L || is.na(utility_mode) || utility_mode == "") {
+    utility_mode <- NA_character_
+  }
+  log_alpha_spoke_estimate_pre <- if (isTRUE(is_cross_set)) {
+    as.double(spoke_stats$log_alpha_spoke_mean %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  log_alpha_spoke_sd_pre <- if (isTRUE(is_cross_set)) {
+    as.double(spoke_stats$log_alpha_spoke_sd %||% NA_real_)
+  } else {
+    NA_real_
+  }
+  hub_lock_mode <- if (isTRUE(is_cross_set)) {
+    hub_lock_mode
+  } else {
+    NA_character_
+  }
+  hub_lock_kappa <- if (isTRUE(is_cross_set)) {
+    if (identical(hub_lock_mode, "soft_lock")) {
+      hub_lock_kappa
+    } else {
+      NA_real_
+    }
+  } else {
+    NA_real_
   }
 
   step_row <- list(
@@ -257,10 +1415,28 @@ run_one_step <- function(state, judge, ...) {
     pair_id = pair_id,
     i = selection$i,
     j = selection$j,
+    i_id = i_id,
+    j_id = j_id,
     A = selection$A,
     B = selection$B,
+    A_id = A_id,
+    B_id = B_id,
+    unordered_key = unordered_key,
+    ordered_key = ordered_key,
     Y = if (isTRUE(is_valid)) Y else NA_integer_,
     status = status,
+    judge_backend = judge_backend,
+    judge_model = judge_model,
+    judge_endpoint = judge_endpoint,
+    judge_valid = judge_valid,
+    judge_invalid_reason = judge_invalid_reason,
+    llm_status_code = llm_status_code,
+    llm_error_message = llm_error_message,
+    llm_custom_id = llm_custom_id,
+    prompt_tokens = prompt_tokens,
+    completion_tokens = completion_tokens,
+    total_tokens = total_tokens,
+    raw_response_json = raw_response_json,
     round_id = selection$round_id,
     round_stage = selection$round_stage,
     pair_type = selection$pair_type,
@@ -286,11 +1462,16 @@ run_one_step <- function(state, judge, ...) {
     fallback_used = selection$fallback_used,
     fallback_path = selection$fallback_path,
     starvation_reason = selection$starvation_reason,
-    n_candidates_generated = selection$n_candidates_generated,
-    n_candidates_after_hard_filters = selection$n_candidates_after_hard_filters,
-    n_candidates_after_duplicates = selection$n_candidates_after_duplicates,
-    n_candidates_after_star_caps = selection$n_candidates_after_star_caps,
-    n_candidates_scored = selection$n_candidates_scored,
+    n_candidates_generated = selection$n_candidates_generated %||% NA_integer_,
+    n_candidates_after_route_filters = selection$n_candidates_after_route_filters %||% NA_integer_,
+    n_candidates_after_active_domain = selection$n_candidates_after_active_domain %||% NA_integer_,
+    n_candidates_after_stage_filters = selection$n_candidates_after_stage_filters %||% NA_integer_,
+    n_candidates_after_exposure_filters = selection$n_candidates_after_exposure_filters %||% NA_integer_,
+    n_candidates_after_hard_filters = selection$n_candidates_after_hard_filters %||% NA_integer_,
+    n_candidates_after_duplicates = selection$n_candidates_after_duplicates %||% NA_integer_,
+    n_candidates_after_star_caps = selection$n_candidates_after_star_caps %||% NA_integer_,
+    n_candidates_scored = selection$n_candidates_scored %||% NA_integer_,
+    hard_filter_collapse_stage = selection$hard_filter_collapse_stage %||% NA_character_,
     deg_i = selection$deg_i,
     deg_j = selection$deg_j,
     recent_deg_i = selection$recent_deg_i,
@@ -302,8 +1483,32 @@ run_one_step <- function(state, judge, ...) {
     p_ij = if (isTRUE(is_valid)) selection$p_ij else NA_real_,
     U0_ij = if (isTRUE(is_valid)) selection$U0_ij else NA_real_,
     star_cap_rejects = selection$star_cap_rejects,
-    star_cap_reject_items = selection$star_cap_reject_items
+    star_cap_reject_items = selection$star_cap_reject_items,
+    set_i = set_i,
+    set_j = set_j,
+    is_cross_set = is_cross_set,
+    is_probe_step = is_probe_step,
+    is_holdout_probe_step = is_holdout_probe_step,
+    is_drift_probe_step = is_drift_probe_step,
+    link_spoke_id = link_spoke_id,
+    run_mode = run_mode,
+    link_estimation_mode = if (isTRUE(is_cross_set)) link_estimation_mode else NA_character_,
+    link_stage = link_stage,
+    delta_spoke_estimate_pre = delta_spoke_estimate_pre,
+    delta_spoke_sd_pre = delta_spoke_sd_pre,
+    dist_stratum_global = as.integer(selection$dist_stratum_global %||% NA_integer_),
+    posterior_win_prob_ij_pre = posterior_win_prob_ij_pre,
+    posterior_win_prob_pre = posterior_win_prob_pre,
+    link_transform_policy = link_transform_policy,
+    link_transform_state = link_transform_state,
+    cross_set_utility_pre = cross_set_utility_pre,
+    utility_mode = utility_mode,
+    log_alpha_spoke_estimate_pre = log_alpha_spoke_estimate_pre,
+    log_alpha_spoke_sd_pre = log_alpha_spoke_sd_pre,
+    hub_lock_mode = hub_lock_mode,
+    hub_lock_kappa = hub_lock_kappa
   )
+  .adaptive_assert_step_row_linking_completeness(step_row)
 
   out <- apply_step_update(state, list(
     row = step_row,
@@ -313,6 +1518,35 @@ run_one_step <- function(state, judge, ...) {
     B_id = B_id,
     Y = Y
   ))
+  if (isTRUE(is_valid)) {
+    out <- .adaptive_link_d_opt_update_after_commit(
+      state_before = state,
+      state_after = out,
+      step_row = step_row
+    )
+  }
+
+  if (!is.na(selected_spoke_id)) {
+    out$controller <- .adaptive_controller_resolve(out)
+    spoke_key <- as.character(as.integer(selected_spoke_id))
+    bins_map <- out$controller$link_stage_coverage_bins_used %||% list()
+    source_map <- out$controller$link_stage_coverage_source %||% list()
+    is_probe_selection <- isTRUE(step_row$is_probe_step %||% FALSE)
+    next_bins <- as.integer(selection$coverage_bins_used %||% NA_integer_)
+    next_source <- as.character(selection$coverage_source %||% NA_character_)
+    if (!isTRUE(is_probe_selection) && !is.na(next_bins)) {
+      bins_map[[spoke_key]] <- as.integer(next_bins)
+    }
+    if (!isTRUE(is_probe_selection) &&
+      length(next_source) == 1L &&
+      !is.na(next_source) &&
+      nzchar(next_source)) {
+      source_map[[spoke_key]] <- as.character(next_source)
+    }
+    out$controller$current_link_spoke_id <- as.integer(selected_spoke_id)
+    out$controller$link_stage_coverage_bins_used <- bins_map
+    out$controller$link_stage_coverage_source <- source_map
+  }
 
   if (.adaptive_warm_start_active(out) && isTRUE(is_valid)) {
     out$warm_start_idx <- as.integer(out$warm_start_idx %||% 1L) + 1L

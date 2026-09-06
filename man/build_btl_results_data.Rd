@@ -61,3 +61,10 @@ ids <- sort(unique(c(results_tbl$A_id, results_tbl$B_id)))
 ids
 
 }
+\seealso{
+\code{\link[=fit_bayes_btl_mcmc]{fit_bayes_btl_mcmc()}}
+
+Other Bayesian models:
+\code{\link[=fit_bayes_btl_mcmc]{fit_bayes_btl_mcmc()}}
+}
+\concept{Bayesian models}

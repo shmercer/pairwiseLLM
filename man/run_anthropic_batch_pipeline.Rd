@@ -134,9 +134,8 @@ Temperature and thinking-mode behaviour are controlled by
 \itemize{
 \item When \code{reasoning = "none"} (no extended thinking):
 \itemize{
-\item The default \code{temperature} is \code{0} (deterministic),
-unless you explicitly supply a \code{temperature} argument via
-\code{...}.
+\item Omitted \code{temperature} and \code{top_p} values are not
+sent, so the model/provider defaults apply.
 \item The default \code{max_tokens} is \code{768}, unless you
 override it via \code{max_tokens} in \code{...}.
 }
@@ -152,8 +151,8 @@ this constraint also produce an error.
 }
 }
 
-Therefore, when you run batches without extended thinking (the usual case),
-the effective default is a temperature of \code{0}. When you explicitly use
+Therefore, batches without extended thinking use model-default sampling.
+When you explicitly use
 extended thinking (either by setting \code{reasoning = "enabled"} or by
 using \code{include_thoughts = TRUE}), Anthropic's requirement of
 \code{temperature = 1} is enforced.
@@ -208,3 +207,32 @@ head(pipeline_thoughts$results)
 }
 
 }
+\seealso{
+\code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}}, \code{\link[=llm_download_batch_results]{llm_download_batch_results()}}
+
+Other batch backends:
+\code{\link[=anthropic_create_batch]{anthropic_create_batch()}},
+\code{\link[=anthropic_download_batch_results]{anthropic_download_batch_results()}},
+\code{\link[=anthropic_get_batch]{anthropic_get_batch()}},
+\code{\link[=anthropic_poll_batch_until_complete]{anthropic_poll_batch_until_complete()}},
+\code{\link[=build_anthropic_batch_requests]{build_anthropic_batch_requests()}},
+\code{\link[=build_gemini_batch_requests]{build_gemini_batch_requests()}},
+\code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}},
+\code{\link[=gemini_create_batch]{gemini_create_batch()}},
+\code{\link[=gemini_download_batch_results]{gemini_download_batch_results()}},
+\code{\link[=gemini_get_batch]{gemini_get_batch()}},
+\code{\link[=gemini_poll_batch_until_complete]{gemini_poll_batch_until_complete()}},
+\code{\link[=llm_download_batch_results]{llm_download_batch_results()}},
+\code{\link[=llm_resume_multi_batches]{llm_resume_multi_batches()}},
+\code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}},
+\code{\link[=llm_submit_pairs_multi_batch]{llm_submit_pairs_multi_batch()}},
+\code{\link[=openai_create_batch]{openai_create_batch()}},
+\code{\link[=openai_download_batch_output]{openai_download_batch_output()}},
+\code{\link[=openai_get_batch]{openai_get_batch()}},
+\code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}},
+\code{\link[=openai_upload_batch_file]{openai_upload_batch_file()}},
+\code{\link[=run_gemini_batch_pipeline]{run_gemini_batch_pipeline()}},
+\code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}},
+\code{\link[=write_openai_batch_file]{write_openai_batch_file()}}
+}
+\concept{batch backends}

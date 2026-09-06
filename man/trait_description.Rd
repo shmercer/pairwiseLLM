@@ -5,14 +5,17 @@
 \title{Get a trait name and description for prompts}
 \usage{
 trait_description(
-  name = c("overall_quality", "organization"),
+  name = c("overall_quality", "organization", "IRRC"),
   custom_name = NULL,
   custom_description = NULL
 )
 }
 \arguments{
 \item{name}{Character identifier for a built-in trait. One of
-\code{"overall_quality"} or \code{"organization"}.
+\code{"overall_quality"}, \code{"organization"}, or \code{"IRRC"}.
+\code{"IRRC"} is case-sensitive and returns an overall-writing rubric
+spanning prompt task, development of explanation, organization, and
+language use.
 Ignored if \code{custom_description} is supplied.}
 
 \item{custom_name}{Optional short label to use when supplying a
@@ -51,3 +54,15 @@ custom_td$name
 custom_td$description
 
 }
+\seealso{
+\code{\link[=set_prompt_template]{set_prompt_template()}}, \code{\link[=build_prompt]{build_prompt()}}
+
+Other prompts and traits:
+\code{\link[=build_prompt]{build_prompt()}},
+\code{\link[=get_prompt_template]{get_prompt_template()}},
+\code{\link[=list_prompt_templates]{list_prompt_templates()}},
+\code{\link[=register_prompt_template]{register_prompt_template()}},
+\code{\link[=remove_prompt_template]{remove_prompt_template()}},
+\code{\link[=set_prompt_template]{set_prompt_template()}}
+}
+\concept{prompts and traits}

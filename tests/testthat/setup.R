@@ -2,8 +2,23 @@
 source(testthat::test_path("helper-fit-contract.R"))
 source(testthat::test_path("helper-fixtures.R"))
 
-if (!"package:pairwiseLLM" %in% search()) {
-  suppressWarnings(suppressMessages(library(pairwiseLLM)))
+if (!"pairwiseLLM" %in% loadedNamespaces()) {
+  library(pairwiseLLM)
+}
+
+pkg_root <- normalizePath(testthat::test_path("..", ".."), winslash = "/", mustWork = TRUE)
+ns_path <- normalizePath(getNamespaceInfo("pairwiseLLM", "path"), winslash = "/", mustWork = TRUE)
+same_path <- identical(pkg_root, ns_path)
+child_path <- startsWith(ns_path, paste0(pkg_root, "/"))
+if (!isTRUE(same_path || child_path)) {
+  rlang::warn(paste0(
+    "Tests are running with a namespace path outside the test root. ",
+    "Loaded path: `",
+    ns_path,
+    "`, test root: `",
+    pkg_root,
+    "`."
+  ))
 }
 
 pll_ns <- asNamespace("pairwiseLLM")

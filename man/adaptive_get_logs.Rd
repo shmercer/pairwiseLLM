@@ -10,21 +10,23 @@ adaptive_get_logs(state)
 \item{state}{Adaptive state.}
 }
 \value{
-A named list with three elements:
+A named list with four elements:
 \describe{
 \item{step_log}{A tibble with one row per attempted step.}
 \item{round_log}{A tibble with one row per BTL refit round.}
 \item{item_log}{A list of per-refit item tibbles.}
+\item{link_stage_log}{A tibble with one row per \code{(refit_id, spoke_id)}
+linking summary when linking mode is active.}
 }
 }
 \description{
 Retrieve canonical adaptive logs.
 }
 \details{
-Returns the three canonical Adaptive logs as currently held in memory:
-\code{step_log}, \code{round_log}, and \code{item_log}. These correspond to
-step attempts, posterior refit rounds, and item-level refit summaries
-respectively.
+Returns the canonical adaptive logs as currently held in memory:
+\code{step_log}, \code{round_log}, \code{item_log}, and
+\code{link_stage_log}. These correspond to step attempts, posterior refit
+rounds, item-level refit summaries, and per-refit linking summaries.
 }
 \examples{
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
@@ -35,10 +37,12 @@ names(logs)
 \seealso{
 \code{\link[=adaptive_step_log]{adaptive_step_log()}}, \code{\link[=adaptive_round_log]{adaptive_round_log()}}, \code{\link[=adaptive_item_log]{adaptive_item_log()}}
 
-Other adaptive logs: 
-\code{\link{adaptive_item_log}()},
-\code{\link{adaptive_results_history}()},
-\code{\link{adaptive_round_log}()},
-\code{\link{adaptive_step_log}()}
+Other adaptive logs:
+\code{\link[=adaptive_item_log]{adaptive_item_log()}},
+\code{\link[=adaptive_results_history]{adaptive_results_history()}},
+\code{\link[=adaptive_round_log]{adaptive_round_log()}},
+\code{\link[=adaptive_step_log]{adaptive_step_log()}},
+\code{\link[=summarize_items]{summarize_items()}},
+\code{\link[=summarize_refits]{summarize_refits()}}
 }
 \concept{adaptive logs}

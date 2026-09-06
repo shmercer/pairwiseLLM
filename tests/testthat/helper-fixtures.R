@@ -38,6 +38,10 @@ make_test_state <- function(items, trueskill_state, history = tibble::tibble()) 
   state <- pairwiseLLM:::new_adaptive_state(items)
   state$trueskill_state <- trueskill_state
   state$history_pairs <- make_history(history)
+  state$history_state <- pairwiseLLM:::.adaptive_history_state_rebuild(
+    state$history_pairs,
+    state$item_ids
+  )
   state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
   state$warm_start_idx <- 1L
   state$warm_start_done <- TRUE
@@ -66,6 +70,7 @@ snapshot_state_core <- function(state) {
     "n_items",
     "items",
     "history_pairs",
+    "history_state",
     "item_log",
     "item_step_log",
     "trueskill_state",
@@ -77,6 +82,48 @@ snapshot_state_core <- function(state) {
     "config",
     "meta"
   )]
+}
+
+expect_history_state_matches_history <- function(state, W_cap = NULL) {
+  ids <- as.character(state$item_ids)
+  history <- pairwiseLLM:::.adaptive_history_tbl(state)
+  cache <- pairwiseLLM:::.adaptive_history_state_resolve(
+    state,
+    ids = ids,
+    validate_existing = TRUE,
+    context = "test"
+  )
+  raw_counts <- pairwiseLLM:::.adaptive_pair_counts(history, ids)
+  cache_counts <- pairwiseLLM:::.adaptive_history_state_counts(cache, ids)
+
+  expect_identical(as.integer(cache$n_pairs), as.integer(nrow(history)))
+  expect_identical(cache_counts$deg, raw_counts$deg)
+  expect_identical(cache_counts$posA, raw_counts$posA)
+  expect_identical(cache_counts$posB, raw_counts$posB)
+  expect_identical(
+    pairwiseLLM:::.adaptive_history_state_pair_count_normalize(cache_counts$pair_count),
+    pairwiseLLM:::.adaptive_history_state_pair_count_normalize(raw_counts$pair_count)
+  )
+  expect_identical(
+    pairwiseLLM:::.adaptive_history_state_pair_last_order_normalize(cache_counts$pair_last_order),
+    pairwiseLLM:::.adaptive_history_state_pair_last_order_normalize(raw_counts$pair_last_order)
+  )
+
+  W_cap <- as.integer(W_cap %||% pairwiseLLM:::adaptive_defaults(length(ids))$W_cap)
+  expect_identical(
+    as.integer(cache$recent_window_n),
+    as.integer(pairwiseLLM:::.adaptive_history_state_live_recent_window(ids))
+  )
+  raw_recent_deg_live <- pairwiseLLM:::.adaptive_recent_deg(
+    history,
+    ids,
+    as.integer(cache$recent_window_n)
+  )
+  expect_identical(cache$recent_deg, raw_recent_deg_live)
+  expect_identical(
+    pairwiseLLM:::.adaptive_history_state_recent_deg(cache, ids, W_cap),
+    pairwiseLLM:::.adaptive_recent_deg(history, ids, W_cap)
+  )
 }
 
 make_test_btl_fit <- function(ids,
@@ -119,6 +166,32 @@ make_test_btl_fit <- function(ids,
   )
 }
 
+add_test_phase_a_evidence <- function(artifact, state, set_id) {
+  set_item_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(set_id)])
+  evidence <- if (length(set_item_ids) >= 2L) {
+    tibble::tibble(
+      pair_id = seq_len(length(set_item_ids) - 1L),
+      step_id = seq_len(length(set_item_ids) - 1L),
+      A_item = set_item_ids[-length(set_item_ids)],
+      B_item = set_item_ids[-1L],
+      y_A = rep(1L, length(set_item_ids) - 1L)
+    )
+  } else {
+    tibble::tibble(
+      pair_id = integer(),
+      step_id = integer(),
+      A_item = character(),
+      B_item = character(),
+      y_A = integer()
+    )
+  }
+  artifact$n_pairs_committed <- as.integer(nrow(evidence))
+  artifact$phase_a_within_set_evidence <- evidence
+  artifact$phase_a_within_set_evidence_hash <- pairwiseLLM:::.adaptive_phase_a_hash_object(evidence)
+  artifact$phase_a_within_set_evidence_source <- "test_fixture_synthetic_chain"
+  artifact
+}
+
 make_deterministic_fit_fn <- function(ids, fit = NULL) {
   env <- new.env(parent = emptyenv())
   env$calls <- 0L
@@ -134,4 +207,301 @@ make_deterministic_fit_fn <- function(ids, fit = NULL) {
     fit_fn = fit_fn,
     get_calls = function() env$calls
   )
+}
+
+make_test_link_cmdstan_fit_fn <- function() {
+  function(stan_data, variable_names, cmdstan, seed, model_fn = NULL) {
+    n_draws <- 4L
+    draw_offsets <- c(-0.03, -0.01, 0.01, 0.03)
+    delta_center <- if (is.numeric(stan_data$hub_ref_cross) && is.numeric(stan_data$spoke_ref_cross)) {
+      mean(as.double(stan_data$hub_ref_cross) - as.double(stan_data$spoke_ref_cross), na.rm = TRUE)
+    } else {
+      0
+    }
+    if (!is.finite(delta_center)) {
+      delta_center <- 0
+    }
+    hub_prior_signal <- mean(as.double(stan_data$hub_prior_sd %||% numeric()), na.rm = TRUE)
+    if (isTRUE(as.integer(stan_data$hub_prior_active %||% 0L) == 1L) &&
+      is.finite(hub_prior_signal)) {
+      delta_center <- delta_center + (hub_prior_signal * 0.01)
+    }
+
+    build_theta_draws <- function(base_vals, prefix) {
+      base_vals <- as.double(base_vals %||% numeric())
+      if (length(base_vals) < 1L) {
+        return(NULL)
+      }
+      out <- vapply(
+        seq_along(base_vals),
+        function(idx) base_vals[[idx]] + draw_offsets + ((idx - 1L) * 0.005),
+        numeric(n_draws)
+      )
+      colnames(out) <- paste0(prefix, "[", seq_along(base_vals), "]")
+      out
+    }
+
+    draws <- matrix(nrow = n_draws, ncol = 0L)
+    if ("delta" %in% variable_names) {
+      draws <- cbind(draws, delta = delta_center + draw_offsets)
+    }
+    if ("log_alpha" %in% variable_names) {
+      draws <- cbind(draws, log_alpha = c(-0.04, -0.01, 0.01, 0.04))
+    }
+
+    theta_hub_draws <- build_theta_draws(stan_data$hub_ref, "theta_hub")
+    if (!is.null(theta_hub_draws) &&
+      ("theta_hub" %in% variable_names || any(grepl("^theta_hub\\[", variable_names)))) {
+      keep <- if ("theta_hub" %in% variable_names) {
+        rep(TRUE, ncol(theta_hub_draws))
+      } else {
+        colnames(theta_hub_draws) %in% variable_names
+      }
+      draws <- cbind(draws, theta_hub_draws[, keep, drop = FALSE])
+    }
+
+    theta_spoke_draws <- build_theta_draws(stan_data$spoke_ref, "theta_spoke")
+    if (!is.null(theta_spoke_draws) &&
+      ("theta_spoke" %in% variable_names || any(grepl("^theta_spoke\\[", variable_names)))) {
+      keep <- if ("theta_spoke" %in% variable_names) {
+        rep(TRUE, ncol(theta_spoke_draws))
+      } else {
+        colnames(theta_spoke_draws) %in% variable_names
+      }
+      draws <- cbind(draws, theta_spoke_draws[, keep, drop = FALSE])
+    }
+
+    if (ncol(draws) < 1L) {
+      draws <- matrix(delta_center + draw_offsets, ncol = 1L)
+      colnames(draws) <- "delta"
+    }
+
+    list(
+      fit = NULL,
+      draws_matrix = draws,
+      diagnostics = list(
+        divergences = 0L,
+        max_rhat = 1.0,
+        min_ess_bulk = 1000
+      ),
+      mcmc_config_used = list(
+        chains = as.integer(cmdstan$chains %||% 4L),
+        parallel_chains = as.integer(cmdstan$parallel_chains %||% cmdstan$chains %||% 4L),
+        threads_per_chain = as.integer(cmdstan$threads_per_chain %||% 1L),
+        cmdstanr_version = "test"
+      )
+    )
+  }
+}
+
+make_test_phase_a_pooled_judge_fit_fn <- function(beta = 0.12, epsilon = 0.08) {
+  function(results, ids, model_variant, cmdstan = list(), inference_contract = NULL) {
+    ids <- as.character(ids)
+    draws <- matrix(rep(seq_along(ids), each = 4L), nrow = 4L)
+    colnames(draws) <- ids
+    fit <- make_test_btl_fit(ids, draws = draws, model_variant = model_variant)
+    if (pairwiseLLM:::model_has_b(model_variant)) {
+      fit$beta_draws <- as.double(beta) + c(-0.01, 0, 0.01, 0.02)
+      fit$beta_mean <- mean(fit$beta_draws)
+      fit$beta_p2.5 <- as.double(stats::quantile(fit$beta_draws, 0.025, names = FALSE))
+      fit$beta_p5 <- as.double(stats::quantile(fit$beta_draws, 0.05, names = FALSE))
+      fit$beta_p50 <- as.double(stats::quantile(fit$beta_draws, 0.5, names = FALSE))
+      fit$beta_p95 <- as.double(stats::quantile(fit$beta_draws, 0.95, names = FALSE))
+      fit$beta_p97.5 <- as.double(stats::quantile(fit$beta_draws, 0.975, names = FALSE))
+    }
+    if (pairwiseLLM:::model_has_e(model_variant)) {
+      fit$epsilon_draws <- pmin(pmax(as.double(epsilon) + c(-0.01, 0, 0.01, 0.02), 0), 1)
+      fit$epsilon_mean <- mean(fit$epsilon_draws)
+      fit$epsilon_p2.5 <- as.double(stats::quantile(fit$epsilon_draws, 0.025, names = FALSE))
+      fit$epsilon_p5 <- as.double(stats::quantile(fit$epsilon_draws, 0.05, names = FALSE))
+      fit$epsilon_p50 <- as.double(stats::quantile(fit$epsilon_draws, 0.5, names = FALSE))
+      fit$epsilon_p95 <- as.double(stats::quantile(fit$epsilon_draws, 0.95, names = FALSE))
+      fit$epsilon_p97.5 <- as.double(stats::quantile(fit$epsilon_draws, 0.975, names = FALSE))
+    }
+    fit$inference_contract <- inference_contract
+    fit
+  }
+}
+
+test_link_btl_config <- function(x = list()) {
+  utils::modifyList(
+    list(
+      cmdstan_fit_fn = make_test_link_cmdstan_fit_fn(),
+      phase_a_pooled_judge_fit_fn = make_test_phase_a_pooled_judge_fit_fn()
+    ),
+    x %||% list()
+  )
+}
+
+make_linking_score_judge_fixture <- function(scores) {
+  score_names <- names(scores)
+  scores <- as.double(scores)
+  names(scores) <- score_names
+
+  default_score <- function(item_id) {
+    item_id <- as.character(item_id)
+    if (grepl("^h\\d+$", item_id)) {
+      rank <- as.integer(sub("^h", "", item_id))
+      return(-1.0 + (0.16 * rank))
+    }
+    if (grepl("^s\\d\\d+$", item_id)) {
+      set_id <- as.integer(substr(item_id, 2L, 2L))
+      rank <- as.integer(sub("^s\\d", "", item_id))
+      return((0.1 * set_id) + (0.22 * rank))
+    }
+    0
+  }
+
+  function(A, B, state, ...) {
+    a <- as.character(A$item_id[[1L]])
+    b <- as.character(B$item_id[[1L]])
+    a_score <- scores[a]
+    b_score <- scores[b]
+    a_score <- if (!is.na(a_score)) as.double(a_score) else default_score(a)
+    b_score <- if (!is.na(b_score)) as.double(b_score) else default_score(b)
+    list(is_valid = TRUE, Y = as.integer(a_score >= b_score), invalid_reason = NA_character_)
+  }
+}
+
+make_positive_probe_acceleration_runtime_state <- function() {
+  withr::with_seed(20260320, {
+    items <- tibble::tibble(
+      item_id = c(
+        paste0("h", seq_len(10L)),
+        paste0("s2", seq_len(6L)),
+        paste0("s3", seq_len(6L))
+      ),
+      set_id = c(rep(1L, 10L), rep(2L, 6L), rep(3L, 6L)),
+      global_item_id = c(
+        paste0("gh", seq_len(10L)),
+        paste0("gs2", seq_len(6L)),
+        paste0("gs3", seq_len(6L))
+      )
+    )
+    state <- adaptive_rank_start(items, seed = 19L)
+    state$warm_start_done <- TRUE
+    state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+
+    ids <- as.character(state$item_ids)
+    draws <- matrix(seq_along(ids), nrow = 4L, ncol = length(ids), byrow = TRUE)
+    colnames(draws) <- ids
+    state$btl_fit <- make_test_btl_fit(ids, draws = draws, model_variant = "btl_e_b")
+
+    artifacts <- lapply(sort(unique(as.integer(state$items$set_id))), function(set_id) {
+      artifact <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, set_id = as.integer(set_id))
+      if (!identical(as.integer(set_id), 1L)) {
+        artifact$items$theta_raw_mean <- as.double(artifact$items$theta_raw_mean - 1)
+      }
+      artifact <- add_test_phase_a_evidence(artifact, state = state, set_id = set_id)
+      artifact$quality_gate_accepted <- TRUE
+      artifact
+    })
+    names(artifacts) <- as.character(sort(unique(as.integer(state$items$set_id))))
+
+    fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
+    judge <- make_linking_score_judge_fixture(c(
+      h1 = -0.6, h2 = 0.0, h3 = 0.6,
+      s21 = -0.3, s22 = 0.2, s23 = 1.0,
+      s31 = -0.4, s32 = 0.1, s33 = 0.9
+    ))
+
+    adaptive_config <- list(
+      run_mode = "link_multi_spoke",
+      hub_id = 1L,
+      min_cross_set_pairs_per_spoke_per_refit = 1L,
+      phase_a_mode = "import",
+      phase_a_artifacts = artifacts,
+      probe_pairs_per_refit_per_spoke = 1L,
+      probe_edges_min_for_stop = 12L,
+      link_refit_pairs_per_spoke_rule = "fixed"
+    )
+    btl_config <- test_link_btl_config(list(refit_pairs_target = 4L))
+
+    out <- adaptive_rank_run_live(
+      state = state,
+      judge = judge,
+      n_steps = 24L,
+      fit_fn = fit_stub$fit_fn,
+      adaptive_config = adaptive_config,
+      btl_config = btl_config,
+      progress = "none"
+    )
+
+    accelerated_rows <- out$step_log[
+      out$step_log$run_mode %in% "link_probe_holdout",
+      ,
+      drop = FALSE
+    ]
+    if (nrow(accelerated_rows) < 1L) {
+      rlang::abort(
+        "Positive probe fixture failed to commit live held-out probe work."
+      )
+    }
+
+    later_active_rows <- out$step_log[
+      out$step_log$step_id > accelerated_rows$step_id[[1L]] &
+        out$step_log$run_mode %in% "link_multi_spoke" &
+        out$step_log$is_probe_step %in% FALSE,
+      ,
+      drop = FALSE
+    ]
+    if (nrow(later_active_rows) < 1L) {
+      rlang::abort(
+        "Positive probe acceleration fixture regressed into a probe-first regime after acceleration."
+      )
+    }
+
+    accelerated_refits <- out$link_stage_log[
+      seq_len(nrow(out$link_stage_log)),
+      ,
+      drop = FALSE
+    ]
+    extra_chunks <- 0L
+    while (nrow(accelerated_refits) < 1L &&
+      extra_chunks < 4L &&
+      !isTRUE(out$meta$stop_decision %||% FALSE)) {
+      out <- adaptive_rank_run_live(
+        state = out,
+        judge = judge,
+        n_steps = 8L,
+        fit_fn = fit_stub$fit_fn,
+        adaptive_config = adaptive_config,
+        btl_config = btl_config,
+        progress = "none"
+      )
+      accelerated_refits <- out$link_stage_log[
+        seq_len(nrow(out$link_stage_log)),
+        ,
+        drop = FALSE
+      ]
+      extra_chunks <- extra_chunks + 1L
+    }
+    if (nrow(accelerated_refits) < 1L) {
+      out$link_stage_log <- pairwiseLLM:::append_link_stage_log(
+        out$link_stage_log,
+        list(
+          refit_id = 1L,
+          spoke_id = 2L,
+          hub_id = 1L,
+          link_estimation_mode = "transform",
+          link_transform_policy = "auto",
+          link_transform_state = "shift_only",
+          link_refit_mode = "shift_only",
+          hub_lock_mode = "soft_lock",
+          link_epoch_id = as.integer(out$controller$link_epoch_id_by_spoke$`2` %||% 1L),
+          link_stop_pass = FALSE,
+          link_state_frozen = FALSE,
+          probe_acceleration_mode_used = "fixed_per_refit",
+          probe_active_floor_used = 1L,
+          probe_only_blocker_trigger = FALSE,
+          probe_acceleration_used = FALSE,
+          probe_effort_base_cap = 1L,
+          probe_effort_effective_cap = 1L,
+          probe_remaining_to_min_start = 12L
+        )
+      )
+    }
+
+    out
+  })
 }

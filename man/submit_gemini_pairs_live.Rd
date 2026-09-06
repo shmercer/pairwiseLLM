@@ -16,6 +16,7 @@ submit_gemini_pairs_live(
   top_p = NULL,
   top_k = NULL,
   max_output_tokens = NULL,
+  service_tier = "standard",
   api_version = "v1beta",
   verbose = TRUE,
   status_every = 1L,
@@ -31,7 +32,7 @@ submit_gemini_pairs_live(
 \arguments{
 \item{pairs}{Tibble/data frame with columns \code{ID1}, \code{text1}, \code{ID2}, \code{text2}.}
 
-\item{model}{Gemini model name (e.g. \code{"gemini-3-pro-preview"} or
+\item{model}{Gemini model name (e.g. \code{"gemini-3.5-flash-lite"} or
 \code{"gemini-3-flash-preview"}).}
 
 \item{trait_name}{Trait name.}
@@ -57,6 +58,11 @@ model uses its own default.}
 
 \item{max_output_tokens}{Optional integer; forwarded to
 \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}.}
+
+\item{service_tier}{Gemini Developer API service tier forwarded to
+\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}. Use \code{"standard"} (default) or \code{NULL} for
+provider default behavior, or \code{"flex"} / \code{"priority"} to request the
+documented Gemini service tier.}
 
 \item{api_version}{API version; default \code{"v1beta"}.}
 
@@ -86,8 +92,8 @@ packages.}
 
 \item{workers}{Integer; the number of parallel workers (threads) to use if
 \code{parallel = TRUE}. Defaults to 1.
-\strong{Guidance:} Start conservatively (e.g., 2-4 workers) to avoid hitting
-HTTP 429 errors, as Gemini rate limits can be strict depending on your tier.}
+\strong{Guidance:} Use no more than 2 workers to avoid HTTP 429 errors and
+respect shared check-farm resources.}
 
 \item{...}{Reserved for future extensions; passed through to
 \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}} (but \code{thinking_budget} is ignored there).}
@@ -140,7 +146,7 @@ tmpl <- set_prompt_template()
 # 1. Sequential execution with incremental saving
 res_seq <- submit_gemini_pairs_live(
   pairs             = pairs,
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -150,13 +156,13 @@ res_seq <- submit_gemini_pairs_live(
 # 2. Parallel execution (faster)
 res_par <- submit_gemini_pairs_live(
   pairs             = pairs,
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
   save_path         = "results_gemini_par.csv",
   parallel          = TRUE,
-  workers           = 4
+  workers           = 2
 )
 
 # 3. Gemini 3 Flash example (minimal thinking)
@@ -175,3 +181,23 @@ head(res_par$results)
 }
 
 }
+\seealso{
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}}, \code{\link[=llm_compare_pair]{llm_compare_pair()}}
+
+Other live backends:
+\code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}},
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}},
+\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}},
+\code{\link[=llm_compare_pair]{llm_compare_pair()}},
+\code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}},
+\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}},
+\code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
+\code{\link[=submit_llm_pairs]{submit_llm_pairs()}},
+\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
+\code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
+\code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
+\code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}
+}
+\concept{live backends}

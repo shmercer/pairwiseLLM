@@ -51,12 +51,9 @@ ollama_compare_pair_live(
 \item{tag_suffix}{Suffix for the better-sample tag. Defaults to
 \code{"</BETTER_SAMPLE>"}.}
 
-\item{think}{Logical; if \code{TRUE} and the model is a Qwen model (name
-starts with \code{"qwen"}), the temperature is set to \code{0.6}.
-Otherwise the temperature is \code{0}. The \code{think} argument does
-not itself modify the HTTP request body; it is used only for choosing
-the temperature, but the function will parse a \code{thinking} field
-from the response whenever one is present.}
+\item{think}{Logical; forwarded to Ollama's \code{think} request field.
+The function parses a \code{thinking} field from the response whenever
+one is present.}
 
 \item{num_ctx}{Integer; context window to use via \code{options$num_ctx}.
 The default is \code{8192L}.}
@@ -110,12 +107,10 @@ instance and expects a single non-streaming response. Model names should
 match those available in your Ollama installation (for example
 \code{"mistral-small3.2:24b"}, \code{"qwen3:32b"}, \code{"gemma3:27b"}).
 
-Temperature and context length are controlled as follows:
+Sampling and context length are controlled as follows:
 
 \itemize{
-\item By default, \code{temperature = 0} for all models.
-\item For Qwen models (model names beginning with \code{"qwen"}) and
-\code{think = TRUE}, \code{temperature} is set to \code{0.6}.
+\item Sampling parameters are omitted so the local model default applies.
 \item The context window is set via \code{options$num_ctx}, which
 defaults to \code{8192L} but may be overridden via the \code{num_ctx}
 argument.
@@ -208,4 +203,21 @@ res_qwen_think$thoughts
 \item \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} for backend-agnostic comparisons over tibbles of
 pairs.
 }
+
+Other live backends:
+\code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}},
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}},
+\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}},
+\code{\link[=llm_compare_pair]{llm_compare_pair()}},
+\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}},
+\code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}},
+\code{\link[=submit_llm_pairs]{submit_llm_pairs()}},
+\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
+\code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
+\code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
+\code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}
 }
+\concept{live backends}

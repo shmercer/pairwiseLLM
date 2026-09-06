@@ -13,6 +13,7 @@ adaptive_rank_run_live(
   btl_config = NULL,
   session_dir = NULL,
   persist_item_log = NULL,
+  checkpoint_every_steps = NULL,
   progress = c("all", "refits", "steps", "none"),
   progress_redraw_every = 10L,
   progress_show_events = TRUE,
@@ -36,49 +37,72 @@ toward this budget, including invalid judge responses.}
 to \code{default_btl_fit_fn()} when a refit is due.}
 
 \item{adaptive_config}{Optional named list overriding adaptive controller
-behavior. Supported fields:
-\code{global_identified_reliability_min}, \code{global_identified_rank_corr_min},
-\code{p_long_low}, \code{p_long_high}, \code{long_taper_mult}, \code{long_frac_floor},
-\code{mid_bonus_frac}, \code{explore_taper_mult}, \code{boundary_k}, \code{boundary_window},
-\code{boundary_frac}, \code{p_star_override_margin}, and
-\code{star_override_budget_per_round}. Unknown fields and invalid values abort
-with an actionable error.}
+behavior. Unknown fields and invalid values abort with an actionable error.
+See \code{\link[=adaptive_rank]{adaptive_rank()}} for the full list of supported keys, detailed
+semantics, and defaults.}
 
 \item{btl_config}{Optional named list overriding BTL refit cadence, stopping
 thresholds, and selected round-log diagnostics. Supported fields:
 \describe{
 \item{\code{refit_pairs_target}}{Minimum new committed comparisons required
-before the next BTL refit.}
+before the next BTL refit. Default is \code{ceiling(N / 2)} clamped to
+\verb{[20L, 5000L]} (Phase A linking uses the active set size).}
 \item{\code{model_variant}}{BTL MCMC variant: \code{"btl"}, \code{"btl_e"}, \code{"btl_b"},
-or \code{"btl_e_b"}.}
-\item{\code{ess_bulk_min}}{Minimum bulk ESS required for diagnostics to pass.}
+or \code{"btl_e_b"}. Default is \code{"btl_e_b"}.}
+\item{\code{ess_bulk_min}}{Minimum bulk ESS required for diagnostics to pass.
+Default is \code{max(400, round(20 * sqrt(N)))}.}
 \item{\code{ess_bulk_min_near_stop}}{Stricter ESS requirement when a run is
-close to stopping.}
-\item{\code{max_rhat}}{Maximum allowed split-\eqn{\hat{R}} diagnostic value.}
-\item{\code{divergences_max}}{Maximum allowed divergent transitions.}
-\item{\code{eap_reliability_min}}{Minimum EAP reliability to allow stopping.}
-\item{\code{stability_lag}}{Lag (in refits) used for stability checks.}
-\item{\code{theta_corr_min}}{Minimum lagged correlation of posterior means.}
+close to stopping. Default is \code{max(1000, round(50 * sqrt(N)))}.}
+\item{\code{max_rhat}}{Maximum allowed split-\eqn{\hat{R}} diagnostic value.
+Default is \code{1.01}.}
+\item{\code{divergences_max}}{Maximum allowed divergent transitions. Default is
+\code{0L}.}
+\item{\code{eap_reliability_min}}{Minimum EAP reliability to allow stopping.
+Default is \code{0.90}.}
+\item{\code{stability_lag}}{Lag (in refits) used for stability checks. Default
+is \code{2L}.}
+\item{\code{theta_corr_min}}{Minimum lagged correlation of posterior means.
+Default is \code{0.95}.}
 \item{\code{theta_sd_rel_change_max}}{Maximum relative change in posterior SD
-allowed by stability checks.}
-\item{\code{rank_spearman_min}}{Minimum lagged Spearman rank correlation.}
+allowed by stability checks. Default is \code{0.10}.}
+\item{\code{rank_spearman_min}}{Minimum lagged Spearman rank correlation.
+Default is \code{0.95}.}
 \item{\code{near_tie_p_low}, \code{near_tie_p_high}}{Probability band used only for
-near-tie diagnostics in round logging (not used for stopping decisions).}
+near-tie diagnostics in round logging (not used for stopping decisions).
+Defaults are \code{0.40} and \code{0.60}.}
+\item{\code{deferred_audit_max_draws}}{Maximum posterior draws used for
+report-only deferred round-log audit metrics such as near-tie and
+credible-interval width summaries. This does not affect CmdStan
+diagnostics or stop gates. Default is \code{400L}; use \code{Inf} to use all draws.}
+\item{\code{phase_b_refit_parallel}, \code{phase_b_refit_workers}}{Opt-in
+parallel execution for spoke-separable Phase B post-refit updates after
+the main BTL refit. Uses forked local workers and is only supported on
+Unix-like platforms. Defaults are \code{FALSE} and \code{1L}.}
 }
-Defaults are resolved from the current item count, then merged with user
-overrides.}
+Defaults are resolved from the current item count \code{N}, then merged with
+user overrides.}
 
-\item{session_dir}{Optional directory for saving session artifacts.}
+\item{session_dir}{Optional directory for saving session artifacts.
+If \code{NULL}, uses \code{state$config$session_dir}. Default is \code{NULL}.}
 
-\item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.}
+\item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.
+If \code{NULL}, uses \code{state$config$persist_item_log}. Default is \code{NULL}.}
 
-\item{progress}{Progress output: "all", "refits", "steps", or "none".}
+\item{checkpoint_every_steps}{Optional positive integer checkpoint cadence for
+ordinary live persistence. If \code{NULL}, uses the persisted state value when
+present, otherwise defaults to \code{100L}.}
 
-\item{progress_redraw_every}{Redraw progress bar every N steps.}
+\item{progress}{Progress output: \code{"all"}, \code{"refits"}, \code{"steps"}, or \code{"none"}.
+Default is \code{"all"}.}
 
-\item{progress_show_events}{Logical; when TRUE, print notable step events.}
+\item{progress_redraw_every}{Redraw progress bar every N steps. Default is
+\code{10L}.}
 
-\item{progress_errors}{Logical; when TRUE, include invalid-step events.}
+\item{progress_show_events}{Logical; when TRUE, print notable step events.
+Default is \code{TRUE}.}
+
+\item{progress_errors}{Logical; when TRUE, include invalid-step events.
+Default is \code{TRUE}.}
 
 \item{...}{Additional arguments passed through to \code{judge()}.}
 }
@@ -96,10 +120,22 @@ applies transactional updates if and only if the judge response is valid.
 Invalid responses produce a logged step with
 \code{pair_id = NA} and must not update committed-comparison state.
 
-Pair selection is TrueSkill-based and does not use BTL posterior draws.
-Utility is based on
-\deqn{U_0 = p_{ij}(1 - p_{ij})} with exploration/exploitation routing and
-fallback handling recorded in \code{step_log}.
+Within-set routing is TrueSkill-based with utility
+\deqn{U_0 = p_{ij}(1 - p_{ij})}.
+After an accepted posterior refit is available, the long-link gate uses the
+BTL posterior win probability for candidate eligibility; before that it
+falls back deterministically to TrueSkill.
+In linking Phase B, anchor/strata routing uses linking-global scores built
+from Phase A summaries and the accepted anchored-joint state. Linking Phase B
+routing ranks eligible
+cross-set candidates by ridge-stabilized D-optimal log-det information gain
+on the active linking parameter block using order-averaged Model D
+probabilities. Linking inference parameters remain inference-only
+(diagnostics and stopping) and are not direct pair-selection objectives.
+Phase B uses a hard-lock hub-fixed fit and a deterministic accepted state
+before the first linking refit.
+Exploration/exploitation routing and fallback handling are recorded in
+\code{step_log}.
 
 Round scheduling uses stage-specific admissibility:
 \itemize{
@@ -127,6 +163,11 @@ appended to \code{round_log}; per-item posterior summaries are appended to
 \code{item_log}. Controller behavior can change after refits via
 identifiability-gated settings in \code{adaptive_config}; those controls
 affect pair routing and quotas, while BTL remains inference-only.
+If \code{adaptive_config$max_pairs_after_stop > 0}, the run records a stop
+boundary at the first refit with \code{stop_decision = TRUE} and allows at
+most that many additional committed comparisons before deterministic
+termination. Round logs record
+\code{max_pairs_after_stop} and \code{pairs_committed_after_stop}.
 }
 \examples{
 # ------------------------------------------------------------------
@@ -322,11 +363,11 @@ print(summarize_adaptive(state_live))
 \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
 \code{\link[=adaptive_step_log]{adaptive_step_log()}}, \code{\link[=adaptive_round_log]{adaptive_round_log()}}, \code{\link[=adaptive_item_log]{adaptive_item_log()}}
 
-Other adaptive ranking: 
-\code{\link{adaptive_rank}()},
-\code{\link{adaptive_rank_resume}()},
-\code{\link{adaptive_rank_start}()},
-\code{\link{make_adaptive_judge_llm}()},
-\code{\link{summarize_adaptive}()}
+Other adaptive ranking:
+\code{\link[=adaptive_rank]{adaptive_rank()}},
+\code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
+\code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
+\code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}},
+\code{\link[=summarize_adaptive]{summarize_adaptive()}}
 }
 \concept{adaptive ranking}

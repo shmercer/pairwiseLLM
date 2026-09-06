@@ -81,11 +81,11 @@ test_that("check_positional_bias accepts a raw details tibble", {
   expect_equal(s$n_inconsistent_pos1_bias, 0L)
   expect_equal(s$n_inconsistent_pos2_bias, 0L)
 
-  # New overall fields exist and are numeric
+  # With no inconsistent pairs, the paired test has no informative discordance.
   expect_true("p_sample1_overall" %in% names(s))
   expect_true("total_pos1_wins" %in% names(s))
   expect_true("total_comparisons" %in% names(s))
-  expect_true(is.numeric(s$p_sample1_overall))
+  expect_true(is.na(s$p_sample1_overall))
 
   # details tibble should have added columns
   d <- diag$details
@@ -93,6 +93,68 @@ test_that("check_positional_bias accepts a raw details tibble", {
     "winner_pos_main", "winner_pos_rev",
     "is_pos1_bias", "is_pos2_bias"
   ) %in% names(d)))
+})
+
+test_that("check_positional_bias uses the exact paired discordance test", {
+  details <- tibble::tibble(
+    key = paste0("pair", 1:6),
+    ID1_main = paste0("A", 1:6),
+    ID2_main = paste0("B", 1:6),
+    better_id_main = paste0("A", 1:6),
+    ID1_rev = paste0("B", 1:6),
+    ID2_rev = paste0("A", 1:6),
+    better_id_rev = c(paste0("B", 1:5), "A6"),
+    is_consistent = c(rep(FALSE, 5), TRUE)
+  )
+
+  diag <- check_positional_bias(details, n_boot = 20, seed = 1)
+
+  expect_equal(diag$summary$n_inconsistent_pos1_bias, 5L)
+  expect_equal(diag$summary$n_inconsistent_pos2_bias, 0L)
+  expect_equal(
+    diag$summary$p_sample1_overall,
+    stats::binom.test(5, 5, p = 0.5)$p.value
+  )
+  expect_equal(diag$summary$total_comparisons, 12L)
+})
+
+test_that("paired test omits inconsistencies without a same-position winner", {
+  details <- tibble::tibble(
+    key = "A||B",
+    ID1_main = "A",
+    ID2_main = "B",
+    better_id_main = "A",
+    ID1_rev = "A",
+    ID2_rev = "B",
+    better_id_rev = "B",
+    is_consistent = FALSE
+  )
+
+  diag <- check_positional_bias(details, n_boot = 10, seed = 1)
+
+  expect_equal(diag$summary$n_inconsistent, 1L)
+  expect_equal(diag$summary$n_inconsistent_pos1_bias, 0L)
+  expect_equal(diag$summary$n_inconsistent_pos2_bias, 0L)
+  expect_true(is.na(diag$summary$p_sample1_overall))
+})
+
+test_that("paired test is balanced across position-1 and position-2 discordances", {
+  details <- tibble::tibble(
+    key = paste0("pair", 1:4),
+    ID1_main = paste0("A", 1:4),
+    ID2_main = paste0("B", 1:4),
+    better_id_main = c("A1", "A2", "B3", "B4"),
+    ID1_rev = paste0("B", 1:4),
+    ID2_rev = paste0("A", 1:4),
+    better_id_rev = c("B1", "B2", "A3", "A4"),
+    is_consistent = FALSE
+  )
+
+  diag <- check_positional_bias(details, n_boot = 10, seed = 1)
+
+  expect_equal(diag$summary$n_inconsistent_pos1_bias, 2L)
+  expect_equal(diag$summary$n_inconsistent_pos2_bias, 2L)
+  expect_equal(diag$summary$p_sample1_overall, 1)
 })
 
 test_that("check_positional_bias errors cleanly on missing columns", {

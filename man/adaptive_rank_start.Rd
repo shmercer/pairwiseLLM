@@ -10,40 +10,36 @@ adaptive_rank_start(
   session_dir = NULL,
   persist_item_log = FALSE,
   ...,
-  adaptive_config = NULL
+  adaptive_config = NULL,
+  checkpoint_every_steps = NULL
 )
 }
 \arguments{
 \item{items}{A vector or data frame of items. Data frames must include an
-\code{item_id} column (or \code{id}/\code{ID}). Item IDs may be character; internal logs
-use integer indices derived from these IDs.}
+\code{item_id} column (or \code{id}/\code{ID}). For linking run modes, items must also
+include integer \code{set_id} values and globally unique \code{global_item_id}
+values. Item IDs may be character; internal logs use integer indices
+derived from these IDs.}
 
 \item{seed}{Integer seed used for deterministic warm-start shuffling and
-selection randomness.}
+selection randomness. Default is \code{1L}.}
 
-\item{session_dir}{Optional directory for saving session artifacts.}
+\item{session_dir}{Optional directory for saving session artifacts.
+Default is \code{NULL}.}
 
-\item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.}
+\item{persist_item_log}{Logical; when TRUE, write per-refit item logs to disk.
+Default is \code{FALSE}.}
 
 \item{...}{Internal/testing only. Supply \code{now_fn} to override the clock used
 for timestamps.}
 
-\item{adaptive_config}{Optional named list overriding adaptive controller
-behavior. Supported fields:
-\describe{
-\item{\code{global_identified_reliability_min}, \code{global_identified_rank_corr_min}}{Thresholds
-used to mark global identifiability after each refit.}
-\item{\code{p_long_low}, \code{p_long_high}}{Posterior probability gate used for
-long-link eligibility once globally identified.}
-\item{\code{long_taper_mult}, \code{long_frac_floor}, \code{mid_bonus_frac}}{Late-stage
-long-link taper and quota reallocation controls.}
-\item{\code{explore_taper_mult}}{Late-stage exploration taper multiplier.}
-\item{\code{boundary_k}, \code{boundary_window}, \code{boundary_frac}}{Local-stage
-boundary-priority controls after global identifiability.}
-\item{\code{p_star_override_margin}, \code{star_override_budget_per_round}}{Near-tie
-star-cap override controls.}
-}
-Unknown fields and invalid values abort with an actionable error.}
+\item{adaptive_config}{Optional named list of adaptive controller overrides.
+Unknown fields and invalid values abort with an actionable error. See
+\code{\link[=adaptive_rank]{adaptive_rank()}} for the full list of supported keys, detailed semantics,
+and defaults.}
+
+\item{checkpoint_every_steps}{Optional positive integer checkpoint cadence for
+ordinary live persistence. If \code{NULL}, defaults to \code{100L}.}
 }
 \value{
 An adaptive state object containing \code{step_log}, \code{round_log}, and
@@ -60,11 +56,25 @@ logs used in the adaptive pairing workflow. Warm start pair construction
 follows the shuffled chain design, which guarantees a connected comparison
 graph after \eqn{N - 1} committed comparisons.
 
-Pair selection in this framework is TrueSkill-driven and uses base utility
+Pair selection in this framework is stepwise and uncertainty-aware.
+Within-set routing uses TrueSkill base utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
-win probability for pair \eqn{\{i, j\}}. Bayesian
-BTL posterior draws are not used for pair selection; they are used for
-posterior inference, diagnostics, and stopping at refit rounds.
+win probability for pair \eqn{\{i, j\}}. In linking Phase B, anchor/strata
+routing uses a linking-global score derived from Phase A raw summaries and
+the accepted Phase B linking state.
+In linking Phase B, eligible cross-set candidates are ranked by
+ridge-stabilized D-optimal log-det information gain on the active linking
+parameter block using order-averaged Model D probabilities. In
+the spoke free block with the hub fixed. Linking inference parameters are
+used for inference/diagnostics/stopping, not as direct selection objectives.
+Phase B uses pooled within-set Phase A judge-parameter estimates, using the
+configured BTL model variant, as the accepted shared source for fixed
+\code{beta}/\code{epsilon} constants.
+Bayesian BTL posterior draws are not used as general pair-selection
+objectives; within-set pairing remains TrueSkill-routed, with accepted
+posterior refits contributing only to the long-link probability gate.
+Linking Phase B refits use Bayesian posterior estimation and posterior
+summaries/diagnostics are logged per spoke at each linking refit.
 
 The returned state contains canonical logs:
 \itemize{
@@ -84,11 +94,11 @@ summarize_adaptive(state)
 \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
 \code{\link[=adaptive_step_log]{adaptive_step_log()}}, \code{\link[=adaptive_round_log]{adaptive_round_log()}}, \code{\link[=adaptive_item_log]{adaptive_item_log()}}
 
-Other adaptive ranking: 
-\code{\link{adaptive_rank}()},
-\code{\link{adaptive_rank_resume}()},
-\code{\link{adaptive_rank_run_live}()},
-\code{\link{make_adaptive_judge_llm}()},
-\code{\link{summarize_adaptive}()}
+Other adaptive ranking:
+\code{\link[=adaptive_rank]{adaptive_rank()}},
+\code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
+\code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
+\code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}},
+\code{\link[=summarize_adaptive]{summarize_adaptive()}}
 }
 \concept{adaptive ranking}

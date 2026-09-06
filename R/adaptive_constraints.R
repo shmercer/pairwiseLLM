@@ -27,6 +27,27 @@ make_ordered_key <- function(A_id, B_id) {
   seed
 }
 
+.adaptive_pair_seed <- function(seed_base, unordered_key, offset = 0L) {
+  seed_base <- as.double(seed_base %||% 1L)
+  offset <- as.double(offset %||% 0L)
+  key <- as.character(unordered_key)
+  if (length(key) != 1L || is.na(key)) {
+    rlang::abort("`unordered_key` must be a non-missing scalar character key.")
+  }
+
+  mod <- .Machine$integer.max
+  chars <- utf8ToInt(key)
+  key_hash <- 0
+  if (length(chars) > 0L) {
+    for (idx in seq_along(chars)) {
+      key_hash <- (key_hash * 131 + as.double(chars[[idx]]) + as.double(idx)) %% mod
+    }
+  }
+
+  seed <- (seed_base * 1000003 + key_hash * 1009 + offset) %% mod
+  as.integer(max(1, floor(seed)))
+}
+
 .adaptive_validate_seed <- function(seed) {
   seed <- as.integer(seed)
   if (length(seed) != 1L || is.na(seed)) {

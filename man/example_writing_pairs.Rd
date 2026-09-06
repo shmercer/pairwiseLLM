@@ -13,6 +13,10 @@ A tibble with 190 rows and 3 variables:
 this pair (either \code{ID1} or \code{ID2}).}
 }
 }
+\source{
+Deterministically derived from \code{example_writing_samples} by
+\code{data-raw/example_writing_samples.R} in the source repository.
+}
 \usage{
 data("example_writing_pairs")
 }

@@ -82,10 +82,10 @@ a warning is issued but extended thinking is still used. When
 \code{temperature}, \code{top_p} or a custom \code{thinking_budget_tokens},
 which will be passed through to the Messages API.
 
-When \code{reasoning = "none"} the defaults are:
+When \code{reasoning = "none"}:
 \itemize{
-\item \code{temperature = 0} (deterministic behaviour) unless you
-supply \code{temperature} explicitly.
+\item Omitted \code{temperature} and \code{top_p} values are not sent,
+so the model/provider defaults apply.
 \item \code{max_tokens = 768} unless you supply \code{max_tokens}.
 }
 
@@ -153,7 +153,7 @@ The API typically responds with a dated model string such as
 
 For stable, reproducible comparisons we recommend:
 \itemize{
-\item \code{reasoning = "none"} with \code{temperature = 0} and
+\item \code{reasoning = "none"} with model-default sampling and
 \code{max_tokens = 768} for standard pairwise scoring.
 \item \code{reasoning = "enabled"} when you explicitly want extended
 thinking; in this mode Anthropic requires \code{temperature = 1}.
@@ -179,8 +179,8 @@ changing the \code{reasoning} argument explicitly. In that case,
 \code{reasoning} is upgraded to \code{"enabled"}, the default
 \code{temperature} becomes 1, and a \code{thinking} block is included in the
 request. When \code{reasoning = "none"} and \code{include_thoughts} is
-\code{FALSE} or \code{NULL}, the default temperature remains 0 unless
-you explicitly override it.
+\code{FALSE} or \code{NULL}, omitted sampling parameters use the
+model/provider defaults.
 }
 \examples{
 \dontrun{
@@ -193,7 +193,7 @@ samples <- example_writing_samples[1:2, ]
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Short, deterministic comparison with no explicit thinking block
+# Standard comparison with model-default sampling and no thinking block
 res_claude <- anthropic_compare_pair_live(
   ID1               = samples$ID[1],
   text1             = samples$text[1],
@@ -229,3 +229,23 @@ substr(res_claude_reason$content, 1, 200)
 }
 
 }
+\seealso{
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}}, \code{\link[=llm_compare_pair]{llm_compare_pair()}}
+
+Other live backends:
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}},
+\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}},
+\code{\link[=llm_compare_pair]{llm_compare_pair()}},
+\code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}},
+\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}},
+\code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}},
+\code{\link[=submit_llm_pairs]{submit_llm_pairs()}},
+\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
+\code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
+\code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
+\code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}
+}
+\concept{live backends}

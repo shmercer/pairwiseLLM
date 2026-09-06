@@ -1,3 +1,68 @@
+reference_within_set_stage_candidates <- function(state,
+                                                  stage_name,
+                                                  fallback_name = "base",
+                                                  active_set_id = NA_integer_) {
+  proxy <- pairwiseLLM:::.adaptive_rank_proxy(state)
+  is_scoped <- is.finite(as.integer(active_set_id))
+  if (isTRUE(is_scoped)) {
+    active_ids <- as.character(state$items$item_id[as.integer(state$items$set_id) == as.integer(active_set_id)])
+    defaults <- pairwiseLLM:::adaptive_defaults(length(active_ids))
+    active_scores <- proxy$scores[active_ids]
+    anchor_ids <- pairwiseLLM:::.adaptive_select_rolling_anchors(active_scores, defaults)
+  } else {
+    active_ids <- as.character(state$item_ids)
+    defaults <- pairwiseLLM:::adaptive_defaults(length(active_ids))
+    active_scores <- proxy$scores[active_ids]
+    anchor_ids <- as.character(state$round$anchor_ids)
+    if (length(anchor_ids) == 0L) {
+      anchor_ids <- pairwiseLLM:::.adaptive_select_rolling_anchors(active_scores, defaults)
+    }
+  }
+
+  strata <- pairwiseLLM:::.adaptive_assign_strata(active_scores, defaults)
+  ids <- names(sort(strata$rank_index))
+  bounds <- pairwiseLLM:::.adaptive_stage_distance_bounds(stage_name, fallback_name, defaults)
+  i_vals <- character()
+  j_vals <- character()
+  dist_vals <- integer()
+
+  for (a in seq_len(length(ids) - 1L)) {
+    i_id <- ids[[a]]
+    for (b in (a + 1L):length(ids)) {
+      j_id <- ids[[b]]
+      dist <- abs(as.integer(strata$stratum_map[[i_id]]) - as.integer(strata$stratum_map[[j_id]]))
+      i_anchor <- i_id %in% anchor_ids
+      j_anchor <- j_id %in% anchor_ids
+      keep <- FALSE
+      if (identical(stage_name, "anchor_link")) {
+        keep <- xor(i_anchor, j_anchor)
+      } else {
+        if (stage_name %in% c("long_link", "mid_link") && (i_anchor || j_anchor)) {
+          next
+        }
+        keep <- dist >= bounds$min && dist <= bounds$max
+      }
+
+      if (isTRUE(keep)) {
+        i_vals <- c(i_vals, i_id)
+        j_vals <- c(j_vals, j_id)
+        dist_vals <- c(dist_vals, as.integer(dist))
+      }
+    }
+  }
+
+  tibble::tibble(
+    i = as.character(i_vals),
+    j = as.character(j_vals),
+    dist_stratum_global = as.integer(dist_vals)
+  )
+}
+
+strip_candidate_filter_counts <- function(candidates) {
+  attr(candidates, "candidate_filter_counts") <- NULL
+  candidates
+}
+
 test_that("generate_candidate_pairs uses rank-local windowed generation", {
   items <- make_test_items(4)
   rank_mu <- sort(items$item_id)
@@ -118,7 +183,7 @@ test_that("generate_candidate_pairs validates inputs", {
   )
 })
 
-test_that("rolling anchors refresh from trueskill and refit sources deterministically", {
+test_that("rolling anchors refresh deterministically from trueskill", {
   items <- make_test_items(10)
   trueskill_state <- make_test_trueskill_state(
     items,
@@ -133,14 +198,32 @@ test_that("rolling anchors refresh from trueskill and refit sources deterministi
   expect_equal(state_1$round$anchor_refresh_source, "trueskill_mu")
 
   state_1$btl_fit <- list(
-    theta_mean = stats::setNames(seq(1, 10), as.character(items$item_id))
+    theta_mean = stats::setNames(seq(10, 1), as.character(items$item_id))
   )
   state_1$refit_meta$last_refit_round_id <- 1L
   state_2 <- pairwiseLLM:::.adaptive_refresh_round_anchors(state_1)
 
-  expect_equal(state_2$round$anchor_refresh_source, "refit_theta_mean")
-  expect_false(identical(state_2$round$anchor_ids, anchors_1))
+  expect_equal(state_2$round$anchor_refresh_source, "btl_theta_eap")
+  expect_identical(state_2$round$anchor_ids, anchors_1)
   expect_equal(state_2$round$anchor_refit_round_id, 1L)
+
+  state_3 <- pairwiseLLM:::.adaptive_refresh_round_anchors(state_2)
+  expect_identical(state_3$round$anchor_ids, state_2$round$anchor_ids)
+  expect_equal(state_3$round$anchor_refit_round_id, 1L)
+})
+
+test_that("rank proxy falls back to trueskill when BTL theta is incomplete", {
+  items <- make_test_items(5)
+  trueskill_state <- make_test_trueskill_state(items, mu = seq(5, 1))
+  state <- make_test_state(items, trueskill_state)
+  state$btl_fit <- list(
+    theta_mean = stats::setNames(c(1, 2, 3, 4), as.character(1:4))
+  )
+
+  proxy <- pairwiseLLM:::.adaptive_rank_proxy(state)
+
+  expect_identical(proxy$source, "trueskill_mu")
+  expect_equal(unname(proxy$scores), as.double(trueskill_state$items$mu))
 })
 
 test_that("rolling anchor count follows clamped default", {
@@ -236,6 +319,85 @@ test_that("stage candidate generators enforce stage admissibility", {
   expect_true(any(dist_local == 0L))
 })
 
+test_that("within-set direct candidate builders match the reference legal domain", {
+  items <- make_test_items(18)
+  trueskill_state <- make_test_trueskill_state(items, mu = seq(18, 1))
+  state <- make_test_state(items, trueskill_state)
+  state$round$staged_active <- TRUE
+  state <- pairwiseLLM:::.adaptive_refresh_round_anchors(state)
+
+  for (stage_name in c("anchor_link", "long_link", "mid_link", "local_link")) {
+    expect_equal(
+      strip_candidate_filter_counts(pairwiseLLM:::generate_stage_candidates_from_state(
+        state = state,
+        stage_name = stage_name,
+        fallback_name = "base",
+        C_max = 5000L,
+        seed = 19L
+      )),
+      reference_within_set_stage_candidates(
+        state = state,
+        stage_name = stage_name,
+        fallback_name = "base"
+      ),
+      info = stage_name
+    )
+  }
+})
+
+test_that("Phase A scoped direct builders stay inside the active set and match reference", {
+  items <- tibble::tibble(
+    item_id = as.character(1:8),
+    set_id = c(rep(1L, 4L), rep(2L, 4L)),
+    global_item_id = paste0("g", 1:8)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 23L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  state$trueskill_state <- make_test_trueskill_state(
+    items,
+    mu = c(8, 7, 6, 5, 4, 3, 2, 1)
+  )
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "pending"),
+      validation_message = c("x", "y"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = FALSE,
+    phase = "phase_a",
+    ready_spokes = integer(),
+    active_phase_a_set = 2L
+  )
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+
+  for (stage_name in c("anchor_link", "long_link", "mid_link", "local_link")) {
+    cand <- strip_candidate_filter_counts(pairwiseLLM:::generate_stage_candidates_from_state(
+      state = state,
+      stage_name = stage_name,
+      fallback_name = "base",
+      C_max = 5000L,
+      seed = 23L
+    ))
+    expect_true(all(set_map[cand$i] == 2L & set_map[cand$j] == 2L), info = stage_name)
+    expect_equal(
+      cand,
+      reference_within_set_stage_candidates(
+        state = state,
+        stage_name = stage_name,
+        fallback_name = "base",
+        active_set_id = 2L
+      ),
+      info = stage_name
+    )
+  }
+})
+
 test_that("long-link fallback candidate generators preserve long distance bounds", {
   items <- make_test_items(30)
   trueskill_state <- make_test_trueskill_state(items, mu = seq(30, 1))
@@ -315,6 +477,95 @@ test_that("stage candidate subsampling is deterministic by seed", {
   expect_false(identical(c1, c3))
 })
 
+test_that("large-N within-set bounded construction matches reference subsampling", {
+  items <- make_test_items(220)
+  trueskill_state <- make_test_trueskill_state(items, mu = seq(220, 1))
+  state <- make_test_state(items, trueskill_state)
+  state$round$staged_active <- TRUE
+  state <- pairwiseLLM:::.adaptive_refresh_round_anchors(state)
+
+  for (stage_name in c("anchor_link", "long_link", "mid_link", "local_link")) {
+    actual <- pairwiseLLM:::generate_stage_candidates_from_state(
+      state = state,
+      stage_name = stage_name,
+      fallback_name = "base",
+      C_max = 120L,
+      seed = 29L
+    )
+    reference <- pairwiseLLM:::.adaptive_uniform_subsample_pairs(
+      reference_within_set_stage_candidates(
+        state = state,
+        stage_name = stage_name,
+        fallback_name = "base"
+      ),
+      C_max = 120L,
+      seed = 29L
+    )
+
+    expect_identical(strip_candidate_filter_counts(actual), reference, info = stage_name)
+    expect_identical(
+      isTRUE(attr(actual, "candidate_filter_counts")$bounded_direct_construction_used),
+      TRUE,
+      info = stage_name
+    )
+    expect_true(
+      attr(actual, "candidate_filter_counts")$n_candidates_legal_domain_total > nrow(actual),
+      info = stage_name
+    )
+  }
+})
+
+test_that("large-N Phase A scoped bounded construction matches reference subsampling", {
+  items <- tibble::tibble(
+    item_id = as.character(seq_len(320L)),
+    set_id = c(rep(1L, 160L), rep(2L, 160L)),
+    global_item_id = paste0("g", seq_len(320L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 31L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  state$trueskill_state <- make_test_trueskill_state(items, mu = rev(seq_len(320L)))
+  state$linking$phase_a <- list(
+    set_status = tibble::tibble(
+      set_id = c(1L, 2L),
+      source = c("run", "run"),
+      status = c("ready", "pending"),
+      validation_message = c("x", "y"),
+      artifact_path = c(NA_character_, NA_character_)
+    ),
+    artifacts = list(),
+    ready_for_phase_b = FALSE,
+    phase = "phase_a",
+    ready_spokes = integer(),
+    active_phase_a_set = 2L
+  )
+
+  actual <- pairwiseLLM:::generate_stage_candidates_from_state(
+    state = state,
+    stage_name = "local_link",
+    fallback_name = "base",
+    C_max = 150L,
+    seed = 31L
+  )
+  reference <- pairwiseLLM:::.adaptive_uniform_subsample_pairs(
+    reference_within_set_stage_candidates(
+      state = state,
+      stage_name = "local_link",
+      fallback_name = "base",
+      active_set_id = 2L
+    ),
+    C_max = 150L,
+    seed = 31L
+  )
+  set_map <- stats::setNames(as.integer(items$set_id), as.character(items$item_id))
+
+  expect_identical(strip_candidate_filter_counts(actual), reference)
+  expect_true(all(set_map[actual$i] == 2L & set_map[actual$j] == 2L))
+  expect_true(isTRUE(attr(actual, "candidate_filter_counts")$bounded_direct_construction_used))
+})
+
 test_that("round candidates helper edge branches are exercised", {
   scores <- stats::setNames(seq(6, 1), as.character(1:6))
   defaults <- pairwiseLLM:::adaptive_defaults(6L)
@@ -341,7 +592,11 @@ test_that("round candidates helper edge branches are exercised", {
 
   no_recent <- pairwiseLLM:::.adaptive_round_exposure_filter(
     candidates = tibble::tibble(i = c("1", "2"), j = c("3", "4")),
-    round = list(per_round_item_uses = stats::setNames(integer(), character()), repeat_in_round_budget = 1L, repeat_in_round_used = 0L),
+    round = list(
+      per_round_item_uses = stats::setNames(integer(), character()),
+      repeat_in_round_budget = 1L,
+      repeat_in_round_used = 0L
+    ),
     recent_deg = numeric(),
     defaults = pairwiseLLM:::adaptive_defaults(8L),
     allow_repeat_pressure = TRUE

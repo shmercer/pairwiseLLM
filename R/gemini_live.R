@@ -85,7 +85,7 @@
 #' @param text1 Character containing the first sample text.
 #' @param ID2 Character ID for the second sample.
 #' @param text2 Character containing the second sample text.
-#' @param model Gemini model identifier (for example `"gemini-3-pro-preview"` or
+#' @param model Gemini model identifier (for example `"gemini-3.5-flash-lite"` or
 #'   `"gemini-3-flash-preview"`). The value is interpolated into the path
 #'   `"/{api_version}/models/<model>:generateContent"`.
 #' @param trait_name Short label for the trait (e.g. `"Overall Quality"`).
@@ -100,7 +100,8 @@
 #'   \itemize{
 #'     \item For Gemini 3 Flash models (for example `"gemini-3-flash-preview"`),
 #'       `"minimal"` is supported and is passed through as `"minimal"`.
-#'     \item For non-Flash Gemini 3 models (for example `"gemini-3-pro-preview"`),
+#'     \item For models not matched by the package's Gemini 3 Flash-name
+#'       detector (for example `"gemini-3.5-flash-lite"`),
 #'       `"minimal"` is not supported.
 #'     \item For backward compatibility with earlier Gemini 3 Pro usage,
 #'       `"low"` maps to `"low"` and both `"medium"` and `"high"` map to `"high"`.
@@ -112,6 +113,9 @@
 #' @param top_k Optional top-k sampling parameter. If `NULL`, omitted.
 #' @param max_output_tokens Optional maximum output token count. If `NULL`,
 #'   omitted.
+#' @param service_tier Gemini Developer API service tier. Use `"standard"`
+#'   (default) or `NULL` for the provider default request, or `"flex"` /
+#'   `"priority"` to encode the documented Gemini `serviceTier` request field.
 #' @param api_version API version to use, default `"v1beta"`. For plain text
 #'   pairwise comparisons v1beta is recommended.
 #' @param include_raw Logical; if `TRUE`, the returned tibble includes a
@@ -154,13 +158,13 @@
 #' td <- trait_description("overall_quality")
 #' tmpl <- set_prompt_template()
 #'
-#' # Gemini 3 Pro example (existing behavior)
+#' # Dated tested Gemini Developer API configuration
 #' res <- gemini_compare_pair_live(
 #'   ID1               = "S01",
 #'   text1             = "Text 1",
 #'   ID2               = "S02",
 #'   text2             = "Text 2",
-#'   model             = "gemini-3-pro-preview",
+#'   model             = "gemini-3.5-flash-lite",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
@@ -190,6 +194,8 @@
 #' res_flash
 #' }
 #'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 gemini_compare_pair_live <- function(
   ID1,
@@ -206,6 +212,7 @@ gemini_compare_pair_live <- function(
   top_p = NULL,
   top_k = NULL,
   max_output_tokens = NULL,
+  service_tier = "standard",
   api_version = "v1beta",
   include_raw = FALSE,
   include_thoughts = FALSE,
@@ -236,6 +243,8 @@ gemini_compare_pair_live <- function(
       "(e.g., `gemini-3-flash-preview`)."
     ))
   }
+
+  service_tier <- normalize_gemini_service_tier(service_tier)
 
   ID1 <- as.character(ID1)
   ID2 <- as.character(ID2)
@@ -310,6 +319,9 @@ gemini_compare_pair_live <- function(
   # Attach generationConfig only if non-empty
   if (length(generation_config) > 0L) {
     body$generationConfig <- generation_config
+  }
+  if (!is.null(service_tier)) {
+    body$serviceTier <- service_tier
   }
 
   path <- sprintf("/%s/models/%s:generateContent", api_version, model)
@@ -522,7 +534,7 @@ gemini_compare_pair_live <- function(
 #' }
 #'
 #' @param pairs Tibble/data frame with columns `ID1`, `text1`, `ID2`, `text2`.
-#' @param model Gemini model name (e.g. `"gemini-3-pro-preview"` or
+#' @param model Gemini model name (e.g. `"gemini-3.5-flash-lite"` or
 #'   `"gemini-3-flash-preview"`).
 #' @param trait_name Trait name.
 #' @param trait_description Trait description.
@@ -539,6 +551,10 @@ gemini_compare_pair_live <- function(
 #' @param top_k Optional numeric; forwarded to [gemini_compare_pair_live()].
 #' @param max_output_tokens Optional integer; forwarded to
 #'   [gemini_compare_pair_live()].
+#' @param service_tier Gemini Developer API service tier forwarded to
+#'   [gemini_compare_pair_live()]. Use `"standard"` (default) or `NULL` for
+#'   provider default behavior, or `"flex"` / `"priority"` to request the
+#'   documented Gemini service tier.
 #' @param api_version API version; default `"v1beta"`.
 #' @param verbose Logical; print status/timing every `status_every` pairs.
 #' @param status_every Integer; how often to print status (default 1 = every
@@ -559,8 +575,8 @@ gemini_compare_pair_live <- function(
 #'   packages.
 #' @param workers Integer; the number of parallel workers (threads) to use if
 #'   \code{parallel = TRUE}. Defaults to 1.
-#'   \strong{Guidance:} Start conservatively (e.g., 2-4 workers) to avoid hitting
-#'   HTTP 429 errors, as Gemini rate limits can be strict depending on your tier.
+#'   \strong{Guidance:} Use no more than 2 workers to avoid HTTP 429 errors and
+#'   respect shared check-farm resources.
 #' @param ... Reserved for future extensions; passed through to
 #'   [gemini_compare_pair_live()] (but `thinking_budget` is ignored there).
 #'
@@ -594,7 +610,7 @@ gemini_compare_pair_live <- function(
 #' # 1. Sequential execution with incremental saving
 #' res_seq <- submit_gemini_pairs_live(
 #'   pairs             = pairs,
-#'   model             = "gemini-3-pro-preview",
+#'   model             = "gemini-3.5-flash-lite",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
@@ -604,13 +620,13 @@ gemini_compare_pair_live <- function(
 #' # 2. Parallel execution (faster)
 #' res_par <- submit_gemini_pairs_live(
 #'   pairs             = pairs,
-#'   model             = "gemini-3-pro-preview",
+#'   model             = "gemini-3.5-flash-lite",
 #'   trait_name        = td$name,
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
 #'   save_path         = "results_gemini_par.csv",
 #'   parallel          = TRUE,
-#'   workers           = 4
+#'   workers           = 2
 #' )
 #'
 #' # 3. Gemini 3 Flash example (minimal thinking)
@@ -628,6 +644,8 @@ gemini_compare_pair_live <- function(
 #' head(res_par$results)
 #' }
 #'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 submit_gemini_pairs_live <- function(
     pairs,
@@ -641,6 +659,7 @@ submit_gemini_pairs_live <- function(
     top_p = NULL,
     top_k = NULL,
     max_output_tokens = NULL,
+    service_tier = "standard",
     api_version = "v1beta",
     verbose = TRUE,
     status_every = 1L,
@@ -820,6 +839,7 @@ submit_gemini_pairs_live <- function(
               prompt_template = prompt_template, api_key = api_key,
               thinking_level = thinking_level, temperature = temperature,
               top_p = top_p, top_k = top_k, max_output_tokens = max_output_tokens,
+              service_tier = service_tier,
               api_version = api_version, include_raw = include_raw, include_thoughts = include_thoughts,
               pair_uid = pair_uid,
               ...
@@ -907,6 +927,7 @@ submit_gemini_pairs_live <- function(
             prompt_template = prompt_template, api_key = api_key,
             thinking_level = thinking_level, temperature = temperature,
             top_p = top_p, top_k = top_k, max_output_tokens = max_output_tokens,
+            service_tier = service_tier,
             api_version = api_version, include_raw = include_raw, include_thoughts = include_thoughts,
             pair_uid = pair_uid,
             ...

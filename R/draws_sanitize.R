@@ -49,3 +49,36 @@
 
   draws_clean
 }
+
+#' @keywords internal
+#' @noRd
+.pairwiseLLM_col_sds <- function(x, center = NULL) {
+  if (!is.matrix(x) || !is.numeric(x)) {
+    rlang::abort("`x` must be a numeric matrix.")
+  }
+  n <- nrow(x)
+  if (n < 2L || ncol(x) < 1L) {
+    return(rep_len(NA_real_, ncol(x)))
+  }
+  center <- center %||% colMeans(x)
+  center <- as.double(center)
+  if (length(center) != ncol(x)) {
+    rlang::abort("`center` must have one value per column in `x`.")
+  }
+  ss <- colSums(x * x) - as.double(n) * center^2
+  sqrt(pmax(ss / as.double(n - 1L), 0))
+}
+
+#' @keywords internal
+#' @noRd
+.pairwiseLLM_col_quantiles <- function(x, probs, names = FALSE) {
+  if (!is.matrix(x) || !is.numeric(x)) {
+    rlang::abort("`x` must be a numeric matrix.")
+  }
+  probs <- as.double(probs)
+  vapply(
+    seq_len(ncol(x)),
+    function(idx) stats::quantile(x[, idx], probs = probs, names = names),
+    numeric(length(probs))
+  )
+}

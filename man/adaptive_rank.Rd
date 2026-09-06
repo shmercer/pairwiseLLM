@@ -8,7 +8,7 @@ adaptive_rank(
   data,
   id_col = 1,
   text_col = 2,
-  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
   model = NULL,
   trait = "overall_quality",
   trait_name = NULL,
@@ -25,6 +25,7 @@ adaptive_rank(
   btl_config = NULL,
   session_dir = NULL,
   persist_item_log = FALSE,
+  checkpoint_every_steps = NULL,
   resume = TRUE,
   seed = 1L,
   progress = c("all", "refits", "steps", "none"),
@@ -41,17 +42,21 @@ adaptive_rank(
 \code{.txt}, \code{.rds}), or a directory containing \code{.txt} files.}
 
 \item{id_col}{ID column selector for tabular inputs. Passed to
-\code{\link[=read_samples_df]{read_samples_df()}}.}
+\code{\link[=read_samples_df]{read_samples_df()}}. Default is \code{1}.}
 
 \item{text_col}{Text column selector for tabular inputs. Passed to
-\code{\link[=read_samples_df]{read_samples_df()}}.}
+\code{\link[=read_samples_df]{read_samples_df()}}. Default is \code{2}.}
 
-\item{backend}{Backend passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.}
+\item{backend}{Backend passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}. Choices are
+\code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"vertex"}, \code{"together"}, and
+\code{"ollama"}. Default is \code{"openai"}.}
 
-\item{model}{Model passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.}
+\item{model}{Model passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}. Required when
+\code{judge} is \code{NULL}. Default is \code{NULL}.}
 
 \item{trait}{Built-in trait key used when no custom trait is supplied.
-Ignored when both \code{trait_name} and \code{trait_description} are supplied.}
+Ignored when both \code{trait_name} and \code{trait_description} are supplied.
+Default is \code{"overall_quality"}.}
 
 \item{trait_name}{Optional custom trait display name.}
 
@@ -61,17 +66,21 @@ Ignored when both \code{trait_name} and \code{trait_description} are supplied.}
 \code{\link[=set_prompt_template]{set_prompt_template()}}.}
 
 \item{endpoint}{Endpoint family passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.
-Only used when \code{backend = "openai"}; ignored otherwise.}
+Only used when \code{backend = "openai"}; choices are \code{"chat.completions"} and
+\code{"responses"}. Default is \code{"chat.completions"}. Ignored for other
+backends.}
 
-\item{api_key}{Optional API key passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.}
+\item{api_key}{Optional API key passed to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.
+Default is \code{NULL}.}
 
-\item{include_raw}{Logical; forwarded to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.}
+\item{include_raw}{Logical; forwarded to \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}.
+Default is \code{FALSE}.}
 
 \item{judge_args}{Named list of fixed additional arguments forwarded to
-\code{\link[=llm_compare_pair]{llm_compare_pair()}} by the generated judge.}
+\code{\link[=llm_compare_pair]{llm_compare_pair()}} by the generated judge. Default is \code{list()}.}
 
 \item{judge_call_args}{Named list of additional arguments forwarded to the
-judge at run time through \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}.}
+judge at run time through \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}. Default is \code{list()}.}
 
 \item{n_steps}{Maximum number of attempted adaptive steps to execute in this
 call. The run may return earlier due to candidate starvation or BTL stop
@@ -79,45 +88,225 @@ criteria. Attempted invalid steps also count toward this limit.}
 
 \item{fit_fn}{Optional fit override passed to \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}.}
 
-\item{adaptive_config}{Optional named list passed to
-\code{\link[=adaptive_rank_start]{adaptive_rank_start()}} and \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}} to control adaptive
-controller behavior. Supported fields:
-\code{global_identified_reliability_min}, \code{global_identified_rank_corr_min},
-\code{p_long_low}, \code{p_long_high}, \code{long_taper_mult}, \code{long_frac_floor},
-\code{mid_bonus_frac}, \code{explore_taper_mult}, \code{boundary_k}, \code{boundary_window},
-\code{boundary_frac}, \code{p_star_override_margin}, and
-\code{star_override_budget_per_round}. Unknown fields and invalid values abort
-with actionable errors.}
+\item{adaptive_config}{Optional named list of adaptive controller overrides.
+Unknown fields and invalid values abort with actionable errors.
+
+Supported keys (with defaults) include:
+\describe{
+\item{\code{global_identified_reliability_min}}{Global EAP reliability threshold
+used to mark the run as globally identified after a refit. Default is
+\code{0.80}.}
+\item{\code{global_identified_rank_corr_min}}{Minimum Spearman correlation
+between the TrueSkill rank proxy and the BTL posterior mean ranks used
+to mark the run as globally identified after a refit. Default is \code{0.90}.}
+\item{\code{p_long_low}}{Lower bound for long-link posterior win probability
+gating after global identifiability when an accepted posterior refit is
+available. Before posterior availability, the gate falls back
+deterministically to TrueSkill. Default is \code{0.10}.}
+\item{\code{p_long_high}}{Upper bound for long-link posterior win probability
+gating after global identifiability when an accepted posterior refit is
+available. Before posterior availability, the gate falls back
+deterministically to TrueSkill. Default is \code{0.90}.}
+\item{\code{long_taper_mult}}{Multiplier controlling long-link quota tapering
+after global identifiability. Default is \code{0.25}.}
+\item{\code{long_frac_floor}}{Floor fraction for long-link quota after tapering.
+Default is \code{0.02}.}
+\item{\code{mid_bonus_frac}}{Fraction of tapered long-link quota reallocated to
+mid-links. Default is \code{0.20}.}
+\item{\code{explore_taper_mult}}{Multiplier controlling exploration tapering
+after global identifiability. Default is \code{0.50}.}
+\item{\code{boundary_k}}{Top/bottom band size used by boundary-priority routing
+after global identifiability. Default is \code{20L}.}
+\item{\code{boundary_window}}{Lookback window (steps) used by boundary-priority
+routing after global identifiability. Default is
+\code{max(10L, ceiling(0.05 * N))} where \code{N} is the number of items.}
+\item{\code{boundary_frac}}{Fraction of local-stage steps eligible for
+boundary-priority routing after global identifiability. Default is \code{0.15}.}
+\item{\code{p_star_override_margin}}{Near-tie probability margin for star-cap
+override consideration. Default is \code{0.05}.}
+\item{\code{star_override_budget_per_round}}{Per-round budget of star-cap
+overrides allowed by the near-tie rule. Default is \code{1L}.}
+
+\item{\code{run_mode}}{Run mode. Choices are \code{"within_set"} (single-set),
+\code{"link_one_spoke"} (hub + one spoke), and \code{"link_multi_spoke"} (hub +
+multiple spokes). Default is \code{"within_set"}. Linking modes require
+multi-set inputs with \code{set_id} and \code{global_item_id} in \code{data}.}
+\item{\code{hub_id}}{Hub \code{set_id} for linking modes. Default is \code{1L}.}
+\item{Phase B estimation}{Linking modes use anchored-joint estimation with
+a hard-locked hub, global-shared judge parameters, concurrent spokes, and
+fail-fast Phase A artifact import. Historical transform/free-lock config
+fields are normalized only when loading older sessions or Phase A
+artifacts; they are not accepted as new \code{adaptive_config} keys.}
+\item{\code{anchored_joint_spoke_prior_scale}}{Scale multiplier for anchored-
+joint spoke priors. Default is \code{1.0}.}
+\item{\code{anchored_joint_sd_floor}}{Lower bound applied to anchored-joint
+spoke prior SDs derived from Phase A artifacts. Default is \code{0.02}.}
+\item{\code{anchored_joint_spoke_prior_fallback_sd}}{Fallback anchored-joint
+spoke prior SD used when artifact-level SDs are unavailable. Default is
+\code{1.0}.}
+
+\item{\code{link_identified_reliability_min}}{Minimum
+\code{reliability_link_global} value on the linking-active item domain used
+to mark a spoke as identified. Default is \code{0.80}.}
+\item{\code{link_stop_reliability_min}}{Minimum \code{reliability_link_global} value
+on the linking-active item domain used to permit linking stop. Default
+is \code{0.90}.}
+\item{\code{link_rank_corr_min}}{Minimum Spearman rank correlation between
+TrueSkill and transformed BTL posterior mean ranks on the linking-active
+item domain. Default is \code{0.90}.}
+\item{\code{max_pairs_after_stop}}{Stop-boundary budget: when \code{0L}, the run stops
+immediately after the first refit with \code{stop_decision = TRUE}. Values
+\verb{> 0L} allow that many additional committed comparisons after the first
+stop boundary before deterministic termination. Default is \code{0L}.}
+
+\item{\code{probe_panel_edges}}{Optional explicit planned held-out probe target
+per spoke. When omitted in linking modes, the default scales with the
+largest spoke: \code{max(160L, ceiling(0.12 * max_spoke_items))}. When
+supplied, the value must be a positive integer and becomes the canonical
+planned target recorded in Phase B logs.}
+\item{\code{probe_pairs_per_refit_per_spoke}}{Base held-out probe collection cap
+per spoke per refit window while the spoke remains active in Phase B. If
+omitted in linking modes, the default scales with the largest spoke:
+\code{max(4L, ceiling(0.0035 * max_spoke_items))}. The runtime uses this as a
+fixed per-refit cap and does not apply bootstrap or sole-blocker probe
+acceleration.}
+\item{\code{probe_edges_min_for_stop}}{Minimum realized held-out probe edges
+required before Phase B stop or escalation can be evaluated. If omitted
+in linking modes, the default scales with the largest spoke:
+\code{max(120L, ceiling(0.106 * max_spoke_items))}.}
+\item{\code{probe_near_boundary_min_frac}, \code{probe_extreme_max_frac},
+\code{probe_midrange_min_frac}, \code{probe_unique_hub_min_frac},
+\code{probe_unique_spoke_min_frac}, \code{probe_rank_bins},
+\code{probe_rank_bins_hub_min}, \code{probe_rank_bins_spoke_min},
+\code{probe_brier_near_boundary_max}, \code{probe_ece_max}}{Held-out probe quality
+gates used by Phase B stop decisions to require useful probability
+spread, hub/spoke item coverage, rank-bin coverage, near-boundary Brier
+calibration, and calibration ECE.}
+\item{\code{probe_brier_delta_min}}{Minimum held-out probe Brier improvement
+required by the Phase B probe quality gate. Default is \code{0.005}.}
+\item{\code{probe_brier_max}}{Maximum held-out probe Brier score allowed by the
+Phase B stop gate. Default is \code{0.19}.}
+\item{\code{probe_pred_rmse_max}}{Maximum lagged held-out probe prediction RMSE
+allowed by the Phase B stop gate. Default is \code{0.015}.}
+\item{\code{theta_global_rmse_max}}{Maximum lagged transformed-score RMSE on the
+direct-evidence spoke scope allowed by the Phase B stop gate. Default is
+\code{0.05}.}
+\item{\code{stability_window_refits}}{Number of eligible refits retained in the
+rolling stop window. Default is \code{3L}.}
+\item{\code{stability_passes_required}}{Minimum number of passing eligible
+refits required within the rolling stop window. Default is \code{2L}.}
+\item{\code{min_refits_in_phase_b}}{Minimum refit index within Phase B before
+linking stop can be evaluated. Default is \code{3L}.}
+\item{\code{reliability_var_mu_epsilon}}{Degeneracy guard for the active-domain
+variance of posterior transformed-score means used in linking
+reliability. Default is \code{1e-6}.}
+\item{\code{reliability_total_var_epsilon}}{Degeneracy guard for the total
+active-domain transformed-score variance used in linking reliability.
+Default is \code{1e-6}.}
+\item{\code{hub_anchor_required_phase_b}}{Controls the normative \code{HubEligible}
+domain used for Phase B held-out probe construction. When \code{TRUE}
+(default), planned probes are drawn from the hub anchor pool; when
+\code{FALSE}, they are drawn from the full hub set.}
+\item{\code{spoke_quantile_coverage_bins}}{Cross-set coverage control: number of
+quantile bins used to ensure spoke items across the score distribution
+receive cross-set exposure within each refit window. Default is \code{3L}.}
+\item{\code{spoke_quantile_coverage_min_per_bin_per_refit}}{Cross-set coverage
+control: minimum cross-set comparisons per quantile bin per refit
+window. Default is \code{1L}.}
+\item{\code{min_cross_set_pairs_per_spoke_per_refit}}{Only used in concurrent
+multi-spoke linking. Minimum cross-set committed comparisons per spoke
+per refit window. Default is \code{5L}.}
+
+\item{\code{phase_a_mode}}{Phase A handling for linking modes. Choices are
+\code{"run"} (compute within-set Phase A artifacts in-run), \code{"import"}
+(require user-supplied artifacts), and \code{"mixed"} (import where provided,
+otherwise run). Default is \code{"run"}.}
+\item{\code{phase_a_required_reliability_min}}{Minimum within-set EAP reliability
+required for Phase A artifacts to be considered ready (unless an imported
+artifact is explicitly marked \code{quality_gate_accepted = TRUE} as a trusted
+external quality override). Default is \code{0.80}.}
+\item{\code{phase_a_artifacts}}{Named list mapping \code{set_id} to an imported Phase A
+artifact (list) or a \code{.rds} path containing one. On the wrapper surface,
+this field also accepts a prior \code{adaptive_rank()} \code{phase_a} return,
+an \code{out$phase_a$manifest}, a saved session directory, or a
+\verb{phase_a_artifacts/} directory, and normalizes those inputs back to the
+canonical named-list form before runtime validation. Imported artifacts
+must match the current normalized BTL \code{model_variant}; all four canonical
+variants (\code{"btl"}, \code{"btl_e"}, \code{"btl_b"}, \code{"btl_e_b"}) are supported when
+the artifact and run variants match. Default is \code{list()}.}
+}
+
+Wrapper preflight validates linking mode combinations against supplied data
+and aborts early for incompatible \code{run_mode}/set structure combinations.}
 
 \item{btl_config}{Optional named list passed to \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}
 to control BTL refit cadence, stopping diagnostics, and selected
 round-log diagnostics. Supported fields:
-\code{refit_pairs_target}, \code{model_variant}, \code{ess_bulk_min},
-\code{ess_bulk_min_near_stop}, \code{max_rhat}, \code{divergences_max},
-\code{eap_reliability_min}, \code{stability_lag}, \code{theta_corr_min},
-\code{theta_sd_rel_change_max}, \code{rank_spearman_min}, \code{near_tie_p_low},
-and \code{near_tie_p_high} (\verb{near_tie_*} affects round logging only, not stop
-decisions). Defaults are resolved from the current item count and merged
-with user overrides.}
+\describe{
+\item{\code{refit_pairs_target}}{Minimum new committed comparisons required
+before the next BTL refit. Default is \code{ceiling(N / 2)} clamped to
+\verb{[20L, 5000L]}. In linking Phase A, \code{N} is the active Phase A set size.
+In concurrent linking Phase B, the effective target is raised when
+needed so each active spoke can satisfy the configured active probe
+floor plus the base per-refit probe cap.}
+\item{\code{model_variant}}{BTL likelihood variant used for inference only.
+Choices are \code{"btl"} (no lapse, no position bias), \code{"btl_e"} (lapse),
+\code{"btl_b"} (position bias), and \code{"btl_e_b"} (lapse + position bias).
+Default is \code{"btl_e_b"}.}
+\item{\code{ess_bulk_min}}{Minimum bulk effective sample size required for
+diagnostics to pass. Default is \code{max(400, round(20 * sqrt(N)))}.}
+\item{\code{ess_bulk_min_near_stop}}{Stricter bulk ESS requirement used when a
+run is close to stopping. Default is \code{max(1000, round(50 * sqrt(N)))}.}
+\item{\code{max_rhat}}{Maximum allowed split-\eqn{\\hat{R}}. Default is \code{1.01}.}
+\item{\code{divergences_max}}{Maximum allowed divergent transitions. Default is
+\code{0L}.}
+\item{\code{eap_reliability_min}}{Minimum EAP reliability required to permit
+stopping. Default is \code{0.90}.}
+\item{\code{stability_lag}}{Lag (in refits) used for stability checks. Default
+is \code{2L}.}
+\item{\code{theta_corr_min}}{Minimum lagged correlation of posterior means
+required by stability checks. Default is \code{0.95}.}
+\item{\code{theta_sd_rel_change_max}}{Maximum relative change in posterior SD
+allowed by stability checks. Default is \code{0.10}.}
+\item{\code{rank_spearman_min}}{Minimum lagged Spearman rank correlation
+required by stability checks. Default is \code{0.95}.}
+\item{\code{near_tie_p_low}}{Lower bound of the near-tie probability band used
+for round logging only. Default is \code{0.40}.}
+\item{\code{near_tie_p_high}}{Upper bound of the near-tie probability band used
+for round logging only. Default is \code{0.60}.}
+}
+Defaults depend on the current item count \code{N} and are merged with user
+overrides.}
 
-\item{session_dir}{Optional session directory for persistence/resume.}
+\item{session_dir}{Optional session directory for persistence/resume.
+Default is \code{NULL}.}
 
-\item{persist_item_log}{Logical; write per-refit item logs when \code{TRUE}.}
+\item{persist_item_log}{Logical; write per-refit item logs when \code{TRUE}.
+Default is \code{FALSE}.}
+
+\item{checkpoint_every_steps}{Optional positive integer checkpoint cadence for
+ordinary live persistence. New sessions default to \code{100L}; resumed sessions
+reuse the persisted cadence unless overridden.}
 
 \item{resume}{Logical; when \code{TRUE} and \code{session_dir} contains a valid session,
-resume from disk; otherwise initialize a new state.}
+resume from disk; otherwise initialize a new state.
+Default is \code{TRUE}.}
 
-\item{seed}{Integer seed used when creating a new adaptive state.}
+\item{seed}{Integer seed used when creating a new adaptive state. Default is
+\code{1L}.}
 
-\item{progress}{Progress mode for \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}.}
+\item{progress}{Progress mode for \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}. Choices are
+\code{"all"}, \code{"refits"}, \code{"steps"}, and \code{"none"}. Default is \code{"all"}.}
 
-\item{progress_redraw_every}{Redraw interval for progress output.}
+\item{progress_redraw_every}{Redraw interval for progress output. Default is
+\code{10L}.}
 
-\item{progress_show_events}{Logical; show step events.}
+\item{progress_show_events}{Logical; show step events. Default is \code{TRUE}.}
 
-\item{progress_errors}{Logical; show invalid-step events.}
+\item{progress_errors}{Logical; show invalid-step events. Default is \code{TRUE}.}
 
-\item{save_outputs}{Logical; when \code{TRUE}, save returned outputs as \code{.rds}.}
+\item{save_outputs}{Logical; when \code{TRUE}, save returned outputs as \code{.rds}.
+Default is \code{FALSE}.}
 
 \item{output_file}{Optional output \code{.rds} path. If \code{NULL} and
 \code{save_outputs = TRUE}, defaults to \code{file.path(session_dir, "adaptive_outputs.rds")}
@@ -133,8 +322,14 @@ A list with:
 \item{state}{Final \code{adaptive_state}.}
 \item{summary}{Run-level summary from \code{\link[=summarize_adaptive]{summarize_adaptive()}}.}
 \item{refits}{Per-refit summary from \code{\link[=summarize_refits]{summarize_refits()}}.}
-\item{items}{Item summary from \code{\link[=summarize_items]{summarize_items()}}.}
+\item{items}{Item summary from \code{\link[=summarize_items]{summarize_items()}}, sorted by a usable
+canonical rank column (\code{rank_link} for linking runs when available,
+otherwise \code{rank_raw}).}
 \item{logs}{Canonical logs from \code{\link[=adaptive_get_logs]{adaptive_get_logs()}}.}
+\item{phase_a}{Canonical wrapper-visible Phase A discovery surface with
+per-set status, \code{artifact_dir}, \code{artifact_paths}, and a reusable
+\code{manifest} that can be fed back into a later linking run via
+\code{adaptive_config$phase_a_artifacts}.}
 \item{output_file}{Saved output path when \code{save_outputs = TRUE}, otherwise
 \code{NULL}.}
 }
@@ -152,6 +347,9 @@ runs. It supports:
 or a directory of \code{.txt} files;
 \item model/backend configuration through \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}};
 \item all adaptive runtime controls exposed by \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}};
+\item wrapper-visible \code{phase_a} reuse surfaces (\code{manifest},
+\code{artifact_dir}, and per-set status) for separate-run then later-link
+workflows;
 \item resumability via \code{session_dir} and \code{resume};
 \item optional saving of run outputs to an \code{.rds} artifact.
 }
@@ -169,6 +367,16 @@ all key controls from \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_liv
 \code{session_dir}, and \code{persist_item_log}.
 Use \code{adaptive_config} for identifiability-gated controller behavior and
 \code{btl_config} for inference/diagnostics cadence only.
+
+Linking run modes:
+\code{run_mode = "within_set"} is the single-set workflow.
+\code{run_mode = "link_one_spoke"} and \code{run_mode = "link_multi_spoke"} require
+multi-set input (\code{set_id}/\code{global_item_id}), enforce hub<->spoke routing
+defaults, and preserve Phase A artifact gating before Phase B cross-set
+comparisons begin. Phase B uses anchored-joint estimation with a hard-locked
+hub and global-shared judge parameters. Every wrapper call returns canonical
+\code{phase_a} outputs that can be fed back into a later linking run through
+\code{adaptive_config$phase_a_artifacts}.
 
 Selection semantics:
 pair selection is TrueSkill-driven in one-pair transactional steps.
@@ -189,7 +397,8 @@ repeat-pressure gating is based on recent exposure (bottom-quantile
 accounting.
 
 Inference separation:
-BTL refits are used for posterior inference, diagnostics, and stopping only.
+BTL refits are used for posterior inference, diagnostics, stop logic, and
+the long-link posterior gate after an accepted refit is available.
 They are not used to choose the next pair.
 
 Resume behavior:
@@ -217,7 +426,7 @@ out$summary
 head(out$logs$step_log)
 
 \dontrun{
-# Live run with OpenAI gpt-5.1 + flex priority.
+# Live run with OpenAI gpt-5.1 + lower-cost Flex processing.
 live <- adaptive_rank(
   data = example_writing_samples[1:12, c("ID", "text")],
   backend = "openai",
@@ -247,6 +456,68 @@ live <- adaptive_rank(
 
 print(live$state)
 live$summary
+
+# Wrapper-driven linking workflow (hub + one spoke).
+linking_samples <- example_writing_samples[1:12, c("ID", "text")]
+linking_samples$set_id <- rep(c(1L, 2L), each = 6L)
+linking_samples$global_item_id <- paste0("g_", linking_samples$ID)
+
+link_out <- adaptive_rank(
+  data = linking_samples,
+  id_col = "ID",
+  text_col = "text",
+  backend = "openai",
+  model = "gpt-5.1",
+  adaptive_config = list(
+    run_mode = "link_one_spoke",
+    hub_id = 1L,
+    phase_a_mode = "run",
+    probe_panel_edges = 48L,
+    hub_anchor_required_phase_b = TRUE,
+    max_pairs_after_stop = 0L
+  ),
+  n_steps = 200,
+  session_dir = file.path(tempdir(), "adaptive-link"),
+  resume = TRUE,
+  progress = "refits"
+)
+
+# Later linking from prior wrapper outputs:
+# hub_run <- adaptive_rank(
+#   data = linking_samples[linking_samples$set_id == 1L, c("ID", "text")],
+#   backend = "openai",
+#   model = "gpt-5.1",
+#   n_steps = 120,
+#   progress = "none"
+# )
+# spoke_run <- adaptive_rank(
+#   data = linking_samples[linking_samples$set_id == 2L, c("ID", "text")],
+#   backend = "openai",
+#   model = "gpt-5.1",
+#   n_steps = 120,
+#   progress = "none"
+# )
+#
+# link_out <- adaptive_rank(
+#   data = linking_samples,
+#   id_col = "ID",
+#   text_col = "text",
+#   backend = "openai",
+#   model = "gpt-5.1",
+#   adaptive_config = list(
+#     run_mode = "link_one_spoke",
+#     hub_id = 1L,
+#     phase_a_mode = "import",
+#     phase_a_artifacts = list(
+#       `1` = hub_run$phase_a$manifest,
+#       `2` = spoke_run$phase_a$artifact_dir
+#     )
+#   ),
+#   n_steps = 200,
+#   progress = "refits"
+# )
+
+names(link_out$logs)
 }
 
 }
@@ -254,11 +525,11 @@ live$summary
 \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}}, \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
 \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}}, \code{\link[=llm_compare_pair]{llm_compare_pair()}}
 
-Other adaptive ranking: 
-\code{\link{adaptive_rank_resume}()},
-\code{\link{adaptive_rank_run_live}()},
-\code{\link{adaptive_rank_start}()},
-\code{\link{make_adaptive_judge_llm}()},
-\code{\link{summarize_adaptive}()}
+Other adaptive ranking:
+\code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
+\code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
+\code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
+\code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}},
+\code{\link[=summarize_adaptive]{summarize_adaptive()}}
 }
 \concept{adaptive ranking}

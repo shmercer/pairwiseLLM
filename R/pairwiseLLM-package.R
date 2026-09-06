@@ -21,10 +21,11 @@
 #' 5. **Collect judgments**:
 #'    - Live: [submit_llm_pairs()] or provider wrappers like
 #'      [submit_openai_pairs_live()], [submit_anthropic_pairs_live()],
-#'      [submit_gemini_pairs_live()], [submit_ollama_pairs_live()],
-#'      [submit_together_pairs_live()].
+#'      [submit_gemini_pairs_live()], [submit_vertex_pairs_live()],
+#'      [submit_ollama_pairs_live()], [submit_together_pairs_live()].
 #'    - Batch (recommended for scale): [run_openai_batch_pipeline()],
 #'      [run_anthropic_batch_pipeline()], [run_gemini_batch_pipeline()].
+#'      Vertex is currently supported on the live path only.
 #' 6. **Assemble modeling data** with [build_bt_data()] or [build_elo_data()]
 #'    (and for some pipelines, [build_btl_results_data()]).
 #' 7. **Fit / summarize**:
@@ -32,6 +33,17 @@
 #'    - Bradley–Terry: [fit_bt_model()]
 #'    - Bayesian BTL (MCMC): [fit_bayes_btl_mcmc()]
 #'    - Summaries: [summarize_bt_fit()], [summarize_items()], [summarize_refits()]
+#'
+#' ### Provider matrix
+#' - Live backends: `"openai"`, `"anthropic"`, `"gemini"` (Gemini Developer
+#'   API), `"vertex"` (Vertex AI Gemini API), `"together"`, and `"ollama"`.
+#' - Batch backends: `"openai"`, `"anthropic"`, and `"gemini"`.
+#'   `backend = "vertex"` is rejected explicitly on generic batch surfaces.
+#' - Gemini Developer API and Vertex use separate API-key surfaces:
+#'   `GEMINI_API_KEY` and `VERTEX_API_KEY`.
+#' - `service_tier` is provider-specific. Gemini Developer API and Vertex share
+#'   the public values `"standard"`, `"flex"`, and `"priority"`, but they use
+#'   different request transports.
 #'
 #' ## Adaptive Bayesian pairing + ranking (end-to-end loop)
 #' If you want the package to both **choose pairs** and **fit Bayesian BTL**
@@ -68,6 +80,7 @@
 #' - OpenAI: [submit_openai_pairs_live()], [openai_compare_pair_live()]
 #' - Anthropic: [submit_anthropic_pairs_live()], [anthropic_compare_pair_live()]
 #' - Gemini: [submit_gemini_pairs_live()], [gemini_compare_pair_live()]
+#' - Vertex: [submit_vertex_pairs_live()], [vertex_compare_pair_live()]
 #' - Ollama: [submit_ollama_pairs_live()], [ollama_compare_pair_live()],
 #'   [ensure_only_ollama_model_loaded()]
 #' - Together: [submit_together_pairs_live()], [together_compare_pair_live()]

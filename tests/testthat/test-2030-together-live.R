@@ -3,8 +3,6 @@
 #   Tests for together_compare_pair_live() and submit_together_pairs_live()
 # =====================================================================
 
-skip_if_no_psock()
-
 trait_description <- pairwiseLLM:::trait_description
 set_prompt_template <- pairwiseLLM:::set_prompt_template
 together_compare_pair_live <- pairwiseLLM::together_compare_pair_live
@@ -63,7 +61,8 @@ testthat::test_that(
       trait_description = td$description,
       prompt_template   = tmpl,
       include_raw       = TRUE,
-      temperature       = 0
+      temperature       = 0,
+      top_p             = 0.9
     )
 
     # Basic structure
@@ -102,6 +101,7 @@ testthat::test_that(
     b <- captured_bodies[[1]]
     testthat::expect_equal(b$model, "moonshotai/Kimi-K2-Instruct-0905")
     testthat::expect_equal(b$temperature, 0)
+    testthat::expect_equal(b$top_p, 0.9)
     testthat::expect_true(is.list(b$messages))
     testthat::expect_true(length(b$messages) == 1L)
   }
@@ -110,7 +110,7 @@ testthat::test_that(
 # ---------------------------------------------------------------------
 
 testthat::test_that(
-  "together_compare_pair_live applies default temperatures when not supplied",
+  "together_compare_pair_live uses model-default sampling when omitted or NULL",
   {
     pll_ns <- asNamespace("pairwiseLLM")
 
@@ -147,7 +147,7 @@ testthat::test_that(
     td <- trait_description("overall_quality")
     tmpl <- set_prompt_template()
 
-    # 1) Non-thinking model (Kimi) with no temperature -> default 0
+    # 1) Non-thinking model with omitted sampling controls
     together_compare_pair_live(
       ID1               = "S01",
       text1             = "Text 1",
@@ -159,7 +159,7 @@ testthat::test_that(
       prompt_template   = tmpl
     )
 
-    # 2) DeepSeek-R1 with no temperature -> default 0.6
+    # 2) Legacy DeepSeek-R1 also leaves sampling to the provider
     together_compare_pair_live(
       ID1               = "S03",
       text1             = "Text 3",
@@ -168,7 +168,9 @@ testthat::test_that(
       model             = "deepseek-ai/DeepSeek-R1",
       trait_name        = td$name,
       trait_description = td$description,
-      prompt_template   = tmpl
+      prompt_template   = tmpl,
+      temperature       = NULL,
+      top_p             = NULL
     )
 
     testthat::expect_equal(length(captured_bodies), 2L)
@@ -177,10 +179,12 @@ testthat::test_that(
     b2 <- captured_bodies[[2]]
 
     testthat::expect_equal(b1$model, "moonshotai/Kimi-K2-Instruct-0905")
-    testthat::expect_equal(b1$temperature, 0)
+    testthat::expect_false("temperature" %in% names(b1))
+    testthat::expect_false("top_p" %in% names(b1))
 
     testthat::expect_equal(b2$model, "deepseek-ai/DeepSeek-R1")
-    testthat::expect_equal(b2$temperature, 0.6)
+    testthat::expect_false("temperature" %in% names(b2))
+    testthat::expect_false("top_p" %in% names(b2))
   }
 )
 
@@ -835,6 +839,7 @@ testthat::test_that("submit_together_pairs_live: Sequential Save Error Handling"
 })
 
 testthat::test_that("submit_together_pairs_live: Parallel Execution & Save Error", {
+  skip_if_no_psock()
   testthat::skip_if_not_installed("future")
   testthat::skip_if_not_installed("future.apply")
   testthat::skip_if_not_installed("readr")
@@ -846,7 +851,6 @@ testthat::test_that("submit_together_pairs_live: Parallel Execution & Save Error
   )
   tmp_file <- tempfile(fileext = ".csv")
 
-  # Mock write_csv to throw an error (triggering the save warning)
   testthat::with_mocked_bindings(
     write_csv = function(...) stop("Parallel Disk full"),
     .package = "readr",
@@ -855,7 +859,7 @@ testthat::test_that("submit_together_pairs_live: Parallel Execution & Save Error
         testthat::expect_warning(
           res <- submit_together_pairs_live(
             pairs,
-            model = 123, # FIX 2: Pass invalid model type to force stop() inside worker
+            model = 123,
             trait_name = td$name,
             trait_description = td$description,
             parallel = TRUE, workers = 2,
@@ -865,7 +869,6 @@ testthat::test_that("submit_together_pairs_live: Parallel Execution & Save Error
         )
       })
 
-      # Now we expect failures with "Error: " because together_compare_pair_live threw an error
       testthat::expect_equal(nrow(res$failed_pairs), 2L)
       testthat::expect_true(all(grepl("Error", res$failed_pairs$error_message)))
       testthat::expect_true(all(grepl("must be a single character", res$failed_pairs$error_message)))
@@ -895,6 +898,7 @@ testthat::test_that("submit_together_pairs_live: Sequential Internal Error Handl
 })
 
 testthat::test_that("submit_together_pairs_live: Parallel Save Strips raw_response", {
+  skip_if_no_psock()
   testthat::skip_if_not_installed("future")
   testthat::skip_if_not_installed("future.apply")
   testthat::skip_if_not_installed("readr")
@@ -904,12 +908,6 @@ testthat::test_that("submit_together_pairs_live: Parallel Save Strips raw_respon
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
   tmp_file <- tempfile(fileext = ".csv")
 
-  # We run with parallel = TRUE and include_raw = TRUE.
-  # We provide a fake API key, so the worker will fail (caught by internal tryCatch).
-  # The worker returns an error tibble which includes a 'raw_response' column (Line 655).
-  # The main process aggregates this and should strip 'raw_response' before saving (Line 667).
-
-  # No warning expected (save should succeed)
   testthat::expect_warning(
     submit_together_pairs_live(
       pairs, "model", td$name, td$description,

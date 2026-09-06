@@ -52,6 +52,10 @@ winner within a direction, that direction's majority winner is set to
 
 The output \code{details} contains exactly one row per unordered pair key,
 which keeps it compatible with \code{\link{check_positional_bias}}.
+Columns other than \code{ID1}, \code{ID2}, and \code{better_id} are not
+grouping variables. Split results by model, template, trait, reasoning or
+thinking condition, and any intended replicate unit before calling this
+function; otherwise their judgments are pooled in the per-key majority.
 }
 \examples{
 main <- tibble::tibble(
@@ -67,3 +71,10 @@ rev <- tibble::tibble(
 compute_reverse_consistency(main, rev)$summary
 
 }
+\seealso{
+\code{\link[=check_positional_bias]{check_positional_bias()}}
+
+Other bias and consistency:
+\code{\link[=check_positional_bias]{check_positional_bias()}}
+}
+\concept{bias and consistency}

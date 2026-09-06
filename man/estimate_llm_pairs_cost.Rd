@@ -10,7 +10,7 @@ estimate_llm_pairs_cost(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "together"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together"),
   endpoint = c("chat.completions", "responses"),
   mode = c("live", "batch"),
   n_test = 25,
@@ -41,7 +41,8 @@ estimate_llm_pairs_cost(
 \code{\link{set_prompt_template}}.}
 
 \item{backend}{Backend for the pilot run; one of \code{"openai"},
-\code{"anthropic"}, \code{"gemini"}, or \code{"together"}.}
+\code{"anthropic"}, \code{"gemini"}, \code{"vertex"}, or
+\code{"together"}.}
 
 \item{endpoint}{OpenAI endpoint; one of \code{"chat.completions"} or
 \code{"responses"}. Ignored for other backends.}
@@ -62,10 +63,12 @@ fewer pairs are supplied.}
 \code{test_strategy} is not \code{"first"}.}
 
 \item{cost_per_million_input}{Cost per one million input tokens (prompt
-tokens), in your currency of choice.}
+tokens), in your currency of choice. Supply a current price for the
+selected provider, model, endpoint, and execution mode.}
 
 \item{cost_per_million_output}{Cost per one million output tokens
-(completion tokens). Reasoning/thinking tokens are treated as output.}
+(completion tokens). Reasoning/thinking tokens are treated as output.
+Supply and verify this price as for \code{cost_per_million_input}.}
 
 \item{batch_discount}{Numeric scalar multiplier applied to the estimated cost
 for the remaining pairs when \code{mode = "batch"}. For example, if batch
@@ -113,6 +116,28 @@ distribution.
 The estimator does not require a provider tokenizer.
 Input tokens are estimated from the byte length of the fully constructed
 prompt and calibrated on the pilot's observed \code{prompt_tokens}.
+Expected remaining completion tokens use the arithmetic mean of usable
+pilot completion counts. Budget completion tokens use the type-7 sample
+quantile selected by \code{budget_quantile}. These are token-use estimates;
+the function does not supply, validate, or refresh provider prices.
+
+Pilot pairs are selected from \code{pairs} and are excluded from
+\code{remaining_pairs} whether their calls succeed or fail. Calibration
+uses successful normalized rows with non-missing input-token counts and a
+missing or 200 status. Completion estimates use the analogous usable
+completion-token rows. With no usable input counts, calibration falls back
+to one token per four prompt bytes; with one row it uses a zero-intercept
+ratio; with multiple distinct byte lengths it uses ordinary least squares;
+and with multiple identical byte lengths it uses their mean token count as
+a constant prediction. With no usable completion counts, completion and
+total-cost estimates that depend on them are \code{NA}.
+
+The observed pilot token totals are always priced as live calls. When
+\code{mode = "batch"}, \code{batch_discount} applies only to estimated
+remaining input and output tokens. The returned pilot object and remaining
+pairs are not automatically merged into a later job result. Local Ollama
+models are unsupported because this function estimates token-billed API
+cost rather than local compute cost.
 }
 \examples{
 \dontrun{
@@ -148,3 +173,7 @@ est$summary
 remaining <- est$remaining_pairs
 }
 }
+\seealso{
+\code{\link[=make_pairs]{make_pairs()}}, \code{\link[=submit_llm_pairs]{submit_llm_pairs()}}, \code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}}
+}
+\concept{cost estimation}

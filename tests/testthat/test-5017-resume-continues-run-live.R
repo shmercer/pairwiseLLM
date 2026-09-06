@@ -3,7 +3,11 @@ test_that("adaptive_rank_resume restores state and run_live can continue", {
   judge <- make_deterministic_judge("i_wins")
   session_dir <- withr::local_tempdir()
 
-  state <- adaptive_rank_start(items, session_dir = session_dir)
+  state <- adaptive_rank_start(
+    items,
+    session_dir = session_dir,
+    checkpoint_every_steps = 3L
+  )
   withr::local_seed(1)
   state <- adaptive_rank_run_live(
     state,
@@ -14,6 +18,8 @@ test_that("adaptive_rank_resume restores state and run_live can continue", {
   )
 
   resumed <- adaptive_rank_resume(session_dir)
+  expect_identical(as.integer(resumed$config$checkpoint_every_steps), 3L)
+  expect_identical(resumed$refit_meta$phase_a_committed_pairs_by_set, c(`1` = 2L))
   withr::local_seed(2)
   resumed <- adaptive_rank_run_live(
     resumed,
@@ -26,4 +32,6 @@ test_that("adaptive_rank_resume restores state and run_live can continue", {
   expect_equal(nrow(resumed$step_log), nrow(state$step_log) + 2L)
   history <- adaptive_results_history(resumed, committed_only = TRUE)
   expect_equal(nrow(history), sum(!is.na(resumed$step_log$pair_id)))
+  expect_identical(resumed$refit_meta$phase_a_committed_pairs_by_set, c(`1` = 4L))
+  expect_history_state_matches_history(resumed)
 })

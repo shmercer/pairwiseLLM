@@ -259,10 +259,11 @@ validate_btl_mcmc_config <- function(config) {
     "`keep_draws` must be logical.")
   .btl_mcmc_check(.btl_mcmc_intish(config$thin_draws) && config$thin_draws >= 1L,
     "`thin_draws` must be >= 1.")
-  if (!is.list(config$cmdstan)) {
+  cmdstan <- config[["cmdstan"]]
+  if (!is.list(cmdstan)) {
     rlang::abort("`config$cmdstan` must be a list when provided.")
   }
-  cmdstan_output_dir <- config$cmdstan$output_dir %||% NULL
+  cmdstan_output_dir <- cmdstan[["output_dir"]] %||% NULL
   if (!is.null(cmdstan_output_dir)) {
     .btl_mcmc_check(is.character(cmdstan_output_dir) && length(cmdstan_output_dir) == 1L,
       "`config$cmdstan$output_dir` must be a length-1 character path.")
@@ -437,7 +438,7 @@ compute_reliability_EAP <- function(draws) {
   }
 
   theta_mean <- colMeans(draws)
-  theta_var <- apply(draws, 2, stats::var)
+  theta_var <- .pairwiseLLM_col_sds(draws, center = theta_mean)^2
   mean_var <- mean(theta_var)
   var_mean <- stats::var(theta_mean)
 
@@ -781,9 +782,20 @@ build_round_log_row <- function(state,
   row$max_rhat <- as.double(max_rhat)
   row$min_ess_bulk <- as.double(min_ess_bulk)
   row$diagnostics_pass <- as.logical(metrics$diagnostics_pass %||% NA)
+  row$diagnostics_divergences_pass <- as.logical(metrics$diagnostics_divergences_pass %||% NA)
+  row$diagnostics_rhat_pass <- as.logical(metrics$diagnostics_rhat_pass %||% NA)
+  row$diagnostics_ess_pass <- as.logical(metrics$diagnostics_ess_pass %||% NA)
+  row$divergences_max_allowed <- as.integer(metrics$divergences_max_allowed %||% NA_integer_)
+  row$max_rhat_allowed <- as.double(metrics$max_rhat_allowed %||% NA_real_)
+  row$ess_bulk_required <- as.double(metrics$ess_bulk_required %||% NA_real_)
+  row$near_stop_active <- as.logical(metrics$near_stop_active %||% NA)
   row$reliability_EAP <- as.double(reliability_EAP)
+  row$reliability_EAP_scope <- as.double(metrics$reliability_EAP_scope %||% NA_real_)
+  row$eap_reliability_min <- as.double(metrics$eap_reliability_min %||% NA_real_)
   row$eap_pass <- as.logical(metrics$eap_pass %||% NA)
+  row$eap_pass_scope <- as.logical(metrics$eap_pass_scope %||% NA)
   row$theta_sd_eap <- as.double(metrics$theta_sd_eap %||% NA_real_)
+  row$theta_sd_eap_scope <- as.double(metrics$theta_sd_eap_scope %||% NA_real_)
   row$rho_theta_lag <- as.double(metrics$rho_theta_lag %||% NA_real_)
   row$theta_corr_pass <- as.logical(metrics$theta_corr_pass %||% NA)
   row$delta_sd_theta_lag <- as.double(metrics$delta_sd_theta_lag %||% NA_real_)
@@ -804,7 +816,7 @@ build_round_log_row <- function(state,
   row$mcmc_cores_detected_physical <- as.integer(mcmc_config_used$cores_detected_physical %||% NA_integer_)
   row$mcmc_cores_detected_logical <- as.integer(mcmc_config_used$cores_detected_logical %||% NA_integer_)
   threads_per_chain <- mcmc_config_used$threads_per_chain %||%
-    config$cmdstan$threads_per_chain %||% 1L
+    config[["cmdstan"]][["threads_per_chain"]] %||% 1L
   row$mcmc_threads_per_chain <- as.integer(threads_per_chain %||% NA_integer_)
   row$mcmc_cmdstanr_version <- as.character(mcmc_config_used$cmdstanr_version %||% NA_character_)
   row
@@ -941,13 +953,9 @@ build_item_log <- function(state, fit = NULL) {
   theta_draws <- theta_draws[, state$ids, drop = FALSE]
   theta_draws <- .pairwiseLLM_sanitize_draws_matrix(theta_draws, name = "theta_draws")
   theta_mean <- as.double(colMeans(theta_draws))
-  theta_sd <- as.double(apply(theta_draws, 2, stats::sd))
+  theta_sd <- as.double(.pairwiseLLM_col_sds(theta_draws, center = theta_mean))
   probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)
-  theta_quantiles <- vapply(
-    seq_len(ncol(theta_draws)),
-    function(idx) stats::quantile(theta_draws[, idx], probs = probs, names = FALSE),
-    numeric(length(probs))
-  )
+  theta_quantiles <- .pairwiseLLM_col_quantiles(theta_draws, probs = probs, names = FALSE)
   theta_p2.5 <- as.double(theta_quantiles[1L, ])
   theta_p5 <- as.double(theta_quantiles[2L, ])
   theta_p50 <- as.double(theta_quantiles[3L, ])
@@ -957,12 +965,8 @@ build_item_log <- function(state, fit = NULL) {
   rank_mat <- t(apply(theta_draws, 1, function(row) rank(-row, ties.method = "average")))
   colnames(rank_mat) <- state$ids
   rank_mean <- as.double(colMeans(rank_mat))
-  rank_sd <- as.double(apply(rank_mat, 2, stats::sd))
-  rank_quantiles <- vapply(
-    seq_len(ncol(rank_mat)),
-    function(idx) stats::quantile(rank_mat[, idx], probs = probs, names = FALSE),
-    numeric(length(probs))
-  )
+  rank_sd <- as.double(.pairwiseLLM_col_sds(rank_mat, center = rank_mean))
+  rank_quantiles <- .pairwiseLLM_col_quantiles(rank_mat, probs = probs, names = FALSE)
   rank_p2.5 <- as.double(rank_quantiles[1L, ])
   rank_p5 <- as.double(rank_quantiles[2L, ])
   rank_p50 <- as.double(rank_quantiles[3L, ])

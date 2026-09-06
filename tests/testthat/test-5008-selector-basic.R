@@ -31,3 +31,78 @@ test_that("select_next_pair returns one valid pair", {
   expect_equal(out2$A, out3$A)
   expect_equal(out2$B, out3$B)
 })
+
+test_that("selector helper edge branches are covered", {
+  expect_identical(pairwiseLLM:::.adaptive_underrep_set(integer()), character())
+  expect_null(pairwiseLLM:::.adaptive_underrep_set(c(1L, 2L)))
+  expect_identical(pairwiseLLM:::.adaptive_underrep_set(c(a = 1L, b = 5L)), "a")
+  expect_identical(pairwiseLLM:::.adaptive_underrep_set(c(a = 1L, b = 1L)), c("a", "b"))
+
+  empty_cand <- tibble::tibble(i = character(), j = character())
+  rank_index <- stats::setNames(seq_len(3L), c("a", "b", "c"))
+  defaults <- pairwiseLLM:::adaptive_defaults(3L)
+  out_empty <- pairwiseLLM:::.adaptive_stage_candidate_filter(
+    candidates = empty_cand,
+    stage_name = "local_link",
+    fallback_name = "base",
+    rank_index = rank_index,
+    defaults = defaults
+  )
+  expect_identical(nrow(out_empty), 0L)
+})
+
+test_that("history-state cache rebuild matches canonical history and preserves selector output", {
+  items <- make_test_items(6)
+  trueskill_state <- make_test_trueskill_state(items)
+  history <- tibble::tibble(
+    A_id = c("1", "2", "3", "2", "4"),
+    B_id = c("4", "5", "6", "4", "6")
+  )
+  state_cached <- make_test_state(items, trueskill_state, history = history)
+  expect_history_state_matches_history(state_cached)
+
+  state_uncached <- state_cached
+  state_uncached$history_state <- NULL
+
+  out_cached <- pairwiseLLM:::select_next_pair(state_cached, step_id = 7L)
+  out_uncached <- pairwiseLLM:::select_next_pair(state_uncached, step_id = 7L)
+
+  expect_identical(out_uncached$i, out_cached$i)
+  expect_identical(out_uncached$j, out_cached$j)
+  expect_identical(out_uncached$A, out_cached$A)
+  expect_identical(out_uncached$B, out_cached$B)
+  expect_identical(out_uncached$deg_i, out_cached$deg_i)
+  expect_identical(out_uncached$deg_j, out_cached$deg_j)
+  expect_identical(out_uncached$recent_deg_i, out_cached$recent_deg_i)
+  expect_identical(out_uncached$recent_deg_j, out_cached$recent_deg_j)
+})
+
+test_that("Phase A selector stays inside the active within-set scope", {
+  items <- tibble::tibble(
+    item_id = as.character(1:8),
+    set_id = c(rep(1L, 4L), rep(2L, 4L)),
+    global_item_id = paste0("g", 1:8)
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 41L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+  )
+  state$linking$phase_a$phase <- "phase_a"
+  state$linking$phase_a$set_status <- tibble::tibble(
+    set_id = c(1L, 2L),
+    source = c("run", "run"),
+    status = c("ready", "pending"),
+    validation_message = c("hub done", "spoke pending"),
+    artifact_path = c(NA_character_, NA_character_)
+  )
+  state$linking$phase_a$active_phase_a_set <- 2L
+  state$linking$phase_a$ready_for_phase_b <- FALSE
+
+  out <- pairwiseLLM:::select_next_pair(state, step_id = 1L)
+  selected_ids <- as.character(state$item_ids[c(out$i, out$j)])
+  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
+
+  expect_false(out$candidate_starved)
+  expect_true(all(set_map[selected_ids] == 2L))
+})

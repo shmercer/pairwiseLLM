@@ -48,6 +48,19 @@ test_that("llm_submit_pairs_batch validates pairs and model", {
     "`model` must be a non-empty character scalar",
     fixed = TRUE
   )
+
+  expect_error(
+    llm_submit_pairs_batch(
+      pairs = good_pairs,
+      backend = "vertex",
+      model = "gemini-2.5-flash",
+      trait_name = td$name,
+      trait_description = td$description,
+      prompt_template = tmpl
+    ),
+    "Vertex batch mode is not implemented in this series",
+    fixed = FALSE
+  )
 })
 
 test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", {
@@ -117,13 +130,15 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
                                          include_thoughts = FALSE,
                                          include_raw = FALSE,
                                          ...) {
+      dots <- list(...)
       openai_calls <<- append(openai_calls, list(
         list(
           model = model,
           trait_name = trait_name,
           trait_description = trait_description,
           include_thoughts = include_thoughts,
-          include_raw = include_raw
+          include_raw = include_raw,
+          dots = dots
         )
       ))
       fake_batch_return("openai")
@@ -155,13 +170,15 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
                                          include_thoughts = FALSE,
                                          include_raw = FALSE,
                                          ...) {
+      dots <- list(...)
       gemini_calls <<- append(gemini_calls, list(
         list(
           model = model,
           trait_name = trait_name,
           trait_description = trait_description,
           include_thoughts = include_thoughts,
-          include_raw = include_raw
+          include_raw = include_raw,
+          dots = dots
         )
       ))
       fake_batch_return("gemini")
@@ -181,6 +198,7 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
       expect_s3_class(batch_openai, "pairwiseLLM_batch")
       expect_equal(batch_openai$backend, "openai")
       expect_equal(length(openai_calls), 1L)
+      expect_false(any(c("temperature", "top_p") %in% names(openai_calls[[1]]$dots)))
       expect_true(file.exists(batch_openai$batch_input_path))
       expect_true(file.exists(batch_openai$batch_output_path))
 
@@ -208,11 +226,13 @@ test_that("llm_submit_pairs_batch dispatches to the correct backend pipelines", 
         trait_description = td$description,
         prompt_template = tmpl,
         include_thoughts = TRUE,
-        include_raw = FALSE
+        include_raw = FALSE,
+        service_tier = "flex"
       )
       expect_s3_class(batch_gemini, "pairwiseLLM_batch")
       expect_equal(batch_gemini$backend, "gemini")
       expect_equal(length(gemini_calls), 1L)
+      expect_equal(gemini_calls[[1]]$dots$service_tier, "flex")
     }
   )
 })
@@ -469,7 +489,7 @@ test_that("build_openai_batch_requests errors for gpt-5.1/5.2 + reasoning != 'no
       pairs = pairs, model = "gpt-5.1", trait_name = td$name, trait_description = td$description,
       endpoint = "responses", reasoning = "low", temperature = 0
     ),
-    regexp = "gpt-5.1/5.2.*temperature"
+    regexp = "GPT-5.x.*temperature"
   )
 
   # GPT-5.2
@@ -478,7 +498,7 @@ test_that("build_openai_batch_requests errors for gpt-5.1/5.2 + reasoning != 'no
       pairs = pairs, model = "gpt-5.2", trait_name = td$name, trait_description = td$description,
       endpoint = "responses", reasoning = "high", top_p = 0.5
     ),
-    regexp = "gpt-5.1/5.2.*temperature"
+    regexp = "GPT-5.x.*temperature"
   )
 })
 

@@ -24,8 +24,8 @@ build_openai_batch_requests(
 \code{ID2}, and \code{text2}.}
 
 \item{model}{Character scalar giving the OpenAI model name.
-Supports standard names (e.g. \code{"gpt-4.1"}) and date-stamped versions
-(e.g. \code{"gpt-5.2-2025-12-11"}).}
+Supports standard names (e.g. \code{"gpt-4.1"}, \code{"gpt-5.6-sol"})
+and date-stamped versions (e.g. \code{"gpt-5.4-2026-01-15"}).}
 
 \item{trait_name}{Short label for the trait (e.g., "Overall Quality").}
 
@@ -38,19 +38,21 @@ and \code{{SAMPLE_2}}. Defaults to \code{set_prompt_template()}.}
 \item{endpoint}{Which OpenAI endpoint to target. One of
 \code{"chat.completions"} (default) or \code{"responses"}.}
 
-\item{temperature}{Optional temperature parameter. Defaults to \code{0} for
-standard models (deterministic). Must be \code{NULL} for reasoning models
-(enabled).}
+\item{temperature}{Optional temperature parameter. If \code{NULL}, it is omitted
+so the model/provider default applies. Must be \code{NULL} for reasoning modes
+that do not support it.}
 
-\item{top_p}{Optional top_p parameter.}
+\item{top_p}{Optional top-p parameter. If \code{NULL}, it is omitted so the
+model/provider default applies.}
 
 \item{logprobs}{Optional logprobs parameter.}
 
 \item{reasoning}{Optional reasoning effort for GPT-5 series when using
 the \code{/v1/responses} endpoint. For \code{"gpt-5"} and
 \code{"gpt-5-mini"}, \code{"none"} is normalized to \code{"minimal"}.
-For \code{"gpt-5.1/5.2"}, use \code{"none"}, \code{"low"},
-\code{"medium"}, or \code{"high"}.}
+For later GPT-5.x reasoning models, use model-supported efforts such as
+\code{"none"}, \code{"low"}, \code{"medium"}, \code{"high"},
+\code{"xhigh"}, or \code{"max"}.}
 
 \item{include_thoughts}{Logical; if TRUE and using \code{responses} endpoint
 with reasoning, requests a summary. Defaults \code{reasoning} to
@@ -92,14 +94,13 @@ batch_tbl_chat <- build_openai_batch_requests(
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  endpoint          = "chat.completions",
-  temperature       = 0
+  endpoint          = "chat.completions"
 )
 
-# 2. GPT-5.2-2025-12-11 Responses Batch with Reasoning
+# 2. GPT-5.6 Sol Responses Batch with Reasoning
 batch_tbl_resp <- build_openai_batch_requests(
   pairs = pairs,
-  model = "gpt-5.2-2025-12-11",
+  model = "gpt-5.6-sol",
   trait_name = td$name,
   trait_description = td$description,
   prompt_template = tmpl,
@@ -112,3 +113,32 @@ batch_tbl_chat
 batch_tbl_resp
 
 }
+\seealso{
+\code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}}, \code{\link[=llm_resume_multi_batches]{llm_resume_multi_batches()}}
+
+Other batch backends:
+\code{\link[=anthropic_create_batch]{anthropic_create_batch()}},
+\code{\link[=anthropic_download_batch_results]{anthropic_download_batch_results()}},
+\code{\link[=anthropic_get_batch]{anthropic_get_batch()}},
+\code{\link[=anthropic_poll_batch_until_complete]{anthropic_poll_batch_until_complete()}},
+\code{\link[=build_anthropic_batch_requests]{build_anthropic_batch_requests()}},
+\code{\link[=build_gemini_batch_requests]{build_gemini_batch_requests()}},
+\code{\link[=gemini_create_batch]{gemini_create_batch()}},
+\code{\link[=gemini_download_batch_results]{gemini_download_batch_results()}},
+\code{\link[=gemini_get_batch]{gemini_get_batch()}},
+\code{\link[=gemini_poll_batch_until_complete]{gemini_poll_batch_until_complete()}},
+\code{\link[=llm_download_batch_results]{llm_download_batch_results()}},
+\code{\link[=llm_resume_multi_batches]{llm_resume_multi_batches()}},
+\code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}},
+\code{\link[=llm_submit_pairs_multi_batch]{llm_submit_pairs_multi_batch()}},
+\code{\link[=openai_create_batch]{openai_create_batch()}},
+\code{\link[=openai_download_batch_output]{openai_download_batch_output()}},
+\code{\link[=openai_get_batch]{openai_get_batch()}},
+\code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}},
+\code{\link[=openai_upload_batch_file]{openai_upload_batch_file()}},
+\code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}},
+\code{\link[=run_gemini_batch_pipeline]{run_gemini_batch_pipeline()}},
+\code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}},
+\code{\link[=write_openai_batch_file]{write_openai_batch_file()}}
+}
+\concept{batch backends}

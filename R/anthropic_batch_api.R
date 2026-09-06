@@ -148,9 +148,8 @@ NULL
 #' \itemize{
 #'   \item \code{reasoning = "none"}:
 #'     \itemize{
-#'       \item Default \code{temperature = 0} (deterministic behaviour),
-#'         unless you explicitly supply a different \code{temperature} via
-#'         \code{...}.
+#'       \item Omitted \code{temperature} and \code{top_p} values are not
+#'         sent, so the model/provider defaults apply.
 #'       \item Default \code{max_tokens = 768}, unless overridden via
 #'         \code{max_tokens} in \code{...}.
 #'     }
@@ -165,8 +164,8 @@ NULL
 #'     }
 #' }
 #'
-#' As a result, when you build batches without extended thinking
-#' (\code{reasoning = "none"}), the effective default temperature is 0. When
+#' As a result, batches without extended thinking
+#' (\code{reasoning = "none"}) use model-default sampling. When
 #' you opt into extended thinking (\code{reasoning = "enabled"}), Anthropic's
 #' requirement of \code{temperature = 1} is enforced for all batch requests.
 #'
@@ -234,6 +233,8 @@ NULL
 #'
 #' reqs_reason
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 build_anthropic_batch_requests <- function(
   pairs,
@@ -270,7 +271,7 @@ build_anthropic_batch_requests <- function(
     # Temperature, max_tokens, and thinking budget (per reasoning mode)
     # --------------------------------------------------------------------
     if (reasoning == "none") {
-      temperature <- dots$temperature %||% 0
+      temperature <- dots$temperature %||% NULL
       max_tokens <- dots$max_tokens %||% 768L
       max_tokens <- as.integer(max_tokens)
 
@@ -331,7 +332,6 @@ build_anthropic_batch_requests <- function(
     params <- list(
       model = model,
       max_tokens = max_tokens,
-      temperature = temperature,
       messages = list(
         list(
           role = "user",
@@ -345,7 +345,9 @@ build_anthropic_batch_requests <- function(
       )
     )
 
-
+    if (!is.null(temperature)) {
+      params$temperature <- temperature
+    }
     if (!is.null(top_p)) {
       params$top_p <- top_p
     }
@@ -439,6 +441,8 @@ build_anthropic_batch_requests <- function(
 #' batch$processing_status
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 anthropic_create_batch <- function(
   requests,
@@ -491,6 +495,8 @@ anthropic_create_batch <- function(
 #' latest$processing_status
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 anthropic_get_batch <- function(
   batch_id,
@@ -543,6 +549,8 @@ anthropic_get_batch <- function(
 #' final$processing_status
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 anthropic_poll_batch_until_complete <- function(
   batch_id,
@@ -628,6 +636,8 @@ anthropic_poll_batch_until_complete <- function(
 #' anthropic_download_batch_results(final$id, jsonl_path)
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 anthropic_download_batch_results <- function(
   batch_id,
@@ -730,6 +740,8 @@ anthropic_download_batch_results <- function(
 #' tbl <- parse_anthropic_batch_output("anthropic-results.jsonl")
 #' }
 #'
+#' @seealso [parse_openai_batch_output()], [parse_gemini_batch_output()]
+#' @family result normalization
 #' @export
 parse_anthropic_batch_output <- function(
   jsonl_path,
@@ -904,9 +916,8 @@ parse_anthropic_batch_output <- function(
 #' \itemize{
 #'   \item When \code{reasoning = "none"} (no extended thinking):
 #'     \itemize{
-#'       \item The default \code{temperature} is \code{0} (deterministic),
-#'         unless you explicitly supply a \code{temperature} argument via
-#'         \code{...}.
+#'       \item Omitted \code{temperature} and \code{top_p} values are not
+#'         sent, so the model/provider defaults apply.
 #'       \item The default \code{max_tokens} is \code{768}, unless you
 #'         override it via \code{max_tokens} in \code{...}.
 #'     }
@@ -922,8 +933,8 @@ parse_anthropic_batch_output <- function(
 #'     }
 #' }
 #'
-#' Therefore, when you run batches without extended thinking (the usual case),
-#' the effective default is a temperature of \code{0}. When you explicitly use
+#' Therefore, batches without extended thinking use model-default sampling.
+#' When you explicitly use
 #' extended thinking (either by setting \code{reasoning = "enabled"} or by
 #' using \code{include_thoughts = TRUE}), Anthropic's requirement of
 #' \code{temperature = 1} is enforced.
@@ -1036,6 +1047,8 @@ parse_anthropic_batch_output <- function(
 #' head(pipeline_thoughts$results)
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 run_anthropic_batch_pipeline <- function(
   pairs,

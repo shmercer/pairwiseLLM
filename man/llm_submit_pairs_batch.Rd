@@ -22,16 +22,18 @@ llm_submit_pairs_batch(
 through where supported.}
 
 \item{backend}{Character scalar; one of \code{"openai"}, \code{"anthropic"}, or
-\code{"gemini"}. Matching is case-insensitive.}
+\code{"gemini"}. Matching is case-insensitive. If \code{"vertex"} is supplied, this
+function aborts explicitly because Vertex batch mode is not implemented in
+this series.}
 
 \item{model}{Character scalar model name to use for the batch job.
 \itemize{
 \item For \code{"openai"}, use models like \code{"gpt-4.1"}, \code{"gpt-5"}, \code{"gpt-5-mini"},
-\code{"gpt-5.1"}, or \code{"gpt-5.2"} (including date-stamped versions like
-\code{"gpt-5.2-2025-12-11"}).
-\item For \code{"anthropic"}, use provider names like \code{"claude-4-5-sonnet"}
+\code{"gpt-5.6-sol"}, \code{"gpt-5.6-terra"}, or \code{"gpt-5.6-luna"} (including
+date-stamped GPT-5.x versions where available).
+\item For \code{"anthropic"}, use provider names like \code{"claude-sonnet-4-5"}
 or date-stamped versions like \code{"claude-sonnet-4-5-20250929"}.
-\item For \code{"gemini"}, use names like \code{"gemini-3-pro-preview"}.
+\item For \code{"gemini"}, use names like \code{"gemini-3.5-flash-lite"}.
 }}
 
 \item{trait_name}{A short name for the trait being evaluated (e.g.
@@ -59,7 +61,9 @@ result (where supported by backends).}
 options such as temperature or batch configuration fields. For OpenAI,
 this may include \code{endpoint}, \code{temperature}, \code{top_p}, \code{logprobs},
 \code{reasoning}, \code{service_tier}, etc. For Anthropic, this may include \code{reasoning},
-\code{max_tokens}, \code{temperature}, or \code{thinking_budget_tokens}.}
+\code{max_tokens}, \code{temperature}, or \code{thinking_budget_tokens}. For Gemini, this
+may include \code{thinking_level}, \code{temperature}, \code{top_p}, \code{top_k},
+\code{max_output_tokens}, and \code{service_tier}.}
 }
 \value{
 A list of class \code{"pairwiseLLM_batch"} containing at least:
@@ -79,8 +83,8 @@ preserved.
 }
 \description{
 \code{llm_submit_pairs_batch()} is a backend-agnostic front-end for running
-provider batch pipelines (OpenAI, Anthropic, Gemini). Together.ai and Ollama
-are supported only for live comparisons.
+provider batch pipelines (OpenAI, Anthropic, Gemini). Vertex, Together.ai,
+and Ollama are supported only for live comparisons in this series.
 
 It mirrors \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} but uses the provider batch APIs under the
 hood via \code{run_openai_batch_pipeline()}, \code{run_anthropic_batch_pipeline()},
@@ -91,21 +95,18 @@ For OpenAI, this helper will by default:
 \item Use the \code{chat.completions} batch style for most models, and
 \item Automatically switch to the \code{responses} style endpoint when:
 \itemize{
-\item \code{model} is in the GPT-5 series (including \code{gpt-5}, \code{gpt-5-mini}, and
-date-stamped \code{gpt-5.1/5.2} variants), and
+\item \code{model} is in the GPT-5 series (including \code{gpt-5}, \code{gpt-5-mini},
+\code{gpt-5.6-sol}, \code{gpt-5.6-terra}, \code{gpt-5.6-luna}, and date-stamped
+GPT-5.x variants), and
 \item either \code{include_thoughts = TRUE} \strong{or} a \code{reasoning} effort is supplied
 in \code{...} (for GPT-5, \code{reasoning = "none"} maps to \code{"minimal"}).
 }
 }
 
-\strong{Temperature Defaults:}
-For OpenAI, if \code{temperature} is not specified in \code{...}:
-\itemize{
-\item It defaults to \code{0} (deterministic) for standard models or when reasoning is
-disabled (\code{reasoning = "none"}) on supported GPT-5.1/5.2 models.
-\item It remains \code{NULL} (API default) when reasoning is enabled, or for GPT-5
-minimal reasoning (which ignores temperature).
-}
+\strong{Sampling defaults:}
+For OpenAI, omitted \code{temperature} and \code{top_p} values are not added to the
+request, so the model/provider defaults apply. Reasoning modes that do not
+support sampling parameters continue to require them to be \code{NULL}.
 
 For Anthropic, standard and date-stamped model names
 (e.g. \code{"claude-sonnet-4-5-20250929"}) are supported. This helper delegates
@@ -113,9 +114,8 @@ temperature and extended-thinking behaviour to
 \code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}} and \code{\link[=build_anthropic_batch_requests]{build_anthropic_batch_requests()}},
 which apply the following rules:
 \itemize{
-\item When \code{reasoning = "none"} (no extended thinking), the default
-temperature is \code{0} (deterministic) unless you explicitly supply a
-different \code{temperature} in \code{...}.
+\item When \code{reasoning = "none"} (no extended thinking), omitted
+\code{temperature} and \code{top_p} values use the model/provider defaults.
 \item When \code{reasoning = "enabled"} (extended thinking), Anthropic requires
 \code{temperature = 1}. If you supply a different value in \code{...}, an error
 is raised. Default values in this mode are \code{max_tokens = 2048} and
@@ -169,7 +169,7 @@ res_openai <- llm_download_batch_results(batch_openai)
 batch_anthropic <- llm_submit_pairs_batch(
   pairs             = pairs,
   backend           = "anthropic",
-  model             = "claude-4-5-sonnet",
+  model             = "claude-sonnet-4-5",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -181,7 +181,7 @@ res_anthropic <- llm_download_batch_results(batch_anthropic)
 batch_gemini <- llm_submit_pairs_batch(
   pairs             = pairs,
   backend           = "gemini",
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -191,3 +191,32 @@ res_gemini <- llm_download_batch_results(batch_gemini)
 }
 
 }
+\seealso{
+\code{\link[=llm_download_batch_results]{llm_download_batch_results()}}, \code{\link[=llm_submit_pairs_multi_batch]{llm_submit_pairs_multi_batch()}}
+
+Other batch backends:
+\code{\link[=anthropic_create_batch]{anthropic_create_batch()}},
+\code{\link[=anthropic_download_batch_results]{anthropic_download_batch_results()}},
+\code{\link[=anthropic_get_batch]{anthropic_get_batch()}},
+\code{\link[=anthropic_poll_batch_until_complete]{anthropic_poll_batch_until_complete()}},
+\code{\link[=build_anthropic_batch_requests]{build_anthropic_batch_requests()}},
+\code{\link[=build_gemini_batch_requests]{build_gemini_batch_requests()}},
+\code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}},
+\code{\link[=gemini_create_batch]{gemini_create_batch()}},
+\code{\link[=gemini_download_batch_results]{gemini_download_batch_results()}},
+\code{\link[=gemini_get_batch]{gemini_get_batch()}},
+\code{\link[=gemini_poll_batch_until_complete]{gemini_poll_batch_until_complete()}},
+\code{\link[=llm_download_batch_results]{llm_download_batch_results()}},
+\code{\link[=llm_resume_multi_batches]{llm_resume_multi_batches()}},
+\code{\link[=llm_submit_pairs_multi_batch]{llm_submit_pairs_multi_batch()}},
+\code{\link[=openai_create_batch]{openai_create_batch()}},
+\code{\link[=openai_download_batch_output]{openai_download_batch_output()}},
+\code{\link[=openai_get_batch]{openai_get_batch()}},
+\code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}},
+\code{\link[=openai_upload_batch_file]{openai_upload_batch_file()}},
+\code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}},
+\code{\link[=run_gemini_batch_pipeline]{run_gemini_batch_pipeline()}},
+\code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}},
+\code{\link[=write_openai_batch_file]{write_openai_batch_file()}}
+}
+\concept{batch backends}

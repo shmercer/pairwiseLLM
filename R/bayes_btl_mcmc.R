@@ -92,6 +92,8 @@
 #' ids <- sort(unique(c(results_tbl$A_id, results_tbl$B_id)))
 #' ids
 #'
+#' @seealso [fit_bayes_btl_mcmc()]
+#' @family Bayesian models
 #' @export
 build_btl_results_data <- function(
     results,
@@ -290,6 +292,144 @@ build_btl_results_data <- function(
   )
 }
 
+.btl_mcmc_standalone_fit_metrics <- function(fit_contract, config) {
+  if (!is.list(fit_contract)) {
+    rlang::abort("`fit_contract` must be a list.")
+  }
+  if (!is.list(config)) {
+    rlang::abort("`config` must be a list.")
+  }
+
+  diagnostics <- fit_contract$diagnostics %||% list()
+  divergences <- as.integer(diagnostics$divergences %||% NA_integer_)
+  max_rhat <- as.double(diagnostics$max_rhat %||% NA_real_)
+  min_ess_bulk <- as.double(diagnostics$min_ess_bulk %||% NA_real_)
+
+  divergences_max <- if (isTRUE(config$require_divergences_zero %||% TRUE)) {
+    0L
+  } else {
+    NA_integer_
+  }
+  max_rhat_allowed <- as.double(config$max_rhat %||% NA_real_)
+  ess_bulk_required <- as.double(config$min_ess_bulk %||% NA_real_)
+
+  diagnostics_divergences_pass <- if (is.na(divergences_max)) {
+    !is.na(divergences)
+  } else {
+    !is.na(divergences) && divergences <= divergences_max
+  }
+  diagnostics_rhat_pass <- !is.na(max_rhat) &&
+    is.finite(max_rhat_allowed) &&
+    max_rhat <= max_rhat_allowed
+  diagnostics_ess_pass <- !is.na(min_ess_bulk) &&
+    is.finite(ess_bulk_required) &&
+    min_ess_bulk >= ess_bulk_required
+
+  diagnostics_pass <- isTRUE(diagnostics_divergences_pass) &&
+    isTRUE(diagnostics_rhat_pass) &&
+    isTRUE(diagnostics_ess_pass)
+
+  reliability_EAP <- compute_reliability_EAP(fit_contract$theta_draws %||% NULL)
+  eap_min <- as.double(config$eap_reliability_min %||% NA_real_)
+  eap_pass <- isTRUE(diagnostics_pass) &&
+    is.finite(reliability_EAP) &&
+    is.finite(eap_min) &&
+    reliability_EAP >= eap_min
+
+  theta_mean <- as.double(fit_contract$theta_mean %||% NA_real_)
+  theta_sd_eap <- if (length(theta_mean) >= 2L && all(is.finite(theta_mean))) {
+    stats::sd(theta_mean)
+  } else {
+    NA_real_
+  }
+
+  list(
+    diagnostics_pass = diagnostics_pass,
+    diagnostics_divergences_pass = diagnostics_divergences_pass,
+    diagnostics_rhat_pass = diagnostics_rhat_pass,
+    diagnostics_ess_pass = diagnostics_ess_pass,
+    divergences = divergences,
+    divergences_max_allowed = divergences_max,
+    max_rhat = max_rhat,
+    max_rhat_allowed = max_rhat_allowed,
+    min_ess_bulk = min_ess_bulk,
+    ess_bulk_required = ess_bulk_required,
+    reliability_EAP = reliability_EAP,
+    reliability_EAP_scope = reliability_EAP,
+    eap_reliability_min = eap_min,
+    eap_pass = eap_pass,
+    eap_pass_scope = eap_pass,
+    theta_sd_eap = theta_sd_eap,
+    theta_sd_eap_scope = theta_sd_eap
+  )
+}
+
+.btl_mcmc_inference_contract_from_results <- function(results, inference_contract = NULL) {
+  if (is.null(inference_contract)) {
+    inference_contract <- list()
+  }
+  if (!is.list(inference_contract)) {
+    rlang::abort("`inference_contract` must be a list or NULL.")
+  }
+  results <- tibble::as_tibble(results)
+
+  phase_levels <- inference_contract$phase_levels %||% NULL
+  if (is.null(phase_levels) && "phase" %in% names(results)) {
+    phase_levels <- as.character(results$phase)
+  }
+  phase_levels <- as.character(phase_levels %||% character())
+  phase_levels <- unique(phase_levels[!is.na(phase_levels) & phase_levels != ""])
+  if (length(phase_levels) > 0L) {
+    .adaptive_check_phase(phase_levels, "inference_contract$phase_levels")
+  }
+
+  judge_scope_levels <- inference_contract$judge_scope_levels %||% NULL
+  inferred_scope_from_results <- FALSE
+  if (is.null(judge_scope_levels) && "judge_scope" %in% names(results)) {
+    judge_scope_levels <- as.character(results$judge_scope)
+    inferred_scope_from_results <- TRUE
+  }
+  judge_scope_levels <- as.character(judge_scope_levels %||% character())
+  judge_scope_levels <- unique(judge_scope_levels[!is.na(judge_scope_levels) & judge_scope_levels != ""])
+  bad_scope <- setdiff(judge_scope_levels, c("shared", "within", "link"))
+  if (length(bad_scope) > 0L && !isTRUE(inferred_scope_from_results)) {
+    rlang::abort("`inference_contract$judge_scope_levels` must be shared, within, or link.")
+  }
+  if (length(bad_scope) > 0L && isTRUE(inferred_scope_from_results)) {
+    judge_scope_levels <- setdiff(judge_scope_levels, bad_scope)
+  }
+
+  judge_param_mode <- inference_contract$judge_param_mode %||% NULL
+  if (is.null(judge_param_mode)) {
+    if (length(judge_scope_levels) == 0L || identical(judge_scope_levels, "shared")) {
+      judge_param_mode <- "global_shared"
+    } else {
+      judge_param_mode <- "phase_specific"
+    }
+  }
+  judge_param_mode <- as.character(judge_param_mode)
+  if (length(judge_param_mode) != 1L || is.na(judge_param_mode) ||
+    !judge_param_mode %in% c("global_shared", "phase_specific")) {
+    rlang::abort("`inference_contract$judge_param_mode` must be global_shared or phase_specific.")
+  }
+
+  phase_boundary_detected <- inference_contract$phase_boundary_detected %||% NULL
+  if (is.null(phase_boundary_detected)) {
+    phase_boundary_detected <- any(phase_levels %in% c("phase3"))
+  }
+  phase_boundary_detected <- as.logical(phase_boundary_detected)
+  if (length(phase_boundary_detected) != 1L || is.na(phase_boundary_detected)) {
+    rlang::abort("`inference_contract$phase_boundary_detected` must be TRUE or FALSE.")
+  }
+
+  list(
+    judge_param_mode = judge_param_mode,
+    phase_levels = phase_levels,
+    judge_scope_levels = judge_scope_levels,
+    phase_boundary_detected = phase_boundary_detected
+  )
+}
+
 #' Full Bayesian BTL inference via CmdStanR (adaptive-compatible)
 #'
 #' Runs full Bayesian posterior inference for a Bradley–Terry–Luce (BTL) style
@@ -336,6 +476,9 @@ build_btl_results_data <- function(
 #' @param seed Optional integer seed for deterministic subset selection when
 #'   \code{subset_method = "sample"}. When \code{NULL}, falls back to
 #'   \code{cmdstan$seed} if provided.
+#' @param inference_contract Optional list of inference-routing semantics to
+#'   attach to each fit contract. When omitted, values are inferred from
+#'   \code{results$phase} and optional \code{results$judge_scope}.
 #'
 #' @return A list with:
 #' \describe{
@@ -379,6 +522,8 @@ build_btl_results_data <- function(
 #' summarize_items(fit)
 #' }
 #'
+#' @seealso [build_btl_results_data()]
+#' @family Bayesian models
 #' @export
 fit_bayes_btl_mcmc <- function(
     results,
@@ -392,7 +537,8 @@ fit_bayes_btl_mcmc <- function(
     ),
     pair_counts = NULL,
     subset_method = c("first", "sample"),
-    seed = NULL
+    seed = NULL,
+    inference_contract = NULL
 ) {
   if (is.list(model_variant) && !is.character(model_variant)) {
     cmdstan <- model_variant
@@ -452,7 +598,15 @@ fit_bayes_btl_mcmc <- function(
     ))
 
     mcmc_fit <- .fit_bayes_btl_mcmc_adaptive(bt_data, config = mcmc_config, seed = mcmc_seed)
+    contract_meta <- .btl_mcmc_inference_contract_from_results(
+      results_subset,
+      inference_contract = inference_contract
+    )
     fit_contract <- as_btl_fit_contract_from_mcmc(mcmc_fit, ids = ids)
+    fit_contract$inference_contract <- contract_meta
+    fit_metrics <- .btl_mcmc_standalone_fit_metrics(fit_contract, mcmc_config)
+    fit_contract$diagnostics_pass <- as.logical(fit_metrics$diagnostics_pass)
+    validate_btl_fit_contract(fit_contract, ids = ids)
     fits[[idx]] <- fit_contract
 
     state <- .btl_mcmc_summary_state(
@@ -463,6 +617,7 @@ fit_bayes_btl_mcmc <- function(
     )
 
     metrics <- btl_mcmc_fill_terminal_stop_metrics(state, mcmc_config)
+    metrics[names(fit_metrics)] <- fit_metrics
     metrics$proposed_pairs <- as.integer(nrow(results_subset))
     round_row <- build_round_log_row(
       state = state,

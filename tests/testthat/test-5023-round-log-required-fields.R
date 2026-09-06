@@ -29,15 +29,35 @@ test_that("round_log includes required stopping and star-cap audit fields", {
     "global_identified",
     "global_identified_reliability_min",
     "global_identified_rank_corr_min",
+    "phase_scope",
+    "phase_scope_set_id",
+    "phase_scope_n_items",
+    "mean_degree_scope",
+    "min_degree_scope",
     "long_quota_raw",
     "long_quota_effective",
     "long_quota_removed",
     "realloc_to_mid",
     "realloc_to_local",
+    "reliability_EAP_scope",
+    "eap_pass_scope",
+    "theta_sd_eap_scope",
+    "rho_theta_scope",
+    "lag_eligible_scope",
+    "theta_corr_pass_scope",
+    "delta_sd_theta_scope",
+    "delta_sd_theta_pass_scope",
+    "rho_rank_scope",
+    "rho_rank_pass_scope",
     "refit_id",
     "round_id_at_refit",
+    "new_active_pairs_since_last_refit",
+    "new_probe_pairs_since_last_refit",
+    "new_total_cross_pairs_since_last_refit",
     "mcmc_chains",
-    "mcmc_parallel_chains"
+    "mcmc_parallel_chains",
+    "max_pairs_after_stop",
+    "pairs_committed_after_stop"
   )
   expect_true(all(required %in% names(round_log)))
 
@@ -57,19 +77,44 @@ test_that("round_log includes required stopping and star-cap audit fields", {
   expect_true(is.logical(round_log$global_identified))
   expect_true(is.double(round_log$global_identified_reliability_min))
   expect_true(is.double(round_log$global_identified_rank_corr_min))
+  expect_true(is.character(round_log$phase_scope))
+  expect_true(is.integer(round_log$phase_scope_set_id))
+  expect_true(is.integer(round_log$phase_scope_n_items))
+  expect_true(is.double(round_log$mean_degree_scope))
+  expect_true(is.integer(round_log$min_degree_scope))
   expect_true(is.integer(round_log$long_quota_raw))
   expect_true(is.integer(round_log$long_quota_effective))
   expect_true(is.integer(round_log$long_quota_removed))
   expect_true(is.integer(round_log$realloc_to_mid))
   expect_true(is.integer(round_log$realloc_to_local))
+  expect_true(is.double(round_log$reliability_EAP_scope))
+  expect_true(is.logical(round_log$eap_pass_scope))
+  expect_true(is.double(round_log$theta_sd_eap_scope))
+  expect_true(is.double(round_log$rho_theta_scope))
+  expect_true(is.logical(round_log$lag_eligible_scope))
+  expect_true(is.logical(round_log$theta_corr_pass_scope))
+  expect_true(is.double(round_log$delta_sd_theta_scope))
+  expect_true(is.logical(round_log$delta_sd_theta_pass_scope))
+  expect_true(is.double(round_log$rho_rank_scope))
+  expect_true(is.logical(round_log$rho_rank_pass_scope))
   expect_true(is.integer(round_log$refit_id))
   expect_true(is.integer(round_log$round_id_at_refit))
+  expect_true(is.integer(round_log$new_active_pairs_since_last_refit))
+  expect_true(is.integer(round_log$new_probe_pairs_since_last_refit))
+  expect_true(is.integer(round_log$new_total_cross_pairs_since_last_refit))
   expect_true(is.integer(round_log$mcmc_chains))
   expect_true(is.integer(round_log$mcmc_parallel_chains))
+  expect_true(is.integer(round_log$max_pairs_after_stop))
+  expect_true(is.integer(round_log$pairs_committed_after_stop))
+  expect_true(all(round_log$max_pairs_after_stop >= 0L))
+  expect_true(all(round_log$pairs_committed_after_stop >= 0L))
   reject_rate <- round_log$star_cap_reject_rate_since_last_refit
   reject_rate <- reject_rate[!is.na(reject_rate)]
   expect_true(all(reject_rate >= 0))
   expect_true(all(reject_rate <= 1))
+  expect_true(all(is.na(round_log$new_active_pairs_since_last_refit)))
+  expect_true(all(is.na(round_log$new_probe_pairs_since_last_refit)))
+  expect_true(all(is.na(round_log$new_total_cross_pairs_since_last_refit)))
 })
 
 test_that("round_log stop decisions and committed counts are reconstructable from logs", {
@@ -115,6 +160,42 @@ test_that("round_log stop decisions and committed counts are reconstructable fro
     },
     logical(1)
   ))
+})
+
+test_that("round_log defers heavy audit-only summaries unless reconstruction is requested", {
+  items <- make_test_items(4)
+  state <- adaptive_rank_start(items)
+  judge <- make_deterministic_judge("i_wins")
+  stub <- make_deterministic_fit_fn(state$item_ids)
+
+  withr::local_seed(4)
+  out <- adaptive_rank_run_live(
+    state,
+    judge,
+    n_steps = 4L,
+    fit_fn = stub$fit_fn,
+    btl_config = list(refit_pairs_target = 2L, stability_lag = 1L),
+    progress = "none"
+  )
+
+  round_log_live <- adaptive_round_log(out)
+  round_log_reconstructed <- adaptive_round_log(out, reconstruct_deferred = TRUE)
+  deferred_cols <- pairwiseLLM:::.adaptive_round_log_deferred_audit_columns()
+  payloads <- out$refit_meta$round_log_deferred_audit_payloads
+
+  expect_true(all(vapply(
+    deferred_cols,
+    function(col) all(is.na(round_log_live[[col]])),
+    logical(1)
+  )))
+  expect_true(length(payloads) > 0L)
+  expect_true(all(vapply(payloads, function(payload) is.null(payload$draws), logical(1))))
+  expect_true(all(vapply(payloads, function(payload) is.list(payload$summary), logical(1))))
+  expect_true(all(is.finite(round_log_reconstructed$cov_trace_theta)))
+  expect_true(all(is.finite(round_log_reconstructed$ci95_theta_width_mean)))
+  expect_true(all(is.finite(round_log_reconstructed$top20_boundary_entropy_mean)))
+  expect_true(all(is.finite(round_log_reconstructed$nn_diff_sd_mean)))
+  expect_false(identical(round_log_live, round_log_reconstructed))
 })
 
 test_that("step_log stage counters and quotas are reconstructable from logs", {

@@ -59,6 +59,8 @@
 #' bt_ex <- build_bt_data(example_writing_pairs)
 #' head(bt_ex)
 #'
+#' @seealso [fit_bt_model()], [summarize_bt_fit()]
+#' @family frequentist models
 #' @export
 build_bt_data <- function(results) {
   results <- tibble::as_tibble(results)
@@ -165,12 +167,18 @@ build_bt_data <- function(results) {
 #' data("example_writing_pairs")
 #' bt <- build_bt_data(example_writing_pairs)
 #'
-#' fit1 <- fit_bt_model(bt, engine = "sirt")
-#' fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+#' if (requireNamespace("sirt", quietly = TRUE)) {
+#'   fit1 <- fit_bt_model(bt, engine = "sirt")
+#' }
+#' if (requireNamespace("BradleyTerry2", quietly = TRUE)) {
+#'   fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+#' }
 #'
 #' @import tibble
 #' @import dplyr
 #' @importFrom stats aggregate
+#' @seealso [build_bt_data()], [summarize_bt_fit()]
+#' @family frequentist models
 #' @export
 fit_bt_model <- function(bt_data,
                          engine = c("auto", "sirt", "BradleyTerry2"),

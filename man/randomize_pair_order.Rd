@@ -53,4 +53,13 @@ head(pairs_rand[, c("ID1", "ID2")])
 \code{\link{alternate_pair_order}} for deterministic alternating order,
 \code{\link{sample_reverse_pairs}} and
 \code{\link{compute_reverse_consistency}} for reverse-order checks.
+
+Other pairing and data:
+\code{\link[=alternate_pair_order]{alternate_pair_order()}},
+\code{\link[=make_pairs]{make_pairs()}},
+\code{\link[=read_samples_df]{read_samples_df()}},
+\code{\link[=read_samples_dir]{read_samples_dir()}},
+\code{\link[=sample_pairs]{sample_pairs()}},
+\code{\link[=sample_reverse_pairs]{sample_reverse_pairs()}}
 }
+\concept{pairing and data}

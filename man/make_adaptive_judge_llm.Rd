@@ -5,7 +5,7 @@
 \title{Build an LLM judge function for adaptive ranking}
 \usage{
 make_adaptive_judge_llm(
-  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
   model,
   trait = "overall_quality",
   trait_name = NULL,
@@ -19,12 +19,15 @@ make_adaptive_judge_llm(
 )
 }
 \arguments{
-\item{backend}{Backend passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}.}
+\item{backend}{Backend passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}. Choices are
+\code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"vertex"}, \code{"together"}, and
+\code{"ollama"}. Default is \code{"openai"}.}
 
-\item{model}{Model identifier passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}.}
+\item{model}{Model identifier passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}. Required.}
 
 \item{trait}{Built-in trait key used when no custom trait is supplied.
-Ignored when both \code{trait_name} and \code{trait_description} are supplied.}
+Ignored when both \code{trait_name} and \code{trait_description} are supplied.
+Default is \code{"overall_quality"}.}
 
 \item{trait_name}{Optional custom trait display name.}
 
@@ -34,22 +37,30 @@ Ignored when both \code{trait_name} and \code{trait_description} are supplied.}
 \code{\link[=set_prompt_template]{set_prompt_template()}}.}
 
 \item{endpoint}{Endpoint family passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}.
-Only used when \code{backend = "openai"}; ignored otherwise.}
+Only used when \code{backend = "openai"}; choices are \code{"chat.completions"} and
+\code{"responses"}. Default is \code{"chat.completions"}. Ignored for other
+backends.}
 
 \item{api_key}{Optional API key passed to \code{\link[=llm_compare_pair]{llm_compare_pair()}}.}
 
-\item{include_raw}{Logical; forwarded to \code{\link[=llm_compare_pair]{llm_compare_pair()}}.}
+\item{include_raw}{Logical; forwarded to \code{\link[=llm_compare_pair]{llm_compare_pair()}}. Default is
+\code{FALSE}.}
 
-\item{text_col}{Name of the text column expected in adaptive item rows.}
+\item{text_col}{Name of the text column expected in adaptive item rows.
+Default is \code{"text"}.}
 
 \item{judge_args}{Named list of additional fixed arguments forwarded to
 \code{\link[=llm_compare_pair]{llm_compare_pair()}}. Use this for provider-specific controls such as
 \code{reasoning}, \code{service_tier}, \code{temperature}, \code{top_p}, \code{logprobs}, \code{host},
-or \code{include_thoughts}.}
+or \code{include_thoughts}. Default is \code{list()}.}
 }
 \value{
-A function \code{judge(A, B, state, ...)} returning a list with fields
-\code{is_valid}, \code{Y}, and \code{invalid_reason}.
+A function \code{judge(A, B, state, ...)} returning a list with required
+fields \code{is_valid}, \code{Y}, and \code{invalid_reason}, plus optional canonical audit
+fields such as \code{judge_backend}, \code{judge_model}, \code{judge_endpoint},
+\code{llm_status_code}, \code{llm_error_message}, \code{llm_custom_id},
+\code{prompt_tokens}, \code{completion_tokens}, \code{total_tokens}, and
+\code{raw_response_json}.
 }
 \description{
 Creates a judge function compatible with \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}} by
@@ -61,7 +72,10 @@ The returned function has signature \code{judge(A, B, state, ...)} and enforces
 the adaptive transactional contract:
 it returns \code{is_valid = TRUE} with \code{Y} in \verb{\{0,1\}} when the model response
 identifies one of the two presented items, and returns \code{is_valid = FALSE}
-otherwise.
+otherwise. In addition to the required contract fields, the returned judge
+preserves canonical audit metadata from the first \code{llm_compare_pair()} row,
+including backend/model provenance, status/error fields, token counts, and a
+serialized \code{raw_response_json} payload when available.
 
 Model configuration is split into:
 \itemize{
@@ -89,11 +103,11 @@ judge <- make_adaptive_judge_llm(
 \seealso{
 \code{\link[=adaptive_rank]{adaptive_rank()}}, \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}, \code{\link[=llm_compare_pair]{llm_compare_pair()}}
 
-Other adaptive ranking: 
-\code{\link{adaptive_rank}()},
-\code{\link{adaptive_rank_resume}()},
-\code{\link{adaptive_rank_run_live}()},
-\code{\link{adaptive_rank_start}()},
-\code{\link{summarize_adaptive}()}
+Other adaptive ranking:
+\code{\link[=adaptive_rank]{adaptive_rank()}},
+\code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
+\code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
+\code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
+\code{\link[=summarize_adaptive]{summarize_adaptive()}}
 }
 \concept{adaptive ranking}

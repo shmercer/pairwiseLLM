@@ -26,10 +26,9 @@ submit_together_pairs_live(
 \code{ID2}, \code{text2}. Typically created by \code{\link[=make_pairs]{make_pairs()}}, \code{\link[=sample_pairs]{sample_pairs()}}, and
 \code{\link[=randomize_pair_order]{randomize_pair_order()}}.}
 
-\item{model}{Together.ai model name, for example \code{"deepseek-ai/DeepSeek-R1"},
-\code{"moonshotai/Kimi-K2-Instruct-0905"},
-\code{"Qwen/Qwen3-235B-A22B-Instruct-2507-tput"},
-\code{"deepseek-ai/DeepSeek-V3"}.}
+\item{model}{Together.ai model name, for example the dated tested identifier
+\code{"deepseek-ai/DeepSeek-V4-Flash-0731"}. Check the provider's current
+serverless catalog before use.}
 
 \item{trait_name}{Trait name to pass to \code{\link[=together_compare_pair_live]{together_compare_pair_live()}}.}
 
@@ -66,7 +65,8 @@ packages.}
 \item{workers}{Integer; the number of parallel workers (threads) to use if
 \code{parallel = TRUE}. Defaults to 1.
 \strong{Guidance:} Together.ai rate limits vary by usage tier. Start with
-4 to 8 workers to avoid hitting HTTP 429 errors.}
+no more than 2 workers to avoid HTTP 429 errors and respect shared
+check-farm resources.}
 
 \item{...}{Additional Together.ai parameters, such as \code{temperature}, \code{top_p},
 or other provider-specific options. These are forwarded to
@@ -120,7 +120,7 @@ tmpl <- set_prompt_template()
 # If interrupted, running this again will resume progress.
 res_seq <- submit_together_pairs_live(
   pairs             = pairs,
-  model             = "deepseek-ai/DeepSeek-R1",
+  model             = "deepseek-ai/DeepSeek-V4-Flash-0731",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -131,13 +131,13 @@ res_seq <- submit_together_pairs_live(
 # Note: On Windows, this opens background R sessions.
 res_par <- submit_together_pairs_live(
   pairs             = pairs,
-  model             = "deepseek-ai/DeepSeek-R1",
+  model             = "deepseek-ai/DeepSeek-V4-Flash-0731",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
   save_path         = "results_par.csv",
   parallel          = TRUE,
-  workers           = 4
+  workers           = 2
 )
 
 # Inspect results
@@ -151,3 +151,23 @@ if (nrow(res_par$failed_pairs) > 0) {
 }
 
 }
+\seealso{
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}}, \code{\link[=llm_compare_pair]{llm_compare_pair()}}
+
+Other live backends:
+\code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}},
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}},
+\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}},
+\code{\link[=llm_compare_pair]{llm_compare_pair()}},
+\code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}},
+\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}},
+\code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}},
+\code{\link[=submit_llm_pairs]{submit_llm_pairs()}},
+\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
+\code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
+\code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
+\code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}
+}
+\concept{live backends}
