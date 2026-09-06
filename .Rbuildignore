@@ -1,4 +1,5 @@
 ^pairwiseLLM\.Rproj$
+^data-raw$
 ^\.Rproj\.user$
 ^\.Rhistory$
 ^\.RData$
@@ -13,7 +14,6 @@
 ^cobertura\.xml$
 ^vignettes/.*\.html$
 ^LICENSE\.md$
-^data-raw$
 ^dev$
 ^\.github$
 ^README\.Rmd$
@@ -27,6 +27,7 @@
 ^CRAN-SUBMISSION$
 ^codemeta\.json$
 ^tests/testthat/bad\.csv$
+^tests/testthat/oops$
 ^agents\.md$
 ^agents_adaptive\.md$
 ^AGENTS\.md$

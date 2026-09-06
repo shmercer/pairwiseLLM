@@ -92,8 +92,8 @@ packages.}
 
 \item{workers}{Integer; the number of parallel workers (threads) to use if
 \code{parallel = TRUE}. Defaults to 1.
-\strong{Guidance:} Start conservatively (e.g., 2-4 workers) to avoid hitting
-HTTP 429 errors, as Gemini rate limits can be strict depending on your tier.}
+\strong{Guidance:} Use no more than 2 workers to avoid HTTP 429 errors and
+respect shared check-farm resources.}
 
 \item{...}{Reserved for future extensions; passed through to
 \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}} (but \code{thinking_budget} is ignored there).}
@@ -162,7 +162,7 @@ res_par <- submit_gemini_pairs_live(
   prompt_template   = tmpl,
   save_path         = "results_gemini_par.csv",
   parallel          = TRUE,
-  workers           = 4
+  workers           = 2
 )
 
 # 3. Gemini 3 Flash example (minimal thinking)

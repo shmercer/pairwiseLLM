@@ -79,8 +79,12 @@ modeling engines. MLE reliability is only available from \pkg{sirt}.
 data("example_writing_pairs")
 bt <- build_bt_data(example_writing_pairs)
 
-fit1 <- fit_bt_model(bt, engine = "sirt")
-fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+if (requireNamespace("sirt", quietly = TRUE)) {
+  fit1 <- fit_bt_model(bt, engine = "sirt")
+}
+if (requireNamespace("BradleyTerry2", quietly = TRUE)) {
+  fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+}
 
 }
 \seealso{

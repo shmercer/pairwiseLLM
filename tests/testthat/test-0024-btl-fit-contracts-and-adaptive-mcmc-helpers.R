@@ -264,6 +264,15 @@ test_that("mcmc core detection, config resolution, and variant inference hit fal
   ))
   expect_identical(cfg_clamped$parallel_chains, 2L)
 
+  cfg_default <- testthat::with_mocked_bindings(
+    .btl_mcmc_detect_cores = function() {
+      list(physical = 32L, logical = 64L, effective = 32L)
+    },
+    pairwiseLLM:::.btl_mcmc_resolve_cmdstan_config(list(chains = 8L)),
+    .package = "pairwiseLLM"
+  )
+  expect_identical(cfg_default$parallel_chains, 2L)
+
   mat_e <- matrix(1, nrow = 2, ncol = 2)
   colnames(mat_e) <- c("theta[1]", "epsilon")
   expect_identical(pairwiseLLM:::.btl_mcmc_infer_variant(mat_e), "btl_e")

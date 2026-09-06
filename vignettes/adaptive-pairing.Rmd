@@ -13,7 +13,8 @@ knitr::opts_chunk$set(
   comment = "#>"
 )
 
-cmdstan_available <- requireNamespace("cmdstanr", quietly = TRUE) &&
+cmdstan_available <- identical(Sys.getenv("PAIRWISELLM_RUN_CMDSTAN_VIGNETTES"), "true") &&
+  requireNamespace("cmdstanr", quietly = TRUE) &&
   tryCatch(
     !is.null(cmdstanr::cmdstan_version()),
     error = function(e) FALSE
@@ -27,7 +28,9 @@ knitr::opts_chunk$set(eval = cmdstan_available)
 This article shows how to rank **one set of items** with [adaptive_rank()]. The wrapper reads and
 validates the items, starts or resumes a run, requests comparisons from a judge, performs Bayesian
 refits, and returns the ranking and audit logs. Most users should start with this wrapper rather
-than assembling the lower-level state and runner functions themselves.
+than assembling the lower-level state and runner functions themselves. Executable CmdStan chunks
+are disabled during ordinary package builds. Set `PAIRWISELLM_RUN_CMDSTAN_VIGNETTES=true` to opt in
+when rendering this source locally.
 
 ## Choose a pairing strategy
 

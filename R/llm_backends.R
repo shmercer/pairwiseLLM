@@ -433,7 +433,7 @@ llm_compare_pair <- function(
 #'   backend           = "openai",
 #'   endpoint          = "chat.completions",
 #'   parallel          = TRUE,
-#'   workers           = 4,
+#'   workers           = 2,
 #'   save_path         = "results_openai.csv"
 #' )
 #'

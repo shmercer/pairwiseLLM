@@ -1,0 +1,28 @@
+Bundled-content provenance and licensing
+========================================
+
+Unless stated below, the R and Stan source, documentation, prompt templates,
+calibration fixture, and example-data generation code were created by Sterett
+H. Mercer and are distributed under the package's MIT license.
+
+The objects example_writing_samples, example_writing_pairs,
+example_writing_results, and example_openai_batch_output are synthetic fixtures
+created by the package author. Their source is retained in the source repository
+at data-raw/example_writing_samples.R.
+
+The object example_writing_samples1000 contains synthetic text generated for
+the package author through the OpenAI API. The package author selected,
+organized, labeled, and distributed those outputs under the package's MIT
+license. The generation script and prompt are retained in the source repository
+at data-raw/generate_example_writing_samples1000.R. Regeneration makes live,
+billable API requests and may not reproduce identical text because provider
+models and sampling are nondeterministic.
+
+The pairwiseLLM banner in man/figures/pairwiseLLM-banner.jpg was supplied by
+the package maintainer and is distributed as package documentation under the
+package's MIT license.
+
+Provider and product names, including OpenAI, Anthropic, Gemini, Vertex AI,
+Together AI, Ollama, Stan, and CmdStan, identify third-party services or
+software. Their use does not imply endorsement. No provider logos or third-party
+software binaries are included in the source package.

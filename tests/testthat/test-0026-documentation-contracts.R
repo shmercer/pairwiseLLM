@@ -519,7 +519,7 @@ test_that("adaptive-linking design vignette tracks the normative Phase A/B contr
 
   expect_true(grepl("adaptive-linking-design.html", practical, fixed = TRUE))
   expect_true(grepl("adaptive-linking-design", pkgdown, fixed = TRUE))
-  expect_true(grepl("adaptive-linking-design.html", readme, fixed = TRUE))
+  expect_true(grepl('vignette("adaptive-linking-design")', readme, fixed = TRUE))
   expect_true(grepl("adaptive-linking.html", text, fixed = TRUE))
   expect_true(grepl("within-set-adaptive-design.html", text, fixed = TRUE))
 

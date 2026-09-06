@@ -189,11 +189,11 @@ Stopping and refits are logged so stop decisions are reproducible from the
 }
 }
 \author{
-\strong{Maintainer}: Sterett H. Mercer \email{sterett.mercer@ubc.ca} (\href{https://orcid.org/0000-0002-7940-4221}{ORCID})
+\strong{Maintainer}: Sterett H. Mercer \email{sterett.mercer@ubc.ca} (\href{https://orcid.org/0000-0002-7940-4221}{ORCID}) [copyright holder]
 
 Authors:
 \itemize{
-  \item Sterett H. Mercer \email{sterett.mercer@ubc.ca} (\href{https://orcid.org/0000-0002-7940-4221}{ORCID})
+  \item Sterett H. Mercer \email{sterett.mercer@ubc.ca} (\href{https://orcid.org/0000-0002-7940-4221}{ORCID}) [copyright holder]
 }
 
 }
