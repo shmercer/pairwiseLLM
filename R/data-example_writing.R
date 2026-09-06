@@ -16,6 +16,8 @@
 #' }
 #'
 #' @usage data("example_writing_samples")
+#' @source Package-author-created synthetic examples. Reproduction code is in
+#'   `data-raw/example_writing_samples.R` in the source repository.
 #'
 #' @examples
 #' data("example_writing_samples")
@@ -48,6 +50,8 @@ NULL
 #' }
 #'
 #' @usage data("example_writing_pairs")
+#' @source Deterministically derived from `example_writing_samples` by
+#'   `data-raw/example_writing_samples.R` in the source repository.
 #'
 #' @examples
 #' data("example_writing_pairs")
@@ -82,6 +86,8 @@ NULL
 #' }
 #'
 #' @usage data("example_writing_results")
+#' @source Deterministically derived from `example_writing_pairs` by
+#'   `data-raw/example_writing_samples.R` in the source repository.
 #'
 #' @examples
 #' data("example_writing_results")
@@ -115,6 +121,8 @@ NULL
 #' single JSON line (JSONL).
 #'
 #' @usage data("example_openai_batch_output")
+#' @source Package-author-created fictional API response fixtures. Reproduction
+#'   code is in `data-raw/example_writing_samples.R` in the source repository.
 #'
 #' @examples
 #' data("example_openai_batch_output")

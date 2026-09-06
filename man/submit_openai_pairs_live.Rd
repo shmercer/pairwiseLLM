@@ -139,7 +139,7 @@ res_par <- submit_openai_pairs_live(
   trait_description = td$description,
   save_path         = "results_par.csv",
   parallel          = TRUE,
-  workers           = 4
+  workers           = 2
 )
 
 # Inspect results

@@ -422,7 +422,8 @@ together_compare_pair_live <- function(
 #' @param workers Integer; the number of parallel workers (threads) to use if
 #'   \code{parallel = TRUE}. Defaults to 1.
 #'   \strong{Guidance:} Together.ai rate limits vary by usage tier. Start with
-#'   4 to 8 workers to avoid hitting HTTP 429 errors.
+#'   no more than 2 workers to avoid HTTP 429 errors and respect shared
+#'   check-farm resources.
 #' @param ... Additional Together.ai parameters, such as `temperature`, `top_p`,
 #'   or other provider-specific options. These are forwarded to
 #'   [together_compare_pair_live()].
@@ -473,7 +474,7 @@ together_compare_pair_live <- function(
 #'   prompt_template   = tmpl,
 #'   save_path         = "results_par.csv",
 #'   parallel          = TRUE,
-#'   workers           = 4
+#'   workers           = 2
 #' )
 #'
 #' # Inspect results

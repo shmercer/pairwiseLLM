@@ -51,7 +51,7 @@ For advanced batch processing workflows, see:
 | Provider Surface | Environment Variable |
 |------------------|----------------------|
 | [OpenAI](https://openai.com/api/) | OPENAI_API_KEY |
-| [Anthropic](https://console.anthropic.com/) | ANTHROPIC_API_KEY |
+| [Anthropic](https://platform.claude.com/) | ANTHROPIC_API_KEY |
 | Gemini Developer API | GEMINI_API_KEY |
 | Vertex AI Gemini API | VERTEX_API_KEY |
 | [Together](https://www.together.ai/) | TOGETHER_API_KEY |
@@ -200,7 +200,7 @@ res_list <- submit_llm_pairs(
   prompt_template   = tmpl,
   # New features:
   parallel          = TRUE,
-  workers           = 4,
+  workers           = 2,
   save_path         = "live_results.csv"
 )
 ```

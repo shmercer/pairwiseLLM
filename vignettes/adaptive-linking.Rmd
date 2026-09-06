@@ -55,7 +55,8 @@ Bayesian Phase A refits and Phase B linking require `cmdstanr`, a working C++ to
 CmdStan. They do not require an LLM credential when a custom local judge is supplied.
 
 ```{r cmdstan-check}
-cmdstan_available <- requireNamespace("cmdstanr", quietly = TRUE) &&
+cmdstan_available <- identical(Sys.getenv("PAIRWISELLM_RUN_CMDSTAN_VIGNETTES"), "true") &&
+  requireNamespace("cmdstanr", quietly = TRUE) &&
   tryCatch({
     cmdstanr::cmdstan_version()
     TRUE
@@ -64,7 +65,9 @@ cmdstan_available <- requireNamespace("cmdstanr", quietly = TRUE) &&
 cmdstan_available
 ```
 
-If this prints `FALSE`, install and verify CmdStan before running the remaining executable chunks:
+If this prints `FALSE`, install and verify CmdStan before running the remaining executable chunks.
+Those chunks are disabled during ordinary package builds; set
+`PAIRWISELLM_RUN_CMDSTAN_VIGNETTES=true` to opt in when rendering this source locally.
 
 ```{r cmdstan-install, eval=FALSE}
 install.packages(

@@ -8,6 +8,10 @@
 A character vector of length 3, where each element is a
 single JSON line (JSONL).
 }
+\source{
+Package-author-created fictional API response fixtures. Reproduction
+code is in \code{data-raw/example_writing_samples.R} in the source repository.
+}
 \usage{
 data("example_openai_batch_output")
 }

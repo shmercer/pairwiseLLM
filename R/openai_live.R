@@ -430,7 +430,7 @@ openai_compare_pair_live <- function(
 #'   trait_description = td$description,
 #'   save_path         = "results_par.csv",
 #'   parallel          = TRUE,
-#'   workers           = 4
+#'   workers           = 2
 #' )
 #'
 #' # Inspect results

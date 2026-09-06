@@ -72,7 +72,9 @@
 
   parallel_chains <- cmdstan$parallel_chains %||% NULL
   if (is.null(parallel_chains)) {
-    core_budget <- max(1L, floor(cores$effective * core_fraction))
+    # Automatic parallelism must remain within CRAN's two-core limit. Callers
+    # can still request a smaller value through `parallel_chains`.
+    core_budget <- min(2L, max(1L, floor(cores$effective * core_fraction)))
     parallel_chains <- min(chains, core_budget)
   } else {
     parallel_chains <- as.integer(parallel_chains)

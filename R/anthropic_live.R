@@ -659,7 +659,8 @@ anthropic_compare_pair_live <- function(
 #' @param workers Integer; the number of parallel workers (threads) to use if
 #'   \code{parallel = TRUE}. Defaults to 1.
 #'   \strong{Guidance:} Anthropic rate limits vary significantly by tier. Start
-#'   conservatively (e.g., 2-4 workers) to avoid HTTP 429 errors.
+#'   conservatively (at most 2 workers) to avoid HTTP 429 errors and respect
+#'   shared check-farm resources.
 #' @param ... Additional Anthropic parameters (for example \code{temperature},
 #'   \code{top_p}, \code{max_tokens}) passed on to
 #'   \code{\link{anthropic_compare_pair_live}}. When \code{pair_uid} is
@@ -709,7 +710,7 @@ anthropic_compare_pair_live <- function(
 #'   prompt_template   = tmpl,
 #'   save_path         = "results_par.csv",
 #'   parallel          = TRUE,
-#'   workers           = 4
+#'   workers           = 2
 #' )
 #'
 #' # Inspect results

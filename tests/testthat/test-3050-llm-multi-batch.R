@@ -2423,3 +2423,27 @@ test_that("llm_resume_multi_batches records batch failures with per-pair attempt
     }
   )
 })
+test_that("multi-batch CSV features require readr conditionally", {
+  missing_readr <- function() rlang::abort("readr unavailable")
+
+  expect_error(
+    testthat::with_mocked_bindings(
+      .llm_multi_require_readr = missing_readr,
+      llm_submit_pairs_multi_batch(
+        pairs = data.frame(), model = "m", trait_name = "t",
+        trait_description = "d", n_segments = 1L, write_registry = TRUE
+      ),
+      .package = "pairwiseLLM"
+    ),
+    "readr unavailable"
+  )
+
+  expect_error(
+    testthat::with_mocked_bindings(
+      .llm_multi_require_readr = missing_readr,
+      llm_resume_multi_batches(jobs = list(), write_combined_csv = TRUE),
+      .package = "pairwiseLLM"
+    ),
+    "readr unavailable"
+  )
+})

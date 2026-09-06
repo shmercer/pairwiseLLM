@@ -9,7 +9,8 @@ vignette: >
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
-cmdstan_available <- requireNamespace("cmdstanr", quietly = TRUE) &&
+cmdstan_available <- identical(Sys.getenv("PAIRWISELLM_RUN_CMDSTAN_VIGNETTES"), "true") &&
+  requireNamespace("cmdstanr", quietly = TRUE) &&
   tryCatch(!is.null(cmdstanr::cmdstan_version()), error = function(e) FALSE)
 ```
 
@@ -20,7 +21,9 @@ pair selection.
 ## Prerequisites
 
 The fit requires the suggested `cmdstanr` package, CmdStan, and a working C++ toolchain. Installation
-is a machine-level setup and does not require provider credentials.
+is a machine-level setup and does not require provider credentials. Executable fitting chunks are
+disabled during ordinary package builds. Set `PAIRWISELLM_RUN_CMDSTAN_VIGNETTES=true` to opt in
+when rendering this source locally.
 
 ```{r install, eval=FALSE}
 install.packages(

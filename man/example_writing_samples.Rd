@@ -13,6 +13,10 @@ A tibble with 20 rows and 3 variables:
 intended relative quality of the sample (higher = better).}
 }
 }
+\source{
+Package-author-created synthetic examples. Reproduction code is in
+\code{data-raw/example_writing_samples.R} in the source repository.
+}
 \usage{
 data("example_writing_samples")
 }

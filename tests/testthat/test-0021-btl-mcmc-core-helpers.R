@@ -51,6 +51,13 @@ test_that("core budget helpers validate and clamp as expected", {
   sizes <- pairwiseLLM:::compute_batch_sizes(100L, overrides = list(BATCH2 = 999L))
   expect_identical(sizes$BATCH2, 999L)
   expect_true(all(c("BATCH1", "BATCH2", "BATCH3", "CW") %in% names(sizes)))
+
+  default_budget <- testthat::with_mocked_bindings(
+    detect_physical_cores = function() 32L,
+    pairwiseLLM:::compute_core_budget(),
+    .package = "pairwiseLLM"
+  )
+  expect_identical(default_budget, 2L)
 })
 
 test_that("detect_physical_cores falls back to logical and then 1", {

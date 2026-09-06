@@ -5,9 +5,9 @@ editor_options:
   chunk_output_type: console
 ---
 
-<!-- README-source-md5: 1abc28994c51d914dc8fc511b0e83af1 -->
+<!-- README-source-md5: 09a690f9f619059ff7d03d949e106063 -->
 
-![pairwiseLLM banner](https://www.dropbox.com/scl/fi/dn51r1q7bkythiz5e6jdj/pairwiseLLM_logo.jpeg?rlkey=qlpe8xyda35wriryxqa87a1v8&st=tu8hmsp6&raw=1)
+![pairwiseLLM banner](man/figures/pairwiseLLM-banner.jpg)
 
 # pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
 
@@ -62,9 +62,9 @@ For basic function usage, see:
 
 For data schemas, prompt management, provider controls, recovery, and Bayesian BTL, see:
 
-  * [`vignette("data-and-prompts")`](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.html)
-  * [`vignette("provider-controls-and-recovery")`](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html)
-  * [`vignette("bayesian-btl")`](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.html)
+  * `vignette("data-and-prompts")`
+  * `vignette("provider-controls-and-recovery")`
+  * `vignette("bayesian-btl")`
 
 For advanced batch processing workflows, see:
 
@@ -85,7 +85,7 @@ the request shape used by an endpoint, whether maintainers tested that exact
 configuration, and whether the provider currently offers the model.
 
 The dated, machine-readable compatibility record is described in
-[`vignette("model-compatibility")`](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html).
+`vignette("model-compatibility")`.
 Absence from that record does not imply incompatibility. Preview identifiers
 and reasoning controls can change independently of the package.
 
@@ -168,6 +168,11 @@ Keys are **never printed**, **never stored**, and **never written** to disk.
 Configure only the key for the cloud backend you plan to use. Local Ollama
 does not require a provider API key.
 
+Cloud comparisons transmit the prompt and sample text you supply to the selected
+third-party provider. Review that provider's privacy and retention terms before
+submitting sensitive, confidential, student, or personal data. Enabling raw-response
+or reasoning retention can also write returned text to an output path you select.
+
 You can verify which providers are available using:
 
 ```r
@@ -241,7 +246,7 @@ At a high level, `pairwiseLLM` workflows follow this structure:
 
 The package provides helpers for each step.
 
-See [`vignette("data-and-prompts")`](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.html)
+See `vignette("data-and-prompts")`
 for the exact transitions between these schemas.
 
 ---
@@ -257,11 +262,11 @@ To get started, see:
 - **Guide: Adaptive Pairing**
   https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html
 - **Design: Adaptive Pairing**
-  https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html
+  `vignette("within-set-adaptive-design")`
 - **Guide: Adaptive Linking**
-  https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.html
+  `vignette("adaptive-linking")`
 - **Design: Adaptive Linking**
-  https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.html
+  `vignette("adaptive-linking-design")`
 
 ---
 
@@ -377,7 +382,7 @@ res_list <- submit_llm_pairs(
   trait_description = td$description,
   prompt_template   = tmpl,
   parallel          = TRUE,
-  workers           = 4,
+  workers           = 2,
   save_path         = "live_results.csv"
 )
 
@@ -786,7 +791,7 @@ For a full tutorial on adaptive pairing, see:
 For a detailed description of the current within-set Bayesian and adaptive algorithms, see:
 
 * **Design: Adaptive Pairing**
-  [https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html)
+  `vignette("within-set-adaptive-design")`
 
 ---
 
