@@ -2,7 +2,7 @@
   "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
   "@type": "SoftwareSourceCode",
   "identifier": "pairwiseLLM",
-  "description": "Provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers ('OpenAI', 'Anthropic', 'Google Gemini', 'Together AI', and locally-hosted 'Ollama' models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. The package additionally supports adaptive pairing workflows that iteratively select comparisons based on model uncertainty to improve ranking efficiency. Results can be modeled using frequentist or Bayesian Bradley–Terry–Luce models (Bradley & Terry, 1952 <doi:10.2307/2334029>; see also Caron & Doucet, 2012 <doi:10.1080/10618600.2012.638220>) or Elo rating methods (see Clark et al., 2018 <doi:10.1371/journal.pone.0190393>) to derive writing quality scores. For information on pairwise comparisons and comparitive judgement, see Thurstone (1927) <doi:10.1037/h0070288> and Heldsinger & Humphry (2010) <doi:10.1007/BF03216919>.",
+  "description": "Provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers ('OpenAI', 'Anthropic', 'Google Gemini', 'Together AI', and locally-hosted 'Ollama' models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. The package additionally supports adaptive pairing workflows that iteratively select comparisons based on model uncertainty to improve ranking efficiency. Results can be modeled using frequentist or Bayesian Bradley–Terry–Luce models (Bradley & Terry, 1952 <doi:10.2307/2334029>; see also Caron & Doucet, 2012 <doi:10.1080/10618600.2012.638220>) or Elo rating methods (see Clark et al., 2018 <doi:10.1371/journal.pone.0190393>) to derive writing quality scores. For information on pairwise comparisons and comparative judgement, see Thurstone (1927) <doi:10.1037/h0070288> and Heldsinger & Humphry (2010) <doi:10.1007/BF03216919>.",
   "name": "pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation",
   "relatedLink": ["https://shmercer.github.io/pairwiseLLM/", "https://CRAN.R-project.org/package=pairwiseLLM"],
   "codeRepository": "https://github.com/shmercer/pairwiseLLM",
@@ -22,6 +22,15 @@
     "url": "https://cran.r-project.org"
   },
   "author": [
+    {
+      "@type": "Person",
+      "givenName": "Sterett H.",
+      "familyName": "Mercer",
+      "email": "sterett.mercer@ubc.ca",
+      "@id": "https://orcid.org/0000-0002-7940-4221"
+    }
+  ],
+  "copyrightHolder": [
     {
       "@type": "Person",
       "givenName": "Sterett H.",
@@ -55,8 +64,7 @@
     {
       "@type": "SoftwareApplication",
       "identifier": "cmdstanr",
-      "name": "cmdstanr",
-      "sameAs": "https://github.com/stan-dev/cmdstanr"
+      "name": "cmdstanr"
     },
     {
       "@type": "SoftwareApplication",
@@ -358,9 +366,9 @@
       "name": "R",
       "version": ">= 4.1"
     },
-    "SystemRequirements": null
+    "SystemRequirements": "CmdStan and a C++17 toolchain (optional; needed only for\n    Bayesian and adaptive modeling)"
   },
-  "fileSize": "4837.17KB",
+  "fileSize": "5285.86KB",
   "citation": [
     {
       "@type": "SoftwareSourceCode",
