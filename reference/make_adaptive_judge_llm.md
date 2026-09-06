@@ -11,7 +11,7 @@ and converting provider responses into adaptive binary outcomes (`Y` in
 
 ``` r
 make_adaptive_judge_llm(
-  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
   model,
   trait = "overall_quality",
   trait_name = NULL,
@@ -31,16 +31,20 @@ make_adaptive_judge_llm(
 
   Backend passed to
   [`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md).
+  Choices are `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`,
+  `"together"`, and `"ollama"`. Default is `"openai"`.
 
 - model:
 
   Model identifier passed to
   [`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md).
+  Required.
 
 - trait:
 
   Built-in trait key used when no custom trait is supplied. Ignored when
-  both `trait_name` and `trait_description` are supplied.
+  both `trait_name` and `trait_description` are supplied. Default is
+  `"overall_quality"`.
 
 - trait_name:
 
@@ -59,7 +63,9 @@ make_adaptive_judge_llm(
 
   Endpoint family passed to
   [`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md).
-  Only used when `backend = "openai"`; ignored otherwise.
+  Only used when `backend = "openai"`; choices are `"chat.completions"`
+  and `"responses"`. Default is `"chat.completions"`. Ignored for other
+  backends.
 
 - api_key:
 
@@ -70,10 +76,12 @@ make_adaptive_judge_llm(
 
   Logical; forwarded to
   [`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md).
+  Default is `FALSE`.
 
 - text_col:
 
-  Name of the text column expected in adaptive item rows.
+  Name of the text column expected in adaptive item rows. Default is
+  `"text"`.
 
 - judge_args:
 
@@ -81,12 +89,17 @@ make_adaptive_judge_llm(
   [`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md).
   Use this for provider-specific controls such as `reasoning`,
   `service_tier`, `temperature`, `top_p`, `logprobs`, `host`, or
-  `include_thoughts`.
+  `include_thoughts`. Default is
+  [`list()`](https://rdrr.io/r/base/list.html).
 
 ## Value
 
-A function `judge(A, B, state, ...)` returning a list with fields
-`is_valid`, `Y`, and `invalid_reason`.
+A function `judge(A, B, state, ...)` returning a list with required
+fields `is_valid`, `Y`, and `invalid_reason`, plus optional canonical
+audit fields such as `judge_backend`, `judge_model`, `judge_endpoint`,
+`llm_status_code`, `llm_error_message`, `llm_custom_id`,
+`prompt_tokens`, `completion_tokens`, `total_tokens`, and
+`raw_response_json`.
 
 ## Details
 
@@ -94,7 +107,11 @@ The returned function has signature `judge(A, B, state, ...)` and
 enforces the adaptive transactional contract: it returns
 `is_valid = TRUE` with `Y` in `{0,1}` when the model response identifies
 one of the two presented items, and returns `is_valid = FALSE`
-otherwise.
+otherwise. In addition to the required contract fields, the returned
+judge preserves canonical audit metadata from the first
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
+row, including backend/model provenance, status/error fields, token
+counts, and a serialized `raw_response_json` payload when available.
 
 Model configuration is split into:
 

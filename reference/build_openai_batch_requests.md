@@ -33,8 +33,8 @@ build_openai_batch_requests(
 - model:
 
   Character scalar giving the OpenAI model name. Supports standard names
-  (e.g. `"gpt-4.1"`) and date-stamped versions (e.g.
-  `"gpt-5.2-2025-12-11"`).
+  (e.g. `"gpt-4.1"`, `"gpt-5.6-sol"`) and date-stamped versions (e.g.
+  `"gpt-5.4-2026-01-15"`).
 
 - trait_name:
 
@@ -57,12 +57,14 @@ build_openai_batch_requests(
 
 - temperature:
 
-  Optional temperature parameter. Defaults to `0` for standard models
-  (deterministic). Must be `NULL` for reasoning models (enabled).
+  Optional temperature parameter. If `NULL`, it is omitted so the
+  model/provider default applies. Must be `NULL` for reasoning modes
+  that do not support it.
 
 - top_p:
 
-  Optional top_p parameter.
+  Optional top-p parameter. If `NULL`, it is omitted so the
+  model/provider default applies.
 
 - logprobs:
 
@@ -72,8 +74,9 @@ build_openai_batch_requests(
 
   Optional reasoning effort for GPT-5 series when using the
   `/v1/responses` endpoint. For `"gpt-5"` and `"gpt-5-mini"`, `"none"`
-  is normalized to `"minimal"`. For `"gpt-5.1/5.2"`, use `"none"`,
-  `"low"`, `"medium"`, or `"high"`.
+  is normalized to `"minimal"`. For later GPT-5.x reasoning models, use
+  model-supported efforts such as `"none"`, `"low"`, `"medium"`,
+  `"high"`, `"xhigh"`, or `"max"`.
 
 - include_thoughts:
 
@@ -98,6 +101,36 @@ A tibble with one row per pair and columns:
 
 - `body`: List column containing the request body.
 
+## See also
+
+[`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md),
+[`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md)
+
+Other batch backends:
+[`anthropic_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_create_batch.md),
+[`anthropic_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_download_batch_results.md),
+[`anthropic_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_get_batch.md),
+[`anthropic_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_poll_batch_until_complete.md),
+[`build_anthropic_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_anthropic_batch_requests.md),
+[`build_gemini_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_gemini_batch_requests.md),
+[`gemini_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_create_batch.md),
+[`gemini_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_download_batch_results.md),
+[`gemini_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_get_batch.md),
+[`gemini_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_poll_batch_until_complete.md),
+[`llm_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.md),
+[`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md),
+[`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md),
+[`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md),
+[`openai_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_create_batch.md),
+[`openai_download_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_output.md),
+[`openai_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_get_batch.md),
+[`openai_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/openai_poll_batch_until_complete.md),
+[`openai_upload_batch_file()`](https://shmercer.github.io/pairwiseLLM/reference/openai_upload_batch_file.md),
+[`run_anthropic_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_anthropic_batch_pipeline.md),
+[`run_gemini_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_gemini_batch_pipeline.md),
+[`run_openai_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_openai_batch_pipeline.md),
+[`write_openai_batch_file()`](https://shmercer.github.io/pairwiseLLM/reference/write_openai_batch_file.md)
+
 ## Examples
 
 ``` r
@@ -118,14 +151,13 @@ batch_tbl_chat <- build_openai_batch_requests(
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
-  endpoint          = "chat.completions",
-  temperature       = 0
+  endpoint          = "chat.completions"
 )
 
-# 2. GPT-5.2-2025-12-11 Responses Batch with Reasoning
+# 2. GPT-5.6 Sol Responses Batch with Reasoning
 batch_tbl_resp <- build_openai_batch_requests(
   pairs = pairs,
-  model = "gpt-5.2-2025-12-11",
+  model = "gpt-5.6-sol",
   trait_name = td$name,
   trait_description = td$description,
   prompt_template = tmpl,
@@ -138,9 +170,9 @@ batch_tbl_chat
 #> # A tibble: 3 × 4
 #>   custom_id      method url                  body            
 #>   <chr>          <chr>  <chr>                <list>          
-#> 1 EXP_S17_vs_S12 POST   /v1/chat/completions <named list [3]>
-#> 2 EXP_S19_vs_S15 POST   /v1/chat/completions <named list [3]>
-#> 3 EXP_S01_vs_S15 POST   /v1/chat/completions <named list [3]>
+#> 1 EXP_S17_vs_S12 POST   /v1/chat/completions <named list [2]>
+#> 2 EXP_S19_vs_S15 POST   /v1/chat/completions <named list [2]>
+#> 3 EXP_S01_vs_S15 POST   /v1/chat/completions <named list [2]>
 batch_tbl_resp
 #> # A tibble: 3 × 4
 #>   custom_id      method url           body            

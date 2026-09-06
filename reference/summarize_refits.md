@@ -38,7 +38,9 @@ Key fields include:
 - identity: `refit_id`, `round_id_at_refit`, `step_id_at_refit`
 
 - run scale: `total_pairs_done`, `new_pairs_since_last_refit`,
-  `n_unique_pairs_seen`
+  `new_active_pairs_since_last_refit`,
+  `new_probe_pairs_since_last_refit`,
+  `new_total_cross_pairs_since_last_refit`, `n_unique_pairs_seen`
 
 - candidate health: `proposed_pairs_mode`,
   `starve_rate_since_last_refit`, `fallback_rate_since_last_refit`,
@@ -57,6 +59,19 @@ Key fields include:
 - report-only uncertainty metrics: `ci95_theta_width_*`,
   `near_tie_adj_*`, `cov_trace_theta`, `top20_boundary_entropy_*`,
   `nn_diff_sd_*`
+
+## See also
+
+[`adaptive_get_logs()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_get_logs.md),
+[`adaptive_step_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_step_log.md)
+
+Other adaptive logs:
+[`adaptive_get_logs()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_get_logs.md),
+[`adaptive_item_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_item_log.md),
+[`adaptive_results_history()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_results_history.md),
+[`adaptive_round_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_round_log.md),
+[`adaptive_step_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_step_log.md),
+[`summarize_items()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_items.md)
 
 ## Examples
 

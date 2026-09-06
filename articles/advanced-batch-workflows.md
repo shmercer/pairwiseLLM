@@ -24,6 +24,10 @@ Supported Batch API providers:
 - **Gemini** (batch pipeline:
   [`run_gemini_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_gemini_batch_pipeline.md))
 
+Vertex AI Gemini API is intentionally excluded here. In this series,
+Vertex is supported on the live path only via `backend = "vertex"` with
+`VERTEX_API_KEY`, and generic batch wrappers reject Vertex explicitly.
+
 > **Recommended approach:** For *multiple* batches (e.g., templates ×
 > providers × models × forward/reverse), use:
 >
@@ -68,6 +72,7 @@ vignette:
 ## 2. Setup and API Keys
 
 ``` r
+
 library(pairwiseLLM)
 library(dplyr)
 library(tidyr)
@@ -76,7 +81,8 @@ library(readr)
 library(stringr)
 ```
 
-Required environment variables:
+Configure the environment variable only for each provider included in
+your run plan:
 
 | Provider  | Environment Variable |
 |-----------|----------------------|
@@ -84,28 +90,36 @@ Required environment variables:
 | Anthropic | `ANTHROPIC_API_KEY`  |
 | Gemini    | `GEMINI_API_KEY`     |
 
+This vignette only covers batch-capable providers. Vertex live requests
+use a separate `VERTEX_API_KEY` surface and are documented in
+[`vignette("getting-started")`](https://shmercer.github.io/pairwiseLLM/articles/getting-started.md).
+
 Check which are set:
 
 ``` r
+
 check_llm_api_keys()
 #> No LLM API keys are currently set for known backends:
 #>   - OpenAI:         OPENAI_API_KEY
 #>   - Anthropic:      ANTHROPIC_API_KEY
 #>   - Google Gemini:  GEMINI_API_KEY
+#>   - Vertex AI:      VERTEX_API_KEY
 #>   - Together.ai:    TOGETHER_API_KEY
 #> 
 #> Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:
 #>   OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"
 #>   ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"
 #>   GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"
+#>   VERTEX_API_KEY    = "YOUR_VERTEX_KEY_HERE"
 #>   TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"
-#> # A tibble: 4 × 4
-#>   backend   service       env_var           has_key
-#>   <chr>     <chr>         <chr>             <lgl>  
-#> 1 openai    OpenAI        OPENAI_API_KEY    FALSE  
-#> 2 anthropic Anthropic     ANTHROPIC_API_KEY FALSE  
-#> 3 gemini    Google Gemini GEMINI_API_KEY    FALSE  
-#> 4 together  Together.ai   TOGETHER_API_KEY  FALSE
+#> # A tibble: 5 × 4
+#>   backend   service              env_var           has_key
+#>   <chr>     <chr>                <chr>             <lgl>  
+#> 1 openai    OpenAI               OPENAI_API_KEY    FALSE  
+#> 2 anthropic Anthropic            ANTHROPIC_API_KEY FALSE  
+#> 3 gemini    Google Gemini        GEMINI_API_KEY    FALSE  
+#> 4 vertex    Vertex AI Gemini API VERTEX_API_KEY    FALSE  
+#> 5 together  Together.ai          TOGETHER_API_KEY  FALSE
 ```
 
 ## 3. Example Data and Prompt Template
@@ -114,6 +128,7 @@ We use the built-in writing samples and a single trait
 (`overall_quality`).
 
 ``` r
+
 data("example_writing_samples", package = "pairwiseLLM")
 
 td <- trait_description("overall_quality")
@@ -122,12 +137,13 @@ td
 #> [1] "Overall Quality"
 #> 
 #> $description
-#> [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."
+#> [1] "Overall quality of the writing, considering how well ideas are expressed,\nhow clearly the writing is organized, and how effective the language and\nconventions are."
 ```
 
 Default prompt template:
 
 ``` r
+
 tmpl <- set_prompt_template()
 cat(substr(tmpl, 1, 400), "...
 ")
@@ -152,6 +168,7 @@ cat(substr(tmpl, 1, 400), "...
 Construct a modest number of pairs to keep the example light:
 
 ``` r
+
 set.seed(123)
 
 pairs_all <- example_writing_samples |>
@@ -190,20 +207,18 @@ Suppose we want to test several prompt templates across:
 Here we define a small grid:
 
 ``` r
+
 anthropic_models <- c(
-  "claude-sonnet-4-5",
-  "claude-haiku-4-5",
-  "claude-opus-4-5"
+  "claude-haiku-4-5-20251001"
 )
 
 gemini_models <- c(
-  "gemini-3-pro-preview"
+  "gemini-3.8-flash"
 )
 
 openai_models <- c(
   "gpt-4.1",
-  "gpt-4o",
-  "gpt-5.1"
+  "gpt-5.6-luna"
 )
 
 thinking_levels <- c("no_thinking", "with_thinking")
@@ -212,7 +227,7 @@ directions <- c("forward", "reverse")
 anthropic_grid <- tidyr::expand_grid(
   provider  = "anthropic",
   model     = anthropic_models,
-  thinking  = thinking_levels,
+  thinking  = "no_thinking",
   direction = directions
 )
 
@@ -226,11 +241,9 @@ gemini_grid <- tidyr::expand_grid(
 openai_grid <- tidyr::expand_grid(
   provider  = "openai",
   model     = openai_models,
-  thinking  = thinking_levels,
+  thinking  = "no_thinking",
   direction = directions
-) |>
-  # For example, only allow "with_thinking" for gpt-5.1
-  dplyr::filter(model == "gpt-5.1" | thinking == "no_thinking")
+)
 
 batch_grid <- dplyr::bind_rows(
   anthropic_grid,
@@ -239,20 +252,17 @@ batch_grid <- dplyr::bind_rows(
 )
 
 batch_grid
-#> # A tibble: 22 × 4
-#>    provider  model             thinking      direction
-#>    <chr>     <chr>             <chr>         <chr>    
-#>  1 anthropic claude-sonnet-4-5 no_thinking   forward  
-#>  2 anthropic claude-sonnet-4-5 no_thinking   reverse  
-#>  3 anthropic claude-sonnet-4-5 with_thinking forward  
-#>  4 anthropic claude-sonnet-4-5 with_thinking reverse  
-#>  5 anthropic claude-haiku-4-5  no_thinking   forward  
-#>  6 anthropic claude-haiku-4-5  no_thinking   reverse  
-#>  7 anthropic claude-haiku-4-5  with_thinking forward  
-#>  8 anthropic claude-haiku-4-5  with_thinking reverse  
-#>  9 anthropic claude-opus-4-5   no_thinking   forward  
-#> 10 anthropic claude-opus-4-5   no_thinking   reverse  
-#> # ℹ 12 more rows
+#> # A tibble: 8 × 4
+#>   provider  model                     thinking      direction
+#>   <chr>     <chr>                     <chr>         <chr>    
+#> 1 anthropic claude-haiku-4-5-20251001 no_thinking   forward  
+#> 2 anthropic claude-haiku-4-5-20251001 no_thinking   reverse  
+#> 3 gemini    gemini-3.8-flash          with_thinking forward  
+#> 4 gemini    gemini-3.8-flash          with_thinking reverse  
+#> 5 openai    gpt-4.1                   no_thinking   forward  
+#> 6 openai    gpt-4.1                   no_thinking   reverse  
+#> 7 openai    gpt-5.6-luna              no_thinking   forward  
+#> 8 openai    gpt-5.6-luna              no_thinking   reverse
 ```
 
 We will also imagine multiple prompt templates have been registered. For
@@ -260,6 +270,7 @@ simplicity, we use the same `tmpl` string, but in practice you would
 substitute different text:
 
 ``` r
+
 templates_tbl <- tibble::tibble(
   template_id     = c("test1", "test2", "test3", "test4", "test5"),
   prompt_template = list(tmpl, tmpl, tmpl, tmpl, tmpl)
@@ -291,6 +302,7 @@ The key idea is:
 ### 5.1 Create a run plan and output directory
 
 ``` r
+
 out_root <- "dev-output/advanced-multi-batch"
 dir.create(out_root, recursive = TRUE, showWarnings = FALSE)
 
@@ -322,6 +334,7 @@ below we:
   (helpful for debugging)
 
 ``` r
+
 submit_one_run <- function(template_id, prompt_template, provider, model, thinking, direction, run_dir) {
   pairs_use   <- get_pairs_for_direction(direction)
   is_thinking <- identical(thinking, "with_thinking")
@@ -331,13 +344,12 @@ submit_one_run <- function(template_id, prompt_template, provider, model, thinki
 
   if (identical(provider, "openai")) {
     # Only request thoughts for models that support them in this workflow
-    extra_args$include_thoughts <- is_thinking && grepl("^gpt-5\\.1", model)
+    extra_args$include_thoughts <- is_thinking && grepl("^gpt-5", model)
     extra_args$include_raw      <- TRUE
   } else if (identical(provider, "anthropic")) {
     extra_args$reasoning        <- if (is_thinking) "enabled" else "none"
     extra_args$include_thoughts <- is_thinking
     extra_args$include_raw      <- TRUE
-    # Optional: set deterministic temperature when not using reasoning
     # Optional: set deterministic temperature when not using reasoning
     if (!is_thinking) extra_args$temperature <- 0
   } else if (identical(provider, "gemini")) {
@@ -375,7 +387,11 @@ submit_one_run <- function(template_id, prompt_template, provider, model, thinki
 }
 
 run_results <- purrr::pmap(
-  run_plan,
+  run_plan |>
+    dplyr::select(
+      template_id, prompt_template, provider, model, thinking, direction,
+      run_dir
+    ),
   submit_one_run
 )
 
@@ -406,6 +422,7 @@ the `jobs` objects in memory by setting `jobs = NULL` and pointing to
 `output_dir` (the function will load `jobs_registry.csv`).
 
 ``` r
+
 manifest_path <- file.path(out_root, "run_manifest.csv")
 manifest <- readr::read_csv(manifest_path, show_col_types = FALSE)
 
@@ -435,6 +452,7 @@ Each element of `polled` contains a `combined` tibble for that run
 one master table.
 
 ``` r
+
 combined_all <- purrr::map2_dfr(
   polled,
   seq_len(nrow(manifest)),
@@ -473,6 +491,7 @@ Resuming jobs is possible:
 Example: resume only unfinished runs (based on each run’s registry):
 
 ``` r
+
 manifest <- readr::read_csv(file.path(out_root, "run_manifest.csv"), show_col_types = FALSE)
 
 needs_poll <- function(run_dir) {
@@ -507,7 +526,6 @@ thinking × direction), you can:
 
 ## 9. Citation
 
-> Mercer, S. H. (2025). *Advanced: Submitting and polling multiple
-> batches* \[R package vignette\]. In *pairwiseLLM: Pairwise comparison
-> tools for large language model-based writing evaluation*.
+> Mercer, S. H. (2026). *Advanced: Submitting and polling multiple
+> batches* \[R package vignette\]. Comprehensive R Archive Network.
 > <https://doi.org/10.32614/CRAN.package.pairwiseLLM>

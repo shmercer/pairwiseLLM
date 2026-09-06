@@ -30,6 +30,19 @@ This is useful when you want a fixed 50/50 mix of original and reversed
 pairs for bias control, benchmarking, or debugging, without relying on
 the random number generator or seeds.
 
+## See also
+
+[`read_samples_df()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_df.md),
+[`read_samples_dir()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_dir.md)
+
+Other pairing and data:
+[`make_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/make_pairs.md),
+[`randomize_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/randomize_pair_order.md),
+[`read_samples_df()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_df.md),
+[`read_samples_dir()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_dir.md),
+[`sample_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/sample_pairs.md),
+[`sample_reverse_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/sample_reverse_pairs.md)
+
 ## Examples
 
 ``` r

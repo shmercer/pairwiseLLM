@@ -126,6 +126,15 @@ For each line, the function:
 The returned data frame is suitable as input for
 [`build_bt_data`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md).
 
+## See also
+
+[`parse_anthropic_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_anthropic_batch_output.md),
+[`parse_gemini_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_gemini_batch_output.md)
+
+Other result normalization:
+[`parse_anthropic_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_anthropic_batch_output.md),
+[`parse_gemini_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_gemini_batch_output.md)
+
 ## Examples
 
 ``` r

@@ -5,14 +5,12 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>Adaptive Pairing and Ranking in pairwiseLLM • pairwiseLLM</title>
+<title>Guide: Adaptive Pairing • pairwiseLLM</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/Inter-0.4.10/font.css" rel="stylesheet">
-<link href="../deps/JetBrains_Mono-0.4.10/font.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Adaptive Pairing and Ranking in pairwiseLLM">
+<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Guide: Adaptive Pairing">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -22,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -32,22 +30,23 @@
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
 <li class="nav-item"><a class="nav-link" href="../index.html"><span class="fa fa-home"></span> Home</a></li>
-<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
-<li class="nav-item dropdown">
-  <button class="nav-link dropdown-toggle" type="button" id="dropdown-usage-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Usage Guides</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-usage-guides">
-<li><a class="dropdown-item" href="../articles/getting-started.html">Getting Started with pairwiseLLM</a></li>
-    <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
-  </ul>
-</li>
+<li class="nav-item"><a class="nav-link" href="../articles/getting-started.html">Get Started</a></li>
 <li class="active nav-item dropdown">
-  <button class="nav-link dropdown-toggle" type="button" id="dropdown-adaptive-pairing" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Adaptive Pairing</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-adaptive-pairing">
-<li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Adaptive Pairing &amp; Ranking</a></li>
-    <li><a class="dropdown-item" href="../articles/bayesian-btl-adaptive-pairing-design.html">Design: Bayesian BTL Adaptive Pairing</a></li>
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-detailed-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Detailed Guides</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-detailed-guides">
+<li><a class="dropdown-item" href="../articles/data-and-prompts.html">Data Schemas and Prompt Management</a></li>
+    <li><a class="dropdown-item" href="../articles/provider-controls-and-recovery.html">Provider Controls and Recovery</a></li>
+    <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
+    <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
+    <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
+    <li><a class="dropdown-item" href="../articles/prompt-template-bias.html">Prompt Template Positional Bias Testing</a></li>
   </ul>
 </li>
-<li class="nav-item"><a class="nav-link" href="../articles/prompt-template-bias.html">Template Positional Bias</a></li>
+<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
@@ -68,7 +67,7 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
 
-      <h1>Adaptive Pairing and Ranking in pairwiseLLM</h1>
+      <h1>Guide: Adaptive Pairing</h1>
             
       
       <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/master/vignettes/adaptive-pairing.Rmd" class="external-link"><code>vignettes/adaptive-pairing.Rmd</code></a></small>
@@ -78,440 +77,552 @@
     
     
 <div class="section level2">
-<h2 id="overview">Overview<a class="anchor" aria-label="anchor" href="#overview"></a>
+<h2 id="scope">Scope<a class="anchor" aria-label="anchor" href="#scope"></a>
 </h2>
-<p>The <code>pairwiseLLM</code> package supports ranking writing samples
-(or other items) using pairwise comparisons. When the number of items is
-large or judgments are expensive, choosing which pairs to compare
-becomes as important as how the comparisons are modeled.</p>
-<p>Adaptive pairing is designed to allocate comparisons more efficiently
-by focusing effort where it reduces uncertainty the most.</p>
-<p>At a high level:</p>
-<ul>
-<li>Pair selection is adaptive and uncertainty-aware.</li>
-<li>Fewer total comparisons are needed to reach stable rankings.</li>
-<li>Remaining uncertainty is concentrated in genuinely ambiguous cases
-(near-ties).</li>
-<li>Final rankings are accompanied by principled Bayesian uncertainty
-estimates.</li>
-</ul>
-<p>This vignette introduces the adaptive pairing and ranking workflow
-and explains when and why it is useful.</p>
-<hr>
+<p>This article shows how to rank <strong>one set of items</strong> with
+[adaptive_rank()]. The wrapper reads and validates the items, starts or
+resumes a run, requests comparisons from a judge, performs Bayesian
+refits, and returns the ranking and audit logs. Most users should start
+with this wrapper rather than assembling the lower-level state and
+runner functions themselves. Executable CmdStan chunks are disabled
+during ordinary package builds. Set
+<code>PAIRWISELLM_RUN_CMDSTAN_VIGNETTES=true</code> to opt in when
+rendering this source locally.</p>
 </div>
 <div class="section level2">
-<h2 id="why-adaptive-pairing">Why adaptive pairing?<a class="anchor" aria-label="anchor" href="#why-adaptive-pairing"></a>
+<h2 id="choose-a-pairing-strategy">Choose a pairing strategy<a class="anchor" aria-label="anchor" href="#choose-a-pairing-strategy"></a>
 </h2>
-<p>A simple baseline approach to pairwise ranking is random pairing:
-select pairs uniformly at random and fit a model once enough data have
-been collected. Random pairing is straightforward to understand and
-often yields slightly higher global reliability metrics.</p>
-<p>However, random pairing is inefficient:</p>
-<ul>
-<li>Many comparisons are redundant or uninformative.</li>
-<li>Obvious mismatches consume judgment budget.</li>
-<li>Uncertainty remains unnecessarily large in decision-relevant regions
-of the ranking.</li>
-</ul>
-<p>Adaptive pairing addresses this by allocating comparisons where they
-matter most.</p>
-<div class="section level3">
-<h3 id="reliability-vs--precision">Reliability vs. precision<a class="anchor" aria-label="anchor" href="#reliability-vs--precision"></a>
-</h3>
-<p>In practice, adaptive pairing often produces:</p>
-<ul>
-<li>Slightly lower overall Bayesian EAP reliability compared to random
-pairing, because comparisons are intentionally concentrated rather than
-uniformly distributed.</li>
-<li>Substantially tighter credible (confidence) intervals around latent
-quality scores and rankings, especially among closely ranked items.</li>
-</ul>
-<p>This tradeoff is intentional. Adaptive pairing prioritizes precision
-of estimates and rankings over uniform coverage of the latent scale.</p>
-<p>For applications such as writing quality evaluation, where
-distinctions between nearby samples matter more than broad global
-separation, this tradeoff is often desirable.</p>
-<hr>
-</div>
+<p>Use exhaustive pairing when the set is small enough to evaluate every
+one of the <code>choose(N, 2)</code> unordered pairs and complete
+coverage is important. Use a random sample when you want a simple
+fixed-budget design or a baseline for comparison. Use adaptive selection
+when each judgment is costly and you want the next comparison to respond
+to evidence already collected.</p>
+<p>The runtime accepts <code>N &gt;= 2</code> unique items. A range such
+as 30–2,000 items is operating guidance, not an enforced limit. Very
+small sets may exhaust all eligible candidates before a Bayesian refit,
+while large studies should be planned around provider cost, refit time,
+and storage.</p>
 </div>
 <div class="section level2">
-<h2 id="conceptual-model">Conceptual model<a class="anchor" aria-label="anchor" href="#conceptual-model"></a>
+<h2 id="what-happens-during-a-run">What happens during a run?<a class="anchor" aria-label="anchor" href="#what-happens-during-a-run"></a>
 </h2>
-<p>Adaptive ranking in <code>pairwiseLLM</code> separates pair selection
-from inference:</p>
-<ul>
-<li>A fast model (TrueSkill) guides which pair to compare next after
-each new pair is evaluated.</li>
-<li>A Bayesian Bradley–Terry–Luce (BTL) model is used intermittently to
-estimate latent quality, quantify uncertainty, and determine
-stopping.</li>
-</ul>
-<p>This separation allows the system to adapt quickly while still
-producing fully Bayesian final results.</p>
-<hr>
-</div>
-<div class="section level2">
-<h2 id="the-adaptive-workflow">The adaptive workflow<a class="anchor" aria-label="anchor" href="#the-adaptive-workflow"></a>
-</h2>
-<p>An adaptive run proceeds through repeated cycles:</p>
+<p>Within-set ranking has three phases.</p>
 <ol style="list-style-type: decimal">
-<li><p><strong>Select a pair</strong> A candidate pair is chosen based
-on uncertainty, coverage needs, and structural constraints.</p></li>
-<li><p><strong>Obtain a judgment</strong> The pair is evaluated
-(typically by an LLM), producing a binary outcome.</p></li>
-<li><p><strong>Online update</strong> The online state is updated
-immediately.</p></li>
-<li><p><strong>Periodic Bayesian refit</strong> After enough new
-comparisons, all accumulated data are refit using Bayesian BTL to
-produce posterior estimates, diagnostics, and stopping metrics.</p></li>
+<li>
+<strong>Phase 1: warm start.</strong> A seeded shuffled chain
+schedules <code>N - 1</code> valid comparisons, producing a connected
+comparison graph.</li>
+<li>
+<strong>Phase 2: normal adaptation.</strong> TrueSkill is updated
+after every committed comparison and guides the next pair. The
+controller balances coverage, long-, mid-, and local-range comparisons,
+repeated-pair limits, and fallbacks.</li>
+<li>
+<strong>Phase 3: near stop.</strong> After a Bayesian refit passes
+diagnostics and its EAP reliability is within 0.05 of the stopping
+threshold, later refits use the stricter near-stop ESS requirement.
+Pair-selection behavior does not otherwise change merely because Phase 3
+was entered.</li>
 </ol>
-<p>This cycle repeats until stopping criteria are met.</p>
-<hr>
+<p>TrueSkill is the fast, step-by-step selection model. Bayesian
+Bradley–Terry–Luce (BTL) refits are slower and intermittent. They
+provide posterior item estimates and uncertainty, convergence
+diagnostics, stability checks, and stopping decisions. Once an accepted
+posterior exists, its win probabilities also gate eligibility for
+long-range comparisons; BTL is therefore not exclusively a final
+reporting model.</p>
+<pre class="text"><code>items -&gt; warm start -&gt; select one pair -&gt; judge -&gt; TrueSkill update
+                              ^                    |
+                              |                    v
+                              +---- continue &lt;- periodic BTL refit -&gt; stop check</code></pre>
+<p>Adaptive selection is intended to direct effort toward useful
+comparisons, but it does not guarantee a particular ranking,
+reliability, cost reduction, or improvement over random pairing. Those
+outcomes depend on the items, judge, budget, and model assumptions.</p>
 </div>
 <div class="section level2">
-<h2 id="early-vs--late-stages-of-adaptation">Early vs. late stages of adaptation<a class="anchor" aria-label="anchor" href="#early-vs--late-stages-of-adaptation"></a>
+<h2 id="install-and-check-cmdstan">Install and check CmdStan<a class="anchor" aria-label="anchor" href="#install-and-check-cmdstan"></a>
 </h2>
-<p>Adaptive behavior intentionally changes over the course of a run.</p>
-<div class="section level3">
-<h3 id="early-stage-global-scale-identification">Early stage: global scale identification<a class="anchor" aria-label="anchor" href="#early-stage-global-scale-identification"></a>
-</h3>
-<p>Early in the run, the algorithm focuses on establishing a
-well-connected comparison graph and identifying the global latent scale.
-This involves:</p>
-<ul>
-<li>comparisons that link distant parts of the ranking,</li>
-<li>anchor items that connect many samples,</li>
-<li>exploratory pairing to avoid isolated samples.</li>
-</ul>
-<p>The goal is to ensure that all samples are meaningfully connected
-before refinements are made.</p>
-</div>
-<div class="section level3">
-<h3 id="late-stage-local-refinement">Late stage: local refinement<a class="anchor" aria-label="anchor" href="#late-stage-local-refinement"></a>
-</h3>
-<p>Once the global scale is reliably identified, adaptive behavior
-shifts:</p>
-<ul>
-<li>long-range comparisons are reduced,</li>
-<li>more comparisons are allocated to similar-quality samples,</li>
-<li>near-ties receive focused attention.</li>
-</ul>
-<p>This concentrates effort where remaining uncertainty affects ranking
-decisions.</p>
-<hr>
-</div>
-</div>
-<div class="section level2">
-<h2 id="global-identifiability-and-stopping">Global identifiability and stopping<a class="anchor" aria-label="anchor" href="#global-identifiability-and-stopping"></a>
-</h2>
-<p>A key feature of the adaptive workflow is an explicit notion of
-global identifiability.</p>
-<p>At each Bayesian refit, diagnostics are used to assess whether:</p>
-<ul>
-<li>latent quality estimates are reliable, and</li>
-<li>rankings implied by TrueSkill and Bayesian models agree.</li>
-</ul>
-<p>Once global identifiability is achieved, it gates later-stage
-behavior and enables more aggressive local refinement.</p>
-<p>Stopping decisions are made only when:</p>
-<ul>
-<li>Bayesian diagnostics are satisfactory,</li>
-<li>posterior reliability is high,</li>
-<li>quality scores and rankings are stable across refits.</li>
-</ul>
-<p>This ensures that adaptive efficiency does not come at the cost of
-statistical defensibility.</p>
-<hr>
-</div>
-<div class="section level2">
-<h2 id="how-the-adaptive-algorithm-works-schematic-overview">How the adaptive algorithm works (schematic overview)<a class="anchor" aria-label="anchor" href="#how-the-adaptive-algorithm-works-schematic-overview"></a>
-</h2>
-<p>Adaptive pairing in <code>pairwiseLLM</code> combines fast online
-selection with slower Bayesian inference. The key idea is that pair
-selection and inference operate on different time scales.</p>
-<p>At each step, only one pair is selected and evaluated. Bayesian
-refits occur intermittently and are used to guide later behavior and
-stopping decisions.</p>
-<div class="section level3">
-<h3 id="high-level-flow">High-level flow<a class="anchor" aria-label="anchor" href="#high-level-flow"></a>
-</h3>
-<pre class="text"><code> ┌──────────────────────┐
- │  Initialize run      │
- │  (warm start)        │
- └─────────┬────────────┘
-           │
-           ▼
- ┌──────────────────────┐
- │  Adaptive pairing    │
- │  (step-by-step)      │
- │                      │
- │  • select pair       │
- │  • query judge       │
- │  • update online     │
- │    state             │
- └─────────┬────────────┘
-           │  (after enough pairs)
-           ▼
- ┌──────────────────────┐
- │  Bayesian BTL refit  │
- │                      │
- │  • posterior θ       │
- │  • uncertainty       │
- │  • diagnostics       │
- │  • stability checks  │
- └─────────┬────────────┘
-           │
-           ▼
- ┌──────────────────────┐
- │  Adapt behavior      │
- │  &amp; check stopping    │
- │                      │
- │  • taper long links  │
- │  • focus near-ties   │
- │  • reduce exploration│
- └─────────┬────────────┘
-           │
-           ├── if stop = FALSE ──► back to adaptive pairing
-           │
-           └── if stop = TRUE ──► return results</code></pre>
-<hr>
-</div>
-<div class="section level3">
-<h3 id="early-vs--late-behavior">Early vs. late behavior<a class="anchor" aria-label="anchor" href="#early-vs--late-behavior"></a>
-</h3>
-<ul>
-<li>
-<p><strong>Early phase</strong></p>
-<ul>
-<li>Emphasizes coverage and global scale identification</li>
-<li>Uses anchor, long-range, and mid-range comparisons</li>
-<li>Exploration remains relatively high</li>
-</ul>
-</li>
-<li>
-<p><strong>Late phase</strong></p>
-<ul>
-<li>Triggered once the global scale is statistically identified</li>
-<li>Long-range comparisons are reduced</li>
-<li>Comparisons focus on near-ties</li>
-<li>Exploration is tapered</li>
-</ul>
-</li>
-</ul>
-<p>This transition is data-driven, not based on a fixed number of
-iterations.</p>
-<hr>
-</div>
-</div>
-<div class="section level2">
-<h2 id="worked-example-adaptive-ranking-of-writing-samples">Worked example: adaptive ranking of writing samples<a class="anchor" aria-label="anchor" href="#worked-example-adaptive-ranking-of-writing-samples"></a>
-</h2>
-<p>This example demonstrates a complete adaptive ranking workflow using
-example writing samples included in the package.</p>
-<p>We show how to: - load example data, - select a writing trait to
-evaluate, - define a prompt template, - run adaptive ranking with a live
-LLM judge, - and extract logs for further analysis.</p>
-<hr>
-<div class="section level3">
-<h3 id="run-adaptive-ranking">Run adaptive ranking<a class="anchor" aria-label="anchor" href="#run-adaptive-ranking"></a>
-</h3>
-<p>Below is an example of the full adaptive workflow using
-<code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code>.</p>
-<p>Key configuration choices in this example:</p>
-<ul>
-<li>
-<strong>Model</strong>: <code>gpt-5.1</code>
-</li>
-<li>
-<strong>Service tier</strong>: <code>"flex"</code> (priority
-routing)</li>
-<li>
-<strong>Custom stopping thresholds</strong>: slightly relaxed
-reliability, stricter rank stability</li>
-</ul>
+<p>Bayesian refits require the suggested <code>cmdstanr</code> package,
+a working C++ toolchain, and CmdStan. This is a one-time machine setup;
+it does not require an LLM credential.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span></span>
+<span>  <span class="st">"cmdstanr"</span>,</span>
+<span>  repos <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"https://stan-dev.r-universe.dev"</span>, <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"repos"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu">cmdstanr</span><span class="fu">::</span><span class="fu"><a href="https://mc-stan.org/cmdstanr/reference/install_cmdstan.html" class="external-link">check_cmdstan_toolchain</a></span><span class="op">(</span>fix <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu">cmdstanr</span><span class="fu">::</span><span class="fu"><a href="https://mc-stan.org/cmdstanr/reference/install_cmdstan.html" class="external-link">install_cmdstan</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<p>Before starting a study, confirm that CmdStan can be found:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">cmdstan_available</span></span>
+<span><span class="co">#&gt; [1] FALSE</span></span>
+<span></span>
+<span><span class="kw">if</span> <span class="op">(</span><span class="va">cmdstan_available</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu">cmdstanr</span><span class="fu">::</span><span class="fu"><a href="https://mc-stan.org/cmdstanr/reference/set_cmdstan_path.html" class="external-link">cmdstan_version</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
+<p>The executable ranking chunks below run when CmdStan is available.
+The deterministic judge is local, so the example never makes a network
+request or incurs provider charges.</p>
+</div>
+<div class="section level2">
+<h2 id="a-complete-offline-run-with-adaptive_rank">A complete offline run with <code>adaptive_rank()</code><a class="anchor" aria-label="anchor" href="#a-complete-offline-run-with-adaptive_rank"></a>
+</h2>
+<p>Start from a clean R session and load the package data. The
+<code>ID</code> column already contains unique, non-missing identifiers.
+We retain <code>quality_score</code> only to simulate a judge.</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/shmercer/pairwiseLLM" class="external-link">pairwiseLLM</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Example data shipped with the package</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
+<span><span class="va">samples</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ID"</span>, <span class="st">"text"</span>, <span class="st">"quality_score"</span><span class="op">)</span><span class="op">]</span></span>
 <span></span>
-<span><span class="co"># Choose a built-in trait (or define a custom trait$name and trait$description)</span></span>
-<span><span class="va">trait</span> <span class="op">&lt;-</span> <span class="st">"overall_quality"</span></span>
+<span><span class="va">trait</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
+<span><span class="va">prompt_template</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Prompt template (character string with required placeholders)</span></span>
-<span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span>  <span class="co"># or set_prompt_template(template = "...custom...")</span></span>
+<span><span class="va">deterministic_judge</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">A</span>, <span class="va">B</span>, <span class="va">state</span>, <span class="va">...</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">a_wins</span> <span class="op">&lt;-</span> <span class="va">A</span><span class="op">$</span><span class="va">quality_score</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span> <span class="op">&gt;=</span> <span class="va">B</span><span class="op">$</span><span class="va">quality_score</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    is_valid <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    Y <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="va">a_wins</span><span class="op">)</span>,</span>
+<span>    invalid_reason <span class="op">=</span> <span class="cn">NA_character_</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
+<p>A custom judge receives one-row item tables <code>A</code> and
+<code>B</code> plus the current state. A valid response must contain
+<code>is_valid = TRUE</code> and <code>Y</code> equal to <code>1</code>
+when A wins or <code>0</code> when B wins. The simulated judge uses a
+fixture score so its choices are deterministic. Because it bypasses an
+LLM, the trait and prompt are not consulted until the live example later
+in this article.</p>
+<p>The minimum useful wrapper call supplies data, its ID and text
+columns, a judge, and a step budget. We also choose a session directory
+so progress is persisted. With 20 items, the implemented default
+<code>refit_pairs_target</code> is 20 committed comparisons:
+<code>ceiling(N / 2)</code> clamped to <code>[20, 5000]</code>. A budget
+of 22 attempted steps leaves room for the warm start and produces one
+refit under this deterministic fixture.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">session_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="st">"pairwisellm-adaptive-"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Use custom stopping criteria</span></span>
-<span><span class="va">btl_config</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>  <span class="co"># --- default values ---</span></span>
-<span>  eap_reliability_min <span class="op">=</span> <span class="fl">0.90</span>,        <span class="co"># Bayesian EAP reliability threshold</span></span>
-<span>  stability_lag <span class="op">=</span> <span class="fl">2L</span>,                <span class="co"># number of refits to use for stability checks</span></span>
-<span>  theta_corr_min <span class="op">=</span> <span class="fl">0.95</span>,             <span class="co"># correlation between θ across refits (stability)</span></span>
-<span>  theta_sd_rel_change_max <span class="op">=</span> <span class="fl">0.10</span>,    <span class="co"># relative change in posterior SD across refits</span></span>
-<span>  rank_spearman_min <span class="op">=</span> <span class="fl">0.95</span>,          <span class="co"># rank stability threshold across refits</span></span>
+<span><span class="va">out</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank.html">adaptive_rank</a></span><span class="op">(</span></span>
+<span>  data <span class="op">=</span> <span class="va">samples</span>,</span>
+<span>  id_col <span class="op">=</span> <span class="st">"ID"</span>,</span>
+<span>  text_col <span class="op">=</span> <span class="st">"text"</span>,</span>
+<span>  judge <span class="op">=</span> <span class="va">deterministic_judge</span>,</span>
+<span>  n_steps <span class="op">=</span> <span class="fl">22L</span>,</span>
+<span>  session_dir <span class="op">=</span> <span class="va">session_dir</span>,</span>
+<span>  persist_item_log <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  resume <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  seed <span class="op">=</span> <span class="fl">42L</span>,</span>
+<span>  progress <span class="op">=</span> <span class="st">"none"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p><code>n_steps</code> is a maximum number of attempted steps for that
+call, not a promise that every attempt will commit and not a global
+stopping criterion. A run can return earlier after Bayesian stopping or
+candidate starvation.</p>
+<div class="section level3">
+<h3 id="inspect-the-ranking-and-stopping-state">Inspect the ranking and stopping state<a class="anchor" aria-label="anchor" href="#inspect-the-ranking-and-stopping-state"></a>
+</h3>
+<p>The wrapper returns the final state and common reporting views
+together. <code>out$items</code> is sorted by the current within-set
+rank; lower rank values are better.</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">out</span><span class="op">$</span><span class="va">summary</span></span>
+<span></span>
+<span><span class="va">out</span><span class="op">$</span><span class="va">items</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"item_id"</span>, <span class="st">"theta_raw_eap"</span>, <span class="st">"theta_raw_sd"</span>, <span class="st">"rank_raw"</span>, <span class="st">"degree"</span></span>
+<span><span class="op">)</span><span class="op">]</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">out</span><span class="op">$</span><span class="va">refits</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"refit_id"</span>, <span class="st">"total_pairs_done"</span>, <span class="st">"diagnostics_pass"</span>,</span>
+<span>  <span class="st">"reliability_EAP"</span>, <span class="st">"stop_decision"</span>, <span class="st">"stop_reason"</span></span>
+<span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
+<p>The latent <code>theta_raw_eap</code> scale is relative within this
+set. Its sign and absolute magnitude are not an external score scale.
+Posterior standard deviations describe model uncertainty under the
+fitted BTL model; they do not include every possible source of judge or
+sampling error.</p>
+<p><code>out$summary$last_stop_reason</code> remains missing when the
+wrapper merely reaches its requested step budget. For within-set runs,
+terminal reasons include <code>"btl_converged"</code> and
+<code>"candidate_starvation"</code>. Inspect the last refit row as well
+as the run summary: no single diagnostic should be interpreted as proof
+that the ranking is correct.</p>
+</div>
+<div class="section level3">
+<h3 id="inspect-comparisons-and-audit-logs">Inspect comparisons and audit logs<a class="anchor" aria-label="anchor" href="#inspect-comparisons-and-audit-logs"></a>
+</h3>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">out</span><span class="op">$</span><span class="va">logs</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">step_log</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_step_log.html">adaptive_step_log</a></span><span class="op">(</span><span class="va">out</span><span class="op">$</span><span class="va">state</span><span class="op">)</span></span>
+<span><span class="va">step_log</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"step_id"</span>, <span class="st">"pair_id"</span>, <span class="st">"A_id"</span>, <span class="st">"B_id"</span>, <span class="st">"Y"</span>, <span class="st">"status"</span>,</span>
+<span>  <span class="st">"round_stage"</span>, <span class="st">"fallback_used"</span>, <span class="st">"starvation_reason"</span></span>
+<span><span class="op">)</span><span class="op">]</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="../reference/summarize_adaptive.html">summarize_adaptive</a></span><span class="op">(</span><span class="va">out</span><span class="op">$</span><span class="va">state</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/summarize_refits.html">summarize_refits</a></span><span class="op">(</span><span class="va">out</span><span class="op">$</span><span class="va">state</span>, last_n <span class="op">=</span> <span class="fl">1L</span>, include_optional <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/summarize_items.html">summarize_items</a></span><span class="op">(</span><span class="va">out</span><span class="op">$</span><span class="va">state</span>, top_n <span class="op">=</span> <span class="fl">5L</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">result_history</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_results_history.html">adaptive_results_history</a></span><span class="op">(</span><span class="va">out</span><span class="op">$</span><span class="va">state</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">result_history</span><span class="op">)</span></span></code></pre></div>
+<p>The step log has one row per attempt. A non-missing
+<code>pair_id</code> identifies a committed result. The round log has
+one row per completed Bayesian refit, and the item log stores posterior
+item summaries for each refit. <code><a href="../reference/adaptive_results_history.html">adaptive_results_history()</a></code>
+converts committed outcomes to the three-column format accepted by
+<code><a href="../reference/build_bt_data.html">build_bt_data()</a></code>.</p>
+<p><code><a href="../reference/adaptive_get_logs.html">adaptive_get_logs()</a></code> returns the step, round, link-stage,
+and item-step views together. Use <code><a href="../reference/adaptive_step_log.html">adaptive_step_log()</a></code> to
+audit calls and transactional validity,
+<code><a href="../reference/adaptive_round_log.html">adaptive_round_log()</a></code> for refit diagnostics and stopping,
+and <code>adaptive_item_log(stack = TRUE)</code> for change across
+refits. Empty typed tables are expected before the corresponding event
+occurs; they are not evidence that the accessor failed.
+<code><a href="../reference/summarize_adaptive.html">summarize_adaptive()</a></code> is a compact view, not a diagnostic
+recomputation.</p>
+</div>
+</div>
+<div class="section level2">
+<h2 id="lower-level-lifecycle-and-offline-judges">Lower-level lifecycle and offline judges<a class="anchor" aria-label="anchor" href="#lower-level-lifecycle-and-offline-judges"></a>
+</h2>
+<p>Most users should use <code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code>. The lower-level
+lifecycle is useful when an application needs to hold the state itself:
+create it with <code><a href="../reference/adaptive_rank_start.html">adaptive_rank_start()</a></code>, advance it with
+<code><a href="../reference/adaptive_rank_run_live.html">adaptive_rank_run_live()</a></code>, persist it, and reconstruct it
+with <code><a href="../reference/adaptive_rank_resume.html">adaptive_rank_resume()</a></code> or
+<code><a href="../reference/load_adaptive_session.html">load_adaptive_session()</a></code>. Do not modify state lists or
+canonical log columns by hand.</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">low_level_items</span> <span class="op">&lt;-</span> <span class="va">samples</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">5</span>, <span class="op">]</span></span>
+<span><span class="va">low_level_items</span><span class="op">$</span><span class="va">item_id</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">low_level_items</span><span class="op">$</span><span class="va">ID</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">low_level_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_start.html">adaptive_rank_start</a></span><span class="op">(</span><span class="va">low_level_items</span>, seed <span class="op">=</span> <span class="fl">17L</span><span class="op">)</span></span>
+<span><span class="va">low_level_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_run_live.html">adaptive_rank_run_live</a></span><span class="op">(</span></span>
+<span>  state <span class="op">=</span> <span class="va">low_level_state</span>,</span>
+<span>  judge <span class="op">=</span> <span class="va">deterministic_judge</span>,</span>
+<span>  n_steps <span class="op">=</span> <span class="fl">3L</span>,</span>
+<span>  btl_config <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>refit_pairs_target <span class="op">=</span> <span class="fl">5000L</span><span class="op">)</span>,</span>
+<span>  progress <span class="op">=</span> <span class="st">"none"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/summarize_adaptive.html">summarize_adaptive</a></span><span class="op">(</span><span class="va">low_level_state</span><span class="op">)</span></span></code></pre></div>
+<p>A custom judge has the contract <code>judge(A, B, state, ...)</code>.
+<code>A</code> and <code>B</code> are one-row item tables. Return
+<code>list(is_valid = TRUE, Y = 1L)</code> when A wins or
+<code>Y = 0L</code> when B wins. To simulate refusal, timeout, or
+parsing failure, return <code>is_valid = FALSE</code>,
+<code>Y = NA_integer_</code>, and a stable <code>invalid_reason</code>.
+Use a local score column, a fixed lookup table, or a separately seeded
+random generator to make simulations reproducible. The package’s
+internal scenario harness is test infrastructure, not a public workflow
+function.</p>
+<p><code><a href="../reference/make_adaptive_judge_llm.html">make_adaptive_judge_llm()</a></code> builds the same judge
+interface around <code><a href="../reference/llm_compare_pair.html">llm_compare_pair()</a></code>. It is a lower-level
+alternative to supplying backend/model arguments to
+<code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code>, and its calls are live, billable, and
+subject to the selected provider’s failure and privacy behavior.</p>
+</div>
+<div class="section level2">
+<h2 id="persistence-interruption-and-resume">Persistence, interruption, and resume<a class="anchor" aria-label="anchor" href="#persistence-interruption-and-resume"></a>
+</h2>
+<p>Supplying <code>session_dir</code> makes the wrapper persist the
+initial state, every completed refit, terminal stops, the end of an
+ordinary call, and intermediate checkpoints. The default checkpoint
+cadence is every 100 attempted steps; change it with
+<code>checkpoint_every_steps</code> when losing that much work would be
+costly. Frequent checkpoints increase disk I/O.</p>
+<p>An abrupt process termination can lose attempts since the most recent
+completed save. After an interrupt, validate what is on disk rather than
+assuming the in-memory state was written.</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">session_metadata</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/validate_session_dir.html">validate_session_dir</a></span><span class="op">(</span><span class="va">session_dir</span><span class="op">)</span></span>
+<span><span class="va">session_metadata</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"schema_version"</span>, <span class="st">"package_version"</span>, <span class="st">"n_items"</span><span class="op">)</span><span class="op">]</span></span>
 <span></span>
-<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank.html">adaptive_rank</a></span><span class="op">(</span></span>
-<span>  data <span class="op">=</span> <span class="va">example_writing_samples</span>,</span>
-<span>  id_col <span class="op">=</span> <span class="st">"sample_id"</span>,</span>
+<span><span class="va">loaded_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_adaptive_session.html">load_adaptive_session</a></span><span class="op">(</span><span class="va">session_dir</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/summarize_adaptive.html">summarize_adaptive</a></span><span class="op">(</span><span class="va">loaded_state</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">resumed</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank.html">adaptive_rank</a></span><span class="op">(</span></span>
+<span>  data <span class="op">=</span> <span class="va">samples</span>,</span>
+<span>  id_col <span class="op">=</span> <span class="st">"ID"</span>,</span>
 <span>  text_col <span class="op">=</span> <span class="st">"text"</span>,</span>
+<span>  judge <span class="op">=</span> <span class="va">deterministic_judge</span>,</span>
+<span>  n_steps <span class="op">=</span> <span class="fl">2L</span>,</span>
+<span>  session_dir <span class="op">=</span> <span class="va">session_dir</span>,</span>
+<span>  persist_item_log <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  resume <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  progress <span class="op">=</span> <span class="st">"none"</span></span>
+<span><span class="op">)</span></span>
 <span></span>
-<span>  backend <span class="op">=</span> <span class="st">"openai"</span>,</span>
-<span>  model <span class="op">=</span> <span class="st">"gpt-5.1"</span>,</span>
-<span>  trait <span class="op">=</span> <span class="va">trait</span>,</span>
-<span>  prompt_template <span class="op">=</span> <span class="va">tmpl</span>,</span>
-<span></span>
-<span>  <span class="co"># Service tier / routing lives inside judge_args</span></span>
-<span>  judge_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>service_tier <span class="op">=</span> <span class="st">"flex"</span><span class="op">)</span>,</span>
-<span></span>
-<span>  <span class="co"># Pass btl_config for stopping rules</span></span>
-<span>  btl_config <span class="op">=</span> <span class="va">btl_config</span>,</span>
-<span></span>
-<span>  <span class="co"># Run for up to N steps; the run may stop early if stopping rules pass</span></span>
-<span>  n_steps <span class="op">=</span> <span class="fl">5000L</span>,</span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  before <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">out</span><span class="op">$</span><span class="va">logs</span><span class="op">$</span><span class="va">step_log</span><span class="op">)</span>,</span>
+<span>  after <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">resumed</span><span class="op">$</span><span class="va">logs</span><span class="op">$</span><span class="va">step_log</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>For most users, this single function call is sufficient to run an
-adaptive study end-to-end.</p>
-<hr>
+<p>Resume is intentionally strict. If saved artifacts are present but
+invalid, <code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code> aborts instead of silently
+creating a new run. The input IDs and their order must exactly match the
+saved session. Set <code>resume = FALSE</code> only when you
+deliberately want a new state, and choose a new or empty session
+directory to avoid mixing studies.</p>
+<p>The wrapper handles ordinary saving. For an explicit snapshot outside
+a wrapper call, use the lower-level persistence helpers:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">snapshot_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="st">"pairwisellm-snapshot-"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/save_adaptive_session.html">save_adaptive_session</a></span><span class="op">(</span><span class="va">resumed</span><span class="op">$</span><span class="va">state</span>, <span class="va">snapshot_dir</span>, overwrite <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/validate_session_dir.html">validate_session_dir</a></span><span class="op">(</span><span class="va">snapshot_dir</span><span class="op">)</span></span>
+<span><span class="va">snapshot</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_adaptive_session.html">load_adaptive_session</a></span><span class="op">(</span><span class="va">snapshot_dir</span><span class="op">)</span></span></code></pre></div>
+<p>Setting <code>persist_item_log = TRUE</code> writes a separate
+item-log file for each refit. The canonical state, step log, round log,
+and metadata are persisted regardless; the option is useful when
+per-refit item histories must be inspected independently.</p>
 </div>
-<div class="section level3">
-<h3 id="inspecting-results">Inspecting results<a class="anchor" aria-label="anchor" href="#inspecting-results"></a>
-</h3>
-<div class="section level4">
-<h4 id="ranked-items-with-uncertainty">Ranked items with uncertainty<a class="anchor" aria-label="anchor" href="#ranked-items-with-uncertainty"></a>
-</h4>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">item_summary</span> <span class="op">&lt;-</span> <span class="va">res</span><span class="op">$</span><span class="va">items</span>     <span class="co"># summarize_items(...)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">item_summary</span><span class="op">)</span></span></code></pre></div>
-<p>Typical columns include:</p>
-<ul>
-<li>posterior mean latent quality,</li>
-<li>credible interval bounds,</li>
-<li>induced rank,</li>
-<li>total number of comparisons per item.</li>
-</ul>
-<p>These summaries reflect the final Bayesian refit.</p>
-<hr>
-</div>
-<div class="section level4">
-<h4 id="step-level-logs-pair-selection-audit-trail">Step-level logs (pair selection audit trail)<a class="anchor" aria-label="anchor" href="#step-level-logs-pair-selection-audit-trail"></a>
-</h4>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">step_log</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_step_log.html">adaptive_step_log</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">state</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">step_log</span><span class="op">)</span></span></code></pre></div>
-<p>Each row corresponds to one attempted adaptive step and records:</p>
-<ul>
-<li>which pair was selected,</li>
-<li>which stage it came from (anchor / long / mid / local),</li>
-<li>whether exploration was used,</li>
-<li>whether fallbacks or overrides occurred.</li>
-</ul>
-<p>This log allows detailed analysis of adaptive behavior.</p>
-<hr>
-</div>
-<div class="section level4">
-<h4 id="pair-result-history">Pair result history<a class="anchor" aria-label="anchor" href="#pair-result-history"></a>
-</h4>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Pair result history (committed outcomes)</span></span>
-<span><span class="va">pair_history</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="va">step_log</span>, <span class="va">status</span> <span class="op">==</span> <span class="st">"ok"</span>, select <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  <span class="va">step_id</span>, <span class="va">timestamp</span>, <span class="va">pair_id</span>,</span>
-<span>  <span class="va">i</span>, <span class="va">j</span>, <span class="va">A</span>, <span class="va">B</span>, <span class="va">Y</span>,</span>
-<span>  <span class="va">round_id</span>, <span class="va">round_stage</span>, <span class="va">pair_type</span></span>
-<span><span class="op">)</span><span class="op">)</span></span>
+<div class="section level2">
+<h2 id="invalid-judgments-and-failed-calls">Invalid judgments and failed calls<a class="anchor" aria-label="anchor" href="#invalid-judgments-and-failed-calls"></a>
+</h2>
+<p>Invalid judge output is transactional: it creates an attempted step
+with no committed <code>pair_id</code>, does not update TrueSkill or
+comparison history, and does not count toward the BTL refit cadence. It
+still consumes one unit of <code>n_steps</code>. The LLM judge created
+internally by <code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code> maps provider errors to
+invalid results and preserves available status, error, token, and raw
+response fields in the step log.</p>
+<p>This small example deliberately rejects its first attempt, then
+accepts the next one:</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">invalid_once_judge</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">A</span>, <span class="va">B</span>, <span class="va">state</span>, <span class="va">...</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">state</span><span class="op">$</span><span class="va">step_log</span><span class="op">)</span> <span class="op">==</span> <span class="fl">0L</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      is_valid <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>      Y <span class="op">=</span> <span class="cn">NA_integer_</span>,</span>
+<span>      invalid_reason <span class="op">=</span> <span class="st">"simulated_parse_failure"</span></span>
+<span>    <span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span>  <span class="fu">deterministic_judge</span><span class="op">(</span><span class="va">A</span>, <span class="va">B</span>, <span class="va">state</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
 <span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">pair_history</span><span class="op">)</span></span></code></pre></div>
-<p>This table contains the committed comparison outcomes:</p>
-<ul>
-<li>ordered pairs,</li>
-<li>binary results,</li>
-<li>timing and refit indices.</li>
-</ul>
-<p>It can be reused for:</p>
-<ul>
-<li>refitting alternative models,</li>
-<li>agreement analyses,</li>
-<li>simulation studies.</li>
-</ul>
-<hr>
+<span><span class="va">invalid_demo</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank.html">adaptive_rank</a></span><span class="op">(</span></span>
+<span>  data <span class="op">=</span> <span class="va">samples</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">4</span>, <span class="op">]</span>,</span>
+<span>  id_col <span class="op">=</span> <span class="st">"ID"</span>,</span>
+<span>  text_col <span class="op">=</span> <span class="st">"text"</span>,</span>
+<span>  judge <span class="op">=</span> <span class="va">invalid_once_judge</span>,</span>
+<span>  n_steps <span class="op">=</span> <span class="fl">2L</span>,</span>
+<span>  resume <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  seed <span class="op">=</span> <span class="fl">7L</span>,</span>
+<span>  progress <span class="op">=</span> <span class="st">"none"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="../reference/adaptive_step_log.html">adaptive_step_log</a></span><span class="op">(</span><span class="va">invalid_demo</span><span class="op">$</span><span class="va">state</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"step_id"</span>, <span class="st">"pair_id"</span>, <span class="st">"status"</span>, <span class="st">"judge_valid"</span>, <span class="st">"judge_invalid_reason"</span></span>
+<span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 5</span></span></span>
+<span><span class="co">#&gt;   step_id pair_id status  judge_valid judge_invalid_reason   </span></span>
+<span><span class="co">#&gt;     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;lgl&gt;</span>       <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span>       1      <span style="color: #BB0000;">NA</span> invalid FALSE       simulated_parse_failure</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span>       2       1 ok      TRUE        <span style="color: #BB0000;">NA</span></span></span></code></pre></div>
+<p>Investigate repeated invalid rows before increasing the budget.
+Common causes include a thrown judge error, a response that does not
+name either presented ID, or a custom judge that returns a missing or
+non-binary <code>Y</code>.</p>
 </div>
-<div class="section level4">
-<h4 id="refit-level-summaries-and-stopping-diagnostics">Refit-level summaries and stopping diagnostics<a class="anchor" aria-label="anchor" href="#refit-level-summaries-and-stopping-diagnostics"></a>
-</h4>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">refit_log</span> <span class="op">&lt;-</span> <span class="va">res</span><span class="op">$</span><span class="va">refits</span>    <span class="co"># summarize_refits(...)</span></span>
-<span><span class="va">refit_log</span></span></code></pre></div>
-<p>The refit log records:</p>
-<ul>
-<li>Bayesian diagnostics,</li>
-<li>reliability and stability metrics,</li>
-<li>whether and why stopping occurred.</li>
-</ul>
-<p>This provides a transparent justification for termination.</p>
-<hr>
-</div>
+<div class="section level2">
+<h2 id="a-detailed-live-llm-workflow">A detailed live-LLM workflow<a class="anchor" aria-label="anchor" href="#a-detailed-live-llm-workflow"></a>
+</h2>
+<p>The following is a <strong>live-API example and is not
+evaluated</strong>. It requires an OpenAI key, network access, and
+incurs provider charges. The request shape shown here was recorded as
+tested with pairwiseLLM 1.3.1 on 2026-09-05. That is dated evidence
+about this configuration, not a promise that the provider still offers
+the model. Check <a href="model-compatibility.html">Backends and Tested
+Model Configurations</a> and the provider catalog before a long run.</p>
+<p>Set <code>OPENAI_API_KEY</code> outside the script. Replace
+<code>real_samples</code> with a data frame or file containing one row
+per item, a unique ID, and the text to compare. Preserve that input in
+its exact row order for resume.</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/shmercer/pairwiseLLM" class="external-link">pairwiseLLM</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nzchar</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"OPENAI_API_KEY"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">real_samples</span> <span class="op">&lt;-</span> <span class="fu">utils</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.csv</a></span><span class="op">(</span></span>
+<span>  <span class="st">"writing-samples.csv"</span>,</span>
+<span>  stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">real_samples</span><span class="op">)</span> <span class="op">&gt;=</span> <span class="fl">2L</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ID"</span>, <span class="st">"text"</span><span class="op">)</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">real_samples</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">anyNA</a></span><span class="op">(</span><span class="va">real_samples</span><span class="op">$</span><span class="va">ID</span><span class="op">)</span>, <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/duplicated.html" class="external-link">anyDuplicated</a></span><span class="op">(</span><span class="va">real_samples</span><span class="op">$</span><span class="va">ID</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">anyNA</a></span><span class="op">(</span><span class="va">real_samples</span><span class="op">$</span><span class="va">text</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/all.html" class="external-link">all</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nzchar</a></span><span class="op">(</span><span class="va">real_samples</span><span class="op">$</span><span class="va">text</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">live_trait</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
+<span><span class="va">live_prompt</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">live_session</span> <span class="op">&lt;-</span> <span class="st">"adaptive-live-session"</span></span>
+<span></span>
+<span><span class="va">live</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank.html">adaptive_rank</a></span><span class="op">(</span></span>
+<span>  data <span class="op">=</span> <span class="va">real_samples</span>,</span>
+<span>  id_col <span class="op">=</span> <span class="st">"ID"</span>,</span>
+<span>  text_col <span class="op">=</span> <span class="st">"text"</span>,</span>
+<span>  backend <span class="op">=</span> <span class="st">"openai"</span>,</span>
+<span>  model <span class="op">=</span> <span class="st">"gpt-5.6-luna"</span>,</span>
+<span>  endpoint <span class="op">=</span> <span class="st">"responses"</span>,</span>
+<span>  trait_name <span class="op">=</span> <span class="va">live_trait</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="va">live_trait</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>  prompt_template <span class="op">=</span> <span class="va">live_prompt</span>,</span>
+<span>  judge_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>reasoning <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span>,</span>
+<span>  n_steps <span class="op">=</span> <span class="fl">200L</span>,</span>
+<span>  session_dir <span class="op">=</span> <span class="va">live_session</span>,</span>
+<span>  checkpoint_every_steps <span class="op">=</span> <span class="fl">10L</span>,</span>
+<span>  persist_item_log <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  resume <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  seed <span class="op">=</span> <span class="fl">20260904L</span>,</span>
+<span>  progress <span class="op">=</span> <span class="st">"refits"</span>,</span>
+<span>  save_outputs <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>This one call validates and normalizes the data, constructs the LLM
+judge, initializes the within-set controller, attempts at most 200
+judgments, performs Bayesian refits when due, persists the session, and
+returns reporting views. <code>n_steps</code> is a per-call ceiling, not
+a target number of valid comparisons or a guarantee that the stopping
+criteria will pass. Use a new or empty <code>session_dir</code> with
+<code>resume = FALSE</code>.</p>
+<p>The call intentionally retains the package’s inference and stopping
+defaults. Do not copy reduced diagnostic thresholds from a test fixture
+into a real study merely to make it finish sooner.</p>
+<div class="section level3">
+<h3 id="inspect-the-live-run">Inspect the live run<a class="anchor" aria-label="anchor" href="#inspect-the-live-run"></a>
+</h3>
+<p>Inspect the ranking, diagnostics, and stopping state before reporting
+results:</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">live</span><span class="op">$</span><span class="va">summary</span></span>
+<span></span>
+<span><span class="va">live</span><span class="op">$</span><span class="va">items</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"item_id"</span>, <span class="st">"theta_raw_eap"</span>, <span class="st">"theta_raw_sd"</span>, <span class="st">"rank_raw"</span>, <span class="st">"degree"</span></span>
+<span><span class="op">)</span><span class="op">]</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fl">10L</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">live</span><span class="op">$</span><span class="va">refits</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"refit_id"</span>, <span class="st">"total_pairs_done"</span>, <span class="st">"diagnostics_pass"</span>,</span>
+<span>  <span class="st">"reliability_EAP"</span>, <span class="st">"stop_decision"</span>, <span class="st">"stop_reason"</span></span>
+<span><span class="op">)</span><span class="op">]</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">tail</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<p>An empty <code>live$items</code> means no successful BTL refit is
+available yet. Reaching the requested step budget does not establish
+convergence. Read the latest refit diagnostics and stop reason
+together.</p>
+<p>The step log records each attempted provider call, including
+provenance, validity, errors, and available token counts:</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">live_steps</span> <span class="op">&lt;-</span> <span class="va">live</span><span class="op">$</span><span class="va">logs</span><span class="op">$</span><span class="va">step_log</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"step_id"</span>, <span class="st">"pair_id"</span>, <span class="st">"A_id"</span>, <span class="st">"B_id"</span>, <span class="st">"Y"</span>, <span class="st">"status"</span>,</span>
+<span>  <span class="st">"judge_backend"</span>, <span class="st">"judge_model"</span>, <span class="st">"judge_endpoint"</span>, <span class="st">"judge_invalid_reason"</span>,</span>
+<span>  <span class="st">"llm_status_code"</span>, <span class="st">"llm_error_message"</span>,</span>
+<span>  <span class="st">"prompt_tokens"</span>, <span class="st">"completion_tokens"</span>, <span class="st">"total_tokens"</span></span>
+<span><span class="op">)</span><span class="op">]</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">tail</a></span><span class="op">(</span><span class="va">live_steps</span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/colSums.html" class="external-link">colSums</a></span><span class="op">(</span><span class="va">live_steps</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"prompt_tokens"</span>, <span class="st">"completion_tokens"</span>, <span class="st">"total_tokens"</span></span>
+<span><span class="op">)</span><span class="op">]</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">live_steps</span><span class="op">[</span><span class="va">live_steps</span><span class="op">$</span><span class="va">status</span> <span class="op">==</span> <span class="st">"invalid"</span>, <span class="op">]</span></span></code></pre></div>
+<p>Invalid API, refusal, or parse responses consume attempted steps but
+do not commit comparisons, update TrueSkill, or advance the BTL refit
+cadence. Investigate repeated invalid rows before adding budget.
+<code>include_raw = TRUE</code> on <code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code> also
+stores serialized raw responses for deeper auditing, but those payloads
+can contain submitted text and increase storage. Enable it only under an
+appropriate retention policy.</p>
 </div>
 <div class="section level3">
-<h3 id="downstream-analyses">Downstream analyses<a class="anchor" aria-label="anchor" href="#downstream-analyses"></a>
+<h3 id="continue-the-same-study">Continue the same study<a class="anchor" aria-label="anchor" href="#continue-the-same-study"></a>
 </h3>
-<p>Because all adaptive decisions are logged, you can:</p>
-<ul>
-<li>examine how uncertainty evolves over time,</li>
-<li>compare adaptive vs. random pairing efficiency,</li>
-<li>refit models with alternative assumptions,</li>
-<li>visualize how near-ties concentrate late-stage effort.</li>
-</ul>
-<hr>
+<p>Resume with the same input IDs, row order, trait, prompt, model
+settings, and session directory. Only <code>n_steps</code>, progress
+display, and checkpoint cadence should normally change between
+calls.</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">live</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank.html">adaptive_rank</a></span><span class="op">(</span></span>
+<span>  data <span class="op">=</span> <span class="va">real_samples</span>,</span>
+<span>  id_col <span class="op">=</span> <span class="st">"ID"</span>,</span>
+<span>  text_col <span class="op">=</span> <span class="st">"text"</span>,</span>
+<span>  backend <span class="op">=</span> <span class="st">"openai"</span>,</span>
+<span>  model <span class="op">=</span> <span class="st">"gpt-5.6-luna"</span>,</span>
+<span>  endpoint <span class="op">=</span> <span class="st">"responses"</span>,</span>
+<span>  trait_name <span class="op">=</span> <span class="va">live_trait</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="va">live_trait</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>  prompt_template <span class="op">=</span> <span class="va">live_prompt</span>,</span>
+<span>  judge_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>reasoning <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span>,</span>
+<span>  n_steps <span class="op">=</span> <span class="fl">100L</span>,</span>
+<span>  session_dir <span class="op">=</span> <span class="va">live_session</span>,</span>
+<span>  checkpoint_every_steps <span class="op">=</span> <span class="fl">10L</span>,</span>
+<span>  persist_item_log <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  resume <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  progress <span class="op">=</span> <span class="st">"refits"</span>,</span>
+<span>  save_outputs <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>Resume validates saved schemas and aborts on incompatible artifacts
+or mismatched input IDs instead of silently starting a new run. A sudden
+process termination can lose attempts since the last completed refit or
+checkpoint, so choose <code>checkpoint_every_steps</code> according to
+how many paid calls you can afford to repeat.</p>
+<p>Each live comparison is usually the dominant monetary and wall-clock
+cost. Bayesian refits are the dominant local compute cost and become
+more expensive as the item set and posterior model grow. Cost also rises
+with invalid calls and additional steps needed to clear diagnostics or
+coverage gaps. Use bounded increments, inspect the audit and refit logs
+between calls, and do not add budget when candidate starvation or a
+persistent structural problem requires a design change instead.</p>
 </div>
 </div>
 <div class="section level2">
-<h2 id="when-should-you-use-adaptive-ranking">When should you use adaptive ranking?<a class="anchor" aria-label="anchor" href="#when-should-you-use-adaptive-ranking"></a>
+<h2 id="troubleshooting">Troubleshooting<a class="anchor" aria-label="anchor" href="#troubleshooting"></a>
 </h2>
-<p>Adaptive pairing is particularly useful when:</p>
-<ul>
-<li>the number of items is large,</li>
-<li>judgments are expensive or slow,</li>
-<li>fine distinctions between nearby items matter,</li>
-<li>uncertainty estimates are as important as point rankings.</li>
-</ul>
-<p>For very small item sets or exploratory analyses, simpler random
-pairing designs may still be appropriate.</p>
-<hr>
+<p><strong>CmdStan is missing or compilation fails.</strong> Run
+<code><a href="https://mc-stan.org/cmdstanr/reference/install_cmdstan.html" class="external-link">cmdstanr::check_cmdstan_toolchain()</a></code> and
+<code><a href="https://mc-stan.org/cmdstanr/reference/set_cmdstan_path.html" class="external-link">cmdstanr::cmdstan_version()</a></code>. Install or repair the compiler
+toolchain before retrying. An LLM credential cannot substitute for
+CmdStan.</p>
+<p><strong>IDs are missing or duplicated.</strong> <code>id_col</code>
+must identify a non-missing, unique column. For the shipped data it is
+<code>id_col = "ID"</code>. Resume also requires the same IDs in the
+same order as the saved state.</p>
+<p><strong>The judge output is malformed.</strong> A custom judge must
+return <code>is_valid</code>, <code>Y</code>, and preferably
+<code>invalid_reason</code>. For a valid result, <code>Y</code> must be
+exactly <code>0</code> or <code>1</code>. Review
+<code>judge_invalid_reason</code>, <code>llm_status_code</code>, and
+<code>llm_error_message</code> in <code><a href="../reference/adaptive_step_log.html">adaptive_step_log()</a></code>.</p>
+<p><strong>The run reports candidate starvation.</strong> The selector
+applies its implemented within-stage fallbacks before declaring a stage
+starved. A terminal <code>"candidate_starvation"</code> means no
+eligible pair remained after those fallbacks. This can occur with very
+small or heavily repeated designs; inspect <code>fallback_path</code>,
+<code>starvation_reason</code>, and committed pair counts rather than
+treating it as Bayesian convergence.</p>
+<p><strong>There is no item summary yet.</strong> <code>out$items</code>
+is empty until the first successful BTL refit. Under the default
+cadence, at least 20 new committed comparisons are needed. Invalid and
+starved attempts do not advance that count.</p>
 </div>
 <div class="section level2">
-<h2 id="technical-details">Technical details<a class="anchor" aria-label="anchor" href="#technical-details"></a>
+<h2 id="related-documentation">Related documentation<a class="anchor" aria-label="anchor" href="#related-documentation"></a>
 </h2>
-<p>This vignette focuses on how to use adaptive pairing.</p>
-<p>For a complete technical specification of the adaptive algorithm,
-including: - pair types and quotas, - fallback rules, - Bayesian models
-and diagnostics, - logging guarantees,</p>
-<p>see the companion vignette:</p>
-<ul>
-<li><a href="bayesian-btl-adaptive-pairing-design.html">Bayesian BTL
-Adaptive Pairing Design</a></li>
-</ul>
-<hr>
-</div>
-<div class="section level2">
-<h2 id="summary">Summary<a class="anchor" aria-label="anchor" href="#summary"></a>
-</h2>
-<p>Adaptive pairing in <code>pairwiseLLM</code> reallocates comparisons
-toward the most informative parts of the ranking, reducing uncertainty
-where it matters most. While overall reliability metrics may be slightly
-lower than with random pairing, adaptive designs typically produce
-tighter credible intervals and more decision-relevant rankings, making
-them well suited for writing quality evaluation and similar tasks.</p>
+<p>See [adaptive_rank()], [adaptive_step_log()], [adaptive_round_log()],
+[adaptive_item_log()], [save_adaptive_session()], and
+[validate_session_dir()] for complete argument and schema details. For
+the within-set algorithm and statistical rationale, see <a href="within-set-adaptive-design.html">Design: Adaptive Pairing</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
-<p>Mercer, S. H. (2026). <em>Adaptive pairing and ranking in
-pairwiseLLM</em> [R package vignette]. In <em>pairwiseLLM: Pairwise
-comparison tools for large language model-based writing evaluation</em>.
-<a href="https://doi.org/10.32614/CRAN.package.pairwiseLLM" class="external-link uri">https://doi.org/10.32614/CRAN.package.pairwiseLLM</a></p>
+<p>Mercer, S. H. (2026). <em>Guide: Adaptive pairing</em> [R package
+vignette]. Comprehensive R Archive Network. <a href="https://doi.org/10.32614/CRAN.package.pairwiseLLM" class="external-link uri">https://doi.org/10.32614/CRAN.package.pairwiseLLM</a></p>
 </blockquote>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
@@ -525,7 +636,7 @@ comparison tools for large language model-based writing evaluation</em>.
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

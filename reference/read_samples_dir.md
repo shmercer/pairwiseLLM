@@ -28,6 +28,19 @@ A tibble with columns:
 
 - `text`: file contents as a single character string
 
+## See also
+
+[`read_samples_df()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_df.md),
+[`make_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/make_pairs.md)
+
+Other pairing and data:
+[`alternate_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/alternate_pair_order.md),
+[`make_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/make_pairs.md),
+[`randomize_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/randomize_pair_order.md),
+[`read_samples_df()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_df.md),
+[`sample_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/sample_pairs.md),
+[`sample_reverse_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/sample_reverse_pairs.md)
+
 ## Examples
 
 ``` r

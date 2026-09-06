@@ -7,10 +7,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Getting Started with pairwiseLLM • pairwiseLLM</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/Inter-0.4.10/font.css" rel="stylesheet">
-<link href="../deps/JetBrains_Mono-0.4.10/font.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Getting Started with pairwiseLLM">
 </head>
@@ -22,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -32,22 +30,23 @@
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
 <li class="nav-item"><a class="nav-link" href="../index.html"><span class="fa fa-home"></span> Home</a></li>
-<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
-<li class="active nav-item dropdown">
-  <button class="nav-link dropdown-toggle" type="button" id="dropdown-usage-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Usage Guides</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-usage-guides">
-<li><a class="dropdown-item" href="../articles/getting-started.html">Getting Started with pairwiseLLM</a></li>
-    <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
-  </ul>
-</li>
+<li class="active nav-item"><a class="nav-link" href="../articles/getting-started.html">Get Started</a></li>
 <li class="nav-item dropdown">
-  <button class="nav-link dropdown-toggle" type="button" id="dropdown-adaptive-pairing" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Adaptive Pairing</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-adaptive-pairing">
-<li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Adaptive Pairing &amp; Ranking</a></li>
-    <li><a class="dropdown-item" href="../articles/bayesian-btl-adaptive-pairing-design.html">Design: Bayesian BTL Adaptive Pairing</a></li>
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-detailed-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Detailed Guides</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-detailed-guides">
+<li><a class="dropdown-item" href="../articles/data-and-prompts.html">Data Schemas and Prompt Management</a></li>
+    <li><a class="dropdown-item" href="../articles/provider-controls-and-recovery.html">Provider Controls and Recovery</a></li>
+    <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
+    <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
+    <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
+    <li><a class="dropdown-item" href="../articles/prompt-template-bias.html">Prompt Template Positional Bias Testing</a></li>
   </ul>
 </li>
-<li class="nav-item"><a class="nav-link" href="../articles/prompt-template-bias.html">Template Positional Bias</a></li>
+<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
@@ -82,8 +81,9 @@
 </h2>
 <p><code>pairwiseLLM</code> provides a unified workflow for generating
 and analyzing <strong>pairwise comparisons of writing quality</strong>
-using LLM APIs (OpenAI, Anthropic, Gemini, Together), and local models
-via Ollama..</p>
+using live LLM APIs (OpenAI, Anthropic, Gemini Developer API, Vertex AI
+Gemini API, Together.ai), local models via Ollama, and batch APIs for
+OpenAI, Anthropic, and Gemini Developer API.</p>
 <p>A typical workflow:</p>
 <ol style="list-style-type: decimal">
 <li>Select writing samples<br>
@@ -115,7 +115,7 @@ environment variables</strong>, never from R options or global
 variables.</p>
 <table class="table">
 <thead><tr class="header">
-<th>Provider</th>
+<th>Provider Surface</th>
 <th>Environment Variable</th>
 </tr></thead>
 <tbody>
@@ -124,35 +124,47 @@ variables.</p>
 <td>OPENAI_API_KEY</td>
 </tr>
 <tr class="even">
-<td><a href="https://console.anthropic.com/" class="external-link">Anthropic</a></td>
+<td><a href="https://platform.claude.com/" class="external-link">Anthropic</a></td>
 <td>ANTHROPIC_API_KEY</td>
 </tr>
 <tr class="odd">
-<td><a href="https://aistudio.google.com/" class="external-link">Gemini</a></td>
+<td>Gemini Developer API</td>
 <td>GEMINI_API_KEY</td>
 </tr>
 <tr class="even">
+<td>Vertex AI Gemini API</td>
+<td>VERTEX_API_KEY</td>
+</tr>
+<tr class="odd">
 <td><a href="https://www.together.ai/" class="external-link">Together</a></td>
 <td>TOGETHER_API_KEY</td>
 </tr>
 </tbody>
 </table>
-<p>You should put these in your <code>~/.Renviron</code>:</p>
+<p><code>backend = "gemini"</code> uses the Gemini Developer API and
+<code>backend = "vertex"</code> uses the Vertex AI Gemini API. Those
+backends use separate API-key surfaces.</p>
+<p>Configure only the key for the cloud backend you plan to use; you do
+not need keys for every provider. You can put the relevant key in your
+<code>~/.Renviron</code>:</p>
 <pre><code><span><span class="va">OPENAI_API_KEY</span><span class="op">=</span><span class="st">"sk-..."</span></span>
 <span><span class="va">ANTHROPIC_API_KEY</span><span class="op">=</span><span class="st">"..."</span></span>
 <span><span class="va">GEMINI_API_KEY</span><span class="op">=</span><span class="st">"..."</span></span>
+<span><span class="va">VERTEX_API_KEY</span><span class="op">=</span><span class="st">"..."</span></span>
 <span><span class="va">TOGETHER_API_KEY</span><span class="op">=</span><span class="st">"..."</span></span></code></pre>
 <p>Check which keys are available:</p>
 <pre><code><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/shmercer/pairwiseLLM" class="external-link">pairwiseLLM</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="../reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; All known LLM API keys are set: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, TOGETHER_API_KEY.</span></span>
-<span><span class="co">#&gt; # A tibble: 4 × 4</span></span>
-<span><span class="co">#&gt;   backend   service        env_var           has_key</span></span>
-<span><span class="co">#&gt; 1 openai    OpenAI         OPENAI_API_KEY    TRUE</span></span>
-<span><span class="co">#&gt; 2 anthropic Anthropic      ANTHROPIC_API_KEY TRUE</span></span>
-<span><span class="co">#&gt; 3 gemini    Google Gemini  GEMINI_API_KEY    TRUE</span></span>
-<span><span class="co">#&gt; 4 together  Together.ai    TOGETHER_API_KEY  TRUE</span></span></code></pre>
+<span><span class="co">#&gt; Some LLM API keys are not set. This is expected when you use only selected backends.</span></span>
+<span><span class="co">#&gt; # A tibble: 5 × 4</span></span>
+<span><span class="co">#&gt;   backend   service              env_var           has_key</span></span>
+<span><span class="co">#&gt;   &lt;chr&gt;     &lt;chr&gt;                &lt;chr&gt;             &lt;lgl&gt;</span></span>
+<span><span class="co">#&gt; 1 openai    OpenAI               OPENAI_API_KEY    TRUE</span></span>
+<span><span class="co">#&gt; 2 anthropic Anthropic            ANTHROPIC_API_KEY TRUE</span></span>
+<span><span class="co">#&gt; 3 gemini    Google Gemini        GEMINI_API_KEY    TRUE</span></span>
+<span><span class="co">#&gt; 4 vertex    Vertex AI Gemini API VERTEX_API_KEY    TRUE</span></span>
+<span><span class="co">#&gt; 5 together  Together.ai          TOGETHER_API_KEY  TRUE</span></span></code></pre>
 <p><a href="https://ollama.com/" class="external-link">Ollama</a> runs locally and does not
 require an API key, just that the Ollama server is running.</p>
 <hr>
@@ -218,7 +230,7 @@ clear differences in quality:</p>
 <span><span class="co">#&gt; [1] "Overall Quality"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $description</span></span>
-<span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed,\nhow clearly the writing is organized, and how effective the language and\nconventions are."</span></span></code></pre></div>
 <p>Or define your own:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">td_custom</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span></span>
@@ -259,14 +271,18 @@ clear differences in quality:</p>
 <p>Load a template from file:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span>file <span class="op">=</span> <span class="st">"my_template.txt"</span><span class="op">)</span></span></code></pre></div>
+<p>For named registration, replacement, removal, and the schemas used in
+later steps, see <a href="data-and-prompts.html">Data Schemas and Prompt
+Management</a>.</p>
 <hr>
 </div>
 </div>
 <div class="section level2">
 <h2 id="live-pairwise-comparisons">6. Live Pairwise Comparisons<a class="anchor" aria-label="anchor" href="#live-pairwise-comparisons"></a>
 </h2>
-<p>The unified wrapper works for <strong>OpenAI, Anthropic, Gemini,
-Together, and Ollama.</strong></p>
+<p>The unified wrapper works for <strong>OpenAI, Anthropic, Gemini
+Developer API, Vertex AI Gemini API, Together.ai, and
+Ollama</strong>.</p>
 <p>It supports <strong>parallel processing</strong> and
 <strong>incremental output file saving</strong> (resume capability) for
 <strong>all</strong> supported backends. The function returns a list
@@ -286,18 +302,49 @@ timeouts, parse errors, invalid winners)</li>
 <code class="sourceCode R"><span><span class="co"># Example using parallel processing and incremental saving</span></span>
 <span><span class="va">res_list</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
 <span>  pairs             <span class="op">=</span> <span class="va">pairs_small</span>,</span>
-<span>  backend           <span class="op">=</span> <span class="st">"openai"</span>, <span class="co"># also "anthropic", "gemini", "together"</span></span>
+<span>  backend           <span class="op">=</span> <span class="st">"openai"</span>, <span class="co"># also "anthropic", "gemini", "vertex", "together", "ollama"</span></span>
 <span>  model             <span class="op">=</span> <span class="st">"gpt-4o"</span>,</span>
 <span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
 <span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
 <span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span>
 <span>  <span class="co"># New features:</span></span>
 <span>  parallel          <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  workers           <span class="op">=</span> <span class="fl">4</span>,</span>
+<span>  workers           <span class="op">=</span> <span class="fl">2</span>,</span>
 <span>  save_path         <span class="op">=</span> <span class="st">"live_results.csv"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>Preview results:</p>
+<p><code>service_tier</code> is provider-specific rather than portable
+across backends. Gemini Developer API and Vertex AI Gemini API currently
+accept the public values <code>"standard"</code>, <code>"flex"</code>,
+and <code>"priority"</code>, but Vertex is live-only and uses a
+different wire format internally.</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Gemini Developer API live request</span></span>
+<span><span class="va">res_gemini</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
+<span>  pairs             <span class="op">=</span> <span class="va">pairs_small</span>,</span>
+<span>  backend           <span class="op">=</span> <span class="st">"gemini"</span>,</span>
+<span>  model             <span class="op">=</span> <span class="st">"gemini-3.5-flash-lite"</span>,</span>
+<span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span>
+<span>  service_tier      <span class="op">=</span> <span class="st">"priority"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Vertex AI Gemini API live request</span></span>
+<span><span class="va">res_vertex</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
+<span>  pairs             <span class="op">=</span> <span class="va">pairs_small</span>,</span>
+<span>  backend           <span class="op">=</span> <span class="st">"vertex"</span>,</span>
+<span>  model             <span class="op">=</span> <span class="st">"gemini-3.8-flash"</span>,</span>
+<span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span>
+<span>  service_tier      <span class="op">=</span> <span class="st">"flex"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>For OpenAI, <code>service_tier = "flex"</code> requests lower-cost,
+slower Flex processing when the selected model supports it. Capacity may
+be unavailable; Flex is not priority routing. Service-tier meanings are
+provider-specific.</p>
+<p>Preview results:</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Successes are in the $results tibble</span></span>
 <span><span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/slice.html" class="external-link">slice_head</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">results</span>, <span class="fl">5</span><span class="op">)</span></span>
 <span></span>
@@ -328,13 +375,13 @@ thoughts (reasoning text, if available) and content (final answer)</p>
 <p>Convert the LLM output (specifically the <code>$results</code> tibble
 for <code><a href="../reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> output) to a 3-column BT
 dataset:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># res_list: output list from submit_llm_pairs()</span></span>
 <span><span class="co"># We extract the $results tibble for modeling</span></span>
 <span><span class="va">bt_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span>
 <span><span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/slice.html" class="external-link">slice_head</a></span><span class="op">(</span><span class="va">bt_data</span>, <span class="fl">5</span><span class="op">)</span></span></code></pre></div>
 <p>and/or a dataset for Elo modeling:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># res_list: output from submit_llm_pairs()</span></span>
 <span><span class="va">elo_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/build_elo_data.html">build_elo_data</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span></code></pre></div>
 <hr>
@@ -343,10 +390,10 @@ dataset:</p>
 <h2 id="bradleyterry-modeling">8. Bradley–Terry Modeling<a class="anchor" aria-label="anchor" href="#bradleyterry-modeling"></a>
 </h2>
 <p>Fit model:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">bt_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt_data</span><span class="op">)</span></span></code></pre></div>
 <p>Summarize results:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/summarize_bt_fit.html">summarize_bt_fit</a></span><span class="op">(</span><span class="va">bt_fit</span><span class="op">)</span></span></code></pre></div>
 <p>The output includes:</p>
 <ul>
@@ -361,7 +408,7 @@ dataset:</p>
 <div class="section level2">
 <h2 id="elo-modeling">9. Elo Modeling<a class="anchor" aria-label="anchor" href="#elo-modeling"></a>
 </h2>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">elo_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_elo_model.html">fit_elo_model</a></span><span class="op">(</span><span class="va">elo_data</span>, runs <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="va">elo_fit</span></span></code></pre></div>
 <p>Outputs:</p>
@@ -380,20 +427,25 @@ dataset:</p>
 <div class="section level3">
 <h3 id="submit-a-batch">10.1 Submit a batch<a class="anchor" aria-label="anchor" href="#submit-a-batch"></a>
 </h3>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<p>Batch helpers support <code>"openai"</code>,
+<code>"anthropic"</code>, and <code>"gemini"</code>.
+<code>backend = "vertex"</code> is rejected explicitly because Vertex
+batch mode is not implemented in this series.</p>
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch</a></span><span class="op">(</span></span>
-<span>  backend            <span class="op">=</span> <span class="st">"openai"</span>,</span>
-<span>  model              <span class="op">=</span> <span class="st">"gpt-4o"</span>,</span>
+<span>  backend            <span class="op">=</span> <span class="st">"gemini"</span>,</span>
+<span>  model              <span class="op">=</span> <span class="st">"gemini-3.8-flash"</span>,</span>
 <span>  pairs              <span class="op">=</span> <span class="va">pairs_small</span>,</span>
 <span>  trait_name         <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
 <span>  trait_description  <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
-<span>  prompt_template    <span class="op">=</span> <span class="va">tmpl</span></span>
+<span>  prompt_template    <span class="op">=</span> <span class="va">tmpl</span>,</span>
+<span>  service_tier       <span class="op">=</span> <span class="st">"priority"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="download-results">10.2 Download results<a class="anchor" aria-label="anchor" href="#download-results"></a>
 </h3>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res_batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/llm_download_batch_results.html">llm_download_batch_results</a></span><span class="op">(</span><span class="va">batch</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">res_batch</span><span class="op">)</span></span></code></pre></div>
 </div>
@@ -405,7 +457,7 @@ into multiple segments using <code><a href="../reference/llm_submit_pairs_multi_
 and then poll all of them with <code><a href="../reference/llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code>.
 This is particularly useful when you have many pairs or want to ensure
 that you can resume if the session ends.</p>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Generate a small set of pairs</span></span>
 <span><span class="va">pairs_small</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -451,8 +503,8 @@ the job by calibrating input tokens from prompt byte length.</p>
 <p>The output includes both:</p>
 <ul>
 <li>
-<strong>Expected cost</strong> (using mean output tokens from the
-pilot)</li>
+<strong>Expected cost</strong> (using mean output tokens from usable
+pilot calls)</li>
 <li>
 <strong>Budget cost</strong> (using a high quantile of pilot output
 tokens, controlled by <code>budget_quantile</code>)</li>
@@ -460,7 +512,7 @@ tokens, controlled by <code>budget_quantile</code>)</li>
 <p>If you are running a discounted batch workflow, set
 <code>mode = "batch"</code> and supply a <code>batch_discount</code>
 multiplier.</p>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Create a moderate set of pairs</span></span>
 <span><span class="va">pairs_big</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -486,11 +538,35 @@ multiplier.</p>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">est</span><span class="op">$</span><span class="va">summary</span></span></code></pre></div>
+<div class="section level4">
+<h4 id="deterministic-calculation-example">Deterministic calculation example<a class="anchor" aria-label="anchor" href="#deterministic-calculation-example"></a>
+</h4>
+<p>Suppose a two-pair live pilot records input-token counts of 20 and 40
+and completion-token counts of 10 and 30. The prompt-byte calibration
+predicts 60 and 80 input tokens for the two remaining pairs. With
+<code>budget_quantile = 0.9</code>, R’s type-7 sample quantile of
+<code>c(10, 30)</code> is 28.</p>
+<p>At input and output prices of 1 currency unit per million tokens and
+<code>batch_discount = 0.5</code>, the estimator calculates:</p>
+<ul>
+<li>observed live pilot tokens: 60 input and 40 output;</li>
+<li>remaining expected tokens: 140 input and
+<code>mean(c(10, 30)) * 2 = 40</code> output;</li>
+<li>remaining budget output tokens: <code>28 * 2 = 56</code>;</li>
+<li>expected cost:
+<code>(60 + 40 + 0.5 * (140 + 40)) / 1e6 = 0.000190</code>; and</li>
+<li>budget cost:
+<code>(60 + 40 + 0.5 * (140 + 56)) / 1e6 = 0.000198</code>.</li>
+</ul>
+<p>The pilot observations are included once at live prices. They are not
+averaged into the estimated remaining count and are not discounted.</p>
 <p>Avoid paying twice: reuse pilot results</p>
-<p>The estimator returns both the pilot output and the pairs not
-included in the pilot (remaining_pairs). Use remaining_pairs to submit
-only the remaining work after you are satisfied with the estimate:</p>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<p>The estimator returns the original pilot output object and the pairs
+not included in the pilot (<code>remaining_pairs</code>). Use
+<code>remaining_pairs</code> to submit only the remaining work after you
+are satisfied with the estimate. Pilot judgments are not automatically
+merged into the later submission result:</p>
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">remaining_pairs</span> <span class="op">&lt;-</span> <span class="va">est</span><span class="op">$</span><span class="va">remaining_pairs</span></span>
 <span></span>
 <span><span class="co"># Example: submit only the remaining pairs as a batch</span></span>
@@ -512,8 +588,12 @@ byte length calibrated on the pilot.</li>
 token costs).</li>
 <li>Reasoning/thinking tokens are treated as output tokens for
 pricing.</li>
+<li>Supply current prices for the selected provider, model, endpoint,
+and mode; the package does not maintain or validate a pricing
+catalog.</li>
 </ul>
 <hr>
+</div>
 </div>
 </div>
 <div class="section level2">
@@ -552,7 +632,15 @@ available.</p>
 </ul>
 </div>
 <div class="section level4">
-<h4 id="together-ai-live-only">11.4 Together.ai (live only)<a class="anchor" aria-label="anchor" href="#together-ai-live-only"></a>
+<h4 id="vertex-ai-gemini-api-live-only">11.4 Vertex AI Gemini API (live only)<a class="anchor" aria-label="anchor" href="#vertex-ai-gemini-api-live-only"></a>
+</h4>
+<ul>
+<li><code><a href="../reference/submit_vertex_pairs_live.html">submit_vertex_pairs_live()</a></code></li>
+<li><code><a href="../reference/vertex_compare_pair_live.html">vertex_compare_pair_live()</a></code></li>
+</ul>
+</div>
+<div class="section level4">
+<h4 id="together-ai-live-only">11.5 Together.ai (live only)<a class="anchor" aria-label="anchor" href="#together-ai-live-only"></a>
 </h4>
 <ul>
 <li><code><a href="../reference/together_compare_pair_live.html">together_compare_pair_live()</a></code></li>
@@ -560,12 +648,16 @@ available.</p>
 </ul>
 </div>
 <div class="section level4">
-<h4 id="ollama-local-live-only">11.5 Ollama (local, live only)<a class="anchor" aria-label="anchor" href="#ollama-local-live-only"></a>
+<h4 id="ollama-local-live-only">11.6 Ollama (local, live only)<a class="anchor" aria-label="anchor" href="#ollama-local-live-only"></a>
 </h4>
 <ul>
 <li><code><a href="../reference/ollama_compare_pair_live.html">ollama_compare_pair_live()</a></code></li>
 <li><code><a href="../reference/submit_ollama_pairs_live.html">submit_ollama_pairs_live()</a></code></li>
+<li><code><a href="../reference/ensure_only_ollama_model_loaded.html">ensure_only_ollama_model_loaded()</a></code></li>
 </ul>
+<p>Reasoning/thinking constraints, partial-result handling, retries, and
+local-resource guidance are covered in <a href="provider-controls-and-recovery.html">Provider Controls and
+Recovery</a>.</p>
 <hr>
 </div>
 </div>
@@ -575,26 +667,29 @@ available.</p>
 <div class="section level4">
 <h4 id="missing-api-keys">Missing API keys<a class="anchor" aria-label="anchor" href="#missing-api-keys"></a>
 </h4>
-<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; No LLM API keys are currently set for known backends:</span></span>
 <span><span class="co">#&gt;   - OpenAI:         OPENAI_API_KEY</span></span>
 <span><span class="co">#&gt;   - Anthropic:      ANTHROPIC_API_KEY</span></span>
 <span><span class="co">#&gt;   - Google Gemini:  GEMINI_API_KEY</span></span>
+<span><span class="co">#&gt;   - Vertex AI:      VERTEX_API_KEY</span></span>
 <span><span class="co">#&gt;   - Together.ai:    TOGETHER_API_KEY</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:</span></span>
 <span><span class="co">#&gt;   OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"</span></span>
 <span><span class="co">#&gt;   ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"</span></span>
 <span><span class="co">#&gt;   GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"</span></span>
+<span><span class="co">#&gt;   VERTEX_API_KEY    = "YOUR_VERTEX_KEY_HERE"</span></span>
 <span><span class="co">#&gt;   TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 4 × 4</span></span></span>
-<span><span class="co">#&gt;   backend   service       env_var           has_key</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>         <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;lgl&gt;</span>  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> openai    OpenAI        OPENAI_API_KEY    FALSE  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> anthropic Anthropic     ANTHROPIC_API_KEY FALSE  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> gemini    Google Gemini GEMINI_API_KEY    FALSE  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> together  Together.ai   TOGETHER_API_KEY  FALSE</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 5 × 4</span></span></span>
+<span><span class="co">#&gt;   backend   service              env_var           has_key</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;lgl&gt;</span>  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> openai    OpenAI               OPENAI_API_KEY    FALSE  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> anthropic Anthropic            ANTHROPIC_API_KEY FALSE  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> gemini    Google Gemini        GEMINI_API_KEY    FALSE  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> vertex    Vertex AI Gemini API VERTEX_API_KEY    FALSE  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> together  Together.ai          TOGETHER_API_KEY  FALSE</span></span></code></pre></div>
 </div>
 <div class="section level4">
 <h4 id="timeouts">Timeouts<a class="anchor" aria-label="anchor" href="#timeouts"></a>
@@ -617,9 +712,8 @@ for a full example).</p>
 <h2 id="citation">13. Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
-<p>Mercer, S. H. (2025). <em>Getting started with pairwiseLLM</em> [R
-package vignette]. In <em>pairwiseLLM: Pairwise comparison tools for
-large language model-based writing evaluation</em>. <a href="https://doi.org/10.32614/CRAN.package.pairwiseLLM" class="external-link uri">https://doi.org/10.32614/CRAN.package.pairwiseLLM</a></p>
+<p>Mercer, S. H. (2026). <em>Getting started with pairwiseLLM</em> [R
+package vignette]. Comprehensive R Archive Network. <a href="https://doi.org/10.32614/CRAN.package.pairwiseLLM" class="external-link uri">https://doi.org/10.32614/CRAN.package.pairwiseLLM</a></p>
 </blockquote>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
@@ -633,7 +727,7 @@ large language model-based writing evaluation</em>. <a href="https://doi.org/10.
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

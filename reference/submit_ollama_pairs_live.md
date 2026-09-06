@@ -82,8 +82,7 @@ submit_ollama_pairs_live(
 
   Logical; see
   [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
-  for behavior. When `TRUE` and the model name starts with `"qwen"`, the
-  temperature is set to `0.6`; otherwise the temperature remains `0`.
+  for behavior.
 
 - num_ctx:
 
@@ -152,12 +151,9 @@ This function offers:
   out-of-memory errors unless the hardware can handle concurrent
   requests. Defaults are set to sequential processing.
 
-Temperature and context length are controlled as follows:
+Sampling and context length are controlled as follows:
 
-- By default, `temperature = 0` for all models.
-
-- For Qwen models (model names beginning with `"qwen"`) and
-  `think = TRUE`, `temperature` is set to `0.6`.
+- Sampling parameters are omitted so the local model default applies.
 
 - The context window is set via `options$num_ctx`, which defaults to
   `8192` but may be overridden via the `num_ctx` argument.
@@ -183,6 +179,22 @@ this function assumes that:
 
 - [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
   for backend-agnostic comparisons over tibbles of pairs.
+
+Other live backends:
+[`anthropic_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md),
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md),
+[`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md),
+[`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md),
+[`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
+[`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
+[`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md),
+[`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
+[`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
+[`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
+[`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
+[`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)
 
 ## Examples
 

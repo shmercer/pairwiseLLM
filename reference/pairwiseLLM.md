@@ -48,6 +48,7 @@ including an adaptive, Bayesian BTL (MCMC) workflow.
       [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
       [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
       [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
+      [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
       [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
       [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md).
 
@@ -55,6 +56,7 @@ including an adaptive, Bayesian BTL (MCMC) workflow.
       [`run_openai_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_openai_batch_pipeline.md),
       [`run_anthropic_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_anthropic_batch_pipeline.md),
       [`run_gemini_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_gemini_batch_pipeline.md).
+      Vertex is currently supported on the live path only.
 
 6.  **Assemble modeling data** with
     [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md)
@@ -78,6 +80,21 @@ including an adaptive, Bayesian BTL (MCMC) workflow.
       [`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md),
       [`summarize_items()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_items.md),
       [`summarize_refits()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_refits.md)
+
+#### Provider matrix
+
+- Live backends: `"openai"`, `"anthropic"`, `"gemini"` (Gemini Developer
+  API), `"vertex"` (Vertex AI Gemini API), `"together"`, and `"ollama"`.
+
+- Batch backends: `"openai"`, `"anthropic"`, and `"gemini"`.
+  `backend = "vertex"` is rejected explicitly on generic batch surfaces.
+
+- Gemini Developer API and Vertex use separate API-key surfaces:
+  `GEMINI_API_KEY` and `VERTEX_API_KEY`.
+
+- `service_tier` is provider-specific. Gemini Developer API and Vertex
+  share the public values `"standard"`, `"flex"`, and `"priority"`, but
+  they use different request transports.
 
 ### Adaptive Bayesian pairing + ranking (end-to-end loop)
 
@@ -165,6 +182,10 @@ BTL** in an auditable loop, use the adaptive workflow:
 - Gemini:
   [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
   [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md)
+
+- Vertex:
+  [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
+  [`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)
 
 - Ollama:
   [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
@@ -292,4 +313,9 @@ trail).
 ## Author
 
 **Maintainer**: Sterett H. Mercer <sterett.mercer@ubc.ca>
-([ORCID](https://orcid.org/0000-0002-7940-4221))
+([ORCID](https://orcid.org/0000-0002-7940-4221)) \[copyright holder\]
+
+Authors:
+
+- Sterett H. Mercer <sterett.mercer@ubc.ca>
+  ([ORCID](https://orcid.org/0000-0002-7940-4221)) \[copyright holder\]

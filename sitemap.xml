@@ -2,12 +2,18 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/404.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/LICENSE-text.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/LICENSE.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html</loc></url>
-<url><loc>https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl-adaptive-pairing-design.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/getting-started.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/index.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/authors.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/index.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/news/index.html</loc></url>
@@ -39,6 +45,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/dot-gemini_api_key.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/dot-parse_gemini_pair_response.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/dot-together_api_key.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/dot-vertex_api_key.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/ensure_only_ollama_model_loaded.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/estimate_llm_pairs_cost.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/example_openai_batch_output.html</loc></url>
@@ -96,6 +103,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/summarize_items.html</loc></url>
@@ -103,6 +111,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/trait_description.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/validate_session_dir.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/write_openai_batch_file.html</loc></url>
 </urlset>
 

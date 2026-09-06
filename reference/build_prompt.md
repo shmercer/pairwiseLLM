@@ -43,6 +43,19 @@ A single character string containing the completed prompt.
 The template must contain the placeholders: `{TRAIT_NAME}`,
 `{TRAIT_DESCRIPTION}`, `{SAMPLE_1}`, and `{SAMPLE_2}`.
 
+## See also
+
+[`trait_description()`](https://shmercer.github.io/pairwiseLLM/reference/trait_description.md),
+[`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md)
+
+Other prompts and traits:
+[`get_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/get_prompt_template.md),
+[`list_prompt_templates()`](https://shmercer.github.io/pairwiseLLM/reference/list_prompt_templates.md),
+[`register_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/register_prompt_template.md),
+[`remove_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/remove_prompt_template.md),
+[`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md),
+[`trait_description()`](https://shmercer.github.io/pairwiseLLM/reference/trait_description.md)
+
 ## Examples
 
 ``` r

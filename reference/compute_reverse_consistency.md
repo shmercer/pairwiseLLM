@@ -56,6 +56,17 @@ the consistency calculation.
 The output `details` contains exactly one row per unordered pair key,
 which keeps it compatible with
 [`check_positional_bias`](https://shmercer.github.io/pairwiseLLM/reference/check_positional_bias.md).
+Columns other than `ID1`, `ID2`, and `better_id` are not grouping
+variables. Split results by model, template, trait, reasoning or
+thinking condition, and any intended replicate unit before calling this
+function; otherwise their judgments are pooled in the per-key majority.
+
+## See also
+
+[`check_positional_bias()`](https://shmercer.github.io/pairwiseLLM/reference/check_positional_bias.md)
+
+Other bias and consistency:
+[`check_positional_bias()`](https://shmercer.github.io/pairwiseLLM/reference/check_positional_bias.md)
 
 ## Examples
 

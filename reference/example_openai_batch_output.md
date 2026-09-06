@@ -15,6 +15,12 @@ data("example_openai_batch_output")
 A character vector of length 3, where each element is a single JSON line
 (JSONL).
 
+## Source
+
+Package-author-created fictional API response fixtures. Reproduction
+code is in `data-raw/example_writing_samples.R` in the source
+repository.
+
 ## Details
 
 The structure follows the current Batch API output schema, with fields
@@ -52,5 +58,5 @@ cat(example_openai_batch_output[1], "\n")
 tmp <- tempfile(fileext = ".jsonl")
 writeLines(example_openai_batch_output, con = tmp)
 tmp
-#> [1] "/tmp/RtmpSHtxxX/file1bee46f3f6d3.jsonl"
+#> [1] "/tmp/RtmpvQuvEe/file1b0a5165c2ef.jsonl"
 ```

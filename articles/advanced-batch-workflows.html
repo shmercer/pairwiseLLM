@@ -7,10 +7,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Advanced: Submitting and Polling Multiple Batches • pairwiseLLM</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/Inter-0.4.10/font.css" rel="stylesheet">
-<link href="../deps/JetBrains_Mono-0.4.10/font.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Advanced: Submitting and Polling Multiple Batches">
 </head>
@@ -22,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -32,22 +30,23 @@
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
 <li class="nav-item"><a class="nav-link" href="../index.html"><span class="fa fa-home"></span> Home</a></li>
-<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item"><a class="nav-link" href="../articles/getting-started.html">Get Started</a></li>
 <li class="active nav-item dropdown">
-  <button class="nav-link dropdown-toggle" type="button" id="dropdown-usage-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Usage Guides</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-usage-guides">
-<li><a class="dropdown-item" href="../articles/getting-started.html">Getting Started with pairwiseLLM</a></li>
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-detailed-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Detailed Guides</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-detailed-guides">
+<li><a class="dropdown-item" href="../articles/data-and-prompts.html">Data Schemas and Prompt Management</a></li>
+    <li><a class="dropdown-item" href="../articles/provider-controls-and-recovery.html">Provider Controls and Recovery</a></li>
+    <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
+    <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
+    <li><a class="dropdown-item" href="../articles/prompt-template-bias.html">Prompt Template Positional Bias Testing</a></li>
   </ul>
 </li>
-<li class="nav-item dropdown">
-  <button class="nav-link dropdown-toggle" type="button" id="dropdown-adaptive-pairing" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Adaptive Pairing</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-adaptive-pairing">
-<li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Adaptive Pairing &amp; Ranking</a></li>
-    <li><a class="dropdown-item" href="../articles/bayesian-btl-adaptive-pairing-design.html">Design: Bayesian BTL Adaptive Pairing</a></li>
-  </ul>
-</li>
-<li class="nav-item"><a class="nav-link" href="../articles/prompt-template-bias.html">Template Positional Bias</a></li>
+<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
@@ -107,6 +106,10 @@ providers)<br>
 <strong>Gemini</strong> (batch pipeline:
 <code><a href="../reference/run_gemini_batch_pipeline.html">run_gemini_batch_pipeline()</a></code>)</li>
 </ul>
+<p>Vertex AI Gemini API is intentionally excluded here. In this series,
+Vertex is supported on the live path only via
+<code>backend = "vertex"</code> with <code>VERTEX_API_KEY</code>, and
+generic batch wrappers reject Vertex explicitly.</p>
 <blockquote>
 <p><strong>Recommended approach:</strong> For <em>multiple</em> batches
 (e.g., templates × providers × models × forward/reverse), use:</p>
@@ -163,7 +166,8 @@ companion vignette:</p>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://purrr.tidyverse.org/" class="external-link">purrr</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://readr.tidyverse.org" class="external-link">readr</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://stringr.tidyverse.org" class="external-link">stringr</a></span><span class="op">)</span></span></code></pre></div>
-<p>Required environment variables:</p>
+<p>Configure the environment variable only for each provider included in
+your run plan:</p>
 <table class="table">
 <thead><tr class="header">
 <th>Provider</th>
@@ -184,6 +188,9 @@ companion vignette:</p>
 </tr>
 </tbody>
 </table>
+<p>This vignette only covers batch-capable providers. Vertex live
+requests use a separate <code>VERTEX_API_KEY</code> surface and are
+documented in <code><a href="../articles/getting-started.html">vignette("getting-started")</a></code>.</p>
 <p>Check which are set:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span>
@@ -191,20 +198,23 @@ companion vignette:</p>
 <span><span class="co">#&gt;   - OpenAI:         OPENAI_API_KEY</span></span>
 <span><span class="co">#&gt;   - Anthropic:      ANTHROPIC_API_KEY</span></span>
 <span><span class="co">#&gt;   - Google Gemini:  GEMINI_API_KEY</span></span>
+<span><span class="co">#&gt;   - Vertex AI:      VERTEX_API_KEY</span></span>
 <span><span class="co">#&gt;   - Together.ai:    TOGETHER_API_KEY</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:</span></span>
 <span><span class="co">#&gt;   OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"</span></span>
 <span><span class="co">#&gt;   ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"</span></span>
 <span><span class="co">#&gt;   GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"</span></span>
+<span><span class="co">#&gt;   VERTEX_API_KEY    = "YOUR_VERTEX_KEY_HERE"</span></span>
 <span><span class="co">#&gt;   TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 4 × 4</span></span></span>
-<span><span class="co">#&gt;   backend   service       env_var           has_key</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>         <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;lgl&gt;</span>  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> openai    OpenAI        OPENAI_API_KEY    FALSE  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> anthropic Anthropic     ANTHROPIC_API_KEY FALSE  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> gemini    Google Gemini GEMINI_API_KEY    FALSE  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> together  Together.ai   TOGETHER_API_KEY  FALSE</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 5 × 4</span></span></span>
+<span><span class="co">#&gt;   backend   service              env_var           has_key</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;lgl&gt;</span>  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> openai    OpenAI               OPENAI_API_KEY    FALSE  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> anthropic Anthropic            ANTHROPIC_API_KEY FALSE  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> gemini    Google Gemini        GEMINI_API_KEY    FALSE  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> vertex    Vertex AI Gemini API VERTEX_API_KEY    FALSE  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> together  Together.ai          TOGETHER_API_KEY  FALSE</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="example-data-and-prompt-template">3. Example Data and Prompt Template<a class="anchor" aria-label="anchor" href="#example-data-and-prompt-template"></a>
@@ -220,7 +230,7 @@ companion vignette:</p>
 <span><span class="co">#&gt; [1] "Overall Quality"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $description</span></span>
-<span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed,\nhow clearly the writing is organized, and how effective the language and\nconventions are."</span></span></code></pre></div>
 <p>Default prompt template:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
@@ -282,19 +292,16 @@ companion vignette:</p>
 <p>Here we define a small grid:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">anthropic_models</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  <span class="st">"claude-sonnet-4-5"</span>,</span>
-<span>  <span class="st">"claude-haiku-4-5"</span>,</span>
-<span>  <span class="st">"claude-opus-4-5"</span></span>
+<span>  <span class="st">"claude-haiku-4-5-20251001"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">gemini_models</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  <span class="st">"gemini-3-pro-preview"</span></span>
+<span>  <span class="st">"gemini-3.8-flash"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">openai_models</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
 <span>  <span class="st">"gpt-4.1"</span>,</span>
-<span>  <span class="st">"gpt-4o"</span>,</span>
-<span>  <span class="st">"gpt-5.1"</span></span>
+<span>  <span class="st">"gpt-5.6-luna"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">thinking_levels</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"no_thinking"</span>, <span class="st">"with_thinking"</span><span class="op">)</span></span>
@@ -303,7 +310,7 @@ companion vignette:</p>
 <span><span class="va">anthropic_grid</span> <span class="op">&lt;-</span> <span class="fu">tidyr</span><span class="fu">::</span><span class="fu"><a href="https://tidyr.tidyverse.org/reference/expand_grid.html" class="external-link">expand_grid</a></span><span class="op">(</span></span>
 <span>  provider  <span class="op">=</span> <span class="st">"anthropic"</span>,</span>
 <span>  model     <span class="op">=</span> <span class="va">anthropic_models</span>,</span>
-<span>  thinking  <span class="op">=</span> <span class="va">thinking_levels</span>,</span>
+<span>  thinking  <span class="op">=</span> <span class="st">"no_thinking"</span>,</span>
 <span>  direction <span class="op">=</span> <span class="va">directions</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -317,11 +324,9 @@ companion vignette:</p>
 <span><span class="va">openai_grid</span> <span class="op">&lt;-</span> <span class="fu">tidyr</span><span class="fu">::</span><span class="fu"><a href="https://tidyr.tidyverse.org/reference/expand_grid.html" class="external-link">expand_grid</a></span><span class="op">(</span></span>
 <span>  provider  <span class="op">=</span> <span class="st">"openai"</span>,</span>
 <span>  model     <span class="op">=</span> <span class="va">openai_models</span>,</span>
-<span>  thinking  <span class="op">=</span> <span class="va">thinking_levels</span>,</span>
+<span>  thinking  <span class="op">=</span> <span class="st">"no_thinking"</span>,</span>
 <span>  direction <span class="op">=</span> <span class="va">directions</span></span>
-<span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="co"># For example, only allow "with_thinking" for gpt-5.1</span></span>
-<span>  <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">model</span> <span class="op">==</span> <span class="st">"gpt-5.1"</span> <span class="op">|</span> <span class="va">thinking</span> <span class="op">==</span> <span class="st">"no_thinking"</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">batch_grid</span> <span class="op">&lt;-</span> <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/bind_rows.html" class="external-link">bind_rows</a></span><span class="op">(</span></span>
 <span>  <span class="va">anthropic_grid</span>,</span>
@@ -330,20 +335,17 @@ companion vignette:</p>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">batch_grid</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 22 × 4</span></span></span>
-<span><span class="co">#&gt;    provider  model             thinking      direction</span></span>
-<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>         <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> anthropic claude-sonnet-4-5 no_thinking   forward  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> anthropic claude-sonnet-4-5 no_thinking   reverse  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> anthropic claude-sonnet-4-5 with_thinking forward  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> anthropic claude-sonnet-4-5 with_thinking reverse  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> anthropic claude-haiku-4-5  no_thinking   forward  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> anthropic claude-haiku-4-5  no_thinking   reverse  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> anthropic claude-haiku-4-5  with_thinking forward  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> anthropic claude-haiku-4-5  with_thinking reverse  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> anthropic claude-opus-4-5   no_thinking   forward  </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> anthropic claude-opus-4-5   no_thinking   reverse  </span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 12 more rows</span></span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 8 × 4</span></span></span>
+<span><span class="co">#&gt;   provider  model                     thinking      direction</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                     <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>         <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> anthropic claude-haiku-4-5-20251001 no_thinking   forward  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> anthropic claude-haiku-4-5-20251001 no_thinking   reverse  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> gemini    gemini-3.8-flash          with_thinking forward  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> gemini    gemini-3.8-flash          with_thinking reverse  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> openai    gpt-4.1                   no_thinking   forward  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> openai    gpt-4.1                   no_thinking   reverse  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">7</span> openai    gpt-5.6-luna              no_thinking   forward  </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">8</span> openai    gpt-5.6-luna              no_thinking   reverse</span></span></code></pre></div>
 <p>We will also imagine multiple prompt templates have been registered.
 For simplicity, we use the same <code>tmpl</code> string, but in
 practice you would substitute different text:</p>
@@ -421,13 +423,12 @@ the example below we:</p>
 <span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">provider</span>, <span class="st">"openai"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="co"># Only request thoughts for models that support them in this workflow</span></span>
-<span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">include_thoughts</span> <span class="op">&lt;-</span> <span class="va">is_thinking</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grepl</a></span><span class="op">(</span><span class="st">"^gpt-5\\.1"</span>, <span class="va">model</span><span class="op">)</span></span>
+<span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">include_thoughts</span> <span class="op">&lt;-</span> <span class="va">is_thinking</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grepl</a></span><span class="op">(</span><span class="st">"^gpt-5"</span>, <span class="va">model</span><span class="op">)</span></span>
 <span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">include_raw</span>      <span class="op">&lt;-</span> <span class="cn">TRUE</span></span>
 <span>  <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">provider</span>, <span class="st">"anthropic"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">reasoning</span>        <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="va">is_thinking</span><span class="op">)</span> <span class="st">"enabled"</span> <span class="kw">else</span> <span class="st">"none"</span></span>
 <span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">include_thoughts</span> <span class="op">&lt;-</span> <span class="va">is_thinking</span></span>
 <span>    <span class="va">extra_args</span><span class="op">$</span><span class="va">include_raw</span>      <span class="op">&lt;-</span> <span class="cn">TRUE</span></span>
-<span>    <span class="co"># Optional: set deterministic temperature when not using reasoning</span></span>
 <span>    <span class="co"># Optional: set deterministic temperature when not using reasoning</span></span>
 <span>    <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="va">is_thinking</span><span class="op">)</span> <span class="va">extra_args</span><span class="op">$</span><span class="va">temperature</span> <span class="op">&lt;-</span> <span class="fl">0</span></span>
 <span>  <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">provider</span>, <span class="st">"gemini"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
@@ -465,7 +466,11 @@ the example below we:</p>
 <span><span class="op">}</span></span>
 <span></span>
 <span><span class="va">run_results</span> <span class="op">&lt;-</span> <span class="fu">purrr</span><span class="fu">::</span><span class="fu"><a href="https://purrr.tidyverse.org/reference/pmap.html" class="external-link">pmap</a></span><span class="op">(</span></span>
-<span>  <span class="va">run_plan</span>,</span>
+<span>  <span class="va">run_plan</span> <span class="op">|&gt;</span></span>
+<span>    <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span></span>
+<span>      <span class="va">template_id</span>, <span class="va">prompt_template</span>, <span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span>, <span class="va">direction</span>,</span>
+<span>      <span class="va">run_dir</span></span>
+<span>    <span class="op">)</span>,</span>
 <span>  <span class="va">submit_one_run</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -603,10 +608,8 @@ thinking × direction), you can:</p>
 <h2 id="citation">9. Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
-<p>Mercer, S. H. (2025). <em>Advanced: Submitting and polling multiple
-batches</em> [R package vignette]. In <em>pairwiseLLM: Pairwise
-comparison tools for large language model-based writing evaluation</em>.
-<a href="https://doi.org/10.32614/CRAN.package.pairwiseLLM" class="external-link uri">https://doi.org/10.32614/CRAN.package.pairwiseLLM</a></p>
+<p>Mercer, S. H. (2026). <em>Advanced: Submitting and polling multiple
+batches</em> [R package vignette]. Comprehensive R Archive Network. <a href="https://doi.org/10.32614/CRAN.package.pairwiseLLM" class="external-link uri">https://doi.org/10.32614/CRAN.package.pairwiseLLM</a></p>
 </blockquote>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
@@ -620,7 +623,7 @@ comparison tools for large language model-based writing evaluation</em>.
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

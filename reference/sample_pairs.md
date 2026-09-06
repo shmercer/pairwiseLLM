@@ -36,6 +36,19 @@ sample_pairs(pairs, pair_pct = 1, n_pairs = NULL, seed = NULL)
 
 A tibble containing the sampled rows of `pairs`.
 
+## See also
+
+[`read_samples_df()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_df.md),
+[`read_samples_dir()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_dir.md)
+
+Other pairing and data:
+[`alternate_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/alternate_pair_order.md),
+[`make_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/make_pairs.md),
+[`randomize_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/randomize_pair_order.md),
+[`read_samples_df()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_df.md),
+[`read_samples_dir()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_dir.md),
+[`sample_reverse_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/sample_reverse_pairs.md)
+
 ## Examples
 
 ``` r

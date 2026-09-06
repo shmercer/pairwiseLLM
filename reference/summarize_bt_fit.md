@@ -68,6 +68,17 @@ A tibble with columns:
 
   MLE reliability (numeric scalar) repeated on each row.
 
+## See also
+
+[`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),
+[`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
+
+Other frequentist models:
+[`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),
+[`build_elo_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_elo_data.md),
+[`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md),
+[`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md)
+
 ## Examples
 
 ``` r
@@ -75,7 +86,10 @@ A tibble with columns:
 data("example_writing_pairs")
 bt <- build_bt_data(example_writing_pairs)
 
-fit1 <- fit_bt_model(bt, engine = "sirt")
+if (requireNamespace("sirt", quietly = TRUE)) {
+  fit1 <- fit_bt_model(bt, engine = "sirt")
+  summarize_bt_fit(fit1)
+}
 #> Warning: NAs introduced by coercion
 #> **** Iteration 1 | Maximum parameter change=0.9874205
 #> **** Iteration 2 | Maximum parameter change=0.9604
@@ -177,9 +191,6 @@ fit1 <- fit_bt_model(bt, engine = "sirt")
 #> **** Iteration 98 | Maximum parameter change=0.1380878
 #> **** Iteration 99 | Maximum parameter change=0.1353261
 #> **** Iteration 100 | Maximum parameter change=0.1326196
-fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
-
-summarize_bt_fit(fit1)
 #> Warning: NAs introduced by coercion
 #> # A tibble: 20 × 6
 #>    ID      theta    se  rank engine reliability
@@ -204,7 +215,10 @@ summarize_bt_fit(fit1)
 #> 18 S04   -2.66   1.12     19 sirt         0.622
 #> 19 S01   -1.85   1.01     18 sirt         0.622
 #> 20 S03   -3.00   1.16     20 sirt         0.622
-summarize_bt_fit(fit2)
+if (requireNamespace("BradleyTerry2", quietly = TRUE)) {
+  fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+  summarize_bt_fit(fit2)
+}
 #> Warning: NAs introduced by coercion
 #> # A tibble: 20 × 6
 #>    ID       theta    se  rank engine        reliability

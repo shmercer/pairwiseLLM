@@ -40,6 +40,15 @@ A tibble with one row per request and columns:
 
 - `prompt_tokens`, `completion_tokens`, `total_tokens`
 
+## See also
+
+[`parse_openai_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_openai_batch_output.md),
+[`parse_anthropic_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_anthropic_batch_output.md)
+
+Other result normalization:
+[`parse_anthropic_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_anthropic_batch_output.md),
+[`parse_openai_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_openai_batch_output.md)
+
 ## Examples
 
 ``` r

@@ -94,6 +94,7 @@ with batch-specific additions:
 
 ## Details
 
+
     {
       "custom_id": "ANTH_S01_vs_S02",
       "result": {
@@ -109,6 +110,15 @@ as
 [`anthropic_compare_pair_live`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md),
 including extraction of extended thinking blocks (when enabled) into a
 separate `thoughts` column.
+
+## See also
+
+[`parse_openai_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_openai_batch_output.md),
+[`parse_gemini_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_gemini_batch_output.md)
+
+Other result normalization:
+[`parse_gemini_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_gemini_batch_output.md),
+[`parse_openai_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_openai_batch_output.md)
 
 ## Examples
 

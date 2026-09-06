@@ -30,6 +30,11 @@ A tibble with 190 rows and 3 variables:
   Character ID of the sample judged better in this pair (either `ID1` or
   `ID2`).
 
+## Source
+
+Deterministically derived from `example_writing_samples` by
+`data-raw/example_writing_samples.R` in the source repository.
+
 ## Details
 
 This dataset is useful for demonstrating functions that process paired

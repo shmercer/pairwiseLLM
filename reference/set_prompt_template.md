@@ -33,6 +33,19 @@ The default template is stored as a plain-text file in
 `inst/templates/default.txt` and loaded at run time. This makes it easy
 to inspect and modify the prompt text without changing the R code.
 
+## See also
+
+[`trait_description()`](https://shmercer.github.io/pairwiseLLM/reference/trait_description.md),
+[`build_prompt()`](https://shmercer.github.io/pairwiseLLM/reference/build_prompt.md)
+
+Other prompts and traits:
+[`build_prompt()`](https://shmercer.github.io/pairwiseLLM/reference/build_prompt.md),
+[`get_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/get_prompt_template.md),
+[`list_prompt_templates()`](https://shmercer.github.io/pairwiseLLM/reference/list_prompt_templates.md),
+[`register_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/register_prompt_template.md),
+[`remove_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/remove_prompt_template.md),
+[`trait_description()`](https://shmercer.github.io/pairwiseLLM/reference/trait_description.md)
+
 ## Examples
 
 ``` r

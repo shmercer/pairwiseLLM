@@ -13,7 +13,7 @@ summarize_items(
   refit = NULL,
   bind = FALSE,
   top_n = NULL,
-  sort_by = c("rank_mean", "theta_mean", "theta_sd", "degree", "pos_A_rate"),
+  sort_by = NULL,
   include_optional = TRUE
 )
 ```
@@ -44,7 +44,9 @@ summarize_items(
 
 - sort_by:
 
-  Column used for sorting. Defaults to `"rank_mean"`.
+  Column used for sorting. When `NULL`, the first available column in
+  `c("rank_link", "rank_raw", "rank_mean", "theta_link_eap", "theta_raw_eap", "theta_mean", "theta_sd", "degree", "pos_A_rate")`
+  is used.
 
 - include_optional:
 
@@ -52,10 +54,20 @@ summarize_items(
 
 ## Value
 
-A tibble with one row per item per refit. Columns reflect the canonical
-item log schema (for example `refit_id`, `ID`, `theta_mean`,
-`rank_mean`, `deg`, and `posA_prop`). Rank percentiles summarize
-per-draw induced ranks (lower is better). When
+A tibble with one row per item per refit. Columns reflect the supplied
+item-log schema. Standalone and legacy logs use fields such as `ID`,
+`theta_mean`, `rank_mean`, `deg`, and `posA_prop`. Current adaptive logs
+use `item_id`, `theta_raw_eap`, `theta_raw_sd`, `rank_raw`, `degree`,
+`pos_count_A`, and `pos_count_B`; linking logs can also include
+`theta_link_eap`, `theta_link_sd`, and `rank_link`. The function is a
+view and does not rename these fields.
+
+In standalone logs, `rank_mean` is the posterior mean of per-draw
+induced ranks. In current adaptive logs, `rank_raw` is the rank of the
+EAP scores. They are not the same statistic, although a request to sort
+a current log by the legacy name `"rank_mean"` maps to `"rank_raw"` for
+compatibility. Similarly, legacy sorting requests for `"theta_mean"` and
+`"theta_sd"` map to `"theta_raw_eap"` and `"theta_raw_sd"`. When
 `include_optional = FALSE`, optional columns such as repeated-pair or
 adjacency diagnostics are dropped if present.
 
@@ -68,6 +80,19 @@ was shown and whether it appeared as the first option (A position). When
 `refit = NULL`, the most recent refit is returned; when `refit = k`, the
 `k`-th refit is returned. When `bind = TRUE`, all refits are stacked
 into a single table and `refit` must be `NULL`.
+
+## See also
+
+[`adaptive_get_logs()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_get_logs.md),
+[`adaptive_step_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_step_log.md)
+
+Other adaptive logs:
+[`adaptive_get_logs()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_get_logs.md),
+[`adaptive_item_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_item_log.md),
+[`adaptive_results_history()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_results_history.md),
+[`adaptive_round_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_round_log.md),
+[`adaptive_step_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_step_log.md),
+[`summarize_refits()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_refits.md)
 
 ## Examples
 

@@ -19,6 +19,7 @@ build_gemini_batch_requests(
   top_p = NULL,
   top_k = NULL,
   max_output_tokens = NULL,
+  service_tier = "standard",
   include_thoughts = FALSE,
   ...
 )
@@ -37,7 +38,7 @@ build_gemini_batch_requests(
 
 - model:
 
-  Gemini model name, for example `"gemini-3-pro-preview"`. This
+  Gemini model name, for example `"gemini-3.5-flash-lite"`. This
   parameter is not embedded in each request object (the model is
   provided via the path), but is included here for symmetry with other
   backends and potential validation.
@@ -66,8 +67,9 @@ build_gemini_batch_requests(
   - For Gemini 3 Flash models (for example `"gemini-3-flash-preview"`),
     `"minimal"` is supported and is passed through as `"minimal"`.
 
-  - For non-Flash Gemini 3 models (for example
-    `"gemini-3-pro-preview"`), `"minimal"` is not supported.
+  - For models not matched by the package's Gemini 3 Flash-name detector
+    (for example `"gemini-3.5-flash-lite"`), `"minimal"` is not
+    supported.
 
   - For backward compatibility with earlier Gemini 3 Pro usage, `"low"`
     maps to `"low"` and both `"medium"` and `"high"` map to `"high"`.
@@ -94,6 +96,12 @@ build_gemini_batch_requests(
 - max_output_tokens:
 
   Optional integer. If `NULL`, omitted.
+
+- service_tier:
+
+  Gemini Developer API service tier. Use `"standard"` (default) or
+  `NULL` for provider default behavior, or `"flex"` / `"priority"` to
+  encode the documented Gemini `serviceTier` request field.
 
 - include_thoughts:
 
@@ -125,6 +133,36 @@ Each pair receives a unique `custom_id` of the form
 `"GEM_<ID1>_vs_<ID2>"` and a corresponding request object containing the
 prompt and generation configuration.
 
+## See also
+
+[`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md),
+[`llm_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.md)
+
+Other batch backends:
+[`anthropic_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_create_batch.md),
+[`anthropic_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_download_batch_results.md),
+[`anthropic_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_get_batch.md),
+[`anthropic_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_poll_batch_until_complete.md),
+[`build_anthropic_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_anthropic_batch_requests.md),
+[`build_openai_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_openai_batch_requests.md),
+[`gemini_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_create_batch.md),
+[`gemini_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_download_batch_results.md),
+[`gemini_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_get_batch.md),
+[`gemini_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_poll_batch_until_complete.md),
+[`llm_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.md),
+[`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md),
+[`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md),
+[`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md),
+[`openai_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_create_batch.md),
+[`openai_download_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_output.md),
+[`openai_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_get_batch.md),
+[`openai_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/openai_poll_batch_until_complete.md),
+[`openai_upload_batch_file()`](https://shmercer.github.io/pairwiseLLM/reference/openai_upload_batch_file.md),
+[`run_anthropic_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_anthropic_batch_pipeline.md),
+[`run_gemini_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_gemini_batch_pipeline.md),
+[`run_openai_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_openai_batch_pipeline.md),
+[`write_openai_batch_file()`](https://shmercer.github.io/pairwiseLLM/reference/write_openai_batch_file.md)
+
 ## Examples
 
 ``` r
@@ -138,10 +176,10 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Gemini 3 Pro example (existing behavior)
+# Dated tested Gemini Developer API configuration
 reqs <- build_gemini_batch_requests(
   pairs             = pairs,
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,

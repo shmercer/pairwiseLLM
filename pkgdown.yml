@@ -1,13 +1,19 @@
-pandoc: 3.1.11
-pkgdown: 2.2.0
+pandoc: 3.8.3
+pkgdown: 2.2.1
 pkgdown_sha: ~
 articles:
+  adaptive-linking-design: adaptive-linking-design.html
+  adaptive-linking: adaptive-linking.html
   adaptive-pairing: adaptive-pairing.html
   advanced-batch-workflows: advanced-batch-workflows.html
-  bayesian-btl-adaptive-pairing-design: bayesian-btl-adaptive-pairing-design.html
+  bayesian-btl: bayesian-btl.html
+  data-and-prompts: data-and-prompts.html
   getting-started: getting-started.html
+  model-compatibility: model-compatibility.html
   prompt-template-bias: prompt-template-bias.html
-last_built: 2026-02-11T04:39Z
+  provider-controls-and-recovery: provider-controls-and-recovery.html
+  within-set-adaptive-design: within-set-adaptive-design.html
+last_built: 2026-09-06T21:12Z
 urls:
   reference: https://shmercer.github.io/pairwiseLLM/reference
   article: https://shmercer.github.io/pairwiseLLM/articles

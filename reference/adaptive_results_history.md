@@ -52,7 +52,9 @@ Other adaptive logs:
 [`adaptive_get_logs()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_get_logs.md),
 [`adaptive_item_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_item_log.md),
 [`adaptive_round_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_round_log.md),
-[`adaptive_step_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_step_log.md)
+[`adaptive_step_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_step_log.md),
+[`summarize_items()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_items.md),
+[`summarize_refits()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_refits.md)
 
 ## Examples
 

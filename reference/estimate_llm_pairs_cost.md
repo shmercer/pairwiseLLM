@@ -21,7 +21,7 @@ estimate_llm_pairs_cost(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "together"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together"),
   endpoint = c("chat.completions", "responses"),
   mode = c("live", "batch"),
   n_test = 25,
@@ -68,7 +68,7 @@ estimate_llm_pairs_cost(
 - backend:
 
   Backend for the pilot run; one of `"openai"`, `"anthropic"`,
-  `"gemini"`, or `"together"`.
+  `"gemini"`, `"vertex"`, or `"together"`.
 
 - endpoint:
 
@@ -99,12 +99,14 @@ estimate_llm_pairs_cost(
 - cost_per_million_input:
 
   Cost per one million input tokens (prompt tokens), in your currency of
-  choice.
+  choice. Supply a current price for the selected provider, model,
+  endpoint, and execution mode.
 
 - cost_per_million_output:
 
   Cost per one million output tokens (completion tokens).
-  Reasoning/thinking tokens are treated as output.
+  Reasoning/thinking tokens are treated as output. Supply and verify
+  this price as for `cost_per_million_input`.
 
 - batch_discount:
 
@@ -164,7 +166,36 @@ An object of class `"pairwiseLLM_cost_estimate"`, a list with:
 
 The estimator does not require a provider tokenizer. Input tokens are
 estimated from the byte length of the fully constructed prompt and
-calibrated on the pilot's observed `prompt_tokens`.
+calibrated on the pilot's observed `prompt_tokens`. Expected remaining
+completion tokens use the arithmetic mean of usable pilot completion
+counts. Budget completion tokens use the type-7 sample quantile selected
+by `budget_quantile`. These are token-use estimates; the function does
+not supply, validate, or refresh provider prices.
+
+Pilot pairs are selected from `pairs` and are excluded from
+`remaining_pairs` whether their calls succeed or fail. Calibration uses
+successful normalized rows with non-missing input-token counts and a
+missing or 200 status. Completion estimates use the analogous usable
+completion-token rows. With no usable input counts, calibration falls
+back to one token per four prompt bytes; with one row it uses a
+zero-intercept ratio; with multiple distinct byte lengths it uses
+ordinary least squares; and with multiple identical byte lengths it uses
+their mean token count as a constant prediction. With no usable
+completion counts, completion and total-cost estimates that depend on
+them are `NA`.
+
+The observed pilot token totals are always priced as live calls. When
+`mode = "batch"`, `batch_discount` applies only to estimated remaining
+input and output tokens. The returned pilot object and remaining pairs
+are not automatically merged into a later job result. Local Ollama
+models are unsupported because this function estimates token-billed API
+cost rather than local compute cost.
+
+## See also
+
+[`make_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/make_pairs.md),
+[`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md),
+[`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md)
 
 ## Examples
 

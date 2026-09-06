@@ -95,6 +95,17 @@ Ability estimates (`theta`) represent latent "writing quality"
 parameters on a log-odds scale. Standard errors are included for both
 modeling engines. MLE reliability is only available from sirt.
 
+## See also
+
+[`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),
+[`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
+
+Other frequentist models:
+[`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),
+[`build_elo_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_elo_data.md),
+[`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md),
+[`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
+
 ## Examples
 
 ``` r
@@ -102,7 +113,9 @@ modeling engines. MLE reliability is only available from sirt.
 data("example_writing_pairs")
 bt <- build_bt_data(example_writing_pairs)
 
-fit1 <- fit_bt_model(bt, engine = "sirt")
+if (requireNamespace("sirt", quietly = TRUE)) {
+  fit1 <- fit_bt_model(bt, engine = "sirt")
+}
 #> Warning: NAs introduced by coercion
 #> **** Iteration 1 | Maximum parameter change=0.9874205
 #> **** Iteration 2 | Maximum parameter change=0.9604
@@ -204,9 +217,9 @@ fit1 <- fit_bt_model(bt, engine = "sirt")
 #> **** Iteration 98 | Maximum parameter change=0.1380878
 #> **** Iteration 99 | Maximum parameter change=0.1353261
 #> **** Iteration 100 | Maximum parameter change=0.1326196
-fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
-#> Warning: the ‘nobars’ function has moved to the reformulas package. Please update your imports, or ask an upstream package maintainter to do so.
-#> This warning is displayed once per session.
-#> Warning: the ‘findbars’ function has moved to the reformulas package. Please update your imports, or ask an upstream package maintainter to do so.
-#> This warning is displayed once per session.
+if (requireNamespace("BradleyTerry2", quietly = TRUE)) {
+  fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+}
+#> Warning: the ‘nobars’ function has moved to the reformulas package. Please update your imports, or ask an upstream package maintainer to do so.
+#> Warning: the ‘findbars’ function has moved to the reformulas package. Please update your imports, or ask an upstream package maintainer to do so.
 ```

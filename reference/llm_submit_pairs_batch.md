@@ -1,8 +1,9 @@
 # Submit pairs to an LLM backend via batch API
 
 `llm_submit_pairs_batch()` is a backend-agnostic front-end for running
-provider batch pipelines (OpenAI, Anthropic, Gemini). Together.ai and
-Ollama are supported only for live comparisons.
+provider batch pipelines (OpenAI, Anthropic, Gemini). Vertex,
+Together.ai, and Ollama are supported only for live comparisons in this
+series.
 
 It mirrors
 [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
@@ -18,22 +19,18 @@ For OpenAI, this helper will by default:
 
 - Automatically switch to the `responses` style endpoint when:
 
-  - `model` is in the GPT-5 series (including `gpt-5`, `gpt-5-mini`, and
-    date-stamped `gpt-5.1/5.2` variants), and
+  - `model` is in the GPT-5 series (including `gpt-5`, `gpt-5-mini`,
+    `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, and date-stamped
+    GPT-5.x variants), and
 
   - either `include_thoughts = TRUE` **or** a `reasoning` effort is
     supplied in `...` (for GPT-5, `reasoning = "none"` maps to
     `"minimal"`).
 
-**Temperature Defaults:** For OpenAI, if `temperature` is not specified
-in `...`:
-
-- It defaults to `0` (deterministic) for standard models or when
-  reasoning is disabled (`reasoning = "none"`) on supported GPT-5.1/5.2
-  models.
-
-- It remains `NULL` (API default) when reasoning is enabled, or for
-  GPT-5 minimal reasoning (which ignores temperature).
+**Sampling defaults:** For OpenAI, omitted `temperature` and `top_p`
+values are not added to the request, so the model/provider defaults
+apply. Reasoning modes that do not support sampling parameters continue
+to require them to be `NULL`.
 
 For Anthropic, standard and date-stamped model names (e.g.
 `"claude-sonnet-4-5-20250929"`) are supported. This helper delegates
@@ -43,9 +40,8 @@ and
 [`build_anthropic_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_anthropic_batch_requests.md),
 which apply the following rules:
 
-- When `reasoning = "none"` (no extended thinking), the default
-  temperature is `0` (deterministic) unless you explicitly supply a
-  different `temperature` in `...`.
+- When `reasoning = "none"` (no extended thinking), omitted
+  `temperature` and `top_p` values use the model/provider defaults.
 
 - When `reasoning = "enabled"` (extended thinking), Anthropic requires
   `temperature = 1`. If you supply a different value in `...`, an error
@@ -98,20 +94,23 @@ llm_submit_pairs_batch(
 - backend:
 
   Character scalar; one of `"openai"`, `"anthropic"`, or `"gemini"`.
-  Matching is case-insensitive.
+  Matching is case-insensitive. If `"vertex"` is supplied, this function
+  aborts explicitly because Vertex batch mode is not implemented in this
+  series.
 
 - model:
 
   Character scalar model name to use for the batch job.
 
   - For `"openai"`, use models like `"gpt-4.1"`, `"gpt-5"`,
-    `"gpt-5-mini"`, `"gpt-5.1"`, or `"gpt-5.2"` (including date-stamped
-    versions like `"gpt-5.2-2025-12-11"`).
+    `"gpt-5-mini"`, `"gpt-5.6-sol"`, `"gpt-5.6-terra"`, or
+    `"gpt-5.6-luna"` (including date-stamped GPT-5.x versions where
+    available).
 
-  - For `"anthropic"`, use provider names like `"claude-4-5-sonnet"` or
+  - For `"anthropic"`, use provider names like `"claude-sonnet-4-5"` or
     date-stamped versions like `"claude-sonnet-4-5-20250929"`.
 
-  - For `"gemini"`, use names like `"gemini-3-pro-preview"`.
+  - For `"gemini"`, use names like `"gemini-3.5-flash-lite"`.
 
 - trait_name:
 
@@ -152,6 +151,8 @@ llm_submit_pairs_batch(
   this may include `endpoint`, `temperature`, `top_p`, `logprobs`,
   `reasoning`, `service_tier`, etc. For Anthropic, this may include
   `reasoning`, `max_tokens`, `temperature`, or `thinking_budget_tokens`.
+  For Gemini, this may include `thinking_level`, `temperature`, `top_p`,
+  `top_k`, `max_output_tokens`, and `service_tier`.
 
 ## Value
 
@@ -174,6 +175,36 @@ A list of class `"pairwiseLLM_batch"` containing at least:
 
 Additional fields returned by the backend-specific pipeline functions
 are preserved.
+
+## See also
+
+[`llm_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.md),
+[`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md)
+
+Other batch backends:
+[`anthropic_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_create_batch.md),
+[`anthropic_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_download_batch_results.md),
+[`anthropic_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_get_batch.md),
+[`anthropic_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_poll_batch_until_complete.md),
+[`build_anthropic_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_anthropic_batch_requests.md),
+[`build_gemini_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_gemini_batch_requests.md),
+[`build_openai_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_openai_batch_requests.md),
+[`gemini_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_create_batch.md),
+[`gemini_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_download_batch_results.md),
+[`gemini_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_get_batch.md),
+[`gemini_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_poll_batch_until_complete.md),
+[`llm_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.md),
+[`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md),
+[`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md),
+[`openai_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_create_batch.md),
+[`openai_download_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_output.md),
+[`openai_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_get_batch.md),
+[`openai_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/openai_poll_batch_until_complete.md),
+[`openai_upload_batch_file()`](https://shmercer.github.io/pairwiseLLM/reference/openai_upload_batch_file.md),
+[`run_anthropic_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_anthropic_batch_pipeline.md),
+[`run_gemini_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_gemini_batch_pipeline.md),
+[`run_openai_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_openai_batch_pipeline.md),
+[`write_openai_batch_file()`](https://shmercer.github.io/pairwiseLLM/reference/write_openai_batch_file.md)
 
 ## Examples
 
@@ -211,7 +242,7 @@ res_openai <- llm_download_batch_results(batch_openai)
 batch_anthropic <- llm_submit_pairs_batch(
   pairs             = pairs,
   backend           = "anthropic",
-  model             = "claude-4-5-sonnet",
+  model             = "claude-sonnet-4-5",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -223,7 +254,7 @@ res_anthropic <- llm_download_batch_results(batch_anthropic)
 batch_gemini <- llm_submit_pairs_batch(
   pairs             = pairs,
   backend           = "gemini",
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,

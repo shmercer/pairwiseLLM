@@ -29,6 +29,11 @@ A tibble with 20 rows and 3 variables:
   Integer from 1 to 10 indicating the intended relative quality of the
   sample (higher = better).
 
+## Source
+
+Package-author-created synthetic examples. Reproduction code is in
+`data-raw/example_writing_samples.R` in the source repository.
+
 ## Examples
 
 ``` r

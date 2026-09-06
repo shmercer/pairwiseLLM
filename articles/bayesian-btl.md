@@ -1,0 +1,163 @@
+# Standalone Bayesian BTL with CmdStan
+
+[`fit_bayes_btl_mcmc()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bayes_btl_mcmc.md)
+fits a Bayesian Bradley–Terry–Luce (BTL) model to an existing fixed set
+of pairwise outcomes. It reuses the adaptive fit and summary contracts
+but does not perform adaptive pair selection.
+
+## Prerequisites
+
+The fit requires the suggested `cmdstanr` package, CmdStan, and a
+working C++ toolchain. Installation is a machine-level setup and does
+not require provider credentials. Executable fitting chunks are disabled
+during ordinary package builds. Set
+`PAIRWISELLM_RUN_CMDSTAN_VIGNETTES=true` to opt in when rendering this
+source locally.
+
+``` r
+
+install.packages(
+  "cmdstanr",
+  repos = c("https://stan-dev.r-universe.dev", getOption("repos"))
+)
+cmdstanr::check_cmdstan_toolchain(fix = TRUE)
+cmdstanr::install_cmdstan()
+```
+
+``` r
+
+cmdstan_available
+#> [1] FALSE
+```
+
+## Prepare canonical input
+
+The public builder accepts `ID1`, `ID2`, and `better_id`, validates that
+each winner belongs to its pair, and adds deterministic keys, iteration
+values, timestamps, and provenance columns.
+
+``` r
+
+library(pairwiseLLM)
+
+data("example_writing_pairs", package = "pairwiseLLM")
+observed <- example_writing_pairs[seq_len(min(40L, nrow(example_writing_pairs))), ]
+results_tbl <- build_btl_results_data(
+  observed,
+  backend = "offline_fixture",
+  model = "deterministic_observations"
+)
+ids <- sort(unique(c(results_tbl$A_id, results_tbl$B_id)))
+
+results_tbl[, c("pair_uid", "A_id", "B_id", "better_id", "winner_pos", "phase")]
+#> # A tibble: 40 × 6
+#>    pair_uid  A_id  B_id  better_id winner_pos phase 
+#>    <chr>     <chr> <chr> <chr>          <int> <chr> 
+#>  1 S01:S02#1 S01   S02   S02                2 phase2
+#>  2 S01:S03#1 S01   S03   S03                2 phase2
+#>  3 S01:S04#1 S01   S04   S04                2 phase2
+#>  4 S01:S05#1 S01   S05   S01                1 phase2
+#>  5 S01:S06#1 S01   S06   S06                2 phase2
+#>  6 S01:S07#1 S01   S07   S07                2 phase2
+#>  7 S01:S08#1 S01   S08   S08                2 phase2
+#>  8 S01:S09#1 S01   S09   S09                2 phase2
+#>  9 S01:S10#1 S01   S10   S10                2 phase2
+#> 10 S01:S11#1 S01   S11   S11                2 phase2
+#> # ℹ 30 more rows
+```
+
+The four likelihood variants are:
+
+- `"btl"`: item parameters only;
+- `"btl_e"`: item parameters plus a lapse/error component;
+- `"btl_b"`: item parameters plus a presentation-position effect;
+- `"btl_e_b"`: both lapse and position components (the default).
+
+Choose the variant before inspecting results, based on the study design
+and estimands. A more complex variant is not automatically preferable,
+especially with sparse data.
+
+## Fit and summarize
+
+The following deterministic example is not evaluated during
+documentation builds. Run it after the availability check returns
+`TRUE`. The small iteration count keeps the walkthrough practical and is
+for workflow demonstration, not production inference.
+
+``` r
+
+fit <- fit_bayes_btl_mcmc(
+  results = results_tbl,
+  ids = ids,
+  model_variant = "btl_e_b",
+  cmdstan = list(
+    chains = 2L,
+    parallel_chains = 2L,
+    iter_warmup = 250L,
+    iter_sampling = 250L,
+    seed = 7007L,
+    core_fraction = 1
+  )
+)
+
+refits <- summarize_refits(fit)
+items <- summarize_items(fit)
+
+refits[, c(
+  "round_id", "total_pairs", "diagnostics_pass",
+  "divergences", "max_rhat", "min_ess_bulk"
+)]
+items[, c("ID", "theta_mean", "theta_sd", "rank_mean", "deg")]
+```
+
+The item scale is relative and identified by the model constraints; its
+absolute origin is not an external score. Posterior SDs and intervals
+are conditional on the selected model and observed judgments. Check
+divergences, R-hat, effective sample size, and sampling warnings before
+interpreting ranks. A failed diagnostic is not repaired by hiding the
+warning or reporting only posterior means.
+
+## Cumulative refits
+
+`pair_counts` fits increasing subsets of the same data and records one
+round/item-log view per subset. `subset_method = "first"` follows row
+order. `"sample"` creates one seeded permutation and uses nested
+prefixes, so provide `seed` for reproducibility.
+
+``` r
+
+cumulative <- fit_bayes_btl_mcmc(
+  results_tbl,
+  ids = ids,
+  pair_counts = c(20L, 40L),
+  subset_method = "sample",
+  seed = 7007L,
+  cmdstan = list(chains = 2L, parallel_chains = 2L, seed = 7007L)
+)
+
+summarize_refits(cumulative)
+summarize_items(cumulative, refit_id = 2L)
+```
+
+## Files, failures, and reproducibility
+
+CmdStan writes generated C++/executables and sampling CSV files to its
+cache or configured `cmdstan$output_dir`. Preserve the seed, model
+variant, CmdStan configuration, package version, and diagnostics with
+reported results. Missing CmdStan, invalid schemas, unknown IDs, invalid
+winners, empty data, invalid subset sizes, and unsupported variants
+abort explicitly. Sampling failures and poor diagnostics should be
+investigated rather than converted to partial rankings.
+
+For adaptive selection and stopping, use [Guide: Adaptive
+Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md).
+For fixed-pair frequentist alternatives, see
+[`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
+and
+[`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md).
+
+## Citation
+
+> Mercer, S. H. (2026). *Standalone Bayesian BTL with CmdStan* \[R
+> package vignette\]. Comprehensive R Archive Network.
+> <https://doi.org/10.32614/CRAN.package.pairwiseLLM>

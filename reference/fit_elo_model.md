@@ -117,6 +117,17 @@ e0190393.
 [doi:10.1371/journal.pone.0190393](https://doi.org/10.1371/journal.pone.0190393)
 .
 
+## See also
+
+[`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),
+[`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
+
+Other frequentist models:
+[`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),
+[`build_elo_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_elo_data.md),
+[`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md),
+[`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
+
 ## Examples
 
 ``` r
@@ -124,33 +135,11 @@ data("example_writing_pairs", package = "pairwiseLLM")
 
 elo_data <- build_elo_data(example_writing_pairs)
 
-fit <- fit_elo_model(elo_data, runs = 5, verbose = FALSE)
-fit$elo
-#> # A tibble: 20 × 2
-#>    ID       elo
-#>    <chr>  <dbl>
-#>  1 S01   -377. 
-#>  2 S02   -281. 
-#>  3 S03   -366. 
-#>  4 S04   -360. 
-#>  5 S05   -257. 
-#>  6 S06   -196. 
-#>  7 S07   -159. 
-#>  8 S08    -62  
-#>  9 S09    -53.8
-#> 10 S10    -31.4
-#> 11 S11     14.2
-#> 12 S12     36.6
-#> 13 S13    179. 
-#> 14 S14    144. 
-#> 15 S15    186. 
-#> 16 S16    200. 
-#> 17 S17    273. 
-#> 18 S18    401. 
-#> 19 S19    310. 
-#> 20 S20    400. 
-fit$reliability
-#> [1] 0.8100695
-fit$reliability_weighted
-#> [1] 0.9208828
+if (requireNamespace("EloChoice", quietly = TRUE)) {
+  fit <- fit_elo_model(elo_data, runs = 5, verbose = FALSE)
+  fit$elo
+  fit$reliability
+  fit$reliability_weighted
+}
+#> [1] 0.9212787
 ```

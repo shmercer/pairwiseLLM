@@ -65,6 +65,11 @@ A tibble with 190 rows and 12 variables:
 
   Model label for provenance.
 
+## Source
+
+Deterministically derived from `example_writing_pairs` by
+`data-raw/example_writing_samples.R` in the source repository.
+
 ## Examples
 
 ``` r

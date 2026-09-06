@@ -7,10 +7,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Prompt Template Positional Bias Testing • pairwiseLLM</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/Inter-0.4.10/font.css" rel="stylesheet">
-<link href="../deps/JetBrains_Mono-0.4.10/font.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Prompt Template Positional Bias Testing">
 </head>
@@ -22,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -32,22 +30,23 @@
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
 <li class="nav-item"><a class="nav-link" href="../index.html"><span class="fa fa-home"></span> Home</a></li>
-<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
-<li class="nav-item dropdown">
-  <button class="nav-link dropdown-toggle" type="button" id="dropdown-usage-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Usage Guides</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-usage-guides">
-<li><a class="dropdown-item" href="../articles/getting-started.html">Getting Started with pairwiseLLM</a></li>
+<li class="nav-item"><a class="nav-link" href="../articles/getting-started.html">Get Started</a></li>
+<li class="active nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-detailed-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Detailed Guides</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-detailed-guides">
+<li><a class="dropdown-item" href="../articles/data-and-prompts.html">Data Schemas and Prompt Management</a></li>
+    <li><a class="dropdown-item" href="../articles/provider-controls-and-recovery.html">Provider Controls and Recovery</a></li>
+    <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
+    <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
+    <li><a class="dropdown-item" href="../articles/prompt-template-bias.html">Prompt Template Positional Bias Testing</a></li>
   </ul>
 </li>
-<li class="nav-item dropdown">
-  <button class="nav-link dropdown-toggle" type="button" id="dropdown-adaptive-pairing" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Adaptive Pairing</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-adaptive-pairing">
-<li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Adaptive Pairing &amp; Ranking</a></li>
-    <li><a class="dropdown-item" href="../articles/bayesian-btl-adaptive-pairing-design.html">Design: Bayesian BTL Adaptive Pairing</a></li>
-  </ul>
-</li>
-<li class="active nav-item"><a class="nav-link" href="../articles/prompt-template-bias.html">Template Positional Bias</a></li>
+<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
@@ -93,8 +92,8 @@ bias</strong><br>
 <li>Quantified both <strong>reverse-order consistency</strong> and
 <strong>preference for SAMPLE_1</strong><br>
 </li>
-<li>Selected templates that appear robust across multiple providers and
-reasoning configurations</li>
+<li>Recorded descriptive results for several historical provider
+configurations</li>
 </ul>
 <p>The vignette also shows how to:</p>
 <ul>
@@ -117,6 +116,13 @@ reasoning configurations</li>
 <div class="section level2">
 <h2 id="testing-process-summary">2. Testing Process Summary<a class="anchor" aria-label="anchor" href="#testing-process-summary"></a>
 </h2>
+<p>This section describes an archived 2025 experiment bundled with
+pairwiseLLM 1.3.0. The result artifact was added to the repository on
+2025-12-10; the exact dates on which its provider calls ran were not
+recorded. It is not a catalog of currently available models. In
+particular, <code>gemini-3-pro-preview</code> is retired, and the old
+Together identifiers below are retained only to identify archived result
+rows.</p>
 <p>At a high level, the testing pipeline works as follows:</p>
 <ol style="list-style-type: decimal">
 <li>
@@ -131,7 +137,7 @@ writing samples.</li>
 <li>
 <p><strong>Generate forward and reverse pairs</strong></p>
 <ul>
-<li>Use <code><a href="../reference/make_pairs.html">make_pairs()</a></code> to generate all ordered pairs.</li>
+<li>Use <code><a href="../reference/make_pairs.html">make_pairs()</a></code> to generate all unordered pairs.</li>
 <li>Use <code><a href="../reference/alternate_pair_order.html">alternate_pair_order()</a></code> to build a deterministic
 “forward” set.</li>
 <li>Use <code><a href="../reference/sample_reverse_pairs.html">sample_reverse_pairs()</a></code> with
@@ -157,8 +163,7 @@ via <code>get_prompt_template("testX")</code>.</li>
 <ul>
 <li>Template (<code>test1</code>–<code>test5</code>)</li>
 <li>Backend (Anthropic, Gemini, OpenAI, TogetherAI)</li>
-<li>Model (e.g., <code>claude-sonnet-4-5</code>, <code>gpt-4o</code>,
-<code>gemini-3-pro-preview</code>)</li>
+<li>Historical model recorded in the bundled experiment</li>
 <li>Thinking configuration (<code>"no_thinking"</code> vs
 <code>"with_thinking"</code>, where applicable)</li>
 <li>Direction (<code>forward</code> vs <code>reverse</code>)</li>
@@ -178,7 +183,8 @@ sets).</p></li>
 <p><strong>Reverse-order consistency</strong></p>
 <ul>
 <li>
-<p>For each (template, provider, model, thinking), compare:</p>
+<p>Within each (template, backend, model, thinking) condition,
+compare:</p>
 <ul>
 <li>The model’s decisions for a pair in the forward set</li>
 <li>The decisions for the same pair in the reverse set (where positions
@@ -203,12 +209,12 @@ winner</strong>.</li>
 <p>Use <code><a href="../reference/check_positional_bias.html">check_positional_bias()</a></code> on the
 reverse-consistency results to quantify:</p>
 <ul>
+<li>the descriptive proportion of valid forward and reverse outcomes
+where SAMPLE_1 is chosen as better; and</li>
 <li>
-<code>prop_pos1</code>: proportion of all comparisons where SAMPLE_1
-is chosen as better.</li>
-<li>
-<code>p_sample1_overall</code>: p-value from a binomial test of
-whether the probability of choosing SAMPLE_1 differs from 0.5.</li>
+<code>p_sample1_overall</code>: the current paired exact test
+comparing inconsistent pairs where position 1 wins both presentations
+with those where position 2 wins both presentations.</li>
 </ul>
 </li>
 </ul>
@@ -223,8 +229,9 @@ table.</li>
 <li>High <code>prop_consistent</code> (close to 1).</li>
 <li>
 <code>prop_pos1</code> close to 0.5.</li>
-<li>Non-significant positional bias (<code>p_sample1_overall</code> not
-&lt; .05).</li>
+<li>Directional preference estimates and their uncertainty, without
+treating a non-significant test as evidence that positional preference
+is absent.</li>
 </ul>
 </li>
 </ul>
@@ -246,15 +253,16 @@ the experiment.</p>
 <span><span class="co">#&gt; [1] "Overall Quality"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $description</span></span>
-<span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed,\nhow clearly the writing is organized, and how effective the language and\nconventions are."</span></span></code></pre></div>
 <p>In <em>pairwiseLLM</em>, every pairwise comparison evaluates writing
 samples on a <strong>trait</strong> — a specific dimension of writing
 quality, such as:</p>
 <ul>
 <li><strong>Overall Quality</strong></li>
 <li><strong>Organization</strong></li>
-<li><strong>Development</strong></li>
-<li><strong>Language</strong></li>
+<li>
+<strong>IRRC</strong>, an overall-writing rubric spanning prompt
+task, development of explanation, organization, and language use</li>
 </ul>
 <p>The trait determines <em>what the model should focus on</em> when
 choosing which sample is better. Each trait has:</p>
@@ -275,11 +283,11 @@ choosing which sample is better. Each trait has:</p>
 <p>The package includes some predefined traits accessible by name:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"organization"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"organization"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"IRRC"</span><span class="op">)</span></span></code></pre></div>
 <p>Calling a built-in trait returns a list with:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="sc">$</span>list</span>
-<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="sc">$</span>name         <span class="co"># human-friendly name</span></span>
-<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="sc">$</span>description  <span class="co"># the textual rubric used in prompts</span></span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="sc">$</span>name         <span class="co"># human-friendly name</span></span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="sc">$</span>description  <span class="co"># the textual rubric used in prompts</span></span></code></pre></div>
 <p>Example:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"organization"</span><span class="op">)</span></span>
@@ -303,8 +311,7 @@ wherever <code>{TRAIT_DESCRIPTION}</code> appears.</p>
 <span>  text1      <span class="op">=</span> <span class="va">sample1</span>,</span>
 <span>  text2      <span class="op">=</span> <span class="va">sample2</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>This will automatically update all trait-specific wording in the
-prompt.</p>
+<p>This will update all trait-specific wording in the prompt.</p>
 <hr>
 </div>
 <div class="section level3">
@@ -341,9 +348,8 @@ own trait directly in the call:</p>
 different traits may produce different sensitivity patterns in LLM
 behavior. For example:</p>
 <ul>
-<li>“Overall Quality” may yield more stable results than
-“Development”</li>
-<li>Short, concise trait definitions may reduce positional bias</li>
+<li>Different rubrics can produce different response patterns</li>
+<li>Rubric wording can be treated as an experimental condition</li>
 <li>Custom traits allow experimentation with alternative rubric
 wordings</li>
 </ul>
@@ -584,30 +590,31 @@ datasets for each experiment:</p>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> S18   S06  </span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> S07   S08</span></span></code></pre></div>
 <p>In <code>pairs_reverse</code>, SAMPLE_1 and SAMPLE_2 are swapped for
-every pair relative to <code>pairs_forward</code>. All other metadata
-(IDs, traits, etc.) remain consistent so that we can compare results
-pairwise.</p>
+every pair relative to <code>pairs_forward</code>. Analyze each model,
+template, trait, and reasoning condition separately:
+<code><a href="../reference/compute_reverse_consistency.html">compute_reverse_consistency()</a></code> does not group on those
+columns and would otherwise pool duplicate votes within each unordered
+pair.</p>
 <hr>
 </div>
 <div class="section level2">
 <h2 id="thinking-reasoning-configurations-used-in-testing">7. Thinking / Reasoning Configurations Used in Testing<a class="anchor" aria-label="anchor" href="#thinking-reasoning-configurations-used-in-testing"></a>
 </h2>
-<p>Many LLM providers now expose <em>reasoning-enhanced</em> decoding
-modes (sometimes called “thinking,” “chain-of-thought modules,” or
-“structured reasoning engines”).<br>
-In <code>pairwiseLLM</code>, these modes are exposed through a simple
-parameter:</p>
-<pre><code><span><span class="va">thinking</span> <span class="op">=</span> <span class="st">"no_thinking"</span>   <span class="co"># standard inference mode  </span></span>
-<span><span class="va">thinking</span> <span class="op">=</span> <span class="st">"with_thinking"</span> <span class="co"># activates provider's reasoning system</span></span></code></pre>
-<p>However, the <em>actual meaning</em> of these settings is
-<strong>backend-specific</strong>. Below we describe the exact
-configurations used in our positional-bias tests.</p>
+<p>The archived artifact uses a <code>thinking</code> column to
+distinguish two historical request configurations:</p>
+<pre><code><span><span class="va">thinking</span> <span class="op">=</span> <span class="st">"no_thinking"</span>   <span class="co"># archived grouping label</span></span>
+<span><span class="va">thinking</span> <span class="op">=</span> <span class="st">"with_thinking"</span> <span class="co"># archived grouping label</span></span></code></pre>
+<p>These strings are labels in the result artifact, not arguments
+accepted by the current public wrappers. The underlying request fields
+were backend-specific. Below we describe the historical configurations
+recorded with the experiment; consult current provider documentation and
+the package’s dated compatibility registry before constructing a new
+request.</p>
 <hr>
 <div class="section level3">
 <h3 id="anthropic-claude-4-5-models">7.1 Anthropic (Claude 4.5 models)<a class="anchor" aria-label="anchor" href="#anthropic-claude-4-5-models"></a>
 </h3>
-<p>Anthropic’s batch API allows explicit control over the reasoning
-system.</p>
+<p>The Anthropic experiment recorded the following controls.</p>
 <div class="section level4">
 <h4 id="thinking-no_thinking">
 <code>thinking = "no_thinking"</code><a class="anchor" aria-label="anchor" href="#thinking-no_thinking"></a>
@@ -619,7 +626,8 @@ system.</p>
 </li>
 <li>Thinking tokens disabled<br>
 </li>
-<li>Intended to give <strong>deterministic</strong> behavior</li>
+<li>Configured for lower sampling variability; not a guarantee of
+deterministic behavior</li>
 </ul>
 </div>
 <div class="section level4">
@@ -636,16 +644,16 @@ tokens)</li>
 <li>Produces Claude’s full structured reasoning trace (not returned to
 the user)</li>
 </ul>
-<p>This mode yields <strong>more reflective but less
-deterministic</strong> decisions.</p>
+<p>This configuration used a larger reasoning budget and a higher
+temperature.</p>
 <hr>
 </div>
 </div>
 <div class="section level3">
 <h3 id="gemini-3-pro-preview">7.2 Gemini 3 Pro Preview<a class="anchor" aria-label="anchor" href="#gemini-3-pro-preview"></a>
 </h3>
-<p>Gemini’s batch API exposes reasoning through the
-<code>thinkingLevel</code> field.</p>
+<p>The Gemini experiment used the <code>thinkingLevel</code> field
+available to that request shape at the time.</p>
 <div class="section level4">
 <h4 id="only-thinking-with_thinking-was-used">Only <code>thinking = "with_thinking"</code> was used<a class="anchor" aria-label="anchor" href="#only-thinking-with_thinking-was-used"></a>
 </h4>
@@ -664,15 +672,15 @@ default</strong><br>
 <li>Gemini’s structured reasoning is stored internally for bias
 testing</li>
 </ul>
-<p>This yields lightweight reasoning comparable to Anthropic’s enabled
-mode.</p>
+<p>No cross-provider equivalence of reasoning effort was
+established.</p>
 <hr>
 </div>
 </div>
 <div class="section level3">
 <h3 id="openai-gpt-4-1-gpt-4o-gpt-5-1">7.3 OpenAI (gpt-4.1, gpt-4o, gpt-5.1)<a class="anchor" aria-label="anchor" href="#openai-gpt-4-1-gpt-4o-gpt-5-1"></a>
 </h3>
-<p>OpenAI supports two distinct APIs:</p>
+<p>The OpenAI experiment used two API shapes:</p>
 <ol style="list-style-type: decimal">
 <li>
 <strong><code>chat.completions</code></strong> — standard
@@ -693,8 +701,8 @@ inference<br>
 <li><code>temperature = 0</code></li>
 <li>No reasoning traces<br>
 </li>
-<li>Most <strong>deterministic mode</strong>, ideal for repeatable
-scoring</li>
+<li>Lower-temperature configuration; not a guarantee of
+repeatability</li>
 </ul>
 </div>
 <div class="section level4">
@@ -720,8 +728,9 @@ analysis.</p>
 <div class="section level3">
 <h3 id="togetherai-deepseek-r1-deepseek-v3-kimi-k2-qwen3">7.4 TogetherAI (Deepseek-R1, Deepseek-V3, Kimi-K2, Qwen3)<a class="anchor" aria-label="anchor" href="#togetherai-deepseek-r1-deepseek-v3-kimi-k2-qwen3"></a>
 </h3>
-<p>For Together.ai we ran positional-bias experiments using the Chat
-Completions API (/v1/chat/completions) for the following models:</p>
+<p>For Together.ai, the archived experiment used the Chat Completions
+API (<code>/v1/chat/completions</code>) with the following historical
+identifiers:</p>
 <ul>
 <li>“deepseek-ai/DeepSeek-R1”</li>
 <li>“deepseek-ai/DeepSeek-V3”</li>
@@ -738,7 +747,7 @@ output.</p>
 <hr>
 </div>
 <div class="section level3">
-<h3 id="summary-table-of-backend-specific-behavior">7.5 Summary Table of Backend-Specific Behavior<a class="anchor" aria-label="anchor" href="#summary-table-of-backend-specific-behavior"></a>
+<h3 id="summary-of-historical-request-configurations">7.5 Summary of historical request configurations<a class="anchor" aria-label="anchor" href="#summary-of-historical-request-configurations"></a>
 </h3>
 <table style="width:100%;" class="table">
 <colgroup>
@@ -761,7 +770,7 @@ output.</p>
 <td>no_thinking</td>
 <td>reasoning=none, no thoughts</td>
 <td><strong>0</strong></td>
-<td>deterministic</td>
+<td>lower-temperature configuration</td>
 </tr>
 <tr class="even">
 <td>Anthropic</td>
@@ -775,14 +784,14 @@ output.</p>
 <td>with_thinking only</td>
 <td>thinkingLevel=“low”, includeThoughts</td>
 <td>provider default</td>
-<td>batch API does not support pure no-thinking mode</td>
+<td>only configuration represented in the artifact</td>
 </tr>
 <tr class="even">
 <td>OpenAI</td>
 <td>no_thinking</td>
 <td>chat.completions, no reasoning</td>
 <td><strong>0</strong></td>
-<td>deterministic</td>
+<td>lower-temperature configuration</td>
 </tr>
 <tr class="odd">
 <td>OpenAI</td>
@@ -818,10 +827,10 @@ extracted to <code>thoughts</code>
 <div class="section level2">
 <h2 id="loading-summary-results">8. Loading summary results<a class="anchor" aria-label="anchor" href="#loading-summary-results"></a>
 </h2>
-<p>The results from the experiments are stored in a CSV included in the
-package (for example, under
-<code>inst/extdata/template_test_summary_all.csv</code>). We load and
-lightly clean that file here.</p>
+<p>The archived results are stored in
+<code>inst/extdata/template_test_summary_all.csv</code>. Only aggregate
+rows remain, so the raw judgments cannot be reanalyzed with the current
+paired test.</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"extdata"</span>, <span class="st">"template_test_summary_all.csv"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
 <span><span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nzchar</a></span><span class="op">(</span><span class="va">summary_path</span><span class="op">)</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="st">"Data file not found in installed package."</span><span class="op">)</span></span>
@@ -849,8 +858,8 @@ ID of the prompt template (e.g., <code>"test1"</code>).</p></li>
 LLM backend (<code>"anthropic"</code>, <code>"gemini"</code>,
 <code>"openai"</code>, <code>"together"</code>).</p></li>
 <li><p><strong><code>model</code></strong><br>
-Specific model (e.g., <code>"claude-sonnet-4-5"</code>,
-<code>"gpt-4o"</code>, <code>"gemini-3-pro-preview"</code>).</p></li>
+Exact historical model identifier recorded by the experiment. These
+values must not be interpreted as a current provider catalog.</p></li>
 <li><p><strong><code>thinking</code></strong><br>
 Reasoning configuration (usually <code>"no_thinking"</code> or
 <code>"with_thinking"</code>). The exact meaning depends on the provider
@@ -860,14 +869,16 @@ thinking-level settings for Gemini).</p></li>
 Proportion of comparisons that remained consistent when the pair order
 was reversed. Higher values indicate greater order-invariance.</p></li>
 <li><p><strong><code>prop_pos1</code></strong><br>
-Proportion of comparisons where SAMPLE_1 was chosen as better. Values
-near 0.5 indicate little or no positional bias toward the first
-position.</p></li>
+Historical descriptive proportion of the 380 forward and reverse
+outcomes where SAMPLE_1 was chosen. In current function output,
+calculate the same descriptive quantity as
+<code>total_pos1_wins / total_comparisons</code>.</p></li>
 <li><p><strong><code>p_sample1_overall</code></strong><br>
-p-value from a binomial test of whether the probability of choosing
-SAMPLE_1 differs from 0.5. Smaller p-values suggest that the observed
-preference (for or against SAMPLE_1) is unlikely to be due to chance
-alone.</p></li>
+Historical p-value from the former binomial calculation that treated all
+forward and reverse outcomes as independent. It is retained to describe
+the archived artifact, not as current confirmatory evidence. Current
+<code><a href="../reference/check_positional_bias.html">check_positional_bias()</a></code> instead applies an exact paired
+test to informative inconsistent pairs.</p></li>
 </ul>
 <hr>
 </div>
@@ -884,8 +895,8 @@ thinking) combination are:</p>
 <li>Measures how often the underlying winner remains the same when a
 pair is presented forward vs reversed.</li>
 <li>Values close to 1 indicate strong order-invariance.</li>
-<li>In practice, values above roughly 0.90 are generally
-reassuring.</li>
+<li>It is descriptive reversal agreement, not a reliability coefficient
+or a test of judge validity.</li>
 </ul>
 </li>
 <li>
@@ -894,7 +905,8 @@ reassuring.</li>
 <ul>
 <li>Measures how often the model selects the first position as
 better.</li>
-<li>A value near 0.5 suggests little or no positional bias.</li>
+<li>A value near 0.5 can still be compatible with practically important
+positional preference, especially with limited data.</li>
 <li>Values substantially above 0.5 suggest a systematic preference for
 SAMPLE_1; values substantially below 0.5 suggest a preference for
 SAMPLE_2.</li>
@@ -904,12 +916,13 @@ SAMPLE_2.</li>
 <p><strong>Binomial test p-value
 (<code>p_sample1_overall</code>)</strong></p>
 <ul>
-<li>Tests the null hypothesis that the true probability of choosing
-SAMPLE_1 is 0.5.</li>
-<li>Small p-values (e.g., &lt; 0.05) provide evidence of positional
-bias.</li>
-<li>Large p-values indicate that any deviation from 0.5 may be due to
-random variation.</li>
+<li>In the archived table only, tests a 0.5 position-1 probability while
+treating the two presentations and all pairs as independent.</li>
+<li>Shared items and paired presentations violate that simple
+independence model, so these archived p-values are descriptive
+historical outputs.</li>
+<li>A large p-value must not be interpreted as evidence that bias is
+absent.</li>
 </ul>
 </li>
 </ol>
@@ -923,12 +936,12 @@ random variation.</li>
 </li>
 <li><code>p_sample1_overall = 0.57</code></li>
 </ul>
-<p>suggests:</p>
+<p>was historically summarized as:</p>
 <ul>
 <li>Very high reverse-order consistency.<br>
 </li>
-<li>No strong evidence of a first-position bias (probability of choosing
-SAMPLE_1 is not significantly different from 0.5).</li>
+<li>The archived unpaired test did not detect a departure from 0.5; this
+does not establish absence of positional preference.</li>
 </ul>
 <p>By contrast, a row with:</p>
 <ul>
@@ -940,12 +953,12 @@ SAMPLE_1 is not significantly different from 0.5).</li>
 </li>
 <li><code>p_sample1_overall = 0.001</code></li>
 </ul>
-<p>would suggest:</p>
+<p>was historically summarized as:</p>
 <ul>
 <li>Somewhat lower consistency.<br>
 </li>
-<li>A statistically significant bias <em>against</em> SAMPLE_1 (the
-model prefers SAMPLE_2).</li>
+<li>Evidence under the archived unpaired calculation of more SAMPLE_2
+choices; paired raw outcomes would be needed for the current test.</li>
 </ul>
 <hr>
 </div>
@@ -2849,32 +2862,24 @@ thinking configuration.</caption>
 <div class="section level2">
 <h2 id="conclusion">11. Conclusion<a class="anchor" aria-label="anchor" href="#conclusion"></a>
 </h2>
-<p>This vignette demonstrates a reproducible workflow for detecting and
-quantifying positional bias in prompt templates.</p>
-<p>Including the template text and summary statistics side by side
-allows rapid inspection and informed template selection. Templates that
-show:</p>
-<ul>
-<li>consistently high <code>Prop_Consistent</code> (e.g., ≥ 0.90) across
-providers and models, and<br>
-</li>
-<li>
-<code>Prop_SAMPLE_1</code> close to 0.5 with non-significant
-<code>Binomial_Test_p</code>
-</li>
-</ul>
-<p>are strong candidates for production scoring pipelines in
-<code>pairwiseLLM</code>.</p>
+<p>This vignette demonstrates a workflow for describing reversal
+agreement and testing directional positional preference in prompt
+templates.</p>
+<p>Use the archived tables to inspect the 2025 experiment, not to infer
+current provider availability or certify a template for production. For
+a new study, retain raw forward/reverse judgments, analyze each
+configuration separately, report agreement and position preference as
+distinct quantities, and review effect sizes and study design alongside
+the paired p-value. Because unordered pairs commonly share items,
+statistical review is appropriate when formal inference is required.</p>
 <hr>
 </div>
 <div class="section level2">
 <h2 id="citation">12. Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
-<p>Mercer, S. H. (2025). <em>Prompt template positional bias
-testing</em> [R package vignette]. In <em>pairwiseLLM: Pairwise
-comparison tools for large language model-based writing evaluation</em>.
-<a href="https://doi.org/10.32614/CRAN.package.pairwiseLLM" class="external-link uri">https://doi.org/10.32614/CRAN.package.pairwiseLLM</a></p>
+<p>Mercer, S. H. (2026). <em>Prompt template positional bias
+testing</em> [R package vignette]. Comprehensive R Archive Network. <a href="https://doi.org/10.32614/CRAN.package.pairwiseLLM" class="external-link uri">https://doi.org/10.32614/CRAN.package.pairwiseLLM</a></p>
 </blockquote>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
@@ -2888,7 +2893,7 @@ comparison tools for large language model-based writing evaluation</em>.
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

@@ -38,6 +38,14 @@ when no user-registered or built-in template is found.
 [`list_prompt_templates`](https://shmercer.github.io/pairwiseLLM/reference/list_prompt_templates.md),
 [`remove_prompt_template`](https://shmercer.github.io/pairwiseLLM/reference/remove_prompt_template.md)
 
+Other prompts and traits:
+[`build_prompt()`](https://shmercer.github.io/pairwiseLLM/reference/build_prompt.md),
+[`list_prompt_templates()`](https://shmercer.github.io/pairwiseLLM/reference/list_prompt_templates.md),
+[`register_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/register_prompt_template.md),
+[`remove_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/remove_prompt_template.md),
+[`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md),
+[`trait_description()`](https://shmercer.github.io/pairwiseLLM/reference/trait_description.md)
+
 ## Examples
 
 ``` r

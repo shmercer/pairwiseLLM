@@ -13,8 +13,8 @@ be biased. This vignette documents how we:
 - Designed and tested several prompt templates for **positional bias**  
 - Quantified both **reverse-order consistency** and **preference for
   SAMPLE_1**  
-- Selected templates that appear robust across multiple providers and
-  reasoning configurations
+- Recorded descriptive results for several historical provider
+  configurations
 
 The vignette also shows how to:
 
@@ -34,6 +34,13 @@ For advanced batch processing workflows, see:
 
 ## 2. Testing Process Summary
 
+This section describes an archived 2025 experiment bundled with
+pairwiseLLM 1.3.0. The result artifact was added to the repository on
+2025-12-10; the exact dates on which its provider calls ran were not
+recorded. It is not a catalog of currently available models. In
+particular, `gemini-3-pro-preview` is retired, and the old Together
+identifiers below are retained only to identify archived result rows.
+
 At a high level, the testing pipeline works as follows:
 
 1.  **Trait and samples**
@@ -48,7 +55,7 @@ At a high level, the testing pipeline works as follows:
 
     - Use
       [`make_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/make_pairs.md)
-      to generate all ordered pairs.
+      to generate all unordered pairs.
     - Use
       [`alternate_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/alternate_pair_order.md)
       to build a deterministic “forward” set.
@@ -70,8 +77,7 @@ At a high level, the testing pipeline works as follows:
 
       - Template (`test1`–`test5`)
       - Backend (Anthropic, Gemini, OpenAI, TogetherAI)
-      - Model (e.g., `claude-sonnet-4-5`, `gpt-4o`,
-        `gemini-3-pro-preview`)
+      - Historical model recorded in the bundled experiment
       - Thinking configuration (`"no_thinking"` vs `"with_thinking"`,
         where applicable)
       - Direction (`forward` vs `reverse`)
@@ -88,7 +94,8 @@ At a high level, the testing pipeline works as follows:
 
 5.  **Reverse-order consistency**
 
-    - For each (template, provider, model, thinking), compare:
+    - Within each (template, backend, model, thinking) condition,
+      compare:
 
       - The model’s decisions for a pair in the forward set
       - The decisions for the same pair in the reverse set (where
@@ -107,10 +114,11 @@ At a high level, the testing pipeline works as follows:
       [`check_positional_bias()`](https://shmercer.github.io/pairwiseLLM/reference/check_positional_bias.md)
       on the reverse-consistency results to quantify:
 
-      - `prop_pos1`: proportion of all comparisons where SAMPLE_1 is
-        chosen as better.
-      - `p_sample1_overall`: p-value from a binomial test of whether the
-        probability of choosing SAMPLE_1 differs from 0.5.
+      - the descriptive proportion of valid forward and reverse outcomes
+        where SAMPLE_1 is chosen as better; and
+      - `p_sample1_overall`: the current paired exact test comparing
+        inconsistent pairs where position 1 wins both presentations with
+        those where position 2 wins both presentations.
 
 7.  **Summarize and interpret**
 
@@ -119,8 +127,9 @@ At a high level, the testing pipeline works as follows:
     - Look for templates with:
       - High `prop_consistent` (close to 1).
       - `prop_pos1` close to 0.5.
-      - Non-significant positional bias (`p_sample1_overall` not \<
-        .05).
+      - Directional preference estimates and their uncertainty, without
+        treating a non-significant test as evidence that positional
+        preference is absent.
 
 In the sections below we show how to retrieve the templates, how they
 are intended to be used, and how to examine the summary statistics for
@@ -133,13 +142,14 @@ the experiment.
 In the tests, we evaluated samples for overall quality.
 
 ``` r
+
 td <- trait_description("overall_quality")
 td
 #> $name
 #> [1] "Overall Quality"
 #> 
 #> $description
-#> [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."
+#> [1] "Overall quality of the writing, considering how well ideas are expressed,\nhow clearly the writing is organized, and how effective the language and\nconventions are."
 ```
 
 In *pairwiseLLM*, every pairwise comparison evaluates writing samples on
@@ -147,8 +157,8 @@ a **trait** — a specific dimension of writing quality, such as:
 
 - **Overall Quality**
 - **Organization**
-- **Development**
-- **Language**
+- **IRRC**, an overall-writing rubric spanning prompt task, development
+  of explanation, organization, and language use
 
 The trait determines *what the model should focus on* when choosing
 which sample is better. Each trait has:
@@ -160,6 +170,7 @@ which sample is better. Each trait has:
 The function that supplies these definitions is:
 
 ``` r
+
 trait_description(name, custom_name = NULL, custom_description = NULL)
 ```
 
@@ -170,14 +181,15 @@ trait_description(name, custom_name = NULL, custom_description = NULL)
 The package includes some predefined traits accessible by name:
 
 ``` r
+
 trait_description("overall_quality")
 trait_description("organization")
+trait_description("IRRC")
 ```
 
 Calling a built-in trait returns a list with:
 
 ``` r
-$list
 $name         # human-friendly name
 $description  # the textual rubric used in prompts
 ```
@@ -185,6 +197,7 @@ $description  # the textual rubric used in prompts
 Example:
 
 ``` r
+
 td <- trait_description("organization")
 td$name
 td$description
@@ -200,6 +213,7 @@ This description is inserted into your chosen prompt template wherever
 To switch evaluations to another trait, simply pass its ID:
 
 ``` r
+
 td <- trait_description("organization")
 
 prompt <- build_prompt(
@@ -211,7 +225,7 @@ prompt <- build_prompt(
 )
 ```
 
-This will automatically update all trait-specific wording in the prompt.
+This will update all trait-specific wording in the prompt.
 
 ------------------------------------------------------------------------
 
@@ -221,6 +235,7 @@ If your study requires a new writing dimension, you can define your own
 trait directly in the call:
 
 ``` r
+
 td <- trait_description(
   custom_name        = "Clarity",
   custom_description = "Clarity refers to how easily a reader can understand the writer's ideas, wording, and structure."
@@ -236,6 +251,7 @@ td$description
 No built-in name needs to be supplied when using custom text:
 
 ``` r
+
 prompt <- build_prompt(
   template   = get_prompt_template("test2"),
   trait_name = td$name,
@@ -252,8 +268,8 @@ prompt <- build_prompt(
 Traits determine the **criterion of comparison**, and different traits
 may produce different sensitivity patterns in LLM behavior. For example:
 
-- “Overall Quality” may yield more stable results than “Development”
-- Short, concise trait definitions may reduce positional bias
+- Different rubrics can produce different response patterns
+- Rubric wording can be treated as an experimental condition
 - Custom traits allow experimentation with alternative rubric wordings
 
 Because positional bias interacts with how the model interprets the
@@ -277,6 +293,7 @@ This dataset provides a reproducible testing base; in real applications,
 you would use your own writing samples.
 
 ``` r
+
 data("example_writing_samples", package = "pairwiseLLM")
 
 # Inspect the structure
@@ -294,17 +311,17 @@ example_writing_samples |>
   )
 ```
 
-| ID                                         | text                                                                      | quality_score |
-|:-------------------------------------------|:--------------------------------------------------------------------------|--------------:|
-| S01                                        | Writing assessment is hard. People write different things. It is          |               |
-| confusing.                                 | 1                                                                         |               |
-| S02                                        | It is hard to grade writing. Some are long and some are short. I do not   |               |
-| know which is best.                        | 2                                                                         |               |
-| S03                                        | Assessing writing is difficult because everyone writes differently and it |               |
-| can be hard to decide what is good or bad. | 3                                                                         |               |
-| S04                                        | Grading essays is tough work. You have to read a lot. Sometimes the       |               |
+| ID | text | quality_score |
+|:---|:---|---:|
+| S01 | Writing assessment is hard. People write different things. It is |  |
+| confusing. | 1 |  |
+| S02 | It is hard to grade writing. Some are long and some are short. I do not |  |
+| know which is best. | 2 |  |
+| S03 | Assessing writing is difficult because everyone writes differently and it |  |
+| can be hard to decide what is good or bad. | 3 |  |
+| S04 | Grading essays is tough work. You have to read a lot. Sometimes the |  |
 
-20 example writing samples included with pairwiseLLM.
+20 example writing samples included with pairwiseLLM. {.table}
 
     handwriting is bad or the grammar is wrong, and that makes it hard to give
     a score.                                                                                                                                                                                                                                           |             4|
@@ -378,6 +395,7 @@ exposed via the template registry. You can retrieve them with
 [`get_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/get_prompt_template.md):
 
 ``` r
+
 template_ids <- paste0("test", 1:5)
 template_ids
 #> [1] "test1" "test2" "test3" "test4" "test5"
@@ -388,6 +406,7 @@ Use
 to view the text:
 
 ``` r
+
 cat(substr(get_prompt_template("test1"), 1, 500), "...\n")
 #> You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.
 #> 
@@ -411,6 +430,7 @@ cat(substr(get_prompt_template("test1"), 1, 500), "...\n")
 The same pattern works for all templates:
 
 ``` r
+
 # Retrieve another template
 tmpl_test3 <- get_prompt_template("test3")
 
@@ -438,6 +458,7 @@ Here is a small example of how we constructed forward and reverse
 datasets for each experiment:
 
 ``` r
+
 pairs_all <- example_writing_samples |>
   make_pairs()
 
@@ -467,37 +488,42 @@ pairs_reverse[1:3, c("ID1", "ID2")]
 ```
 
 In `pairs_reverse`, SAMPLE_1 and SAMPLE_2 are swapped for every pair
-relative to `pairs_forward`. All other metadata (IDs, traits, etc.)
-remain consistent so that we can compare results pairwise.
+relative to `pairs_forward`. Analyze each model, template, trait, and
+reasoning condition separately:
+[`compute_reverse_consistency()`](https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.md)
+does not group on those columns and would otherwise pool duplicate votes
+within each unordered pair.
 
 ------------------------------------------------------------------------
 
 ## 7. Thinking / Reasoning Configurations Used in Testing
 
-Many LLM providers now expose *reasoning-enhanced* decoding modes
-(sometimes called “thinking,” “chain-of-thought modules,” or “structured
-reasoning engines”).  
-In `pairwiseLLM`, these modes are exposed through a simple parameter:
+The archived artifact uses a `thinking` column to distinguish two
+historical request configurations:
 
-    thinking = "no_thinking"   # standard inference mode  
-    thinking = "with_thinking" # activates provider's reasoning system
+    thinking = "no_thinking"   # archived grouping label
+    thinking = "with_thinking" # archived grouping label
 
-However, the *actual meaning* of these settings is **backend-specific**.
-Below we describe the exact configurations used in our positional-bias
-tests.
+These strings are labels in the result artifact, not arguments accepted
+by the current public wrappers. The underlying request fields were
+backend-specific. Below we describe the historical configurations
+recorded with the experiment; consult current provider documentation and
+the package’s dated compatibility registry before constructing a new
+request.
 
 ------------------------------------------------------------------------
 
 ### 7.1 Anthropic (Claude 4.5 models)
 
-Anthropic’s batch API allows explicit control over the reasoning system.
+The Anthropic experiment recorded the following controls.
 
 #### `thinking = "no_thinking"`
 
 - `reasoning = "none"`
 - `temperature = 0`  
 - Thinking tokens disabled  
-- Intended to give **deterministic** behavior
+- Configured for lower sampling variability; not a guarantee of
+  deterministic behavior
 
 #### `thinking = "with_thinking"`
 
@@ -508,13 +534,15 @@ Anthropic’s batch API allows explicit control over the reasoning system.
 - Produces Claude’s full structured reasoning trace (not returned to the
   user)
 
-This mode yields **more reflective but less deterministic** decisions.
+This configuration used a larger reasoning budget and a higher
+temperature.
 
 ------------------------------------------------------------------------
 
 ### 7.2 Gemini 3 Pro Preview
 
-Gemini’s batch API exposes reasoning through the `thinkingLevel` field.
+The Gemini experiment used the `thinkingLevel` field available to that
+request shape at the time.
 
 #### Only `thinking = "with_thinking"` was used
 
@@ -525,14 +553,13 @@ Settings used:
 - `temperature` left at **provider default**  
 - Gemini’s structured reasoning is stored internally for bias testing
 
-This yields lightweight reasoning comparable to Anthropic’s enabled
-mode.
+No cross-provider equivalence of reasoning effort was established.
 
 ------------------------------------------------------------------------
 
 ### 7.3 OpenAI (gpt-4.1, gpt-4o, gpt-5.1)
 
-OpenAI supports two distinct APIs:
+The OpenAI experiment used two API shapes:
 
 1.  **`chat.completions`** — standard inference  
 2.  **`responses`** — reasoning-enabled (formerly “Chain of Thought” via
@@ -545,7 +572,7 @@ Used for **all models**, including gpt-5.1:
 - Endpoint: `chat.completions`
 - `temperature = 0`
 - No reasoning traces  
-- Most **deterministic mode**, ideal for repeatable scoring
+- Lower-temperature configuration; not a guarantee of repeatability
 
 #### `thinking = "with_thinking"` (gpt-5.1 only)
 
@@ -559,8 +586,8 @@ This mode returns reasoning metadata that is stripped prior to analysis.
 
 ### 7.4 TogetherAI (Deepseek-R1, Deepseek-V3, Kimi-K2, Qwen3)
 
-For Together.ai we ran positional-bias experiments using the Chat
-Completions API (/v1/chat/completions) for the following models:
+For Together.ai, the archived experiment used the Chat Completions API
+(`/v1/chat/completions`) with the following historical identifiers:
 
 - “deepseek-ai/DeepSeek-R1”
 - “deepseek-ai/DeepSeek-V3”
@@ -576,28 +603,29 @@ Temperature settings used in testing: - “deepseek-ai/DeepSeek-R1”:
 
 ------------------------------------------------------------------------
 
-### 7.5 Summary Table of Backend-Specific Behavior
+### 7.5 Summary of historical request configurations
 
-| Backend   | Thinking Mode       | What It Controls                                                 | Temperature Used  | Notes                                                     |
-|-----------|---------------------|------------------------------------------------------------------|-------------------|-----------------------------------------------------------|
-| Anthropic | no_thinking         | reasoning=none, no thoughts                                      | **0**             | deterministic                                             |
-| Anthropic | with_thinking       | reasoning enabled, thoughts included, budget=1024                | **1**             | rich internal reasoning                                   |
-| Gemini    | with_thinking only  | thinkingLevel=“low”, includeThoughts                             | provider default  | batch API does not support pure no-thinking mode          |
-| OpenAI    | no_thinking         | chat.completions, no reasoning                                   | **0**             | deterministic                                             |
-| OpenAI    | with_thinking (5.1) | responses API with reasoning=low                                 | ignored / N/A     | only applied to gpt-5.1                                   |
-| Together  | with_thinking       | Chat Completions with `<think>…</think>` extracted to `thoughts` | **0.6** (default) | internal reasoning always on; visible answer in `content` |
-| Together  | no_thinking         | Chat Completions, no explicit reasoning toggle                   | **0**             | reasoning not supported in these specific models          |
+| Backend | Thinking Mode | What It Controls | Temperature Used | Notes |
+|----|----|----|----|----|
+| Anthropic | no_thinking | reasoning=none, no thoughts | **0** | lower-temperature configuration |
+| Anthropic | with_thinking | reasoning enabled, thoughts included, budget=1024 | **1** | rich internal reasoning |
+| Gemini | with_thinking only | thinkingLevel=“low”, includeThoughts | provider default | only configuration represented in the artifact |
+| OpenAI | no_thinking | chat.completions, no reasoning | **0** | lower-temperature configuration |
+| OpenAI | with_thinking (5.1) | responses API with reasoning=low | ignored / N/A | only applied to gpt-5.1 |
+| Together | with_thinking | Chat Completions with `<think>…</think>` extracted to `thoughts` | **0.6** (default) | internal reasoning always on; visible answer in `content` |
+| Together | no_thinking | Chat Completions, no explicit reasoning toggle | **0** | reasoning not supported in these specific models |
 
 ------------------------------------------------------------------------
 
 ## 8. Loading summary results
 
-The results from the experiments are stored in a CSV included in the
-package (for example, under
-`inst/extdata/template_test_summary_all.csv`). We load and lightly clean
-that file here.
+The archived results are stored in
+`inst/extdata/template_test_summary_all.csv`. Only aggregate rows
+remain, so the raw judgments cannot be reanalyzed with the current
+paired test.
 
 ``` r
+
 summary_path <- system.file("extdata", "template_test_summary_all.csv", package = "pairwiseLLM")
 if (!nzchar(summary_path)) stop("Data file not found in installed package.")
 
@@ -627,8 +655,8 @@ The columns in `summary_tbl` are:
   LLM backend (`"anthropic"`, `"gemini"`, `"openai"`, `"together"`).
 
 - **`model`**  
-  Specific model (e.g., `"claude-sonnet-4-5"`, `"gpt-4o"`,
-  `"gemini-3-pro-preview"`).
+  Exact historical model identifier recorded by the experiment. These
+  values must not be interpreted as a current provider catalog.
 
 - **`thinking`**  
   Reasoning configuration (usually `"no_thinking"` or
@@ -641,15 +669,19 @@ The columns in `summary_tbl` are:
   was reversed. Higher values indicate greater order-invariance.
 
 - **`prop_pos1`**  
-  Proportion of comparisons where SAMPLE_1 was chosen as better. Values
-  near 0.5 indicate little or no positional bias toward the first
-  position.
+  Historical descriptive proportion of the 380 forward and reverse
+  outcomes where SAMPLE_1 was chosen. In current function output,
+  calculate the same descriptive quantity as
+  `total_pos1_wins / total_comparisons`.
 
 - **`p_sample1_overall`**  
-  p-value from a binomial test of whether the probability of choosing
-  SAMPLE_1 differs from 0.5. Smaller p-values suggest that the observed
-  preference (for or against SAMPLE_1) is unlikely to be due to chance
-  alone.
+  Historical p-value from the former binomial calculation that treated
+  all forward and reverse outcomes as independent. It is retained to
+  describe the archived artifact, not as current confirmatory evidence.
+  Current
+  [`check_positional_bias()`](https://shmercer.github.io/pairwiseLLM/reference/check_positional_bias.md)
+  instead applies an exact paired test to informative inconsistent
+  pairs.
 
 ------------------------------------------------------------------------
 
@@ -663,24 +695,27 @@ combination are:
     - Measures how often the underlying winner remains the same when a
       pair is presented forward vs reversed.
     - Values close to 1 indicate strong order-invariance.
-    - In practice, values above roughly 0.90 are generally reassuring.
+    - It is descriptive reversal agreement, not a reliability
+      coefficient or a test of judge validity.
 
 2.  **Proportion choosing SAMPLE_1 (`prop_pos1`)**
 
     - Measures how often the model selects the first position as better.
-    - A value near 0.5 suggests little or no positional bias.
+    - A value near 0.5 can still be compatible with practically
+      important positional preference, especially with limited data.
     - Values substantially above 0.5 suggest a systematic preference for
       SAMPLE_1; values substantially below 0.5 suggest a preference for
       SAMPLE_2.
 
 3.  **Binomial test p-value (`p_sample1_overall`)**
 
-    - Tests the null hypothesis that the true probability of choosing
-      SAMPLE_1 is 0.5.
-    - Small p-values (e.g., \< 0.05) provide evidence of positional
-      bias.
-    - Large p-values indicate that any deviation from 0.5 may be due to
-      random variation.
+    - In the archived table only, tests a 0.5 position-1 probability
+      while treating the two presentations and all pairs as independent.
+    - Shared items and paired presentations violate that simple
+      independence model, so these archived p-values are descriptive
+      historical outputs.
+    - A large p-value must not be interpreted as evidence that bias is
+      absent.
 
 As an example, a row with:
 
@@ -688,11 +723,11 @@ As an example, a row with:
 - `prop_pos1 = 0.48`  
 - `p_sample1_overall = 0.57`
 
-suggests:
+was historically summarized as:
 
 - Very high reverse-order consistency.  
-- No strong evidence of a first-position bias (probability of choosing
-  SAMPLE_1 is not significantly different from 0.5).
+- The archived unpaired test did not detect a departure from 0.5; this
+  does not establish absence of positional preference.
 
 By contrast, a row with:
 
@@ -700,11 +735,11 @@ By contrast, a row with:
 - `prop_pos1 = 0.42`  
 - `p_sample1_overall = 0.001`
 
-would suggest:
+was historically summarized as:
 
 - Somewhat lower consistency.  
-- A statistically significant bias *against* SAMPLE_1 (the model prefers
-  SAMPLE_2).
+- Evidence under the archived unpaired calculation of more SAMPLE_2
+  choices; paired raw outcomes would be needed for the current test.
 
 ------------------------------------------------------------------------
 
@@ -731,6 +766,7 @@ In this section we present, for each template:
 #### 9.1.1 Template text
 
 ``` r
+
 cat(get_prompt_template("test1"))
 #> You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.
 #> 
@@ -769,6 +805,7 @@ cat(get_prompt_template("test1"))
 #### 9.1.2 Summary table
 
 ``` r
+
 summary_tbl |>
   filter(template_id == "test1") |>
   arrange(backend, model, thinking) |>
@@ -790,23 +827,23 @@ summary_tbl |>
   )
 ```
 
-| Backend   | Model                         | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
-|:----------|:------------------------------|:--------------|----------------:|--------------:|----------------:|
-| anthropic | claude-haiku-4-5              | no_thinking   |           0.884 |         0.516 |           0.573 |
-| anthropic | claude-haiku-4-5              | with_thinking |           0.905 |         0.484 |           0.573 |
-| anthropic | claude-opus-4-5               | no_thinking   |           0.884 |         0.442 |           0.027 |
-| anthropic | claude-opus-4-5               | with_thinking |           0.884 |         0.447 |           0.045 |
-| anthropic | claude-sonnet-4-5             | no_thinking   |           0.895 |         0.505 |           0.878 |
-| anthropic | claude-sonnet-4-5             | with_thinking |           0.932 |         0.497 |           0.959 |
-| gemini    | gemini-3-pro-preview          | with_thinking |           0.926 |         0.521 |           0.442 |
-| openai    | gpt-4.1                       | no_thinking   |           0.937 |         0.479 |           0.442 |
-| openai    | gpt-4o                        | no_thinking   |           0.837 |         0.418 |           0.002 |
-| openai    | gpt-5.1                       | no_thinking   |           0.926 |         0.474 |           0.330 |
-| openai    | gpt-5.1                       | with_thinking |           0.858 |         0.429 |           0.006 |
-| together  | DeepSeek-R1                   | with_thinking |           0.837 |         0.576 |           0.003 |
-| together  | DeepSeek-V3                   | no_thinking   |           0.921 |         0.487 |           0.644 |
-| together  | Kimi-K2-Instruct-0905         | no_thinking   |           0.889 |         0.455 |           0.090 |
-| together  | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.821 |         0.416 |           0.001 |
+| Backend | Model | Thinking | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:---|:---|:---|---:|---:|---:|
+| anthropic | claude-haiku-4-5 | no_thinking | 0.884 | 0.516 | 0.573 |
+| anthropic | claude-haiku-4-5 | with_thinking | 0.905 | 0.484 | 0.573 |
+| anthropic | claude-opus-4-5 | no_thinking | 0.884 | 0.442 | 0.027 |
+| anthropic | claude-opus-4-5 | with_thinking | 0.884 | 0.447 | 0.045 |
+| anthropic | claude-sonnet-4-5 | no_thinking | 0.895 | 0.505 | 0.878 |
+| anthropic | claude-sonnet-4-5 | with_thinking | 0.932 | 0.497 | 0.959 |
+| gemini | gemini-3-pro-preview | with_thinking | 0.926 | 0.521 | 0.442 |
+| openai | gpt-4.1 | no_thinking | 0.937 | 0.479 | 0.442 |
+| openai | gpt-4o | no_thinking | 0.837 | 0.418 | 0.002 |
+| openai | gpt-5.1 | no_thinking | 0.926 | 0.474 | 0.330 |
+| openai | gpt-5.1 | with_thinking | 0.858 | 0.429 | 0.006 |
+| together | DeepSeek-R1 | with_thinking | 0.837 | 0.576 | 0.003 |
+| together | DeepSeek-V3 | no_thinking | 0.921 | 0.487 | 0.644 |
+| together | Kimi-K2-Instruct-0905 | no_thinking | 0.889 | 0.455 | 0.090 |
+| together | Qwen3-235B-A22B-Instruct-2507 | no_thinking | 0.821 | 0.416 | 0.001 |
 
 ------------------------------------------------------------------------
 
@@ -815,6 +852,7 @@ summary_tbl |>
 #### 9.2.1 Template text
 
 ``` r
+
 cat(get_prompt_template("test2"))
 #> You are an impartial, expert writing evaluator. You will be provided with two student writing samples.
 #> 
@@ -857,6 +895,7 @@ cat(get_prompt_template("test2"))
 #### 9.2.2 Summary table
 
 ``` r
+
 summary_tbl |>
   filter(template_id == "test2") |>
   arrange(backend, model, thinking) |>
@@ -878,23 +917,23 @@ summary_tbl |>
   )
 ```
 
-| Backend   | Model                         | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
-|:----------|:------------------------------|:--------------|----------------:|--------------:|----------------:|
-| anthropic | claude-haiku-4-5              | no_thinking   |           0.863 |         0.442 |           0.027 |
-| anthropic | claude-haiku-4-5              | with_thinking |           0.932 |         0.487 |           0.644 |
-| anthropic | claude-opus-4-5               | no_thinking   |           0.895 |         0.458 |           0.112 |
-| anthropic | claude-opus-4-5               | with_thinking |           0.926 |         0.474 |           0.330 |
-| anthropic | claude-sonnet-4-5             | no_thinking   |           0.926 |         0.468 |           0.238 |
-| anthropic | claude-sonnet-4-5             | with_thinking |           0.916 |         0.484 |           0.573 |
-| gemini    | gemini-3-pro-preview          | with_thinking |           0.879 |         0.561 |           0.021 |
-| openai    | gpt-4.1                       | no_thinking   |           0.932 |         0.466 |           0.200 |
-| openai    | gpt-4o                        | no_thinking   |           0.884 |         0.442 |           0.027 |
-| openai    | gpt-5.1                       | no_thinking   |           0.853 |         0.426 |           0.005 |
-| openai    | gpt-5.1                       | with_thinking |           0.853 |         0.426 |           0.005 |
-| together  | DeepSeek-R1                   | with_thinking |           0.916 |         0.511 |           0.720 |
-| together  | DeepSeek-V3                   | no_thinking   |           0.874 |         0.563 |           0.016 |
-| together  | Kimi-K2-Instruct-0905         | no_thinking   |           0.905 |         0.458 |           0.112 |
-| together  | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.858 |         0.434 |           0.012 |
+| Backend | Model | Thinking | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:---|:---|:---|---:|---:|---:|
+| anthropic | claude-haiku-4-5 | no_thinking | 0.863 | 0.442 | 0.027 |
+| anthropic | claude-haiku-4-5 | with_thinking | 0.932 | 0.487 | 0.644 |
+| anthropic | claude-opus-4-5 | no_thinking | 0.895 | 0.458 | 0.112 |
+| anthropic | claude-opus-4-5 | with_thinking | 0.926 | 0.474 | 0.330 |
+| anthropic | claude-sonnet-4-5 | no_thinking | 0.926 | 0.468 | 0.238 |
+| anthropic | claude-sonnet-4-5 | with_thinking | 0.916 | 0.484 | 0.573 |
+| gemini | gemini-3-pro-preview | with_thinking | 0.879 | 0.561 | 0.021 |
+| openai | gpt-4.1 | no_thinking | 0.932 | 0.466 | 0.200 |
+| openai | gpt-4o | no_thinking | 0.884 | 0.442 | 0.027 |
+| openai | gpt-5.1 | no_thinking | 0.853 | 0.426 | 0.005 |
+| openai | gpt-5.1 | with_thinking | 0.853 | 0.426 | 0.005 |
+| together | DeepSeek-R1 | with_thinking | 0.916 | 0.511 | 0.720 |
+| together | DeepSeek-V3 | no_thinking | 0.874 | 0.563 | 0.016 |
+| together | Kimi-K2-Instruct-0905 | no_thinking | 0.905 | 0.458 | 0.112 |
+| together | Qwen3-235B-A22B-Instruct-2507 | no_thinking | 0.858 | 0.434 | 0.012 |
 
 ------------------------------------------------------------------------
 
@@ -903,6 +942,7 @@ summary_tbl |>
 #### 9.3.1 Template text
 
 ``` r
+
 cat(get_prompt_template("test3"))
 #> You are an expert writing assessor.
 #> 
@@ -953,6 +993,7 @@ cat(get_prompt_template("test3"))
 #### 9.3.2 Summary table
 
 ``` r
+
 summary_tbl |>
   filter(template_id == "test3") |>
   arrange(backend, model, thinking) |>
@@ -974,23 +1015,23 @@ summary_tbl |>
   )
 ```
 
-| Backend   | Model                         | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
-|:----------|:------------------------------|:--------------|----------------:|--------------:|----------------:|
-| anthropic | claude-haiku-4-5              | no_thinking   |           0.921 |         0.461 |           0.137 |
-| anthropic | claude-haiku-4-5              | with_thinking |           0.916 |         0.463 |           0.166 |
-| anthropic | claude-opus-4-5               | no_thinking   |           0.905 |         0.463 |           0.166 |
-| anthropic | claude-opus-4-5               | with_thinking |           0.916 |         0.463 |           0.166 |
-| anthropic | claude-sonnet-4-5             | no_thinking   |           0.884 |         0.453 |           0.072 |
-| anthropic | claude-sonnet-4-5             | with_thinking |           0.937 |         0.489 |           0.720 |
-| gemini    | gemini-3-pro-preview          | with_thinking |           0.911 |         0.545 |           0.090 |
-| openai    | gpt-4.1                       | no_thinking   |           0.916 |         0.458 |           0.112 |
-| openai    | gpt-4o                        | no_thinking   |           0.832 |         0.416 |           0.001 |
-| openai    | gpt-5.1                       | no_thinking   |           0.879 |         0.445 |           0.035 |
-| openai    | gpt-5.1                       | with_thinking |           0.863 |         0.432 |           0.009 |
-| together  | DeepSeek-R1                   | with_thinking |           0.953 |         0.487 |           0.644 |
-| together  | DeepSeek-V3                   | no_thinking   |           0.884 |         0.453 |           0.072 |
-| together  | Kimi-K2-Instruct-0905         | no_thinking   |           0.879 |         0.455 |           0.090 |
-| together  | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.805 |         0.408 |           0.000 |
+| Backend | Model | Thinking | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:---|:---|:---|---:|---:|---:|
+| anthropic | claude-haiku-4-5 | no_thinking | 0.921 | 0.461 | 0.137 |
+| anthropic | claude-haiku-4-5 | with_thinking | 0.916 | 0.463 | 0.166 |
+| anthropic | claude-opus-4-5 | no_thinking | 0.905 | 0.463 | 0.166 |
+| anthropic | claude-opus-4-5 | with_thinking | 0.916 | 0.463 | 0.166 |
+| anthropic | claude-sonnet-4-5 | no_thinking | 0.884 | 0.453 | 0.072 |
+| anthropic | claude-sonnet-4-5 | with_thinking | 0.937 | 0.489 | 0.720 |
+| gemini | gemini-3-pro-preview | with_thinking | 0.911 | 0.545 | 0.090 |
+| openai | gpt-4.1 | no_thinking | 0.916 | 0.458 | 0.112 |
+| openai | gpt-4o | no_thinking | 0.832 | 0.416 | 0.001 |
+| openai | gpt-5.1 | no_thinking | 0.879 | 0.445 | 0.035 |
+| openai | gpt-5.1 | with_thinking | 0.863 | 0.432 | 0.009 |
+| together | DeepSeek-R1 | with_thinking | 0.953 | 0.487 | 0.644 |
+| together | DeepSeek-V3 | no_thinking | 0.884 | 0.453 | 0.072 |
+| together | Kimi-K2-Instruct-0905 | no_thinking | 0.879 | 0.455 | 0.090 |
+| together | Qwen3-235B-A22B-Instruct-2507 | no_thinking | 0.805 | 0.408 | 0.000 |
 
 ------------------------------------------------------------------------
 
@@ -999,6 +1040,7 @@ summary_tbl |>
 #### 9.4.1 Template text
 
 ``` r
+
 cat(get_prompt_template("test4"))
 #> You are an expert writing assessor.
 #> 
@@ -1033,6 +1075,7 @@ cat(get_prompt_template("test4"))
 #### 9.4.2 Summary table
 
 ``` r
+
 summary_tbl |>
   filter(template_id == "test4") |>
   arrange(backend, model, thinking) |>
@@ -1054,23 +1097,23 @@ summary_tbl |>
   )
 ```
 
-| Backend   | Model                         | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
-|:----------|:------------------------------|:--------------|----------------:|--------------:|----------------:|
-| anthropic | claude-haiku-4-5              | no_thinking   |           0.937 |         0.468 |           0.238 |
-| anthropic | claude-haiku-4-5              | with_thinking |           0.937 |         0.474 |           0.328 |
-| anthropic | claude-opus-4-5               | no_thinking   |           0.900 |         0.461 |           0.137 |
-| anthropic | claude-opus-4-5               | with_thinking |           0.895 |         0.458 |           0.112 |
-| anthropic | claude-sonnet-4-5             | no_thinking   |           0.911 |         0.461 |           0.137 |
-| anthropic | claude-sonnet-4-5             | with_thinking |           0.900 |         0.482 |           0.505 |
-| gemini    | gemini-3-pro-preview          | with_thinking |           0.916 |         0.542 |           0.112 |
-| openai    | gpt-4.1                       | no_thinking   |           0.884 |         0.442 |           0.027 |
-| openai    | gpt-4o                        | no_thinking   |           0.884 |         0.442 |           0.027 |
-| openai    | gpt-5.1                       | no_thinking   |           0.858 |         0.429 |           0.006 |
-| openai    | gpt-5.1                       | with_thinking |           0.832 |         0.416 |           0.001 |
-| together  | DeepSeek-R1                   | with_thinking |           0.905 |         0.474 |           0.330 |
-| together  | DeepSeek-V3                   | no_thinking   |           0.932 |         0.503 |           0.959 |
-| together  | Kimi-K2-Instruct-0905         | no_thinking   |           0.942 |         0.503 |           0.959 |
-| together  | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.768 |         0.384 |           0.000 |
+| Backend | Model | Thinking | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:---|:---|:---|---:|---:|---:|
+| anthropic | claude-haiku-4-5 | no_thinking | 0.937 | 0.468 | 0.238 |
+| anthropic | claude-haiku-4-5 | with_thinking | 0.937 | 0.474 | 0.328 |
+| anthropic | claude-opus-4-5 | no_thinking | 0.900 | 0.461 | 0.137 |
+| anthropic | claude-opus-4-5 | with_thinking | 0.895 | 0.458 | 0.112 |
+| anthropic | claude-sonnet-4-5 | no_thinking | 0.911 | 0.461 | 0.137 |
+| anthropic | claude-sonnet-4-5 | with_thinking | 0.900 | 0.482 | 0.505 |
+| gemini | gemini-3-pro-preview | with_thinking | 0.916 | 0.542 | 0.112 |
+| openai | gpt-4.1 | no_thinking | 0.884 | 0.442 | 0.027 |
+| openai | gpt-4o | no_thinking | 0.884 | 0.442 | 0.027 |
+| openai | gpt-5.1 | no_thinking | 0.858 | 0.429 | 0.006 |
+| openai | gpt-5.1 | with_thinking | 0.832 | 0.416 | 0.001 |
+| together | DeepSeek-R1 | with_thinking | 0.905 | 0.474 | 0.330 |
+| together | DeepSeek-V3 | no_thinking | 0.932 | 0.503 | 0.959 |
+| together | Kimi-K2-Instruct-0905 | no_thinking | 0.942 | 0.503 | 0.959 |
+| together | Qwen3-235B-A22B-Instruct-2507 | no_thinking | 0.768 | 0.384 | 0.000 |
 
 ------------------------------------------------------------------------
 
@@ -1079,6 +1122,7 @@ summary_tbl |>
 #### 9.5.1 Template text
 
 ``` r
+
 cat(get_prompt_template("test5"))
 #> You are a critique-focused evaluator. Instead of looking for general quality, you will look for deviations from the ideal.
 #> 
@@ -1114,6 +1158,7 @@ cat(get_prompt_template("test5"))
 #### 9.5.2 Summary table
 
 ``` r
+
 summary_tbl |>
   filter(template_id == "test5") |>
   arrange(backend, model, thinking) |>
@@ -1135,23 +1180,23 @@ summary_tbl |>
   )
 ```
 
-| Backend   | Model                         | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
-|:----------|:------------------------------|:--------------|----------------:|--------------:|----------------:|
-| anthropic | claude-haiku-4-5              | no_thinking   |           0.905 |         0.463 |           0.166 |
-| anthropic | claude-haiku-4-5              | with_thinking |           0.926 |         0.489 |           0.719 |
-| anthropic | claude-opus-4-5               | no_thinking   |           0.874 |         0.447 |           0.045 |
-| anthropic | claude-opus-4-5               | with_thinking |           0.926 |         0.489 |           0.720 |
-| anthropic | claude-sonnet-4-5             | no_thinking   |           0.900 |         0.482 |           0.505 |
-| anthropic | claude-sonnet-4-5             | with_thinking |           0.900 |         0.476 |           0.383 |
-| gemini    | gemini-3-pro-preview          | with_thinking |           0.932 |         0.508 |           0.798 |
-| openai    | gpt-4.1                       | no_thinking   |           0.911 |         0.476 |           0.383 |
-| openai    | gpt-4o                        | no_thinking   |           0.863 |         0.463 |           0.166 |
-| openai    | gpt-5.1                       | no_thinking   |           0.877 |         0.451 |           0.086 |
-| openai    | gpt-5.1                       | with_thinking |           0.789 |         0.400 |           0.000 |
-| together  | DeepSeek-R1                   | with_thinking |           0.847 |         0.497 |           0.959 |
-| together  | DeepSeek-V3                   | no_thinking   |           0.811 |         0.484 |           0.573 |
-| together  | Kimi-K2-Instruct-0905         | no_thinking   |           0.795 |         0.482 |           0.505 |
-| together  | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.800 |         0.400 |           0.000 |
+| Backend | Model | Thinking | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:---|:---|:---|---:|---:|---:|
+| anthropic | claude-haiku-4-5 | no_thinking | 0.905 | 0.463 | 0.166 |
+| anthropic | claude-haiku-4-5 | with_thinking | 0.926 | 0.489 | 0.719 |
+| anthropic | claude-opus-4-5 | no_thinking | 0.874 | 0.447 | 0.045 |
+| anthropic | claude-opus-4-5 | with_thinking | 0.926 | 0.489 | 0.720 |
+| anthropic | claude-sonnet-4-5 | no_thinking | 0.900 | 0.482 | 0.505 |
+| anthropic | claude-sonnet-4-5 | with_thinking | 0.900 | 0.476 | 0.383 |
+| gemini | gemini-3-pro-preview | with_thinking | 0.932 | 0.508 | 0.798 |
+| openai | gpt-4.1 | no_thinking | 0.911 | 0.476 | 0.383 |
+| openai | gpt-4o | no_thinking | 0.863 | 0.463 | 0.166 |
+| openai | gpt-5.1 | no_thinking | 0.877 | 0.451 | 0.086 |
+| openai | gpt-5.1 | with_thinking | 0.789 | 0.400 | 0.000 |
+| together | DeepSeek-R1 | with_thinking | 0.847 | 0.497 | 0.959 |
+| together | DeepSeek-V3 | no_thinking | 0.811 | 0.484 | 0.573 |
+| together | Kimi-K2-Instruct-0905 | no_thinking | 0.795 | 0.482 | 0.505 |
+| together | Qwen3-235B-A22B-Instruct-2507 | no_thinking | 0.800 | 0.400 | 0.000 |
 
 ------------------------------------------------------------------------
 
@@ -1179,6 +1224,7 @@ in testing.
 ### 10.1 Anthropic models
 
 ``` r
+
 summary_tbl |>
   filter(backend == "anthropic") |>
   arrange(template_id, model, thinking) |>
@@ -1201,47 +1247,48 @@ summary_tbl |>
   )
 ```
 
-| Template | Model             | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
-|:---------|:------------------|:--------------|----------------:|--------------:|----------------:|
-| test1    | claude-haiku-4-5  | no_thinking   |           0.884 |         0.516 |           0.573 |
-| test1    | claude-haiku-4-5  | with_thinking |           0.905 |         0.484 |           0.573 |
-| test1    | claude-opus-4-5   | no_thinking   |           0.884 |         0.442 |           0.027 |
-| test1    | claude-opus-4-5   | with_thinking |           0.884 |         0.447 |           0.045 |
-| test1    | claude-sonnet-4-5 | no_thinking   |           0.895 |         0.505 |           0.878 |
-| test1    | claude-sonnet-4-5 | with_thinking |           0.932 |         0.497 |           0.959 |
-| test2    | claude-haiku-4-5  | no_thinking   |           0.863 |         0.442 |           0.027 |
-| test2    | claude-haiku-4-5  | with_thinking |           0.932 |         0.487 |           0.644 |
-| test2    | claude-opus-4-5   | no_thinking   |           0.895 |         0.458 |           0.112 |
-| test2    | claude-opus-4-5   | with_thinking |           0.926 |         0.474 |           0.330 |
-| test2    | claude-sonnet-4-5 | no_thinking   |           0.926 |         0.468 |           0.238 |
-| test2    | claude-sonnet-4-5 | with_thinking |           0.916 |         0.484 |           0.573 |
-| test3    | claude-haiku-4-5  | no_thinking   |           0.921 |         0.461 |           0.137 |
-| test3    | claude-haiku-4-5  | with_thinking |           0.916 |         0.463 |           0.166 |
-| test3    | claude-opus-4-5   | no_thinking   |           0.905 |         0.463 |           0.166 |
-| test3    | claude-opus-4-5   | with_thinking |           0.916 |         0.463 |           0.166 |
-| test3    | claude-sonnet-4-5 | no_thinking   |           0.884 |         0.453 |           0.072 |
-| test3    | claude-sonnet-4-5 | with_thinking |           0.937 |         0.489 |           0.720 |
-| test4    | claude-haiku-4-5  | no_thinking   |           0.937 |         0.468 |           0.238 |
-| test4    | claude-haiku-4-5  | with_thinking |           0.937 |         0.474 |           0.328 |
-| test4    | claude-opus-4-5   | no_thinking   |           0.900 |         0.461 |           0.137 |
-| test4    | claude-opus-4-5   | with_thinking |           0.895 |         0.458 |           0.112 |
-| test4    | claude-sonnet-4-5 | no_thinking   |           0.911 |         0.461 |           0.137 |
-| test4    | claude-sonnet-4-5 | with_thinking |           0.900 |         0.482 |           0.505 |
-| test5    | claude-haiku-4-5  | no_thinking   |           0.905 |         0.463 |           0.166 |
-| test5    | claude-haiku-4-5  | with_thinking |           0.926 |         0.489 |           0.719 |
-| test5    | claude-opus-4-5   | no_thinking   |           0.874 |         0.447 |           0.045 |
-| test5    | claude-opus-4-5   | with_thinking |           0.926 |         0.489 |           0.720 |
-| test5    | claude-sonnet-4-5 | no_thinking   |           0.900 |         0.482 |           0.505 |
-| test5    | claude-sonnet-4-5 | with_thinking |           0.900 |         0.476 |           0.383 |
+| Template | Model | Thinking | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:---|:---|:---|---:|---:|---:|
+| test1 | claude-haiku-4-5 | no_thinking | 0.884 | 0.516 | 0.573 |
+| test1 | claude-haiku-4-5 | with_thinking | 0.905 | 0.484 | 0.573 |
+| test1 | claude-opus-4-5 | no_thinking | 0.884 | 0.442 | 0.027 |
+| test1 | claude-opus-4-5 | with_thinking | 0.884 | 0.447 | 0.045 |
+| test1 | claude-sonnet-4-5 | no_thinking | 0.895 | 0.505 | 0.878 |
+| test1 | claude-sonnet-4-5 | with_thinking | 0.932 | 0.497 | 0.959 |
+| test2 | claude-haiku-4-5 | no_thinking | 0.863 | 0.442 | 0.027 |
+| test2 | claude-haiku-4-5 | with_thinking | 0.932 | 0.487 | 0.644 |
+| test2 | claude-opus-4-5 | no_thinking | 0.895 | 0.458 | 0.112 |
+| test2 | claude-opus-4-5 | with_thinking | 0.926 | 0.474 | 0.330 |
+| test2 | claude-sonnet-4-5 | no_thinking | 0.926 | 0.468 | 0.238 |
+| test2 | claude-sonnet-4-5 | with_thinking | 0.916 | 0.484 | 0.573 |
+| test3 | claude-haiku-4-5 | no_thinking | 0.921 | 0.461 | 0.137 |
+| test3 | claude-haiku-4-5 | with_thinking | 0.916 | 0.463 | 0.166 |
+| test3 | claude-opus-4-5 | no_thinking | 0.905 | 0.463 | 0.166 |
+| test3 | claude-opus-4-5 | with_thinking | 0.916 | 0.463 | 0.166 |
+| test3 | claude-sonnet-4-5 | no_thinking | 0.884 | 0.453 | 0.072 |
+| test3 | claude-sonnet-4-5 | with_thinking | 0.937 | 0.489 | 0.720 |
+| test4 | claude-haiku-4-5 | no_thinking | 0.937 | 0.468 | 0.238 |
+| test4 | claude-haiku-4-5 | with_thinking | 0.937 | 0.474 | 0.328 |
+| test4 | claude-opus-4-5 | no_thinking | 0.900 | 0.461 | 0.137 |
+| test4 | claude-opus-4-5 | with_thinking | 0.895 | 0.458 | 0.112 |
+| test4 | claude-sonnet-4-5 | no_thinking | 0.911 | 0.461 | 0.137 |
+| test4 | claude-sonnet-4-5 | with_thinking | 0.900 | 0.482 | 0.505 |
+| test5 | claude-haiku-4-5 | no_thinking | 0.905 | 0.463 | 0.166 |
+| test5 | claude-haiku-4-5 | with_thinking | 0.926 | 0.489 | 0.719 |
+| test5 | claude-opus-4-5 | no_thinking | 0.874 | 0.447 | 0.045 |
+| test5 | claude-opus-4-5 | with_thinking | 0.926 | 0.489 | 0.720 |
+| test5 | claude-sonnet-4-5 | no_thinking | 0.900 | 0.482 | 0.505 |
+| test5 | claude-sonnet-4-5 | with_thinking | 0.900 | 0.476 | 0.383 |
 
 Anthropic: Positional-bias summary by template, model, and thinking
-configuration.
+configuration. {.table}
 
 ------------------------------------------------------------------------
 
 ### 10.2 Gemini models
 
 ``` r
+
 summary_tbl |>
   filter(backend == "gemini") |>
   arrange(template_id, model, thinking) |>
@@ -1264,22 +1311,23 @@ summary_tbl |>
   )
 ```
 
-| Template | Model                | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
-|:---------|:---------------------|:--------------|----------------:|--------------:|----------------:|
-| test1    | gemini-3-pro-preview | with_thinking |           0.926 |         0.521 |           0.442 |
-| test2    | gemini-3-pro-preview | with_thinking |           0.879 |         0.561 |           0.021 |
-| test3    | gemini-3-pro-preview | with_thinking |           0.911 |         0.545 |           0.090 |
-| test4    | gemini-3-pro-preview | with_thinking |           0.916 |         0.542 |           0.112 |
-| test5    | gemini-3-pro-preview | with_thinking |           0.932 |         0.508 |           0.798 |
+| Template | Model | Thinking | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:---|:---|:---|---:|---:|---:|
+| test1 | gemini-3-pro-preview | with_thinking | 0.926 | 0.521 | 0.442 |
+| test2 | gemini-3-pro-preview | with_thinking | 0.879 | 0.561 | 0.021 |
+| test3 | gemini-3-pro-preview | with_thinking | 0.911 | 0.545 | 0.090 |
+| test4 | gemini-3-pro-preview | with_thinking | 0.916 | 0.542 | 0.112 |
+| test5 | gemini-3-pro-preview | with_thinking | 0.932 | 0.508 | 0.798 |
 
 Gemini: Positional-bias summary by template, model, and thinking
-configuration.
+configuration. {.table}
 
 ------------------------------------------------------------------------
 
 ### 10.3 OpenAI models
 
 ``` r
+
 summary_tbl |>
   filter(backend == "openai") |>
   arrange(template_id, model, thinking) |>
@@ -1326,13 +1374,14 @@ summary_tbl |>
 | test5    | gpt-5.1 | with_thinking |           0.789 |         0.400 |           0.000 |
 
 OpenAI: Positional-bias summary by template, model, and thinking
-configuration.
+configuration. {.table style="width:100%;"}
 
 ------------------------------------------------------------------------
 
 ### 10.4 TogetherAI-hosted models
 
 ``` r
+
 summary_tbl |>
   filter(backend == "together") |>
   arrange(template_id, model, thinking) |>
@@ -1355,53 +1404,51 @@ summary_tbl |>
   )
 ```
 
-| Template | Model                         | Thinking      | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
-|:---------|:------------------------------|:--------------|----------------:|--------------:|----------------:|
-| test1    | DeepSeek-R1                   | with_thinking |           0.837 |         0.576 |           0.003 |
-| test1    | DeepSeek-V3                   | no_thinking   |           0.921 |         0.487 |           0.644 |
-| test1    | Kimi-K2-Instruct-0905         | no_thinking   |           0.889 |         0.455 |           0.090 |
-| test1    | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.821 |         0.416 |           0.001 |
-| test2    | DeepSeek-R1                   | with_thinking |           0.916 |         0.511 |           0.720 |
-| test2    | DeepSeek-V3                   | no_thinking   |           0.874 |         0.563 |           0.016 |
-| test2    | Kimi-K2-Instruct-0905         | no_thinking   |           0.905 |         0.458 |           0.112 |
-| test2    | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.858 |         0.434 |           0.012 |
-| test3    | DeepSeek-R1                   | with_thinking |           0.953 |         0.487 |           0.644 |
-| test3    | DeepSeek-V3                   | no_thinking   |           0.884 |         0.453 |           0.072 |
-| test3    | Kimi-K2-Instruct-0905         | no_thinking   |           0.879 |         0.455 |           0.090 |
-| test3    | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.805 |         0.408 |           0.000 |
-| test4    | DeepSeek-R1                   | with_thinking |           0.905 |         0.474 |           0.330 |
-| test4    | DeepSeek-V3                   | no_thinking   |           0.932 |         0.503 |           0.959 |
-| test4    | Kimi-K2-Instruct-0905         | no_thinking   |           0.942 |         0.503 |           0.959 |
-| test4    | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.768 |         0.384 |           0.000 |
-| test5    | DeepSeek-R1                   | with_thinking |           0.847 |         0.497 |           0.959 |
-| test5    | DeepSeek-V3                   | no_thinking   |           0.811 |         0.484 |           0.573 |
-| test5    | Kimi-K2-Instruct-0905         | no_thinking   |           0.795 |         0.482 |           0.505 |
-| test5    | Qwen3-235B-A22B-Instruct-2507 | no_thinking   |           0.800 |         0.400 |           0.000 |
+| Template | Model | Thinking | Prop_Consistent | Prop_SAMPLE_1 | Binomial_Test_p |
+|:---|:---|:---|---:|---:|---:|
+| test1 | DeepSeek-R1 | with_thinking | 0.837 | 0.576 | 0.003 |
+| test1 | DeepSeek-V3 | no_thinking | 0.921 | 0.487 | 0.644 |
+| test1 | Kimi-K2-Instruct-0905 | no_thinking | 0.889 | 0.455 | 0.090 |
+| test1 | Qwen3-235B-A22B-Instruct-2507 | no_thinking | 0.821 | 0.416 | 0.001 |
+| test2 | DeepSeek-R1 | with_thinking | 0.916 | 0.511 | 0.720 |
+| test2 | DeepSeek-V3 | no_thinking | 0.874 | 0.563 | 0.016 |
+| test2 | Kimi-K2-Instruct-0905 | no_thinking | 0.905 | 0.458 | 0.112 |
+| test2 | Qwen3-235B-A22B-Instruct-2507 | no_thinking | 0.858 | 0.434 | 0.012 |
+| test3 | DeepSeek-R1 | with_thinking | 0.953 | 0.487 | 0.644 |
+| test3 | DeepSeek-V3 | no_thinking | 0.884 | 0.453 | 0.072 |
+| test3 | Kimi-K2-Instruct-0905 | no_thinking | 0.879 | 0.455 | 0.090 |
+| test3 | Qwen3-235B-A22B-Instruct-2507 | no_thinking | 0.805 | 0.408 | 0.000 |
+| test4 | DeepSeek-R1 | with_thinking | 0.905 | 0.474 | 0.330 |
+| test4 | DeepSeek-V3 | no_thinking | 0.932 | 0.503 | 0.959 |
+| test4 | Kimi-K2-Instruct-0905 | no_thinking | 0.942 | 0.503 | 0.959 |
+| test4 | Qwen3-235B-A22B-Instruct-2507 | no_thinking | 0.768 | 0.384 | 0.000 |
+| test5 | DeepSeek-R1 | with_thinking | 0.847 | 0.497 | 0.959 |
+| test5 | DeepSeek-V3 | no_thinking | 0.811 | 0.484 | 0.573 |
+| test5 | Kimi-K2-Instruct-0905 | no_thinking | 0.795 | 0.482 | 0.505 |
+| test5 | Qwen3-235B-A22B-Instruct-2507 | no_thinking | 0.800 | 0.400 | 0.000 |
 
 TogetherAI: Positional-bias summary by template, model, and thinking
-configuration.
+configuration. {.table}
 
 ------------------------------------------------------------------------
 
 ## 11. Conclusion
 
-This vignette demonstrates a reproducible workflow for detecting and
-quantifying positional bias in prompt templates.
+This vignette demonstrates a workflow for describing reversal agreement
+and testing directional positional preference in prompt templates.
 
-Including the template text and summary statistics side by side allows
-rapid inspection and informed template selection. Templates that show:
-
-- consistently high `Prop_Consistent` (e.g., ≥ 0.90) across providers
-  and models, and  
-- `Prop_SAMPLE_1` close to 0.5 with non-significant `Binomial_Test_p`
-
-are strong candidates for production scoring pipelines in `pairwiseLLM`.
+Use the archived tables to inspect the 2025 experiment, not to infer
+current provider availability or certify a template for production. For
+a new study, retain raw forward/reverse judgments, analyze each
+configuration separately, report agreement and position preference as
+distinct quantities, and review effect sizes and study design alongside
+the paired p-value. Because unordered pairs commonly share items,
+statistical review is appropriate when formal inference is required.
 
 ------------------------------------------------------------------------
 
 ## 12. Citation
 
-> Mercer, S. H. (2025). *Prompt template positional bias testing* \[R
-> package vignette\]. In *pairwiseLLM: Pairwise comparison tools for
-> large language model-based writing evaluation*.
+> Mercer, S. H. (2026). *Prompt template positional bias testing* \[R
+> package vignette\]. Comprehensive R Archive Network.
 > <https://doi.org/10.32614/CRAN.package.pairwiseLLM>

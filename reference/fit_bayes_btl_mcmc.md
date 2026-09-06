@@ -21,7 +21,8 @@ fit_bayes_btl_mcmc(
     0.8),
   pair_counts = NULL,
   subset_method = c("first", "sample"),
-  seed = NULL
+  seed = NULL,
+  inference_contract = NULL
 )
 ```
 
@@ -92,6 +93,12 @@ fit_bayes_btl_mcmc(
   `subset_method = "sample"`. When `NULL`, falls back to `cmdstan$seed`
   if provided.
 
+- inference_contract:
+
+  Optional list of inference-routing semantics to attach to each fit
+  contract. When omitted, values are inferred from `results$phase` and
+  optional `results$judge_scope`.
+
 ## Value
 
 A list with:
@@ -132,6 +139,13 @@ treated as a "refit" in the adaptive logging sense, producing:
 
 - one item-log table per refit (compatible with
   `.adaptive_item_log_schema()`).
+
+## See also
+
+[`build_btl_results_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_btl_results_data.md)
+
+Other Bayesian models:
+[`build_btl_results_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_btl_results_data.md)
 
 ## Examples
 

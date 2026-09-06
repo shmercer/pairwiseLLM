@@ -14,7 +14,7 @@ submit_llm_pairs(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "together", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
   endpoint = c("chat.completions", "responses"),
   api_key = NULL,
   verbose = TRUE,
@@ -43,12 +43,14 @@ submit_llm_pairs(
 
   Model identifier for the chosen backend. For `"openai"` this should be
   an OpenAI model name (for example `"gpt-4.1"`, `"gpt-5.1"`). For
-  `"anthropic"` and `"gemini"`, use the corresponding provider model
-  names (for example `"claude-4-5-sonnet"` or `"gemini-3-pro-preview"`).
-  For "together", use Together.ai model identifiers such as
-  `"deepseek-ai/DeepSeek-R1"` or `"deepseek-ai/DeepSeek-V3"`. For
-  `"ollama"`, use a local model name known to the Ollama server (for
-  example `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`).
+  `"anthropic"`, use Anthropic model names such as
+  `"claude-sonnet-4-5"`. For `"gemini"` and `"vertex"`, use the
+  corresponding Gemini model names (for example
+  `"gemini-3.5-flash-lite"` or `"gemini-2.5-flash"`). For "together",
+  use Together.ai model identifiers such as
+  `"deepseek-ai/DeepSeek-V4-Flash-0731"`. For `"ollama"`, use a local
+  model name known to the Ollama server (for example
+  `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`).
 
 - trait_name:
 
@@ -67,7 +69,8 @@ submit_llm_pairs(
 - backend:
 
   Character scalar indicating which LLM provider to use. One of
-  `"openai"`, `"anthropic"`, `"gemini"`, `"together"`, or `"ollama"`.
+  `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, or
+  `"ollama"`.
 
 - endpoint:
 
@@ -75,8 +78,8 @@ submit_llm_pairs(
   that support multiple live APIs. For the `"openai"` backend this must
   be one of `"chat.completions"` or `"responses"`, matching
   [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md).
-  For `"anthropic"`, `"gemini"`, `"together"`, and `"ollama"`, this is
-  currently ignored.
+  For `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, and
+  `"ollama"`, this is currently ignored.
 
 - api_key:
 
@@ -130,14 +133,15 @@ submit_llm_pairs(
   forwarded to
   [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md)
   and typically include `temperature`, `top_p`, `logprobs`, `reasoning`,
-  `service_tier`, and `include_thoughts`. For `"anthropic"` and
-  `"gemini"`, they are forwarded to
-  [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md)
+  `service_tier`, and `include_thoughts`. For `"anthropic"`, `"gemini"`,
+  and `"vertex"`, they are forwarded to
+  [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
+  [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
   or
-  [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md)
+  [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md)
   and may include options such as `max_output_tokens`,
-  `include_thoughts`, and provider-specific controls. For `"ollama"`,
-  arguments are forwarded to
+  `include_thoughts`, `service_tier`, `thinking_level`, and
+  provider-specific controls. For `"ollama"`, arguments are forwarded to
   [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
   and may include `host`, `think`, `num_ctx`, and other Ollama-specific
   options.
@@ -164,7 +168,7 @@ A list containing:
 
 This function supports parallel processing, incremental saving, and
 resume capability for the `"openai"`, `"anthropic"`, `"gemini"`,
-`"together"`, and `"ollama"` backends.
+`"vertex"`, `"together"`, and `"ollama"` backends.
 
 At present, the following backends are implemented:
 
@@ -177,6 +181,9 @@ At present, the following backends are implemented:
 - `"gemini"` →
   [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md)
 
+- `"vertex"` →
+  [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md)
+
 - `"together"` →
   [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md)
 
@@ -188,10 +195,27 @@ At present, the following backends are implemented:
 - [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
   [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
   [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
+  [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
   [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
   and
   [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
   for backend-specific implementations.
+
+Other live backends:
+[`anthropic_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md),
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md),
+[`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md),
+[`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md),
+[`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
+[`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
+[`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
+[`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
+[`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
+[`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
+[`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
+[`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)
 
 ## Examples
 
@@ -219,7 +243,7 @@ res_live <- submit_llm_pairs(
   backend           = "openai",
   endpoint          = "chat.completions",
   parallel          = TRUE,
-  workers           = 4,
+  workers           = 2,
   save_path         = "results_openai.csv"
 )
 

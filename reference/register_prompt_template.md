@@ -44,6 +44,19 @@ To make templates persistent across sessions, call this function in your
 Any template must contain the placeholders `{TRAIT_NAME}`,
 `{TRAIT_DESCRIPTION}`, `{SAMPLE_1}`, and `{SAMPLE_2}`.
 
+## See also
+
+[`trait_description()`](https://shmercer.github.io/pairwiseLLM/reference/trait_description.md),
+[`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md)
+
+Other prompts and traits:
+[`build_prompt()`](https://shmercer.github.io/pairwiseLLM/reference/build_prompt.md),
+[`get_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/get_prompt_template.md),
+[`list_prompt_templates()`](https://shmercer.github.io/pairwiseLLM/reference/list_prompt_templates.md),
+[`remove_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/remove_prompt_template.md),
+[`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md),
+[`trait_description()`](https://shmercer.github.io/pairwiseLLM/reference/trait_description.md)
+
 ## Examples
 
 ``` r

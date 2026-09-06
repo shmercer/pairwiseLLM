@@ -1,8 +1,8 @@
-# Check positional bias and bootstrap consistency reliability
+# Check positional preference and bootstrap reversal agreement
 
-This function diagnoses positional bias in LLM-based paired comparison
-data and provides a bootstrapped confidence interval for the overall
-consistency of forward vs. reverse comparisons.
+This function diagnoses positional preference in LLM-based paired
+comparison data and provides a bootstrapped confidence interval for the
+overall agreement of forward vs. reverse comparisons.
 
 ## Usage
 
@@ -64,8 +64,8 @@ A list with two elements:
 
   - `p_sample1_rev`: analogous p-value for the reverse comparisons
 
-  - `p_sample1_overall`: p-value from a binomial test for the null that
-    position 1 wins 50\\ *all* (forward + reverse) comparisons
+  - `p_sample1_overall`: p-value from the paired exact test that
+    position-1 and position-2 inconsistencies are equally likely
 
   - `total_pos1_wins`: total number of wins by position 1 across
     forward + reverse comparisons
@@ -100,6 +100,29 @@ A list with two elements:
 It is designed to work with the output of
 [`compute_reverse_consistency`](https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.md),
 but will also accept a tibble that looks like its `$details` component.
+
+Each row of `details` is one unordered pair after any duplicate
+judgments have been reduced to a per-direction majority by
+[`compute_reverse_consistency()`](https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.md).
+The agreement estimate and its percentile bootstrap interval therefore
+use unordered pairs as the unit of analysis and treat those rows as
+independently resampled units. This assumption may be inappropriate when
+pairs share items.
+
+The direction-specific binomial tests likewise treat unordered-pair
+outcomes within a direction as independent. The overall test is paired:
+among inconsistent pairs, it compares the number for which position 1
+won both presentations with the number for which position 2 won both.
+This is the exact conditional form of McNemar's test. It returns `NA`
+when there are no informative inconsistent pairs. A large p-value is not
+evidence that positional preference is absent.
+
+## See also
+
+[`compute_reverse_consistency()`](https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.md)
+
+Other bias and consistency:
+[`compute_reverse_consistency()`](https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.md)
 
 ## Examples
 

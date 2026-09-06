@@ -40,10 +40,9 @@ submit_together_pairs_live(
 
 - model:
 
-  Together.ai model name, for example `"deepseek-ai/DeepSeek-R1"`,
-  `"moonshotai/Kimi-K2-Instruct-0905"`,
-  `"Qwen/Qwen3-235B-A22B-Instruct-2507-tput"`,
-  `"deepseek-ai/DeepSeek-V3"`.
+  Together.ai model name, for example the dated tested identifier
+  `"deepseek-ai/DeepSeek-V4-Flash-0731"`. Check the provider's current
+  serverless catalog before use.
 
 - trait_name:
 
@@ -101,8 +100,8 @@ submit_together_pairs_live(
 
   Integer; the number of parallel workers (threads) to use if
   `parallel = TRUE`. Defaults to 1. **Guidance:** Together.ai rate
-  limits vary by usage tier. Start with 4 to 8 workers to avoid hitting
-  HTTP 429 errors.
+  limits vary by usage tier. Start with no more than 2 workers to avoid
+  HTTP 429 errors and respect shared check-farm resources.
 
 - ...:
 
@@ -145,6 +144,27 @@ This function improves upon simple looping by offering:
 - **Error Separation:** Returns valid results and failed pairs
   separately, making it easier to debug or retry specific failures.
 
+## See also
+
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
+
+Other live backends:
+[`anthropic_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md),
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md),
+[`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md),
+[`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md),
+[`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
+[`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
+[`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md),
+[`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
+[`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
+[`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
+[`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
+[`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)
+
 ## Examples
 
 ``` r
@@ -165,7 +185,7 @@ tmpl <- set_prompt_template()
 # If interrupted, running this again will resume progress.
 res_seq <- submit_together_pairs_live(
   pairs             = pairs,
-  model             = "deepseek-ai/DeepSeek-R1",
+  model             = "deepseek-ai/DeepSeek-V4-Flash-0731",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -176,13 +196,13 @@ res_seq <- submit_together_pairs_live(
 # Note: On Windows, this opens background R sessions.
 res_par <- submit_together_pairs_live(
   pairs             = pairs,
-  model             = "deepseek-ai/DeepSeek-R1",
+  model             = "deepseek-ai/DeepSeek-V4-Flash-0731",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
   save_path         = "results_par.csv",
   parallel          = TRUE,
-  workers           = 4
+  workers           = 2
 )
 
 # Inspect results

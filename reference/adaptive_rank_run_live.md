@@ -14,6 +14,7 @@ adaptive_rank_run_live(
   btl_config = NULL,
   session_dir = NULL,
   persist_item_log = NULL,
+  checkpoint_every_steps = NULL,
   progress = c("all", "refits", "steps", "none"),
   progress_redraw_every = 10L,
   progress_show_events = TRUE,
@@ -49,14 +50,10 @@ adaptive_rank_run_live(
 
 - adaptive_config:
 
-  Optional named list overriding adaptive controller behavior. Supported
-  fields: `global_identified_reliability_min`,
-  `global_identified_rank_corr_min`, `p_long_low`, `p_long_high`,
-  `long_taper_mult`, `long_frac_floor`, `mid_bonus_frac`,
-  `explore_taper_mult`, `boundary_k`, `boundary_window`,
-  `boundary_frac`, `p_star_override_margin`, and
-  `star_override_budget_per_round`. Unknown fields and invalid values
-  abort with an actionable error.
+  Optional named list overriding adaptive controller behavior. Unknown
+  fields and invalid values abort with an actionable error. See
+  [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
+  for the full list of supported keys, detailed semantics, and defaults.
 
 - btl_config:
 
@@ -66,80 +63,109 @@ adaptive_rank_run_live(
   `refit_pairs_target`
 
   :   Minimum new committed comparisons required before the next BTL
-      refit.
+      refit. Default is `ceiling(N / 2)` clamped to `[20L, 5000L]`
+      (Phase A linking uses the active set size).
 
   `model_variant`
 
   :   BTL MCMC variant: `"btl"`, `"btl_e"`, `"btl_b"`, or `"btl_e_b"`.
+      Default is `"btl_e_b"`.
 
   `ess_bulk_min`
 
-  :   Minimum bulk ESS required for diagnostics to pass.
+  :   Minimum bulk ESS required for diagnostics to pass. Default is
+      `max(400, round(20 * sqrt(N)))`.
 
   `ess_bulk_min_near_stop`
 
-  :   Stricter ESS requirement when a run is close to stopping.
+  :   Stricter ESS requirement when a run is close to stopping. Default
+      is `max(1000, round(50 * sqrt(N)))`.
 
   `max_rhat`
 
-  :   Maximum allowed split-\\\hat{R}\\ diagnostic value.
+  :   Maximum allowed split-\\\hat{R}\\ diagnostic value. Default is
+      `1.01`.
 
   `divergences_max`
 
-  :   Maximum allowed divergent transitions.
+  :   Maximum allowed divergent transitions. Default is `0L`.
 
   `eap_reliability_min`
 
-  :   Minimum EAP reliability to allow stopping.
+  :   Minimum EAP reliability to allow stopping. Default is `0.90`.
 
   `stability_lag`
 
-  :   Lag (in refits) used for stability checks.
+  :   Lag (in refits) used for stability checks. Default is `2L`.
 
   `theta_corr_min`
 
-  :   Minimum lagged correlation of posterior means.
+  :   Minimum lagged correlation of posterior means. Default is `0.95`.
 
   `theta_sd_rel_change_max`
 
   :   Maximum relative change in posterior SD allowed by stability
-      checks.
+      checks. Default is `0.10`.
 
   `rank_spearman_min`
 
-  :   Minimum lagged Spearman rank correlation.
+  :   Minimum lagged Spearman rank correlation. Default is `0.95`.
 
   `near_tie_p_low`, `near_tie_p_high`
 
   :   Probability band used only for near-tie diagnostics in round
-      logging (not used for stopping decisions).
+      logging (not used for stopping decisions). Defaults are `0.40` and
+      `0.60`.
 
-  Defaults are resolved from the current item count, then merged with
-  user overrides.
+  `deferred_audit_max_draws`
+
+  :   Maximum posterior draws used for report-only deferred round-log
+      audit metrics such as near-tie and credible-interval width
+      summaries. This does not affect CmdStan diagnostics or stop gates.
+      Default is `400L`; use `Inf` to use all draws.
+
+  `phase_b_refit_parallel`, `phase_b_refit_workers`
+
+  :   Opt-in parallel execution for spoke-separable Phase B post-refit
+      updates after the main BTL refit. Uses forked local workers and is
+      only supported on Unix-like platforms. Defaults are `FALSE` and
+      `1L`.
+
+  Defaults are resolved from the current item count `N`, then merged
+  with user overrides.
 
 - session_dir:
 
-  Optional directory for saving session artifacts.
+  Optional directory for saving session artifacts. If `NULL`, uses
+  `state$config$session_dir`. Default is `NULL`.
 
 - persist_item_log:
 
-  Logical; when TRUE, write per-refit item logs to disk.
+  Logical; when TRUE, write per-refit item logs to disk. If `NULL`, uses
+  `state$config$persist_item_log`. Default is `NULL`.
+
+- checkpoint_every_steps:
+
+  Optional positive integer checkpoint cadence for ordinary live
+  persistence. If `NULL`, uses the persisted state value when present,
+  otherwise defaults to `100L`.
 
 - progress:
 
-  Progress output: "all", "refits", "steps", or "none".
+  Progress output: `"all"`, `"refits"`, `"steps"`, or `"none"`. Default
+  is `"all"`.
 
 - progress_redraw_every:
 
-  Redraw progress bar every N steps.
+  Redraw progress bar every N steps. Default is `10L`.
 
 - progress_show_events:
 
-  Logical; when TRUE, print notable step events.
+  Logical; when TRUE, print notable step events. Default is `TRUE`.
 
 - progress_errors:
 
-  Logical; when TRUE, include invalid-step events.
+  Logical; when TRUE, include invalid-step events. Default is `TRUE`.
 
 - ...:
 
@@ -158,10 +184,20 @@ then applies transactional updates if and only if the judge response is
 valid. Invalid responses produce a logged step with `pair_id = NA` and
 must not update committed-comparison state.
 
-Pair selection is TrueSkill-based and does not use BTL posterior draws.
-Utility is based on \$\$U_0 = p\_{ij}(1 - p\_{ij})\$\$ with
-exploration/exploitation routing and fallback handling recorded in
-`step_log`.
+Within-set routing is TrueSkill-based with utility \$\$U_0 = p\_{ij}(1 -
+p\_{ij})\$\$. After an accepted posterior refit is available, the
+long-link gate uses the BTL posterior win probability for candidate
+eligibility; before that it falls back deterministically to TrueSkill.
+In linking Phase B, anchor/strata routing uses linking-global scores
+built from Phase A summaries and the accepted anchored-joint state.
+Linking Phase B routing ranks eligible cross-set candidates by
+ridge-stabilized D-optimal log-det information gain on the active
+linking parameter block using order-averaged Model D probabilities.
+Linking inference parameters remain inference-only (diagnostics and
+stopping) and are not direct pair-selection objectives. Phase B uses a
+hard-lock hub-fixed fit and a deterministic accepted state before the
+first linking refit. Exploration/exploitation routing and fallback
+handling are recorded in `step_log`.
 
 Round scheduling uses stage-specific admissibility:
 
@@ -188,7 +224,12 @@ lagged stability criteria. Refit-level outcomes are appended to
 `round_log`; per-item posterior summaries are appended to `item_log`.
 Controller behavior can change after refits via identifiability-gated
 settings in `adaptive_config`; those controls affect pair routing and
-quotas, while BTL remains inference-only.
+quotas, while BTL remains inference-only. If
+`adaptive_config$max_pairs_after_stop > 0`, the run records a stop
+boundary at the first refit with `stop_decision = TRUE` and allows at
+most that many additional committed comparisons before deterministic
+termination. Round logs record `max_pairs_after_stop` and
+`pairs_committed_after_stop`.
 
 ## See also
 
@@ -285,24 +326,24 @@ run_summary
 #> 1       8               6               6        0 FALSE             
 #> # ℹ 1 more variable: last_stop_reason <chr>
 head(step_view)
-#> # A tibble: 6 × 51
-#>   step_id timestamp           pair_id     i     j     A     B     Y status
-#>     <int> <dttm>                <int> <int> <int> <int> <int> <int> <chr> 
-#> 1       1 2026-02-11 04:39:08       1     1     5     1     5     0 ok    
-#> 2       2 2026-02-11 04:39:08       2     5     8     5     8     0 ok    
-#> 3       3 2026-02-11 04:39:08       3     8     6     8     6     1 ok    
-#> 4       4 2026-02-11 04:39:08       4     6     2     6     2     1 ok    
-#> 5       5 2026-02-11 04:39:08       5     2     4     2     4     0 ok    
-#> 6       6 2026-02-11 04:39:09       6     4     3     4     3     1 ok    
-#> # ℹ 42 more variables: round_id <int>, round_stage <chr>, pair_type <chr>,
-#> #   used_in_round_i <int>, used_in_round_j <int>, is_anchor_i <lgl>,
-#> #   is_anchor_j <lgl>, stratum_i <int>, stratum_j <int>, dist_stratum <int>,
-#> #   stage_committed_so_far <int>, stage_quota <int>, is_explore_step <lgl>,
-#> #   explore_mode <chr>, explore_reason <chr>, explore_rate_used <dbl>,
-#> #   local_priority_mode <chr>, long_gate_pass <lgl>, long_gate_reason <chr>,
-#> #   star_override_used <lgl>, star_override_reason <chr>, …
+#> # A tibble: 6 × 97
+#>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
+#>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
+#> 1       1 2026-09-06 21:12:23       1     1     5 S01   S05       5     1 S05  
+#> 2       2 2026-09-06 21:12:23       2     5     8 S05   S08       8     5 S08  
+#> 3       3 2026-09-06 21:12:23       3     8     6 S08   S06       6     8 S06  
+#> 4       4 2026-09-06 21:12:23       4     6     2 S06   S02       2     6 S02  
+#> 5       5 2026-09-06 21:12:23       5     2     4 S02   S04       4     2 S04  
+#> 6       6 2026-09-06 21:12:23       6     4     3 S04   S03       3     4 S03  
+#> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
+#> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
+#> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,
+#> #   llm_status_code <int>, llm_error_message <chr>, llm_custom_id <chr>,
+#> #   prompt_tokens <dbl>, completion_tokens <dbl>, total_tokens <dbl>,
+#> #   raw_response_json <chr>, round_id <int>, round_stage <chr>,
+#> #   pair_type <chr>, used_in_round_i <int>, used_in_round_j <int>, …
 names(logs)
-#> [1] "step_log"  "round_log" "item_log" 
+#> [1] "step_log"       "round_log"      "item_log"       "link_stage_log"
 
 # Resume from disk and continue.
 resumed <- adaptive_rank_resume(session_dir)

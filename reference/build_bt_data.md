@@ -42,6 +42,17 @@ It accepts either:
 Rows where `better_id` does not match either side of the pair (including
 `NA`) are excluded.
 
+## See also
+
+[`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md),
+[`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
+
+Other frequentist models:
+[`build_elo_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_elo_data.md),
+[`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md),
+[`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md),
+[`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
+
 ## Examples
 
 ``` r

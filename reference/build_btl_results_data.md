@@ -63,6 +63,13 @@ The output is deterministic and schema-valid:
 
 - deterministic `iter` and `received_at` sequences.
 
+## See also
+
+[`fit_bayes_btl_mcmc()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bayes_btl_mcmc.md)
+
+Other Bayesian models:
+[`fit_bayes_btl_mcmc()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bayes_btl_mcmc.md)
+
 ## Examples
 
 ``` r

@@ -8,7 +8,7 @@ the `{TRAIT_NAME}` and `{TRAIT_DESCRIPTION}` placeholders.
 
 ``` r
 trait_description(
-  name = c("overall_quality", "organization"),
+  name = c("overall_quality", "organization", "IRRC"),
   custom_name = NULL,
   custom_description = NULL
 )
@@ -18,8 +18,11 @@ trait_description(
 
 - name:
 
-  Character identifier for a built-in trait. One of `"overall_quality"`
-  or `"organization"`. Ignored if `custom_description` is supplied.
+  Character identifier for a built-in trait. One of `"overall_quality"`,
+  `"organization"`, or `"IRRC"`. `"IRRC"` is case-sensitive and returns
+  an overall-writing rubric spanning prompt task, development of
+  explanation, organization, and language use. Ignored if
+  `custom_description` is supplied.
 
 - custom_name:
 
@@ -45,6 +48,19 @@ A list with two elements:
   Full-text definition of the trait, suitable for inclusion in the
   prompt.
 
+## See also
+
+[`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md),
+[`build_prompt()`](https://shmercer.github.io/pairwiseLLM/reference/build_prompt.md)
+
+Other prompts and traits:
+[`build_prompt()`](https://shmercer.github.io/pairwiseLLM/reference/build_prompt.md),
+[`get_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/get_prompt_template.md),
+[`list_prompt_templates()`](https://shmercer.github.io/pairwiseLLM/reference/list_prompt_templates.md),
+[`register_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/register_prompt_template.md),
+[`remove_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/remove_prompt_template.md),
+[`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md)
+
 ## Examples
 
 ``` r
@@ -52,7 +68,7 @@ td <- trait_description("overall_quality")
 td$name
 #> [1] "Overall Quality"
 td$description
-#> [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."
+#> [1] "Overall quality of the writing, considering how well ideas are expressed,\nhow clearly the writing is organized, and how effective the language and\nconventions are."
 
 custom_td <- trait_description(
   custom_name = "Ideas",

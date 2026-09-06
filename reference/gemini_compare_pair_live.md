@@ -23,6 +23,7 @@ gemini_compare_pair_live(
   top_p = NULL,
   top_k = NULL,
   max_output_tokens = NULL,
+  service_tier = "standard",
   api_version = "v1beta",
   include_raw = FALSE,
   include_thoughts = FALSE,
@@ -51,7 +52,7 @@ gemini_compare_pair_live(
 
 - model:
 
-  Gemini model identifier (for example `"gemini-3-pro-preview"` or
+  Gemini model identifier (for example `"gemini-3.5-flash-lite"` or
   `"gemini-3-flash-preview"`). The value is interpolated into the path
   `"/{api_version}/models/<model>:generateContent"`.
 
@@ -81,8 +82,9 @@ gemini_compare_pair_live(
   - For Gemini 3 Flash models (for example `"gemini-3-flash-preview"`),
     `"minimal"` is supported and is passed through as `"minimal"`.
 
-  - For non-Flash Gemini 3 models (for example
-    `"gemini-3-pro-preview"`), `"minimal"` is not supported.
+  - For models not matched by the package's Gemini 3 Flash-name detector
+    (for example `"gemini-3.5-flash-lite"`), `"minimal"` is not
+    supported.
 
   - For backward compatibility with earlier Gemini 3 Pro usage, `"low"`
     maps to `"low"` and both `"medium"` and `"high"` map to `"high"`.
@@ -104,6 +106,12 @@ gemini_compare_pair_live(
 - max_output_tokens:
 
   Optional maximum output token count. If `NULL`, omitted.
+
+- service_tier:
+
+  Gemini Developer API service tier. Use `"standard"` (default) or
+  `NULL` for the provider default request, or `"flex"` / `"priority"` to
+  encode the documented Gemini `serviceTier` request field.
 
 - api_version:
 
@@ -183,6 +191,27 @@ Gemini's explicit chain-of-thought style reasoning ("thoughts") via the
 while still using the final answer content to detect the
 `<BETTER_SAMPLE>` tag.
 
+## See also
+
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
+
+Other live backends:
+[`anthropic_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md),
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md),
+[`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md),
+[`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md),
+[`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
+[`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
+[`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md),
+[`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
+[`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
+[`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
+[`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
+[`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
+[`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)
+
 ## Examples
 
 ``` r
@@ -194,13 +223,13 @@ if (FALSE) { # \dontrun{
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Gemini 3 Pro example (existing behavior)
+# Dated tested Gemini Developer API configuration
 res <- gemini_compare_pair_live(
   ID1               = "S01",
   text1             = "Text 1",
   ID2               = "S02",
   text2             = "Text 2",
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,

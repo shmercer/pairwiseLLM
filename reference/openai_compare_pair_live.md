@@ -48,7 +48,7 @@ openai_compare_pair_live(
 
 - model:
 
-  OpenAI model name (e.g. "gpt-4.1", "gpt-5.2-2025-12-11").
+  OpenAI model name (e.g. "gpt-4.1", "gpt-5.6-sol").
 
 - trait_name:
 
@@ -85,10 +85,12 @@ openai_compare_pair_live(
 - ...:
 
   Additional OpenAI parameters, for example `temperature`, `top_p`,
-  `logprobs`, `reasoning`, `service_tier`, `pair_uid`, and (optionally)
-  `include_thoughts`. When `pair_uid` is supplied, it is used verbatim
-  as `custom_id`. The same validation rules for gpt-5 models are applied
-  as in
+  `logprobs`, `reasoning`, `service_tier`, `max_output_tokens`,
+  `pair_uid`, and (optionally) `include_thoughts`. `max_output_tokens`
+  must be a positive integer and is supported only by the Responses
+  endpoint. When `pair_uid` is supplied, it is used verbatim as
+  `custom_id`. The same validation rules for gpt-5 models are applied as
+  in
   [`build_openai_batch_requests`](https://shmercer.github.io/pairwiseLLM/reference/build_openai_batch_requests.md).
   When using the Responses endpoint with reasoning models, you can
   request reasoning summaries in the `thoughts` column by setting
@@ -161,7 +163,7 @@ A tibble with one row and columns:
 ## Details
 
 It supports both the Chat Completions endpoint ("/v1/chat/completions")
-and the Responses endpoint ("/v1/responses", for example gpt-5.1 with
+and the Responses endpoint ("/v1/responses", for example gpt-5.6 with
 reasoning), using the same prompt template and model / parameter rules
 as the batch pipeline.
 
@@ -171,13 +173,31 @@ For the Responses endpoint, the function collects:
 
 - Visible assistant output into the `content` column.
 
-**Temperature Defaults:** If `temperature` is not provided in `...`:
+**Sampling defaults:** If `temperature` or `top_p` is not provided in
+`...`, the corresponding field is omitted so the model/provider default
+applies. Reasoning modes that do not support sampling parameters
+continue to require them to be `NULL`.
 
-- It defaults to `0` (deterministic) for standard models or when
-  reasoning is disabled.
+## See also
 
-- It remains `NULL` when reasoning is enabled, as the API does not
-  support temperature in that mode.
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
+
+Other live backends:
+[`anthropic_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md),
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md),
+[`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md),
+[`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
+[`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
+[`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md),
+[`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
+[`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
+[`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
+[`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
+[`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
+[`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)
 
 ## Examples
 
@@ -191,15 +211,14 @@ res <- openai_compare_pair_live(
   ID2 = "B", text2 = "Text B...",
   model = "gpt-4.1",
   trait_name = "clarity",
-  trait_description = "Which text is clearer?",
-  temperature = 0
+  trait_description = "Which text is clearer?"
 )
 
-# 2. Reasoning comparison using GPT-5.2
+# 2. Reasoning comparison using GPT-5.6 Sol
 res_reasoning <- openai_compare_pair_live(
   ID1 = "A", text1 = "Text A...",
   ID2 = "B", text2 = "Text B...",
-  model = "gpt-5.2-2025-12-11",
+  model = "gpt-5.6-sol",
   trait_name = "clarity",
   trait_description = "Which text is clearer?",
   endpoint = "responses",

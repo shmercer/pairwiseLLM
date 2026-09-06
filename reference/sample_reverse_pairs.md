@@ -21,7 +21,8 @@ sample_reverse_pairs(pairs, reverse_pct = NULL, n_reverse = NULL, seed = NULL)
 
   Optional proportion of rows to reverse (between 0 and 1). If
   `n_reverse` is also supplied, `n_reverse` takes precedence and
-  `reverse_pct` is ignored.
+  `reverse_pct` is ignored. For values strictly between 0 and 1, the row
+  count is `round(nrow(pairs) * reverse_pct)`.
 
 - n_reverse:
 
@@ -36,6 +37,19 @@ sample_reverse_pairs(pairs, reverse_pct = NULL, n_reverse = NULL, seed = NULL)
 
 A tibble containing the reversed pairs only (i.e., with `ID1` swapped
 with `ID2` and `text1` swapped with `text2`).
+
+## See also
+
+[`read_samples_df()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_df.md),
+[`read_samples_dir()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_dir.md)
+
+Other pairing and data:
+[`alternate_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/alternate_pair_order.md),
+[`make_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/make_pairs.md),
+[`randomize_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/randomize_pair_order.md),
+[`read_samples_df()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_df.md),
+[`read_samples_dir()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_dir.md),
+[`sample_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/sample_pairs.md)
 
 ## Examples
 

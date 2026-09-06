@@ -11,7 +11,8 @@ adaptive_rank_start(
   session_dir = NULL,
   persist_item_log = FALSE,
   ...,
-  adaptive_config = NULL
+  adaptive_config = NULL,
+  checkpoint_every_steps = NULL
 )
 ```
 
@@ -20,21 +21,24 @@ adaptive_rank_start(
 - items:
 
   A vector or data frame of items. Data frames must include an `item_id`
-  column (or `id`/`ID`). Item IDs may be character; internal logs use
-  integer indices derived from these IDs.
+  column (or `id`/`ID`). For linking run modes, items must also include
+  integer `set_id` values and globally unique `global_item_id` values.
+  Item IDs may be character; internal logs use integer indices derived
+  from these IDs.
 
 - seed:
 
   Integer seed used for deterministic warm-start shuffling and selection
-  randomness.
+  randomness. Default is `1L`.
 
 - session_dir:
 
-  Optional directory for saving session artifacts.
+  Optional directory for saving session artifacts. Default is `NULL`.
 
 - persist_item_log:
 
-  Logical; when TRUE, write per-refit item logs to disk.
+  Logical; when TRUE, write per-refit item logs to disk. Default is
+  `FALSE`.
 
 - ...:
 
@@ -43,36 +47,15 @@ adaptive_rank_start(
 
 - adaptive_config:
 
-  Optional named list overriding adaptive controller behavior. Supported
-  fields:
+  Optional named list of adaptive controller overrides. Unknown fields
+  and invalid values abort with an actionable error. See
+  [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
+  for the full list of supported keys, detailed semantics, and defaults.
 
-  `global_identified_reliability_min`, `global_identified_rank_corr_min`
+- checkpoint_every_steps:
 
-  :   Thresholds used to mark global identifiability after each refit.
-
-  `p_long_low`, `p_long_high`
-
-  :   Posterior probability gate used for long-link eligibility once
-      globally identified.
-
-  `long_taper_mult`, `long_frac_floor`, `mid_bonus_frac`
-
-  :   Late-stage long-link taper and quota reallocation controls.
-
-  `explore_taper_mult`
-
-  :   Late-stage exploration taper multiplier.
-
-  `boundary_k`, `boundary_window`, `boundary_frac`
-
-  :   Local-stage boundary-priority controls after global
-      identifiability.
-
-  `p_star_override_margin`, `star_override_budget_per_round`
-
-  :   Near-tie star-cap override controls.
-
-  Unknown fields and invalid values abort with an actionable error.
+  Optional positive integer checkpoint cadence for ordinary live
+  persistence. If `NULL`, defaults to `100L`.
 
 ## Value
 
@@ -88,11 +71,24 @@ canonical logs used in the adaptive pairing workflow. Warm start pair
 construction follows the shuffled chain design, which guarantees a
 connected comparison graph after \\N - 1\\ committed comparisons.
 
-Pair selection in this framework is TrueSkill-driven and uses base
-utility \$\$U_0 = p\_{ij}(1 - p\_{ij})\$\$ where \\p\_{ij}\\ is the
-current TrueSkill win probability for pair \\\\i, j\\\\. Bayesian BTL
-posterior draws are not used for pair selection; they are used for
-posterior inference, diagnostics, and stopping at refit rounds.
+Pair selection in this framework is stepwise and uncertainty-aware.
+Within-set routing uses TrueSkill base utility \$\$U_0 = p\_{ij}(1 -
+p\_{ij})\$\$ where \\p\_{ij}\\ is the current TrueSkill win probability
+for pair \\\\i, j\\\\. In linking Phase B, anchor/strata routing uses a
+linking-global score derived from Phase A raw summaries and the accepted
+Phase B linking state. In linking Phase B, eligible cross-set candidates
+are ranked by ridge-stabilized D-optimal log-det information gain on the
+active linking parameter block using order-averaged Model D
+probabilities. In the spoke free block with the hub fixed. Linking
+inference parameters are used for inference/diagnostics/stopping, not as
+direct selection objectives. Phase B uses pooled within-set Phase A
+judge-parameter estimates, using the configured BTL model variant, as
+the accepted shared source for fixed `beta`/`epsilon` constants.
+Bayesian BTL posterior draws are not used as general pair-selection
+objectives; within-set pairing remains TrueSkill-routed, with accepted
+posterior refits contributing only to the long-link probability gate.
+Linking Phase B refits use Bayesian posterior estimation and posterior
+summaries/diagnostics are logged per spoke at each linking refit.
 
 The returned state contains canonical logs:
 

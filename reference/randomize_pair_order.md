@@ -54,6 +54,14 @@ and
 [`compute_reverse_consistency`](https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.md)
 for reverse-order checks.
 
+Other pairing and data:
+[`alternate_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/alternate_pair_order.md),
+[`make_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/make_pairs.md),
+[`read_samples_df()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_df.md),
+[`read_samples_dir()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_dir.md),
+[`sample_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/sample_pairs.md),
+[`sample_reverse_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/sample_reverse_pairs.md)
+
 ## Examples
 
 ``` r

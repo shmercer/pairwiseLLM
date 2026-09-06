@@ -118,8 +118,8 @@ submit_anthropic_pairs_live(
 
   Integer; the number of parallel workers (threads) to use if
   `parallel = TRUE`. Defaults to 1. **Guidance:** Anthropic rate limits
-  vary significantly by tier. Start conservatively (e.g., 2-4 workers)
-  to avoid HTTP 429 errors.
+  vary significantly by tier. Start conservatively (at most 2 workers)
+  to avoid HTTP 429 errors and respect shared check-farm resources.
 
 - ...:
 
@@ -167,9 +167,8 @@ This function offers:
 Temperature and extended-thinking behaviour are controlled by
 [`anthropic_compare_pair_live`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md):
 
-- When `reasoning = "none"` (no extended thinking), the default
-  `temperature` is `0` (deterministic) unless you explicitly supply a
-  different `temperature` via `...`.
+- When `reasoning = "none"` (no extended thinking), omitted
+  `temperature` and `top_p` values use model/provider defaults.
 
 - When `reasoning = "enabled"` (extended thinking), Anthropic requires
   `temperature = 1`. If you supply a different value, an error is raised
@@ -180,7 +179,28 @@ If you set `include_thoughts = TRUE` while `reasoning = "none"`, the
 underlying calls upgrade to `reasoning = "enabled"`, which in turn
 implies `temperature = 1` and adds a `thinking` block to the API
 request. When `include_thoughts = FALSE` (the default), and you leave
-`reasoning = "none"`, the effective default temperature is `0`.
+`reasoning = "none"`, omitted sampling values use model defaults.
+
+## See also
+
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
+
+Other live backends:
+[`anthropic_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md),
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md),
+[`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md),
+[`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md),
+[`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
+[`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md),
+[`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
+[`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
+[`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
+[`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
+[`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
+[`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)
 
 ## Examples
 
@@ -218,7 +238,7 @@ res_par <- submit_anthropic_pairs_live(
   prompt_template   = tmpl,
   save_path         = "results_par.csv",
   parallel          = TRUE,
-  workers           = 4
+  workers           = 2
 )
 
 # Inspect results

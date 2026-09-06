@@ -20,6 +20,7 @@ submit_gemini_pairs_live(
   top_p = NULL,
   top_k = NULL,
   max_output_tokens = NULL,
+  service_tier = "standard",
   api_version = "v1beta",
   verbose = TRUE,
   status_every = 1L,
@@ -41,7 +42,7 @@ submit_gemini_pairs_live(
 
 - model:
 
-  Gemini model name (e.g. `"gemini-3-pro-preview"` or
+  Gemini model name (e.g. `"gemini-3.5-flash-lite"` or
   `"gemini-3-flash-preview"`).
 
 - trait_name:
@@ -89,6 +90,13 @@ submit_gemini_pairs_live(
   Optional integer; forwarded to
   [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md).
 
+- service_tier:
+
+  Gemini Developer API service tier forwarded to
+  [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md).
+  Use `"standard"` (default) or `NULL` for provider default behavior, or
+  `"flex"` / `"priority"` to request the documented Gemini service tier.
+
 - api_version:
 
   API version; default `"v1beta"`.
@@ -132,9 +140,9 @@ submit_gemini_pairs_live(
 - workers:
 
   Integer; the number of parallel workers (threads) to use if
-  `parallel = TRUE`. Defaults to 1. **Guidance:** Start conservatively
-  (e.g., 2-4 workers) to avoid hitting HTTP 429 errors, as Gemini rate
-  limits can be strict depending on your tier.
+  `parallel = TRUE`. Defaults to 1. **Guidance:** Use no more than 2
+  workers to avoid HTTP 429 errors and respect shared check-farm
+  resources.
 
 - ...:
 
@@ -175,6 +183,27 @@ This function offers:
 - **Error Separation:** Returns valid results and failed pairs
   separately, making it easier to debug or retry specific failures.
 
+## See also
+
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
+
+Other live backends:
+[`anthropic_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_compare_pair_live.md),
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md),
+[`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md),
+[`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md),
+[`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
+[`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md),
+[`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
+[`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
+[`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
+[`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
+[`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
+[`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)
+
 ## Examples
 
 ``` r
@@ -197,7 +226,7 @@ tmpl <- set_prompt_template()
 # 1. Sequential execution with incremental saving
 res_seq <- submit_gemini_pairs_live(
   pairs             = pairs,
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -207,13 +236,13 @@ res_seq <- submit_gemini_pairs_live(
 # 2. Parallel execution (faster)
 res_par <- submit_gemini_pairs_live(
   pairs             = pairs,
-  model             = "gemini-3-pro-preview",
+  model             = "gemini-3.5-flash-lite",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
   save_path         = "results_gemini_par.csv",
   parallel          = TRUE,
-  workers           = 4
+  workers           = 2
 )
 
 # 3. Gemini 3 Flash example (minimal thinking)

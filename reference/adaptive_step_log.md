@@ -23,12 +23,27 @@ A tibble with one row per attempted step, in execution order.
 `step_log` is the canonical per-step audit log for the adaptive
 workflow. It records candidate pipeline outcomes, selected pair/order,
 and commit status. A step with invalid judge response keeps committed
-fields as `NA` and must not update model state.
+fields as `NA` and must not update model state. The selected endpoints
+`i`/`j` are the pre-orientation item indices, while `A`/`B` are the
+displayed / judged item indices after order assignment. `Y` is defined
+relative to displayed order: `Y = 1` means `A` wins and `Y = 0` means
+`B` wins. For cross-run audit and reuse, prefer the stable `*_id`
+columns plus `unordered_key`/`ordered_key` rather than transient integer
+item positions from the live state. Judge provenance, token counts, and
+`raw_response_json` are canonical step-log outputs, with
+`raw_response_json` stored as serialized character data rather than a
+list-column.
 
 Core columns:
 
-- Identity/outcome: `step_id`, `timestamp`, `pair_id`, `i`, `j`, `A`,
-  `B`, `Y`, `status`.
+- Identity/outcome: `step_id`, `timestamp`, `pair_id`, `i`, `j`, `i_id`,
+  `j_id`, `A`, `B`, `A_id`, `B_id`, `unordered_key`, `ordered_key`, `Y`,
+  `status`.
+
+- Judge audit: `judge_backend`, `judge_model`, `judge_endpoint`,
+  `judge_valid`, `judge_invalid_reason`, `llm_status_code`,
+  `llm_error_message`, `llm_custom_id`, `prompt_tokens`,
+  `completion_tokens`, `total_tokens`, `raw_response_json`.
 
 - Routing/scheduling: `round_id`, `round_stage`, `pair_type`,
   `stage_committed_so_far`, `stage_quota`.
@@ -61,19 +76,21 @@ Other adaptive logs:
 [`adaptive_get_logs()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_get_logs.md),
 [`adaptive_item_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_item_log.md),
 [`adaptive_results_history()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_results_history.md),
-[`adaptive_round_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_round_log.md)
+[`adaptive_round_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_round_log.md),
+[`summarize_items()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_items.md),
+[`summarize_refits()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_refits.md)
 
 ## Examples
 
 ``` r
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
 adaptive_step_log(state)
-#> # A tibble: 0 × 51
-#> # ℹ 51 variables: step_id <int>, timestamp <dttm>, pair_id <int>, i <int>,
-#> #   j <int>, A <int>, B <int>, Y <int>, status <chr>, round_id <int>,
-#> #   round_stage <chr>, pair_type <chr>, used_in_round_i <int>,
-#> #   used_in_round_j <int>, is_anchor_i <lgl>, is_anchor_j <lgl>,
-#> #   stratum_i <int>, stratum_j <int>, dist_stratum <int>,
-#> #   stage_committed_so_far <int>, stage_quota <int>, is_explore_step <lgl>,
-#> #   explore_mode <chr>, explore_reason <chr>, explore_rate_used <dbl>, …
+#> # A tibble: 0 × 97
+#> # ℹ 97 variables: step_id <int>, timestamp <dttm>, pair_id <int>, i <int>,
+#> #   j <int>, i_id <chr>, j_id <chr>, A <int>, B <int>, A_id <chr>, B_id <chr>,
+#> #   unordered_key <chr>, ordered_key <chr>, Y <int>, status <chr>,
+#> #   judge_backend <chr>, judge_model <chr>, judge_endpoint <chr>,
+#> #   judge_valid <lgl>, judge_invalid_reason <chr>, llm_status_code <int>,
+#> #   llm_error_message <chr>, llm_custom_id <chr>, prompt_tokens <dbl>,
+#> #   completion_tokens <dbl>, total_tokens <dbl>, raw_response_json <chr>, …
 ```

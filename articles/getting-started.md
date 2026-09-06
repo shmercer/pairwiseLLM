@@ -3,8 +3,10 @@
 ## 1. Introduction
 
 `pairwiseLLM` provides a unified workflow for generating and analyzing
-**pairwise comparisons of writing quality** using LLM APIs (OpenAI,
-Anthropic, Gemini, Together), and local models via Ollama..
+**pairwise comparisons of writing quality** using live LLM APIs (OpenAI,
+Anthropic, Gemini Developer API, Vertex AI Gemini API, Together.ai),
+local models via Ollama, and batch APIs for OpenAI, Anthropic, and
+Gemini Developer API.
 
 A typical workflow:
 
@@ -30,18 +32,26 @@ For advanced batch processing workflows, see:
 `pairwiseLLM` reads provider keys **only from environment variables**,
 never from R options or global variables.
 
-| Provider                                    | Environment Variable |
-|---------------------------------------------|----------------------|
-| [OpenAI](https://openai.com/api/)           | OPENAI_API_KEY       |
-| [Anthropic](https://console.anthropic.com/) | ANTHROPIC_API_KEY    |
-| [Gemini](https://aistudio.google.com/)      | GEMINI_API_KEY       |
-| [Together](https://www.together.ai/)        | TOGETHER_API_KEY     |
+| Provider Surface                          | Environment Variable |
+|-------------------------------------------|----------------------|
+| [OpenAI](https://openai.com/api/)         | OPENAI_API_KEY       |
+| [Anthropic](https://platform.claude.com/) | ANTHROPIC_API_KEY    |
+| Gemini Developer API                      | GEMINI_API_KEY       |
+| Vertex AI Gemini API                      | VERTEX_API_KEY       |
+| [Together](https://www.together.ai/)      | TOGETHER_API_KEY     |
 
-You should put these in your `~/.Renviron`:
+`backend = "gemini"` uses the Gemini Developer API and
+`backend = "vertex"` uses the Vertex AI Gemini API. Those backends use
+separate API-key surfaces.
+
+Configure only the key for the cloud backend you plan to use; you do not
+need keys for every provider. You can put the relevant key in your
+`~/.Renviron`:
 
     OPENAI_API_KEY="sk-..."
     ANTHROPIC_API_KEY="..."
     GEMINI_API_KEY="..."
+    VERTEX_API_KEY="..."
     TOGETHER_API_KEY="..."
 
 Check which keys are available:
@@ -49,13 +59,15 @@ Check which keys are available:
     library(pairwiseLLM)
 
     check_llm_api_keys()
-    #> All known LLM API keys are set: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, TOGETHER_API_KEY.
-    #> # A tibble: 4 × 4
-    #>   backend   service        env_var           has_key
-    #> 1 openai    OpenAI         OPENAI_API_KEY    TRUE
-    #> 2 anthropic Anthropic      ANTHROPIC_API_KEY TRUE
-    #> 3 gemini    Google Gemini  GEMINI_API_KEY    TRUE
-    #> 4 together  Together.ai    TOGETHER_API_KEY  TRUE
+    #> Some LLM API keys are not set. This is expected when you use only selected backends.
+    #> # A tibble: 5 × 4
+    #>   backend   service              env_var           has_key
+    #>   <chr>     <chr>                <chr>             <lgl>
+    #> 1 openai    OpenAI               OPENAI_API_KEY    TRUE
+    #> 2 anthropic Anthropic            ANTHROPIC_API_KEY TRUE
+    #> 3 gemini    Google Gemini        GEMINI_API_KEY    TRUE
+    #> 4 vertex    Vertex AI Gemini API VERTEX_API_KEY    TRUE
+    #> 5 together  Together.ai          TOGETHER_API_KEY  TRUE
 
 [Ollama](https://ollama.com/) runs locally and does not require an API
 key, just that the Ollama server is running.
@@ -68,6 +80,7 @@ The package ships with 20 simulated student writing samples with clear
 differences in quality:
 
 ``` r
+
 data("example_writing_samples", package = "pairwiseLLM")
 dplyr::slice_head(example_writing_samples, n = 3)
 #> # A tibble: 3 × 3
@@ -90,6 +103,7 @@ Each sample has:
 Create all unordered pairs:
 
 ``` r
+
 pairs <- example_writing_samples |>
   make_pairs()
 
@@ -107,12 +121,14 @@ dplyr::slice_head(pairs, n = 5)
 Sample a subset of pairs:
 
 ``` r
+
 pairs_small <- sample_pairs(pairs, n_pairs = 10, seed = 123)
 ```
 
 Randomize SAMPLE_1 / SAMPLE_2 order:
 
 ``` r
+
 pairs_small <- randomize_pair_order(pairs_small, seed = 99)
 ```
 
@@ -123,18 +139,20 @@ pairs_small <- randomize_pair_order(pairs_small, seed = 99)
 ### 5.1 Using a built-in trait
 
 ``` r
+
 td <- trait_description("overall_quality")
 td
 #> $name
 #> [1] "Overall Quality"
 #> 
 #> $description
-#> [1] "Overall quality of the writing, considering how well ideas are expressed,\n      how clearly the writing is organized, and how effective the language and\n      conventions are."
+#> [1] "Overall quality of the writing, considering how well ideas are expressed,\nhow clearly the writing is organized, and how effective the language and\nconventions are."
 ```
 
 Or define your own:
 
 ``` r
+
 td_custom <- trait_description(
   custom_name = "Clarity",
   custom_description = "How clearly and effectively ideas are expressed."
@@ -146,6 +164,7 @@ td_custom <- trait_description(
 Load default prompt:
 
 ``` r
+
 tmpl <- set_prompt_template()
 cat(substr(tmpl, 1, 300))
 #> You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.
@@ -176,15 +195,20 @@ Placeholders required in custom prompt templates:
 Load a template from file:
 
 ``` r
+
 set_prompt_template(file = "my_template.txt")
 ```
+
+For named registration, replacement, removal, and the schemas used in
+later steps, see [Data Schemas and Prompt
+Management](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.md).
 
 ------------------------------------------------------------------------
 
 ## 6. Live Pairwise Comparisons
 
-The unified wrapper works for **OpenAI, Anthropic, Gemini, Together, and
-Ollama.**
+The unified wrapper works for **OpenAI, Anthropic, Gemini Developer API,
+Vertex AI Gemini API, Together.ai, and Ollama**.
 
 It supports **parallel processing** and **incremental output file
 saving** (resume capability) for **all** supported backends. The
@@ -196,24 +220,61 @@ function returns a list containing:
   errors, invalid winners)
 
 ``` r
+
 # Example using parallel processing and incremental saving
 res_list <- submit_llm_pairs(
   pairs             = pairs_small,
-  backend           = "openai", # also "anthropic", "gemini", "together"
+  backend           = "openai", # also "anthropic", "gemini", "vertex", "together", "ollama"
   model             = "gpt-4o",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
   # New features:
   parallel          = TRUE,
-  workers           = 4,
+  workers           = 2,
   save_path         = "live_results.csv"
 )
 ```
 
+`service_tier` is provider-specific rather than portable across
+backends. Gemini Developer API and Vertex AI Gemini API currently accept
+the public values `"standard"`, `"flex"`, and `"priority"`, but Vertex
+is live-only and uses a different wire format internally.
+
+``` r
+
+# Gemini Developer API live request
+res_gemini <- submit_llm_pairs(
+  pairs             = pairs_small,
+  backend           = "gemini",
+  model             = "gemini-3.5-flash-lite",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  service_tier      = "priority"
+)
+
+# Vertex AI Gemini API live request
+res_vertex <- submit_llm_pairs(
+  pairs             = pairs_small,
+  backend           = "vertex",
+  model             = "gemini-3.8-flash",
+  trait_name        = td$name,
+  trait_description = td$description,
+  prompt_template   = tmpl,
+  service_tier      = "flex"
+)
+```
+
+For OpenAI, `service_tier = "flex"` requests lower-cost, slower Flex
+processing when the selected model supports it. Capacity may be
+unavailable; Flex is not priority routing. Service-tier meanings are
+provider-specific.
+
 Preview results:
 
 ``` r
+
 # Successes are in the $results tibble
 dplyr::slice_head(res_list$results, 5)
 
@@ -244,6 +305,7 @@ Convert the LLM output (specifically the `$results` tibble for
 output) to a 3-column BT dataset:
 
 ``` r
+
 # res_list: output list from submit_llm_pairs()
 # We extract the $results tibble for modeling
 bt_data <- build_bt_data(res_list$results)
@@ -253,6 +315,7 @@ dplyr::slice_head(bt_data, 5)
 and/or a dataset for Elo modeling:
 
 ``` r
+
 # res_list: output from submit_llm_pairs()
 elo_data <- build_elo_data(res_list$results)
 ```
@@ -264,12 +327,14 @@ elo_data <- build_elo_data(res_list$results)
 Fit model:
 
 ``` r
+
 bt_fit <- fit_bt_model(bt_data)
 ```
 
 Summarize results:
 
 ``` r
+
 summarize_bt_fit(bt_fit)
 ```
 
@@ -284,6 +349,7 @@ The output includes:
 ## 9. Elo Modeling
 
 ``` r
+
 elo_fit <- fit_elo_model(elo_data, runs = 5)
 elo_fit
 ```
@@ -300,20 +366,27 @@ Outputs:
 
 ### 10.1 Submit a batch
 
+Batch helpers support `"openai"`, `"anthropic"`, and `"gemini"`.
+`backend = "vertex"` is rejected explicitly because Vertex batch mode is
+not implemented in this series.
+
 ``` r
+
 batch <- llm_submit_pairs_batch(
-  backend            = "openai",
-  model              = "gpt-4o",
+  backend            = "gemini",
+  model              = "gemini-3.8-flash",
   pairs              = pairs_small,
   trait_name         = td$name,
   trait_description  = td$description,
-  prompt_template    = tmpl
+  prompt_template    = tmpl,
+  service_tier       = "priority"
 )
 ```
 
 ### 10.2 Download results
 
 ``` r
+
 res_batch <- llm_download_batch_results(batch)
 head(res_batch)
 ```
@@ -329,6 +402,7 @@ This is particularly useful when you have many pairs or want to ensure
 that you can resume if the session ends.
 
 ``` r
+
 # Generate a small set of pairs
 pairs_small <- example_writing_samples |>
   make_pairs() |>
@@ -374,7 +448,7 @@ rest of the job by calibrating input tokens from prompt byte length.
 
 The output includes both:
 
-- **Expected cost** (using mean output tokens from the pilot)
+- **Expected cost** (using mean output tokens from usable pilot calls)
 - **Budget cost** (using a high quantile of pilot output tokens,
   controlled by `budget_quantile`)
 
@@ -382,6 +456,7 @@ If you are running a discounted batch workflow, set `mode = "batch"` and
 supply a `batch_discount` multiplier.
 
 ``` r
+
 # Create a moderate set of pairs
 pairs_big <- example_writing_samples |>
   make_pairs() |>
@@ -409,13 +484,37 @@ est <- estimate_llm_pairs_cost(
 est$summary
 ```
 
+#### Deterministic calculation example
+
+Suppose a two-pair live pilot records input-token counts of 20 and 40
+and completion-token counts of 10 and 30. The prompt-byte calibration
+predicts 60 and 80 input tokens for the two remaining pairs. With
+`budget_quantile = 0.9`, R’s type-7 sample quantile of `c(10, 30)` is
+28.
+
+At input and output prices of 1 currency unit per million tokens and
+`batch_discount = 0.5`, the estimator calculates:
+
+- observed live pilot tokens: 60 input and 40 output;
+- remaining expected tokens: 140 input and `mean(c(10, 30)) * 2 = 40`
+  output;
+- remaining budget output tokens: `28 * 2 = 56`;
+- expected cost: `(60 + 40 + 0.5 * (140 + 40)) / 1e6 = 0.000190`; and
+- budget cost: `(60 + 40 + 0.5 * (140 + 56)) / 1e6 = 0.000198`.
+
+The pilot observations are included once at live prices. They are not
+averaged into the estimated remaining count and are not discounted.
+
 Avoid paying twice: reuse pilot results
 
-The estimator returns both the pilot output and the pairs not included
-in the pilot (remaining_pairs). Use remaining_pairs to submit only the
-remaining work after you are satisfied with the estimate:
+The estimator returns the original pilot output object and the pairs not
+included in the pilot (`remaining_pairs`). Use `remaining_pairs` to
+submit only the remaining work after you are satisfied with the
+estimate. Pilot judgments are not automatically merged into the later
+submission result:
 
 ``` r
+
 remaining_pairs <- est$remaining_pairs
 
 # Example: submit only the remaining pairs as a batch
@@ -438,6 +537,8 @@ Notes:
 - Ollama is not supported in the estimator (local models do not incur
   token costs).
 - Reasoning/thinking tokens are treated as output tokens for pricing.
+- Supply current prices for the selected provider, model, endpoint, and
+  mode; the package does not maintain or validate a pricing catalog.
 
 ------------------------------------------------------------------------
 
@@ -466,15 +567,25 @@ Most users use the unified interface, but backend helpers are available.
 - [`run_gemini_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_gemini_batch_pipeline.md)
 - [`parse_gemini_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_gemini_batch_output.md)
 
-#### 11.4 Together.ai (live only)
+#### 11.4 Vertex AI Gemini API (live only)
+
+- [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md)
+- [`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)
+
+#### 11.5 Together.ai (live only)
 
 - [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md)
 - [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md)
 
-#### 11.5 Ollama (local, live only)
+#### 11.6 Ollama (local, live only)
 
 - [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
 - [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
+- [`ensure_only_ollama_model_loaded()`](https://shmercer.github.io/pairwiseLLM/reference/ensure_only_ollama_model_loaded.md)
+
+Reasoning/thinking constraints, partial-result handling, retries, and
+local-resource guidance are covered in [Provider Controls and
+Recovery](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.md).
 
 ------------------------------------------------------------------------
 
@@ -483,25 +594,29 @@ Most users use the unified interface, but backend helpers are available.
 #### Missing API keys
 
 ``` r
+
 check_llm_api_keys()
 #> No LLM API keys are currently set for known backends:
 #>   - OpenAI:         OPENAI_API_KEY
 #>   - Anthropic:      ANTHROPIC_API_KEY
 #>   - Google Gemini:  GEMINI_API_KEY
+#>   - Vertex AI:      VERTEX_API_KEY
 #>   - Together.ai:    TOGETHER_API_KEY
 #> 
 #> Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:
 #>   OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"
 #>   ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"
 #>   GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"
+#>   VERTEX_API_KEY    = "YOUR_VERTEX_KEY_HERE"
 #>   TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"
-#> # A tibble: 4 × 4
-#>   backend   service       env_var           has_key
-#>   <chr>     <chr>         <chr>             <lgl>  
-#> 1 openai    OpenAI        OPENAI_API_KEY    FALSE  
-#> 2 anthropic Anthropic     ANTHROPIC_API_KEY FALSE  
-#> 3 gemini    Google Gemini GEMINI_API_KEY    FALSE  
-#> 4 together  Together.ai   TOGETHER_API_KEY  FALSE
+#> # A tibble: 5 × 4
+#>   backend   service              env_var           has_key
+#>   <chr>     <chr>                <chr>             <lgl>  
+#> 1 openai    OpenAI               OPENAI_API_KEY    FALSE  
+#> 2 anthropic Anthropic            ANTHROPIC_API_KEY FALSE  
+#> 3 gemini    Google Gemini        GEMINI_API_KEY    FALSE  
+#> 4 vertex    Vertex AI Gemini API VERTEX_API_KEY    FALSE  
+#> 5 together  Together.ai          TOGETHER_API_KEY  FALSE
 ```
 
 #### Timeouts
@@ -525,7 +640,6 @@ for a full example).
 
 ## 13. Citation
 
-> Mercer, S. H. (2025). *Getting started with pairwiseLLM* \[R package
-> vignette\]. In *pairwiseLLM: Pairwise comparison tools for large
-> language model-based writing evaluation*.
+> Mercer, S. H. (2026). *Getting started with pairwiseLLM* \[R package
+> vignette\]. Comprehensive R Archive Network.
 > <https://doi.org/10.32614/CRAN.package.pairwiseLLM>

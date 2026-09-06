@@ -114,10 +114,10 @@ anthropic_compare_pair_live(
   `top_p` or a custom `thinking_budget_tokens`, which will be passed
   through to the Messages API.
 
-  When `reasoning = "none"` the defaults are:
+  When `reasoning = "none"`:
 
-  - `temperature = 0` (deterministic behaviour) unless you supply
-    `temperature` explicitly.
+  - Omitted `temperature` and `top_p` values are not sent, so the
+    model/provider defaults apply.
 
   - `max_tokens = 768` unless you supply `max_tokens`.
 
@@ -223,8 +223,8 @@ The API typically responds with a dated model string such as
 
 For stable, reproducible comparisons we recommend:
 
-- `reasoning = "none"` with `temperature = 0` and `max_tokens = 768` for
-  standard pairwise scoring.
+- `reasoning = "none"` with model-default sampling and
+  `max_tokens = 768` for standard pairwise scoring.
 
 - `reasoning = "enabled"` when you explicitly want extended thinking; in
   this mode Anthropic requires `temperature = 1`. The default in this
@@ -236,6 +236,7 @@ For stable, reproducible comparisons we recommend:
 When `reasoning = "enabled"`, this function also sends a `thinking`
 block to the Anthropic API:
 
+
     "thinking": {
       "type": "enabled",
       "budget_tokens": <thinking_budget_tokens>
@@ -246,8 +247,29 @@ convenient way to opt into Anthropic's extended thinking mode without
 changing the `reasoning` argument explicitly. In that case, `reasoning`
 is upgraded to `"enabled"`, the default `temperature` becomes 1, and a
 `thinking` block is included in the request. When `reasoning = "none"`
-and `include_thoughts` is `FALSE` or `NULL`, the default temperature
-remains 0 unless you explicitly override it.
+and `include_thoughts` is `FALSE` or `NULL`, omitted sampling parameters
+use the model/provider defaults.
+
+## See also
+
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
+
+Other live backends:
+[`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
+[`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md),
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md),
+[`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md),
+[`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md),
+[`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
+[`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
+[`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md),
+[`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
+[`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
+[`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
+[`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
+[`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
+[`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)
 
 ## Examples
 
@@ -262,7 +284,7 @@ samples <- example_writing_samples[1:2, ]
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Short, deterministic comparison with no explicit thinking block
+# Standard comparison with model-default sampling and no thinking block
 res_claude <- anthropic_compare_pair_live(
   ID1               = samples$ID[1],
   text1             = samples$text[1],
