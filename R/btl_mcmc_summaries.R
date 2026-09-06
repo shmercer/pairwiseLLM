@@ -344,6 +344,8 @@
 #' # Drop optional diagnostics if you want a compact core summary:
 #' summarize_refits(logs, include_optional = FALSE)
 #'
+#' @seealso [adaptive_get_logs()], [adaptive_step_log()]
+#' @family adaptive logs
 #' @export
 summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
   last_n <- .adaptive_summary_validate_last_n(last_n)
@@ -488,6 +490,8 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
 #' # Sort and take the top rows:
 #' summarize_items(logs, sort_by = "rank_mean", top_n = 2)
 #'
+#' @seealso [adaptive_get_logs()], [adaptive_step_log()]
+#' @family adaptive logs
 #' @export
 summarize_items <- function(state,
     posterior = NULL,

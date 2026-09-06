@@ -85,6 +85,8 @@
 #' status <- check_llm_api_keys(verbose = FALSE)
 #' status
 #'
+#' @seealso [llm_compare_pair()], [submit_llm_pairs()]
+#' @family live backends
 #' @export
 check_llm_api_keys <- function(verbose = TRUE) {
   # Known backends and their primary env vars

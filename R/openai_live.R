@@ -104,6 +104,8 @@ NULL
 #' print(res_reasoning$thoughts)
 #' }
 #'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 openai_compare_pair_live <- function(
   ID1,
@@ -452,6 +454,8 @@ openai_compare_pair_live <- function(
 #' )
 #' }
 #'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 submit_openai_pairs_live <- function(
   pairs,

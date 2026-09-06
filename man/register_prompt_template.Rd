@@ -62,3 +62,15 @@ tmpl <- get_prompt_template("my_custom")
 cat(substr(tmpl, 1, 160), "...\n")
 
 }
+\seealso{
+\code{\link[=trait_description]{trait_description()}}, \code{\link[=set_prompt_template]{set_prompt_template()}}
+
+Other prompts and traits:
+\code{\link[=build_prompt]{build_prompt()}},
+\code{\link[=get_prompt_template]{get_prompt_template()}},
+\code{\link[=list_prompt_templates]{list_prompt_templates()}},
+\code{\link[=remove_prompt_template]{remove_prompt_template()}},
+\code{\link[=set_prompt_template]{set_prompt_template()}},
+\code{\link[=trait_description]{trait_description()}}
+}
+\concept{prompts and traits}

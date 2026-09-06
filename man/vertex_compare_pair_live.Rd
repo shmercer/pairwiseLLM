@@ -123,3 +123,37 @@ live backends.
 The prompt template should instruct the model to choose exactly one of
 SAMPLE_1 or SAMPLE_2 and wrap the decision in \verb{<BETTER_SAMPLE>} tags.
 }
+\examples{
+\dontrun{
+td <- trait_description("overall_quality")
+vertex_compare_pair_live(
+  ID1 = "A", text1 = "First response.",
+  ID2 = "B", text2 = "Second response.",
+  model = "gemini-3.8-flash",
+  trait_name = td$name,
+  trait_description = td$description,
+  thinking_level = "low"
+)
+}
+
+}
+\seealso{
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}}, \code{\link[=llm_compare_pair]{llm_compare_pair()}}
+
+Other live backends:
+\code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}},
+\code{\link[=check_llm_api_keys]{check_llm_api_keys()}},
+\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}},
+\code{\link[=llm_compare_pair]{llm_compare_pair()}},
+\code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}},
+\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}},
+\code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}},
+\code{\link[=submit_llm_pairs]{submit_llm_pairs()}},
+\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
+\code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
+\code{\link[=together_compare_pair_live]{together_compare_pair_live()}}
+}
+\concept{live backends}

@@ -53,8 +53,13 @@ testthat::test_that("provider smoke runner fails missing keys unless explicitly 
 
 testthat::test_that("smoke matrix covers the selected current model catalog", {
   root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  matrix_path <- file.path(root, "inst", "extdata", "model_smoke_matrix.csv")
+  testthat::skip_if(
+    !file.exists(matrix_path),
+    "Repository smoke matrix is unavailable in installed-package tests."
+  )
   matrix <- utils::read.csv(
-    file.path(root, "inst", "extdata", "model_smoke_matrix.csv"),
+    matrix_path,
     stringsAsFactors = FALSE
   )
 
@@ -83,7 +88,12 @@ testthat::test_that("smoke matrix covers the selected current model catalog", {
 
 testthat::test_that("batch orchestration submits all jobs before grouped polling", {
   root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
-  source(file.path(root, "inst", "scripts", "smoke_model_compatibility_helpers.R"))
+  helper <- file.path(root, "inst", "scripts", "smoke_model_compatibility_helpers.R")
+  testthat::skip_if(
+    !file.exists(helper),
+    "Repository smoke helpers are unavailable in installed-package tests."
+  )
+  source(helper)
 
   rows <- data.frame(test_id = c("a", "b"), stringsAsFactors = FALSE)
   states <- setNames(lapply(rows$test_id, function(x) new_batch_state()), rows$test_id)
@@ -129,6 +139,10 @@ testthat::test_that("batch orchestration submits all jobs before grouped polling
 testthat::test_that("list mode is offline and reports filtered configurations", {
   root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
   script <- file.path(root, "inst", "scripts", "smoke_model_compatibility.R")
+  testthat::skip_if(
+    !file.exists(script),
+    "Repository smoke runner is unavailable in installed-package tests."
+  )
   output <- withr::with_dir(root, system2(
     file.path(R.home("bin"), "Rscript"),
     args = shQuote(c(script, "--list=true", "--mode=batch", "--providers=anthropic")),
@@ -143,9 +157,14 @@ testthat::test_that("list mode is offline and reports filtered configurations", 
 
 testthat::test_that("promotion blocks incomplete runs and builds tested flags", {
   root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
-  source(file.path(
+  helper <- file.path(
     root, "inst", "scripts", "promote_model_smoke_results_helpers.R"
-  ))
+  )
+  testthat::skip_if(
+    !file.exists(helper),
+    "Repository promotion helpers are unavailable in installed-package tests."
+  )
+  source(helper)
 
   results <- data.frame(
     test_id = c("openai_live", "openai_batch", "together_live"),
@@ -208,9 +227,14 @@ testthat::test_that("promotion updates dated evidence references", {
     "model_smoke_results_2026-09-03.csv",
     "model_batch_smoke_results_2026-09-03.csv"
   ), path)
-  source(testthat::test_path(
+  helper <- testthat::test_path(
     "..", "..", "inst", "scripts", "promote_model_smoke_results_helpers.R"
-  ))
+  )
+  testthat::skip_if(
+    !file.exists(helper),
+    "Repository promotion helpers are unavailable in installed-package tests."
+  )
+  source(helper)
 
   update_dated_evidence_references(path, "2026-09-05")
   contents <- readLines(path)
@@ -220,6 +244,10 @@ testthat::test_that("promotion updates dated evidence references", {
 testthat::test_that("smoke resume restores authoritative static metadata", {
   root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
   script <- file.path(root, "inst", "scripts", "smoke_model_compatibility.R")
+  testthat::skip_if(
+    !file.exists(script),
+    "Repository smoke runner is unavailable in installed-package tests."
+  )
   output_path <- tempfile(fileext = ".csv")
   arguments <- shQuote(c(
     script, "--mode=live", "--providers=openai", "--allow-missing-keys=true",

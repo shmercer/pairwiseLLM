@@ -508,7 +508,7 @@ a new or empty directory when you intentionally want a new study. For expensive 
 ## A detailed live-LLM workflow
 
 The following is a **live-API example and is not evaluated**. It uses the OpenAI configuration
-recorded as tested with package 1.3.1 on 2026-09-03. A tested configuration is evidence about that
+recorded as tested with package 1.3.1 on 2026-09-05. A tested configuration is evidence about that
 dated request shape, not a promise that the provider still offers the model. Check
 [Backends and Tested Model Configurations](model-compatibility.html) and the provider catalog
 before a long run.

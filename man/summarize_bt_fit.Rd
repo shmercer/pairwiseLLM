@@ -52,3 +52,13 @@ summarize_bt_fit(fit1)
 summarize_bt_fit(fit2)
 
 }
+\seealso{
+\code{\link[=build_bt_data]{build_bt_data()}}, \code{\link[=fit_bt_model]{fit_bt_model()}}
+
+Other frequentist models:
+\code{\link[=build_bt_data]{build_bt_data()}},
+\code{\link[=build_elo_data]{build_elo_data()}},
+\code{\link[=fit_bt_model]{fit_bt_model()}},
+\code{\link[=fit_elo_model]{fit_elo_model()}}
+}
+\concept{frequentist models}

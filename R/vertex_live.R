@@ -189,6 +189,21 @@ normalize_vertex_service_tier <- function(service_tier) {
 #'   * `prompt_tokens`, `completion_tokens`, `total_tokens` - usage counts if
 #'     reported by the API, otherwise `NA_real_`.
 #'
+#' @examples
+#' \dontrun{
+#' td <- trait_description("overall_quality")
+#' vertex_compare_pair_live(
+#'   ID1 = "A", text1 = "First response.",
+#'   ID2 = "B", text2 = "Second response.",
+#'   model = "gemini-3.8-flash",
+#'   trait_name = td$name,
+#'   trait_description = td$description,
+#'   thinking_level = "low"
+#' )
+#' }
+#'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 vertex_compare_pair_live <- function(
   ID1,
@@ -528,6 +543,24 @@ vertex_compare_pair_live <- function(
 #'     observed outcomes.}
 #' }
 #'
+#' @examples
+#' \dontrun{
+#' data("example_writing_samples", package = "pairwiseLLM")
+#' pairs <- make_pairs(example_writing_samples[1:3, ])
+#' td <- trait_description("overall_quality")
+#' out <- submit_vertex_pairs_live(
+#'   pairs = pairs,
+#'   model = "gemini-3.8-flash",
+#'   trait_name = td$name,
+#'   trait_description = td$description,
+#'   thinking_level = "low",
+#'   parallel = FALSE
+#' )
+#' out$failed_pairs
+#' }
+#'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 submit_vertex_pairs_live <- function(
   pairs,

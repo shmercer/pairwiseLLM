@@ -170,6 +170,7 @@
 #' * [build_bt_data()] and [fit_bt_model()] for Bradley–Terry modelling of
 #'   comparison results.
 #'
+#' @family live backends
 #' @export
 llm_compare_pair <- function(
   ID1,
@@ -469,6 +470,7 @@ llm_compare_pair <- function(
 #'   [submit_together_pairs_live()], and [submit_ollama_pairs_live()] for
 #'   backend-specific implementations.
 #'
+#' @family live backends
 #' @export
 submit_llm_pairs <- function(
     pairs,

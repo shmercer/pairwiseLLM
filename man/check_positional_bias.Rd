@@ -117,3 +117,10 @@ bias <- check_positional_bias(rc)
 bias$summary
 
 }
+\seealso{
+\code{\link[=compute_reverse_consistency]{compute_reverse_consistency()}}
+
+Other bias and consistency:
+\code{\link[=compute_reverse_consistency]{compute_reverse_consistency()}}
+}
+\concept{bias and consistency}

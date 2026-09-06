@@ -98,6 +98,8 @@
 #' res_deepseek$thoughts
 #' }
 #'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 together_compare_pair_live <- function(
   ID1,
@@ -484,6 +486,8 @@ together_compare_pair_live <- function(
 #' }
 #' }
 #'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 submit_together_pairs_live <- function(
   pairs,

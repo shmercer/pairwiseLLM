@@ -44,3 +44,13 @@ elo_data <- build_elo_data(results)
 elo_data
 
 }
+\seealso{
+\code{\link[=build_bt_data]{build_bt_data()}}, \code{\link[=fit_bt_model]{fit_bt_model()}}
+
+Other frequentist models:
+\code{\link[=build_bt_data]{build_bt_data()}},
+\code{\link[=fit_bt_model]{fit_bt_model()}},
+\code{\link[=fit_elo_model]{fit_elo_model()}},
+\code{\link[=summarize_bt_fit]{summarize_bt_fit()}}
+}
+\concept{frequentist models}

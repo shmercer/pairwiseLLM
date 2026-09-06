@@ -38,6 +38,8 @@
 #' custom_td$name
 #' custom_td$description
 #'
+#' @seealso [set_prompt_template()], [build_prompt()]
+#' @family prompts and traits
 #' @export
 trait_description <- function(name = c("overall_quality", "organization",
                                       "IRRC"),

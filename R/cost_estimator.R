@@ -126,6 +126,8 @@
 #' # Reuse pilot results and run only remaining pairs:
 #' remaining <- est$remaining_pairs
 #' }
+#' @seealso [make_pairs()], [submit_llm_pairs()], [llm_submit_pairs_batch()]
+#' @family cost estimation
 #' @export
 estimate_llm_pairs_cost <- function(
     pairs,

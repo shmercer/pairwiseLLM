@@ -233,6 +233,8 @@ NULL
 #'
 #' reqs_reason
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 build_anthropic_batch_requests <- function(
   pairs,
@@ -439,6 +441,8 @@ build_anthropic_batch_requests <- function(
 #' batch$processing_status
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 anthropic_create_batch <- function(
   requests,
@@ -491,6 +495,8 @@ anthropic_create_batch <- function(
 #' latest$processing_status
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 anthropic_get_batch <- function(
   batch_id,
@@ -543,6 +549,8 @@ anthropic_get_batch <- function(
 #' final$processing_status
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 anthropic_poll_batch_until_complete <- function(
   batch_id,
@@ -628,6 +636,8 @@ anthropic_poll_batch_until_complete <- function(
 #' anthropic_download_batch_results(final$id, jsonl_path)
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 anthropic_download_batch_results <- function(
   batch_id,
@@ -730,6 +740,8 @@ anthropic_download_batch_results <- function(
 #' tbl <- parse_anthropic_batch_output("anthropic-results.jsonl")
 #' }
 #'
+#' @seealso [parse_openai_batch_output()], [parse_gemini_batch_output()]
+#' @family result normalization
 #' @export
 parse_anthropic_batch_output <- function(
   jsonl_path,
@@ -1035,6 +1047,8 @@ parse_anthropic_batch_output <- function(
 #' head(pipeline_thoughts$results)
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 run_anthropic_batch_pipeline <- function(
   pairs,

@@ -421,16 +421,19 @@ if (nrow(batch_rows) > 0L) {
     outcome_from_results(results)
   }
 
+  runtime_env <- environment(persist_runtime)
   persist_states <- function(states) {
+    updated_runtime <- get("runtime", envir = runtime_env, inherits = FALSE)
     for (id in names(states)) {
-      i <- match(id, runtime$test_id)
-      runtime$status[[i]] <<- states[[id]]$status
-      runtime$status_code[[i]] <<- states[[id]]$status_code
-      runtime$parsed_winner[[i]] <<- states[[id]]$parsed_winner
-      runtime$error[[i]] <<- states[[id]]$error
-      runtime$remote_id[[i]] <<- states[[id]]$remote_id
-      runtime$remote_status[[i]] <<- states[[id]]$remote_status
+      i <- match(id, updated_runtime$test_id)
+      updated_runtime$status[[i]] <- states[[id]]$status
+      updated_runtime$status_code[[i]] <- states[[id]]$status_code
+      updated_runtime$parsed_winner[[i]] <- states[[id]]$parsed_winner
+      updated_runtime$error[[i]] <- states[[id]]$error
+      updated_runtime$remote_id[[i]] <- states[[id]]$remote_id
+      updated_runtime$remote_status[[i]] <- states[[id]]$remote_status
     }
+    assign("runtime", updated_runtime, envir = runtime_env)
     persist_runtime()
   }
 

@@ -156,6 +156,8 @@
 #' res_gemini <- llm_download_batch_results(batch_gemini)
 #' }
 #'
+#' @seealso [llm_download_batch_results()], [llm_submit_pairs_multi_batch()]
+#' @family batch backends
 #' @export
 llm_submit_pairs_batch <- function(
   pairs,
@@ -354,6 +356,8 @@ llm_submit_pairs_batch <- function(
 #' res
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_submit_pairs_multi_batch()]
+#' @family batch backends
 #' @export
 llm_download_batch_results <- function(x, ...) {
   if (inherits(x, "pairwiseLLM_batch")) {

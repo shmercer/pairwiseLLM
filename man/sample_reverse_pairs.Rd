@@ -40,3 +40,15 @@ pairs <- make_pairs(example_writing_samples)
 rev20 <- sample_reverse_pairs(pairs, reverse_pct = 0.2, seed = 123)
 
 }
+\seealso{
+\code{\link[=read_samples_df]{read_samples_df()}}, \code{\link[=read_samples_dir]{read_samples_dir()}}
+
+Other pairing and data:
+\code{\link[=alternate_pair_order]{alternate_pair_order()}},
+\code{\link[=make_pairs]{make_pairs()}},
+\code{\link[=randomize_pair_order]{randomize_pair_order()}},
+\code{\link[=read_samples_df]{read_samples_df()}},
+\code{\link[=read_samples_dir]{read_samples_dir()}},
+\code{\link[=sample_pairs]{sample_pairs()}}
+}
+\concept{pairing and data}

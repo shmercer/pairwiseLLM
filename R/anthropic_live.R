@@ -247,6 +247,8 @@ NULL
 #' substr(res_claude_reason$content, 1, 200)
 #' }
 #'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 anthropic_compare_pair_live <- function(
   ID1,
@@ -720,6 +722,8 @@ anthropic_compare_pair_live <- function(
 #' }
 #' }
 #'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 submit_anthropic_pairs_live <- function(
   pairs,

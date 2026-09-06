@@ -156,7 +156,7 @@ anthropic_models <- c(
 )
 
 gemini_models <- c(
-  "gemini-2.5-flash"
+  "gemini-3.8-flash"
 )
 
 openai_models <- c(
@@ -170,7 +170,7 @@ directions <- c("forward", "reverse")
 anthropic_grid <- tidyr::expand_grid(
   provider  = "anthropic",
   model     = anthropic_models,
-  thinking  = thinking_levels,
+  thinking  = "no_thinking",
   direction = directions
 )
 
@@ -184,11 +184,9 @@ gemini_grid <- tidyr::expand_grid(
 openai_grid <- tidyr::expand_grid(
   provider  = "openai",
   model     = openai_models,
-  thinking  = thinking_levels,
+  thinking  = "no_thinking",
   direction = directions
-) |>
-  # For example, only allow "with_thinking" for the GPT-5-series model
-  dplyr::filter(model == "gpt-5.6-luna" | thinking == "no_thinking")
+)
 
 batch_grid <- dplyr::bind_rows(
   anthropic_grid,
@@ -419,6 +417,6 @@ Once you have per-run results CSVs (e.g., one per template × model × thinking 
 
 # 9. Citation
 
-> Mercer, S. H. (2025). *Advanced: Submitting and polling multiple batches* [R package vignette]. 
-In *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*. 
-https://doi.org/10.32614/CRAN.package.pairwiseLLM
+> Mercer, S. H. (2026). *Advanced: Submitting and polling multiple batches* [R package vignette]. In
+> *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*
+> (Version 1.3.1). https://doi.org/10.32614/CRAN.package.pairwiseLLM

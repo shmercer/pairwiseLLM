@@ -79,6 +79,8 @@
 #' tmpl2 <- set_prompt_template(template = custom)
 #' cat(substr(tmpl2, 1, 120), "...\n")
 #'
+#' @seealso [trait_description()], [build_prompt()]
+#' @family prompts and traits
 #' @export
 set_prompt_template <- function(template = NULL,
                                 file = NULL) {
@@ -152,6 +154,8 @@ set_prompt_template <- function(template = NULL,
 #' )
 #' cat(substr(prompt, 1, 200), "...\n")
 #'
+#' @seealso [trait_description()], [set_prompt_template()]
+#' @family prompts and traits
 #' @export
 build_prompt <- function(template,
                          trait_name,
@@ -233,6 +237,8 @@ build_prompt <- function(template,
 #' tmpl <- get_prompt_template("my_custom")
 #' cat(substr(tmpl, 1, 160), "...\n")
 #'
+#' @seealso [trait_description()], [set_prompt_template()]
+#' @family prompts and traits
 #' @export
 register_prompt_template <- function(name,
                                      template = NULL,
@@ -286,6 +292,7 @@ register_prompt_template <- function(name,
 #'   \code{\link{list_prompt_templates}},
 #'   \code{\link{remove_prompt_template}}
 #'
+#' @family prompts and traits
 #' @export
 get_prompt_template <- function(name = "default") {
   if (!is.character(name) || length(name) != 1L || !nzchar(name)) {
@@ -336,6 +343,8 @@ get_prompt_template <- function(name = "default") {
 #' @examples
 #' list_prompt_templates()
 #'
+#' @seealso [trait_description()], [set_prompt_template()]
+#' @family prompts and traits
 #' @export
 list_prompt_templates <- function(include_builtin = TRUE,
                                   include_registered = TRUE) {
@@ -383,6 +392,7 @@ list_prompt_templates <- function(include_builtin = TRUE,
 #'   \code{\link{get_prompt_template}},
 #'   \code{\link{list_prompt_templates}}
 #'
+#' @family prompts and traits
 #' @export
 remove_prompt_template <- function(name, quiet = FALSE) {
   if (!is.character(name) || length(name) != 1L || !nzchar(name)) {

@@ -173,6 +173,9 @@ Load a template from file:
 set_prompt_template(file = "my_template.txt")
 ```
 
+For named registration, replacement, removal, and the schemas used in later steps, see
+[Data Schemas and Prompt Management](data-and-prompts.html).
+
 ---
 
 # 6. Live Pairwise Comparisons
@@ -223,7 +226,7 @@ res_gemini <- submit_llm_pairs(
 res_vertex <- submit_llm_pairs(
   pairs             = pairs_small,
   backend           = "vertex",
-  model             = "gemini-2.5-flash",
+  model             = "gemini-3.8-flash",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -328,7 +331,7 @@ not implemented in this series.
 ```{r, eval=FALSE}
 batch <- llm_submit_pairs_batch(
   backend            = "gemini",
-  model              = "gemini-2.5-flash",
+  model              = "gemini-3.8-flash",
   pairs              = pairs_small,
   trait_name         = td$name,
   trait_description  = td$description,
@@ -512,6 +515,10 @@ Most users use the unified interface, but backend helpers are available.
 ### 11.6 Ollama (local, live only)
 - `ollama_compare_pair_live()`
 - `submit_ollama_pairs_live()`
+- `ensure_only_ollama_model_loaded()`
+
+Reasoning/thinking constraints, partial-result handling, retries, and local-resource guidance are
+covered in [Provider Controls and Recovery](provider-controls-and-recovery.html).
 
 ---
 
@@ -534,6 +541,6 @@ Use `compute_reverse_consistency()` + `check_positional_bias()` (see [vignette("
 
 # 13. Citation
 
-> Mercer, S. H. (2025). *Getting started with pairwiseLLM* [R package vignette]. 
-In *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*. 
-https://doi.org/10.32614/CRAN.package.pairwiseLLM
+> Mercer, S. H. (2026). *Getting started with pairwiseLLM* [R package vignette]. In
+> *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*
+> (Version 1.3.1). https://doi.org/10.32614/CRAN.package.pairwiseLLM

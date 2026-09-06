@@ -48,3 +48,15 @@ pairs_ex_sample <- sample_pairs(pairs_ex, pair_pct = 0.10, seed = 1)
 nrow(pairs_ex_sample)
 
 }
+\seealso{
+\code{\link[=read_samples_df]{read_samples_df()}}, \code{\link[=read_samples_dir]{read_samples_dir()}}
+
+Other pairing and data:
+\code{\link[=alternate_pair_order]{alternate_pair_order()}},
+\code{\link[=make_pairs]{make_pairs()}},
+\code{\link[=randomize_pair_order]{randomize_pair_order()}},
+\code{\link[=read_samples_df]{read_samples_df()}},
+\code{\link[=read_samples_dir]{read_samples_dir()}},
+\code{\link[=sample_reverse_pairs]{sample_reverse_pairs()}}
+}
+\concept{pairing and data}

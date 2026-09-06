@@ -96,3 +96,13 @@ pairwise comparisons of perceived physical strength."
 \emph{PLOS ONE}, 13(1), e0190393.
 \doi{10.1371/journal.pone.0190393}.
 }
+\seealso{
+\code{\link[=build_bt_data]{build_bt_data()}}, \code{\link[=fit_bt_model]{fit_bt_model()}}
+
+Other frequentist models:
+\code{\link[=build_bt_data]{build_bt_data()}},
+\code{\link[=build_elo_data]{build_elo_data()}},
+\code{\link[=fit_bt_model]{fit_bt_model()}},
+\code{\link[=summarize_bt_fit]{summarize_bt_fit()}}
+}
+\concept{frequentist models}

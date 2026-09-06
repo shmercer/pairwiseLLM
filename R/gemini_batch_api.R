@@ -404,6 +404,8 @@
 #'
 #' reqs_flash
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 build_gemini_batch_requests <- function(
   pairs,
@@ -612,6 +614,8 @@ build_gemini_batch_requests <- function(
 #' batch$metadata$state
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 gemini_create_batch <- function(
   requests,
@@ -688,6 +692,8 @@ gemini_create_batch <- function(
 #' batch$metadata$state
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 gemini_get_batch <- function(
   batch_name,
@@ -741,6 +747,8 @@ gemini_get_batch <- function(
 #' final_batch$metadata$state
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 gemini_poll_batch_until_complete <- function(
   batch_name,
@@ -874,6 +882,8 @@ gemini_poll_batch_until_complete <- function(
 #' readLines(out_file, warn = FALSE)
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 gemini_download_batch_results <- function(
   batch,
@@ -1033,6 +1043,8 @@ gemini_download_batch_results <- function(
 #' results
 #' }
 #'
+#' @seealso [parse_openai_batch_output()], [parse_anthropic_batch_output()]
+#' @family result normalization
 #' @export
 parse_gemini_batch_output <- function(results_path, requests_tbl) {
   if (!file.exists(results_path)) {
@@ -1332,6 +1344,8 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #' res_flash$results
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 run_gemini_batch_pipeline <- function(
   pairs,

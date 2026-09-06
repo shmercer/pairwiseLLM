@@ -44,3 +44,15 @@ prompt <- build_prompt(
 cat(substr(prompt, 1, 200), "...\n")
 
 }
+\seealso{
+\code{\link[=trait_description]{trait_description()}}, \code{\link[=set_prompt_template]{set_prompt_template()}}
+
+Other prompts and traits:
+\code{\link[=get_prompt_template]{get_prompt_template()}},
+\code{\link[=list_prompt_templates]{list_prompt_templates()}},
+\code{\link[=register_prompt_template]{register_prompt_template()}},
+\code{\link[=remove_prompt_template]{remove_prompt_template()}},
+\code{\link[=set_prompt_template]{set_prompt_template()}},
+\code{\link[=trait_description]{trait_description()}}
+}
+\concept{prompts and traits}

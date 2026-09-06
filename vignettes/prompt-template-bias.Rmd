@@ -894,6 +894,6 @@ inference is required.
 
 # 12. Citation
 
-> Mercer, S. H. (2025). *Prompt template positional bias testing* [R package vignette]. 
-In *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*. 
-https://doi.org/10.32614/CRAN.package.pairwiseLLM
+> Mercer, S. H. (2026). *Prompt template positional bias testing* [R package vignette]. In
+> *pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation*
+> (Version 1.3.1). https://doi.org/10.32614/CRAN.package.pairwiseLLM

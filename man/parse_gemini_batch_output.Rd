@@ -54,3 +54,11 @@ results
 }
 
 }
+\seealso{
+\code{\link[=parse_openai_batch_output]{parse_openai_batch_output()}}, \code{\link[=parse_anthropic_batch_output]{parse_anthropic_batch_output()}}
+
+Other result normalization:
+\code{\link[=parse_anthropic_batch_output]{parse_anthropic_batch_output()}},
+\code{\link[=parse_openai_batch_output]{parse_openai_batch_output()}}
+}
+\concept{result normalization}

@@ -77,3 +77,15 @@ summarize_refits(logs, last_n = 1)
 summarize_refits(logs, include_optional = FALSE)
 
 }
+\seealso{
+\code{\link[=adaptive_get_logs]{adaptive_get_logs()}}, \code{\link[=adaptive_step_log]{adaptive_step_log()}}
+
+Other adaptive logs:
+\code{\link[=adaptive_get_logs]{adaptive_get_logs()}},
+\code{\link[=adaptive_item_log]{adaptive_item_log()}},
+\code{\link[=adaptive_results_history]{adaptive_results_history()}},
+\code{\link[=adaptive_round_log]{adaptive_round_log()}},
+\code{\link[=adaptive_step_log]{adaptive_step_log()}},
+\code{\link[=summarize_items]{summarize_items()}}
+}
+\concept{adaptive logs}

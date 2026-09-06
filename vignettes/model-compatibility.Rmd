@@ -33,11 +33,11 @@ availability is controlled by the provider. Preview identifiers and reasoning
 controls can change independently of this package.
 
 Check current availability in the official catalogs for
-[OpenAI](https://developers.openai.com/api/docs/models),
-[Anthropic](https://platform.claude.com/docs/en/about-claude/models/overview),
+[OpenAI](https://developers.openai.com/api/docs/models/all),
+[Anthropic](https://platform.claude.com/docs/en/models/overview),
 [Gemini Developer API](https://ai.google.dev/gemini-api/docs/models),
-[Vertex AI](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models),
-and [Together AI](https://docs.together.ai/docs/serverless-models).
+[Vertex AI](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions),
+and [Together AI](https://docs.together.ai/docs/serverless/models).
 Ollama tags depend on what is installed on the local server.
 
 ## Dated compatibility record

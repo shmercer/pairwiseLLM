@@ -118,3 +118,10 @@ summarize_items(fit)
 }
 
 }
+\seealso{
+\code{\link[=build_btl_results_data]{build_btl_results_data()}}
+
+Other Bayesian models:
+\code{\link[=build_btl_results_data]{build_btl_results_data()}}
+}
+\concept{Bayesian models}

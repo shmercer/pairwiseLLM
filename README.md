@@ -2,7 +2,7 @@ pairwiseLLM: Pairwise Comparison Tools for Large Language Model-Based
 Writing Evaluation
 ================
 
-<!-- README-source-md5: c6ab31d11fa69f0709c0c91f631eedd0 -->
+<!-- README-source-md5: 1abc28994c51d914dc8fc511b0e83af1 -->
 
 <figure>
 <img
@@ -58,6 +58,13 @@ For basic function usage, see:
 
 - [`vignette("getting-started")`](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
 
+For data schemas, prompt management, provider controls, recovery, and
+Bayesian BTL, see:
+
+- [`vignette("data-and-prompts")`](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.html)
+- [`vignette("provider-controls-and-recovery")`](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html)
+- [`vignette("bayesian-btl")`](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.html)
+
 For advanced batch processing workflows, see:
 
 - [`vignette("advanced-batch-workflows")`](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html)
@@ -102,12 +109,12 @@ live-only in this series, so generic batch wrappers reject
 mode.
 
 Use official provider catalogs to check current availability:
-[OpenAI](https://developers.openai.com/api/docs/models),
-[Anthropic](https://platform.claude.com/docs/en/about-claude/models/overview),
+[OpenAI](https://developers.openai.com/api/docs/models/all),
+[Anthropic](https://platform.claude.com/docs/en/models/overview),
 [Gemini Developer API](https://ai.google.dev/gemini-api/docs/models),
 [Vertex
-AI](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models),
-and [Together AI](https://docs.together.ai/docs/serverless-models).
+AI](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions),
+and [Together AI](https://docs.together.ai/docs/serverless/models).
 Ollama tags are local, environment-dependent identifiers.
 
 Unless you supply `temperature` or `top_p`, pairwiseLLM omits those
@@ -242,6 +249,10 @@ At a high level, `pairwiseLLM` workflows follow this structure:
     Elo.
 
 The package provides helpers for each step.
+
+See
+[`vignette("data-and-prompts")`](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.html)
+for the exact transitions between these schemas.
 
 ------------------------------------------------------------------------
 
@@ -434,7 +445,7 @@ Example Vertex live request with a Vertex-specific API key surface:
 res_vertex <- submit_llm_pairs(
   pairs             = pairs,
   backend           = "vertex",
-  model             = "gemini-2.5-flash",
+  model             = "gemini-3.8-flash",
   trait_name        = td$name,
   trait_description = td$description,
   prompt_template   = tmpl,
@@ -460,7 +471,7 @@ Example:
 ``` r
 batch <- llm_submit_pairs_batch(
   backend           = "gemini",
-  model             = "gemini-2.5-flash",
+  model             = "gemini-3.8-flash",
   pairs             = pairs,
   trait_name        = td$name,
   trait_description = td$description,

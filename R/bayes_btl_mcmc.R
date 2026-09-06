@@ -92,6 +92,8 @@
 #' ids <- sort(unique(c(results_tbl$A_id, results_tbl$B_id)))
 #' ids
 #'
+#' @seealso [fit_bayes_btl_mcmc()]
+#' @family Bayesian models
 #' @export
 build_btl_results_data <- function(
     results,
@@ -520,6 +522,8 @@ build_btl_results_data <- function(
 #' summarize_items(fit)
 #' }
 #'
+#' @seealso [build_btl_results_data()]
+#' @family Bayesian models
 #' @export
 fit_bayes_btl_mcmc <- function(
     results,
