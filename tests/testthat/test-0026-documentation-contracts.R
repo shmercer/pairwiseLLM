@@ -303,6 +303,10 @@ test_that("Task 09 release documentation keeps navigation and citation contracts
 
 test_that("standalone Bayesian BTL vignette uses current summary columns", {
   root <- normalizePath(testthat::test_path("..", ".."), mustWork = TRUE)
+  skip_if(
+    !file.exists(file.path(root, "vignettes", "bayesian-btl.Rmd")),
+    "Repository documentation sources are unavailable in installed-package tests."
+  )
   vignette <- paste(
     readLines(file.path(root, "vignettes", "bayesian-btl.Rmd"), warn = FALSE),
     collapse = "\n"
