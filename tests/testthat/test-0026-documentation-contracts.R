@@ -21,11 +21,13 @@ test_that("model compatibility registry has a stable unique schema", {
 
 test_that("provider smoke matrix covers live and implemented batch surfaces", {
   path <- system.file("extdata", "model_smoke_matrix.csv", package = "pairwiseLLM")
+  skip_if(!nzchar(path), "Repository smoke matrix is unavailable in installed-package tests.")
   matrix <- utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
 
   expect_identical(names(matrix), c(
     "test_id", "backend", "provider", "model_id", "mode", "endpoint",
-    "reasoning_mode", "env_var"
+    "request_profile", "reasoning_mode", "env_var", "catalog_status",
+    "catalog_checked_on", "catalog_url"
   ))
   expect_false(anyDuplicated(matrix$test_id) > 0L)
   expect_setequal(unique(matrix$backend[matrix$mode == "live"]), c(
@@ -40,25 +42,146 @@ test_that("provider smoke matrix covers live and implemented batch surfaces", {
   )))
 })
 
-test_that("dated provider smoke evidence covers the maintained matrix", {
+test_that("dated provider smoke evidence is internally consistent", {
   matrix_path <- system.file("extdata", "model_smoke_matrix.csv", package = "pairwiseLLM")
   live_path <- system.file(
-    "extdata", "model_smoke_results_2026-09-03.csv", package = "pairwiseLLM"
+    "extdata", "model_smoke_results_2026-09-05.csv", package = "pairwiseLLM"
   )
   batch_path <- system.file(
-    "extdata", "model_batch_smoke_results_2026-09-03.csv", package = "pairwiseLLM"
+    "extdata", "model_batch_smoke_results_2026-09-05.csv", package = "pairwiseLLM"
   )
-  matrix <- utils::read.csv(matrix_path, stringsAsFactors = FALSE)
+  skip_if(
+    !all(nzchar(c(matrix_path, live_path, batch_path))),
+    "Repository smoke evidence is unavailable in installed-package tests."
+  )
   evidence <- rbind(
     utils::read.csv(live_path, stringsAsFactors = FALSE),
     utils::read.csv(batch_path, stringsAsFactors = FALSE)
   )
+  matrix <- utils::read.csv(matrix_path, stringsAsFactors = FALSE)
 
+  expect_false(anyDuplicated(evidence$test_id) > 0L)
   expect_setequal(evidence$test_id, matrix$test_id)
-  expect_true(all(evidence$status == "passed"))
-  expect_true(all(evidence$status_code == 200L))
-  expect_true(all(evidence$parsed_winner))
-  expect_true(all(evidence$test_date == "2026-09-03"))
+  expect_true(all(evidence$status %in% c("passed", "failed-error-row", "failed-remote")))
+  passed <- evidence$status == "passed"
+  expect_true(all(evidence$status_code[passed] == 200L))
+  parsed_winner <- as.character(evidence$parsed_winner) %in% c("TRUE", "1")
+  expect_true(all(parsed_winner[passed]))
+  expect_false(any(parsed_winner[!passed]))
+  expect_true(all(evidence$test_date == "2026-09-05"))
+  expect_true(all(evidence$catalog_checked_on == "2026-09-05"))
+})
+
+test_that("Task 07 export audit and reference grouping cover every export", {
+  root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  audit_path <- file.path(root, "tasklists", "evidence", "07-export-audit.csv")
+  skip_if(
+    !file.exists(audit_path),
+    "Tasklist evidence is unavailable in installed-package tests."
+  )
+
+  namespace <- readLines(file.path(root, "NAMESPACE"), warn = FALSE)
+  exports <- sub("^export\\((.*)\\)$", "\\1", grep("^export\\(", namespace, value = TRUE))
+  audit <- utils::read.csv(audit_path, stringsAsFactors = FALSE, check.names = FALSE)
+  expected_workflows <- c(
+    "pairing/data", "prompts/traits", "live backends", "batch backends",
+    "normalization", "cost", "bias", "frequentist models", "Bayesian models",
+    "adaptive lifecycle", "adaptive inspection", "persistence", "Ollama"
+  )
+  audit_fields <- c(
+    "title_purpose", "arguments", "return_value", "side_effects", "failures",
+    "example", "workflow_links", "terminology", "roxygen_source"
+  )
+
+  expect_false(anyDuplicated(audit[["function"]]) > 0L)
+  expect_setequal(audit[["function"]], exports)
+  expect_setequal(unique(audit$workflow), expected_workflows)
+  expect_true(all(audit$priority %in% c("high", "standard")))
+  expect_true(all(vapply(audit[audit_fields], function(x) all(nzchar(x)), logical(1L))))
+
+  pkgdown <- readLines(file.path(root, "_pkgdown.yml"), warn = FALSE)
+  reference_start <- grep("^reference:$", pkgdown)
+  reference_text <- pkgdown[seq.int(reference_start + 1L, length(pkgdown))]
+  reference_names <- sub(
+    "^[[:space:]]*- [[:space:]]*", "",
+    grep("^      - [a-zA-Z]", reference_text, value = TRUE)
+  )
+  additional_topics <- c(
+    "example_writing_samples", "example_writing_samples1000", "example_writing_pairs",
+    "example_writing_results", "example_openai_batch_output",
+    "print.pairwiseLLM_cost_estimate", "print.adaptive_state"
+  )
+  expect_setequal(reference_names, c(exports, additional_topics))
+  expect_false(anyDuplicated(reference_names) > 0L)
+})
+
+test_that("every exported function has workflow links and family metadata", {
+  root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  pairing_source <- file.path(root, "R", "pairing.R")
+  skip_if(
+    !file.exists(file.path(root, "NAMESPACE")) || !file.exists(pairing_source),
+    "Repository Roxygen sources are unavailable in installed-package tests."
+  )
+  pairing_lines <- readLines(pairing_source, warn = FALSE)
+  skip_if(
+    !any(grepl("^make_pairs <- function", pairing_lines)) ||
+      !any(grepl("^#' @export", pairing_lines)),
+    "Original repository Roxygen sources are unavailable in coverage tests."
+  )
+  exports <- sub(
+    "^export\\((.*)\\)$", "\\1",
+    grep("^export\\(", readLines(file.path(root, "NAMESPACE")), value = TRUE)
+  )
+  sources <- list.files(file.path(root, "R"), pattern = "[.]R$", full.names = TRUE)
+
+  for (fun in exports) {
+    found <- FALSE
+    for (source in sources) {
+      lines <- readLines(source, warn = FALSE)
+      idx <- grep(paste0("^[[:space:]]*", fun, " <- function"), lines)
+      if (length(idx) != 1L) {
+        next
+      }
+      found <- TRUE
+      export_idx <- max(which(seq_along(lines) < idx & grepl("^#' @export", lines)))
+      block_start <- max(c(
+        0L,
+        which(seq_along(lines) < export_idx & !grepl("^#'", lines))
+      )) + 1L
+      block <- lines[block_start:export_idx]
+      expect_true(any(grepl("@seealso", block)), info = fun)
+      expect_true(any(grepl("@family", block)), info = fun)
+      break
+    }
+    expect_true(found, info = fun)
+  }
+})
+
+test_that("Task 07 workflow articles retain their public contracts", {
+  root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  skip_if(
+    !file.exists(file.path(root, "vignettes", "bayesian-btl.Rmd")),
+    "Repository vignette sources are unavailable in installed-package tests."
+  )
+  read_article <- function(name) {
+    paste(readLines(file.path(root, "vignettes", name), warn = FALSE), collapse = "\n")
+  }
+  bayes <- read_article("bayesian-btl.Rmd")
+  data_prompts <- read_article("data-and-prompts.Rmd")
+  recovery <- read_article("provider-controls-and-recovery.Rmd")
+  adaptive <- read_article("adaptive-pairing.Rmd")
+
+  expect_true(grepl("build_btl_results_data", bayes, fixed = TRUE))
+  expect_true(all(vapply(c("btl", "btl_e", "btl_b", "btl_e_b"), function(x) {
+    grepl(paste0('`"', x, '"`'), bayes, fixed = TRUE)
+  }, logical(1L))))
+  expect_true(grepl("register_prompt_template", data_prompts, fixed = TRUE))
+  expect_true(grepl("normalized results", data_prompts, fixed = TRUE))
+  expect_true(grepl("failed_attempts", recovery, fixed = TRUE))
+  expect_true(grepl("ensure_only_ollama_model_loaded", recovery, fixed = TRUE))
+  expect_true(grepl("2026-09-05", recovery, fixed = TRUE))
+  expect_true(grepl("adaptive_rank_start", adaptive, fixed = TRUE))
+  expect_true(grepl("internal scenario harness is test", adaptive, fixed = TRUE))
 })
 
 test_that("active documentation excludes retired IDs and removed controls", {

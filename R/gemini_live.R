@@ -194,6 +194,8 @@
 #' res_flash
 #' }
 #'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 gemini_compare_pair_live <- function(
   ID1,
@@ -642,6 +644,8 @@ gemini_compare_pair_live <- function(
 #' head(res_par$results)
 #' }
 #'
+#' @seealso [check_llm_api_keys()], [llm_compare_pair()]
+#' @family live backends
 #' @export
 submit_gemini_pairs_live <- function(
     pairs,

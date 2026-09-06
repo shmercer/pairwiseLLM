@@ -59,6 +59,8 @@
 #' )
 #' compute_reverse_consistency(main, rev)$summary
 #'
+#' @seealso [check_positional_bias()]
+#' @family bias and consistency
 #' @export
 compute_reverse_consistency <- function(main_results, reverse_results) {
   main_results <- tibble::as_tibble(main_results)
@@ -281,6 +283,8 @@ compute_reverse_consistency <- function(main_results, reverse_results) {
 #' bias <- check_positional_bias(rc)
 #' bias$summary
 #'
+#' @seealso [compute_reverse_consistency()]
+#' @family bias and consistency
 #' @export
 check_positional_bias <- function(consistency,
                                   n_boot = 1000,

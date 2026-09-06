@@ -121,6 +121,8 @@
 #' head(results$combined)
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 llm_submit_pairs_multi_batch <- function(
   pairs,
@@ -438,6 +440,8 @@ llm_submit_pairs_multi_batch <- function(
 #' print(results$combined)
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 llm_resume_multi_batches <- function(
   jobs = NULL,

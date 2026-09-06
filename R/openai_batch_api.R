@@ -92,6 +92,8 @@ NULL
 #' file_obj$id
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 openai_upload_batch_file <- function(
   path,
@@ -142,6 +144,8 @@ openai_upload_batch_file <- function(
 #' batch_obj$status
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 openai_create_batch <- function(
   input_file_id,
@@ -184,6 +188,8 @@ openai_create_batch <- function(
 #' batch$status
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 openai_get_batch <- function(
   batch_id,
@@ -221,6 +227,8 @@ openai_get_batch <- function(
 #' head(res)
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 openai_download_batch_output <- function(
   batch_id,
@@ -286,6 +294,8 @@ openai_download_batch_output <- function(
 #' final$status
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 openai_poll_batch_until_complete <- function(
     batch_id,
@@ -448,6 +458,8 @@ openai_poll_batch_until_complete <- function(
 #' print(utils::head(out$results))
 #' }
 #'
+#' @seealso [llm_submit_pairs_batch()], [llm_resume_multi_batches()]
+#' @family batch backends
 #' @export
   run_openai_batch_pipeline <- function(
     pairs,
@@ -648,6 +660,8 @@ openai_poll_batch_until_complete <- function(
 #' batch_tbl_resp
 #'
 #' @import tibble
+#' @seealso [llm_submit_pairs_batch()], [llm_resume_multi_batches()]
+#' @family batch backends
 #' @export
   build_openai_batch_requests <- function(pairs,
                                           model,
@@ -794,6 +808,8 @@ openai_poll_batch_until_complete <- function(
 #' readLines(path)
 #'
 #' @importFrom jsonlite toJSON
+#' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
+#' @family batch backends
 #' @export
 write_openai_batch_file <- function(batch_tbl, path) {
   batch_tbl <- tibble::as_tibble(batch_tbl)
@@ -938,6 +954,8 @@ write_openai_batch_file <- function(batch_tbl, path) {
 #'
 #' @import tibble
 #' @importFrom jsonlite fromJSON
+#' @seealso [parse_anthropic_batch_output()], [parse_gemini_batch_output()]
+#' @family result normalization
 #' @export
 parse_openai_batch_output <- function(path,
                                       tag_prefix = "<BETTER_SAMPLE>",

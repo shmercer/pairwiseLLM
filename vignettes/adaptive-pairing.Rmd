@@ -206,6 +206,46 @@ round log has one row per completed Bayesian refit, and the item log stores post
 summaries for each refit. `adaptive_results_history()` converts committed outcomes to the
 three-column format accepted by `build_bt_data()`.
 
+`adaptive_get_logs()` returns the step, round, link-stage, and item-step views together. Use
+`adaptive_step_log()` to audit calls and transactional validity, `adaptive_round_log()` for refit
+diagnostics and stopping, and `adaptive_item_log(stack = TRUE)` for change across refits. Empty
+typed tables are expected before the corresponding event occurs; they are not evidence that the
+accessor failed. `summarize_adaptive()` is a compact view, not a diagnostic recomputation.
+
+## Lower-level lifecycle and offline judges
+
+Most users should use `adaptive_rank()`. The lower-level lifecycle is useful when an application
+needs to hold the state itself: create it with `adaptive_rank_start()`, advance it with
+`adaptive_rank_run_live()`, persist it, and reconstruct it with `adaptive_rank_resume()` or
+`load_adaptive_session()`. Do not modify state lists or canonical log columns by hand.
+
+```{r lower-level-lifecycle}
+low_level_items <- samples[1:5, ]
+low_level_items$item_id <- as.character(low_level_items$ID)
+
+low_level_state <- adaptive_rank_start(low_level_items, seed = 17L)
+low_level_state <- adaptive_rank_run_live(
+  state = low_level_state,
+  judge = deterministic_judge,
+  n_steps = 3L,
+  btl_config = list(refit_pairs_target = 5000L),
+  progress = "none"
+)
+
+summarize_adaptive(low_level_state)
+```
+
+A custom judge has the contract `judge(A, B, state, ...)`. `A` and `B` are one-row item tables.
+Return `list(is_valid = TRUE, Y = 1L)` when A wins or `Y = 0L` when B wins. To simulate refusal,
+timeout, or parsing failure, return `is_valid = FALSE`, `Y = NA_integer_`, and a stable
+`invalid_reason`. Use a local score column, a fixed lookup table, or a separately seeded random
+generator to make simulations reproducible. The package's internal scenario harness is test
+infrastructure, not a public workflow function.
+
+`make_adaptive_judge_llm()` builds the same judge interface around `llm_compare_pair()`. It is a
+lower-level alternative to supplying backend/model arguments to `adaptive_rank()`, and its calls
+are live, billable, and subject to the selected provider's failure and privacy behavior.
+
 ## Persistence, interruption, and resume
 
 Supplying `session_dir` makes the wrapper persist the initial state, every completed refit,
@@ -306,7 +346,7 @@ missing or non-binary `Y`.
 
 The following is a **live-API example and is not evaluated**. It requires an OpenAI key, network
 access, and incurs provider charges. The request shape shown here was recorded as tested with
-pairwiseLLM 1.3.1 on 2026-09-03. That is dated evidence about this configuration, not a promise
+pairwiseLLM 1.3.1 on 2026-09-05. That is dated evidence about this configuration, not a promise
 that the provider still offers the model. Check
 [Backends and Tested Model Configurations](model-compatibility.html) and the provider catalog
 before a long run.

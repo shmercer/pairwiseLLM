@@ -46,3 +46,23 @@ status <- check_llm_api_keys(verbose = FALSE)
 status
 
 }
+\seealso{
+\code{\link[=llm_compare_pair]{llm_compare_pair()}}, \code{\link[=submit_llm_pairs]{submit_llm_pairs()}}
+
+Other live backends:
+\code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}},
+\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}},
+\code{\link[=llm_compare_pair]{llm_compare_pair()}},
+\code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}},
+\code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}},
+\code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
+\code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}},
+\code{\link[=submit_llm_pairs]{submit_llm_pairs()}},
+\code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
+\code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
+\code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
+\code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}
+}
+\concept{live backends}

@@ -41,6 +41,8 @@
 #' summarize_bt_fit(fit2)
 #'
 #' @import tibble
+#' @seealso [build_bt_data()], [fit_bt_model()]
+#' @family frequentist models
 #' @export
 summarize_bt_fit <- function(fit, decreasing = TRUE, verbose = TRUE) {
   if (!is.list(fit) || is.null(fit$theta)) {

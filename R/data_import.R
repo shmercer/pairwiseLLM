@@ -37,6 +37,8 @@
 #' )
 #' head(samples2)
 #'
+#' @seealso [read_samples_dir()], [make_pairs()]
+#' @family pairing and data
 #' @export
 read_samples_df <- function(df,
                             id_col = 1,
@@ -98,6 +100,8 @@ read_samples_df <- function(df,
 #'
 #' samples
 #'
+#' @seealso [read_samples_df()], [make_pairs()]
+#' @family pairing and data
 #' @export
 read_samples_dir <- function(path = ".",
                              pattern = "\\.txt$") {

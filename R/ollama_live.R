@@ -162,6 +162,7 @@
 #' * [submit_llm_pairs()] for backend-agnostic comparisons over tibbles of
 #'   pairs.
 #'
+#' @family live backends
 #' @export
 ollama_compare_pair_live <- function(
   ID1,
@@ -473,6 +474,7 @@ ollama_compare_pair_live <- function(
 #' * [submit_llm_pairs()] for backend-agnostic comparisons over tibbles of
 #'   pairs.
 #'
+#' @family live backends
 #' @export
 submit_ollama_pairs_live <- function(
   pairs,
@@ -944,6 +946,7 @@ submit_ollama_pairs_live <- function(
 #' * [submit_ollama_pairs_live()] for row-wise Ollama comparisons across
 #'   many pairs.
 #'
+#' @family Ollama resource management
 #' @export
 ensure_only_ollama_model_loaded <- function(model, verbose = TRUE) {
   if (!is.character(model) || length(model) != 1L || !nzchar(model)) {

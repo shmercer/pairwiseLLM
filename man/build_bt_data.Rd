@@ -53,3 +53,13 @@ bt_ex <- build_bt_data(example_writing_pairs)
 head(bt_ex)
 
 }
+\seealso{
+\code{\link[=fit_bt_model]{fit_bt_model()}}, \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}
+
+Other frequentist models:
+\code{\link[=build_elo_data]{build_elo_data()}},
+\code{\link[=fit_bt_model]{fit_bt_model()}},
+\code{\link[=fit_elo_model]{fit_elo_model()}},
+\code{\link[=summarize_bt_fit]{summarize_bt_fit()}}
+}
+\concept{frequentist models}

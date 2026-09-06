@@ -81,3 +81,4 @@ ensure_only_ollama_model_loaded("mistral-small3.2:24b")
 many pairs.
 }
 }
+\concept{Ollama resource management}

@@ -173,3 +173,7 @@ est$summary
 remaining <- est$remaining_pairs
 }
 }
+\seealso{
+\code{\link[=make_pairs]{make_pairs()}}, \code{\link[=submit_llm_pairs]{submit_llm_pairs()}}, \code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}}
+}
+\concept{cost estimation}

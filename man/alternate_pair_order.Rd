@@ -35,3 +35,15 @@ head(pairs[, c("ID1", "ID2")])
 head(pairs_alt[, c("ID1", "ID2")])
 
 }
+\seealso{
+\code{\link[=read_samples_df]{read_samples_df()}}, \code{\link[=read_samples_dir]{read_samples_dir()}}
+
+Other pairing and data:
+\code{\link[=make_pairs]{make_pairs()}},
+\code{\link[=randomize_pair_order]{randomize_pair_order()}},
+\code{\link[=read_samples_df]{read_samples_df()}},
+\code{\link[=read_samples_dir]{read_samples_dir()}},
+\code{\link[=sample_pairs]{sample_pairs()}},
+\code{\link[=sample_reverse_pairs]{sample_reverse_pairs()}}
+}
+\concept{pairing and data}

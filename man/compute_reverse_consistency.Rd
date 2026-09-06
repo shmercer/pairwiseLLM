@@ -71,3 +71,10 @@ rev <- tibble::tibble(
 compute_reverse_consistency(main, rev)$summary
 
 }
+\seealso{
+\code{\link[=check_positional_bias]{check_positional_bias()}}
+
+Other bias and consistency:
+\code{\link[=check_positional_bias]{check_positional_bias()}}
+}
+\concept{bias and consistency}

@@ -1,11 +1,98 @@
-test_id,backend,provider,model_id,mode,endpoint,reasoning_mode,env_var
-openai_chat_live,openai,OpenAI,gpt-4.1,live,chat.completions,none,OPENAI_API_KEY
-openai_responses_live,openai,OpenAI,gpt-5.6-luna,live,responses,none,OPENAI_API_KEY
-anthropic_standard_live,anthropic,Anthropic,claude-haiku-4-5-20251001,live,messages,none,ANTHROPIC_API_KEY
-anthropic_thinking_live,anthropic,Anthropic,claude-haiku-4-5-20251001,live,messages,enabled,ANTHROPIC_API_KEY
-gemini_thinking_live,gemini,Google,gemini-3.5-flash-lite,live,generateContent,thinking_level=low,GEMINI_API_KEY
-vertex_standard_live,vertex,Google,gemini-2.5-flash,live,generateContent,thinking_budget=0,VERTEX_API_KEY
-together_standard_live,together,Together AI,deepseek-ai/DeepSeek-V4-Flash-0731,live,chat.completions,none,TOGETHER_API_KEY
-openai_responses_batch,openai,OpenAI,gpt-5.6-luna,batch,responses,none,OPENAI_API_KEY
-anthropic_standard_batch,anthropic,Anthropic,claude-haiku-4-5-20251001,batch,messages,none,ANTHROPIC_API_KEY
-gemini_thinking_batch,gemini,Google,gemini-3.5-flash-lite,batch,batchGenerateContent,thinking_level=low,GEMINI_API_KEY
+test_id,backend,provider,model_id,mode,endpoint,request_profile,reasoning_mode,env_var,catalog_status,catalog_checked_on,catalog_url
+openai_gpt_5_6_sol_live,openai,OpenAI,gpt-5.6-sol,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_6_sol_batch,openai,OpenAI,gpt-5.6-sol,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_6_terra_live,openai,OpenAI,gpt-5.6-terra,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_6_terra_batch,openai,OpenAI,gpt-5.6-terra,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_6_luna_live,openai,OpenAI,gpt-5.6-luna,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_6_luna_batch,openai,OpenAI,gpt-5.6-luna,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_5_live,openai,OpenAI,gpt-5.5,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_5_batch,openai,OpenAI,gpt-5.5,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_4_live,openai,OpenAI,gpt-5.4,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_4_batch,openai,OpenAI,gpt-5.4,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_4_mini_live,openai,OpenAI,gpt-5.4-mini,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_4_mini_batch,openai,OpenAI,gpt-5.4-mini,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_4_nano_live,openai,OpenAI,gpt-5.4-nano,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_4_nano_batch,openai,OpenAI,gpt-5.4-nano,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_3_codex_live,openai,OpenAI,gpt-5.3-codex,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_3_codex_batch,openai,OpenAI,gpt-5.3-codex,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_2_live,openai,OpenAI,gpt-5.2,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_2_batch,openai,OpenAI,gpt-5.2,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_1_live,openai,OpenAI,gpt-5.1,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_1_batch,openai,OpenAI,gpt-5.1,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_live,openai,OpenAI,gpt-5,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_batch,openai,OpenAI,gpt-5,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_mini_live,openai,OpenAI,gpt-5-mini,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_mini_batch,openai,OpenAI,gpt-5-mini,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_nano_live,openai,OpenAI,gpt-5-nano,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_5_nano_batch,openai,OpenAI,gpt-5-nano,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_o3_live,openai,OpenAI,o3,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_o3_batch,openai,OpenAI,o3,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_4_1_live,openai,OpenAI,gpt-4.1,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_4_1_batch,openai,OpenAI,gpt-4.1,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_4_1_chat_live,openai,OpenAI,gpt-4.1,live,chat.completions,openai_chat_default,provider-default,OPENAI_API_KEY,supplemental,2026-09-05,https://developers.openai.com/api/docs/models/gpt-4.1
+openai_gpt_4_1_mini_live,openai,OpenAI,gpt-4.1-mini,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_4_1_mini_batch,openai,OpenAI,gpt-4.1-mini,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_4o_mini_live,openai,OpenAI,gpt-4o-mini,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_4o_mini_batch,openai,OpenAI,gpt-4o-mini,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_4o_live,openai,OpenAI,gpt-4o,live,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+openai_gpt_4o_batch,openai,OpenAI,gpt-4o,batch,responses,openai_responses_default,provider-default,OPENAI_API_KEY,current,2026-09-05,https://developers.openai.com/api/docs/models/all
+anthropic_fable_5_1_live,anthropic,Anthropic,claude-fable-5-1,live,messages,anthropic_standard,none,ANTHROPIC_API_KEY,current,2026-09-05,https://platform.claude.com/docs/en/models/overview
+anthropic_fable_5_1_batch,anthropic,Anthropic,claude-fable-5-1,batch,messages,anthropic_standard,none,ANTHROPIC_API_KEY,current,2026-09-05,https://platform.claude.com/docs/en/models/overview
+anthropic_opus_5_live,anthropic,Anthropic,claude-opus-5,live,messages,anthropic_standard,none,ANTHROPIC_API_KEY,current,2026-09-05,https://platform.claude.com/docs/en/models/overview
+anthropic_opus_5_batch,anthropic,Anthropic,claude-opus-5,batch,messages,anthropic_standard,none,ANTHROPIC_API_KEY,current,2026-09-05,https://platform.claude.com/docs/en/models/overview
+anthropic_sonnet_5_live,anthropic,Anthropic,claude-sonnet-5,live,messages,anthropic_standard,none,ANTHROPIC_API_KEY,current,2026-09-05,https://platform.claude.com/docs/en/models/overview
+anthropic_sonnet_5_batch,anthropic,Anthropic,claude-sonnet-5,batch,messages,anthropic_standard,none,ANTHROPIC_API_KEY,current,2026-09-05,https://platform.claude.com/docs/en/models/overview
+anthropic_haiku_4_5_live,anthropic,Anthropic,claude-haiku-4-5-20251001,live,messages,anthropic_standard,none,ANTHROPIC_API_KEY,current,2026-09-05,https://platform.claude.com/docs/en/models/overview
+anthropic_haiku_4_5_batch,anthropic,Anthropic,claude-haiku-4-5-20251001,batch,messages,anthropic_standard,none,ANTHROPIC_API_KEY,current,2026-09-05,https://platform.claude.com/docs/en/models/overview
+anthropic_haiku_4_5_thinking_live,anthropic,Anthropic,claude-haiku-4-5-20251001,live,messages,anthropic_thinking,enabled,ANTHROPIC_API_KEY,supplemental,2026-09-05,https://platform.claude.com/docs/en/models/overview
+gemini_3_8_flash_live,gemini,Google,gemini-3.8-flash,live,generateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_8_flash_batch,gemini,Google,gemini-3.8-flash,batch,batchGenerateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_7_flash_live,gemini,Google,gemini-3.7-flash,live,generateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_7_flash_batch,gemini,Google,gemini-3.7-flash,batch,batchGenerateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_6_flash_live,gemini,Google,gemini-3.6-flash,live,generateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_6_flash_batch,gemini,Google,gemini-3.6-flash,batch,batchGenerateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_5_flash_live,gemini,Google,gemini-3.5-flash,live,generateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_5_flash_batch,gemini,Google,gemini-3.5-flash,batch,batchGenerateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_5_flash_lite_live,gemini,Google,gemini-3.5-flash-lite,live,generateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_5_flash_lite_batch,gemini,Google,gemini-3.5-flash-lite,batch,batchGenerateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_1_flash_lite_live,gemini,Google,gemini-3.1-flash-lite,live,generateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_1_flash_lite_batch,gemini,Google,gemini-3.1-flash-lite,batch,batchGenerateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_1_pro_preview_live,gemini,Google,gemini-3.1-pro-preview,live,generateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,preview,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_1_pro_preview_batch,gemini,Google,gemini-3.1-pro-preview,batch,batchGenerateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,preview,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_flash_preview_live,gemini,Google,gemini-3-flash-preview,live,generateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,preview,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_3_flash_preview_batch,gemini,Google,gemini-3-flash-preview,batch,batchGenerateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,preview,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_2_5_flash_live,gemini,Google,gemini-2.5-flash,live,generateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_2_5_flash_batch,gemini,Google,gemini-2.5-flash,batch,batchGenerateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_2_5_flash_lite_live,gemini,Google,gemini-2.5-flash-lite,live,generateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_2_5_flash_lite_batch,gemini,Google,gemini-2.5-flash-lite,batch,batchGenerateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_2_5_pro_live,gemini,Google,gemini-2.5-pro,live,generateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+gemini_2_5_pro_batch,gemini,Google,gemini-2.5-pro,batch,batchGenerateContent,gemini_low,thinking_level=low,GEMINI_API_KEY,current,2026-09-05,https://ai.google.dev/gemini-api/docs/models
+vertex_3_8_flash_live,vertex,Google,gemini-3.8-flash,live,generateContent,vertex_gemini3_low,thinking_level=low,VERTEX_API_KEY,current,2026-09-05,https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+vertex_3_7_flash_live,vertex,Google,gemini-3.7-flash,live,generateContent,vertex_gemini3_low,thinking_level=low,VERTEX_API_KEY,current,2026-09-05,https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+vertex_3_6_flash_live,vertex,Google,gemini-3.6-flash,live,generateContent,vertex_gemini3_low,thinking_level=low,VERTEX_API_KEY,current,2026-09-05,https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+vertex_3_5_flash_live,vertex,Google,gemini-3.5-flash,live,generateContent,vertex_gemini3_low,thinking_level=low,VERTEX_API_KEY,current,2026-09-05,https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+vertex_3_5_flash_lite_live,vertex,Google,gemini-3.5-flash-lite,live,generateContent,vertex_gemini3_low,thinking_level=low,VERTEX_API_KEY,current,2026-09-05,https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+vertex_3_1_flash_lite_live,vertex,Google,gemini-3.1-flash-lite,live,generateContent,vertex_gemini3_low,thinking_level=low,VERTEX_API_KEY,current,2026-09-05,https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+vertex_3_1_pro_preview_live,vertex,Google,gemini-3.1-pro-preview,live,generateContent,vertex_gemini3_low,thinking_level=low,VERTEX_API_KEY,preview,2026-09-05,https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+vertex_3_flash_preview_live,vertex,Google,gemini-3-flash-preview,live,generateContent,vertex_gemini3_low,thinking_level=low,VERTEX_API_KEY,preview,2026-09-05,https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+vertex_2_5_flash_live,vertex,Google,gemini-2.5-flash,live,generateContent,vertex_gemini25_no_thinking,thinking_budget=0,VERTEX_API_KEY,current,2026-09-05,https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+vertex_2_5_flash_lite_live,vertex,Google,gemini-2.5-flash-lite,live,generateContent,vertex_gemini25_no_thinking,thinking_budget=0,VERTEX_API_KEY,current,2026-09-05,https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+vertex_2_5_pro_live,vertex,Google,gemini-2.5-pro,live,generateContent,vertex_gemini25_no_thinking,thinking_budget=0,VERTEX_API_KEY,current,2026-09-05,https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions
+together_inkling_live,together,Together AI,thinkingmachines/Inkling,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_minimax_m3_live,together,Together AI,MiniMaxAI/MiniMax-M3,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_qwen_3_8_a95b_live,together,Together AI,Qwen/Qwen3.8-2.4T-A95B,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_qwen_3_7_max_live,together,Together AI,Qwen/Qwen3.7-Max,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_qwen_3_6_plus_live,together,Together AI,Qwen/Qwen3.6-Plus,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_qwen_3_5_9b_live,together,Together AI,Qwen/Qwen3.5-9B,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_kimi_k3_live,together,Together AI,moonshotai/Kimi-K3,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_glm_5_3_live,together,Together AI,zai-org/GLM-5.3,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_glm_5_3_flash_live,together,Together AI,zai-org/GLM-5.3-Flash,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_glm_5_2_live,together,Together AI,zai-org/GLM-5.2,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_gpt_oss_120b_live,together,Together AI,openai/gpt-oss-120b,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_deepseek_v4_flash_live,together,Together AI,deepseek-ai/DeepSeek-V4-Flash-0731,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_deepseek_v4_pro_live,together,Together AI,deepseek-ai/DeepSeek-V4-Pro-0813,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_llama_3_3_70b_live,together,Together AI,meta-llama/Llama-3.3-70B-Instruct-Turbo,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_qwen_3_7_plus_live,together,Together AI,Qwen/Qwen3.7-Plus,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_ternary_bonsai_live,together,Together AI,Prism-ML/Ternary-Bonsai-27B,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_muse_glimmer_live,together,Together AI,meta-models/Muse-Glimmer-30B,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+together_qwen_3_8_flash_live,together,Together AI,Qwen/Qwen3.8-Flash,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models

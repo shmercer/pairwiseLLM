@@ -38,3 +38,15 @@ samples <- read_samples_dir(samples_dir)
 samples
 
 }
+\seealso{
+\code{\link[=read_samples_df]{read_samples_df()}}, \code{\link[=make_pairs]{make_pairs()}}
+
+Other pairing and data:
+\code{\link[=alternate_pair_order]{alternate_pair_order()}},
+\code{\link[=make_pairs]{make_pairs()}},
+\code{\link[=randomize_pair_order]{randomize_pair_order()}},
+\code{\link[=read_samples_df]{read_samples_df()}},
+\code{\link[=sample_pairs]{sample_pairs()}},
+\code{\link[=sample_reverse_pairs]{sample_reverse_pairs()}}
+}
+\concept{pairing and data}
