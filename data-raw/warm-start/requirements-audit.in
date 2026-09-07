@@ -1,0 +1,10 @@
+# Direct inputs for the Python 3.12 writing_features_v1 audit.
+# requirements-audit.lock records the complete locally tested resolution.
+textdescriptives==2.8.4
+textstat==0.7.13
+spacy==3.7.5
+thinc==8.2.5
+numpy==1.26.4
+spacy-lookups-data==1.0.5
+pyphen==0.18.1
+en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl

@@ -129,4 +129,5 @@ Collate:
     'traits.R'
     'utils-null-coalesce.R'
     'vertex_live.R'
+    'warm_start_feature_schema.R'
 Config/roxygen2/version: 8.1.0
