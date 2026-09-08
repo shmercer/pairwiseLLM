@@ -42,6 +42,7 @@ Suggests:
     EloChoice,
     future,
     future.apply,
+    glmnet,
     knitr,
     mockery,
     pkgload,
@@ -134,5 +135,8 @@ Collate:
     'vertex_live.R'
     'warm_start_feature_schema.R'
     'warm_start_features.R'
+    'warm_start_model.R'
+    'warm_start_predict.R'
+    'warm_start_preprocess.R'
     'warm_start_python.R'
 Config/roxygen2/version: 8.1.0
