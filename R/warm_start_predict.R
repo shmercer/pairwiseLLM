@@ -10,6 +10,7 @@
 #' @return A tibble in `newdata` row order with character `item_id`, numeric
 #'   `raw_prediction`, and numeric `calibrated_prediction`. Raw predictions are on
 #'   the within-task standardized outcome scale, not the original BT/BTL scale.
+#'   Public fits apply the stored OOF calibration intercept and slope to raw values.
 #'   For uncalibrated core fits, calibrated predictions are `NA_real_`, never
 #'   identity-calibrated substitutes. Attributes `warm_start_schema` and
 #'   `warm_start_model` record schema identity and model metadata (format version,
@@ -33,7 +34,11 @@ predict.pairwiseLLM_warm_model <- function(object, newdata, ...) {
   raw <- as.numeric(object$intercept + scaled %*% object$coefficients)
   if (any(!is.finite(raw))) rlang::abort("Warm-start prediction produced nonfinite values.")
   out <- tibble::tibble(item_id = features$item_id, raw_prediction = raw,
-    calibrated_prediction = rep(NA_real_, length(raw)))
+    calibrated_prediction = if (object$calibration$status == "oof_linear") {
+      .warm_start_calibration_apply(raw, object$calibration)
+    } else {
+      rep(NA_real_, length(raw))
+    })
   attr(out, "warm_start_schema") <- object$schema
   attr(out, "warm_start_model") <- list(format_version = object$format_version,
     task_id = object$training$task_id, outcome_definition = object$outcome$definition,

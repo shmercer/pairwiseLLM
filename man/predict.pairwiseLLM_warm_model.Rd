@@ -20,6 +20,7 @@ are ignored; required columns cannot be omitted even if training removed them.}
 A tibble in \code{newdata} row order with character \code{item_id}, numeric
 \code{raw_prediction}, and numeric \code{calibrated_prediction}. Raw predictions are on
 the within-task standardized outcome scale, not the original BT/BTL scale.
+Public fits apply the stored OOF calibration intercept and slope to raw values.
 For uncalibrated core fits, calibrated predictions are \code{NA_real_}, never
 identity-calibrated substitutes. Attributes \code{warm_start_schema} and
 \code{warm_start_model} record schema identity and model metadata (format version,

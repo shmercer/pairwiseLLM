@@ -11,8 +11,8 @@
 #'
 #' @details
 #' The fixed-hyperparameter core is internal. It does not tune hyperparameters,
-#' run cross-validation, or learn calibration. A public model-development
-#' workflow will be added separately. Core models are explicitly uncalibrated.
+#' run cross-validation, or learn calibration. [fit_warm_start_model()] adds nested
+#' validation and OOF calibration. Core models remain explicitly uncalibrated.
 #'
 #' Format version 1 is an S3 list with these deployment fields:
 #' * `format_version`: integer `1L`.
@@ -26,10 +26,13 @@
 #' * `outcome`: `definition = "within_task_z"`, original training mean and sample
 #'   SD, and `sd_convention = "sample"`. The target is `(theta - mean) / sd`.
 #' * `calibration`: `status = "uncalibrated"`, with `intercept = NULL` and
-#'   `slope = NULL`. These are not identity or learned calibration coefficients.
+#'   `slope = NULL` for core fits. Public fits store `status = "oof_linear"`,
+#'   learned intercept/slope, calibration row count, method, QR tolerance and OOF source.
 #' * `training`: task ID, training row count, requested alpha/lambda, nonzero
 #'   coefficient count, engine/version, and package version.
-#' * `tuning` and `validation`: `NULL`, reserved for later model development.
+#' * `tuning` and `validation`: NULL for core fits; public fits retain exact
+#'   alpha/lambda traces, fold preprocessing, OOF calibration inputs, outer
+#'   held-out predictions and metrics, and warning messages. See [fit_warm_start_model()].
 #'
 #' Preprocessing is fitted only on the supplied training rows. It first removes
 #' all-missing columns and columns with missing fraction strictly above 0.20,
@@ -57,7 +60,7 @@
 #'
 #' @return `print()` invisibly returns the model. `summary()` returns a named
 #'   list describing the task, target, preprocessing, hyperparameters, and
-#'   uncalibrated/unvalidated status; no performance metrics are estimated.
+#'   calibration status and stored nested-validation metrics when available.
 NULL
 
 .warm_start_hyperparameters <- function(alpha, lambda) {
@@ -99,10 +102,7 @@ NULL
       !.warm_start_named_numeric(model$coefficients, model$preprocessing$retained) ||
       !.warm_start_number(model$intercept)) invalid()
   .validate_warm_start_outcome(model$outcome)
-  if (!identical(model$calibration,
-      list(status = "uncalibrated", intercept = NULL, slope = NULL))) {
-    rlang::abort("Unsupported calibration contract: core models must be explicitly uncalibrated.")
-  }
+  .validate_warm_start_calibration(model$calibration)
   training <- model$training
   if (!is.list(training)) invalid()
   .warm_start_task_id(training$task_id)
@@ -116,18 +116,24 @@ NULL
     if (!is.character(training[[field]]) || length(training[[field]]) != 1L ||
         is.na(training[[field]]) || !nzchar(training[[field]])) invalid()
   }
-  if (!is.null(model$tuning) || !is.null(model$validation)) {
-    rlang::abort("Core models cannot contain tuning or validation results yet.")
+  if (model$calibration$status == "uncalibrated") {
+    if (!is.null(model$tuning) || !is.null(model$validation)) {
+      rlang::abort("Uncalibrated core models cannot contain tuning or validation results.")
+    }
+  } else {
+    .validate_warm_start_development(model)
   }
   invisible(model)
 }
 
-.new_warm_start_model <- function(schema, preprocessing, coefficients, intercept, outcome, training) {
+.new_warm_start_model <- function(schema, preprocessing, coefficients, intercept, outcome, training,
+                                   calibration = list(status = "uncalibrated", intercept = NULL, slope = NULL),
+                                   tuning = NULL, validation = NULL) {
   model <- structure(list(format_version = 1L, schema = schema,
     features = warm_start_feature_schema(schema)$feature, preprocessing = preprocessing,
     coefficients = coefficients, intercept = intercept, outcome = outcome,
-    calibration = list(status = "uncalibrated", intercept = NULL, slope = NULL),
-    training = training, tuning = NULL, validation = NULL), class = "pairwiseLLM_warm_model")
+    calibration = calibration, training = training, tuning = tuning, validation = validation),
+    class = "pairwiseLLM_warm_model")
   .validate_warm_start_model(model)
   model
 }
@@ -213,7 +219,8 @@ summary.pairwiseLLM_warm_model <- function(object, ...) {
     schema = object$schema, retained_predictors = length(object$coefficients),
     removed_predictors = object$preprocessing$removed, nonzero_coefficients = object$training$n_nonzero,
     alpha = object$training$alpha, lambda = object$training$lambda,
-    calibration = object$calibration$status, validation = "not performed")
+    calibration = object$calibration$status,
+    validation = if (is.null(object$validation)) "not performed" else object$validation$metrics)
 }
 
 #' @rdname pairwiseLLM_warm_model
@@ -226,6 +233,12 @@ print.pairwiseLLM_warm_model <- function(x, ...) {
   cat("Training rows:", info$n, "| Retained predictors:", info$retained_predictors,
     "| Nonzero coefficients:", info$nonzero_coefficients, "\n")
   cat("Alpha:", info$alpha, "| Lambda:", info$lambda, "\n")
-  cat("Calibration: uncalibrated | Validation: not performed\n")
+  cat("Calibration:", info$calibration, "\n")
+  if (is.list(info$validation)) {
+    cat("Nested validation: Pearson r =", info$validation$pearson_r,
+      "| RMSE =", info$validation$rmse, "| MAE =", info$validation$mae, "\n")
+  } else {
+    cat("Validation: not performed\n")
+  }
   invisible(x)
 }

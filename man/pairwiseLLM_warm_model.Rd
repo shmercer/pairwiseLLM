@@ -20,7 +20,7 @@
 \value{
 \code{print()} invisibly returns the model. \code{summary()} returns a named
 list describing the task, target, preprocessing, hyperparameters, and
-uncalibrated/unvalidated status; no performance metrics are estimated.
+calibration status and stored nested-validation metrics when available.
 }
 \description{
 A warm-start model predicts relative quality from frozen writing features
@@ -29,8 +29,8 @@ assessment; unlinked BT/BTL scores from different tasks must not be pooled.
 }
 \details{
 The fixed-hyperparameter core is internal. It does not tune hyperparameters,
-run cross-validation, or learn calibration. A public model-development
-workflow will be added separately. Core models are explicitly uncalibrated.
+run cross-validation, or learn calibration. \code{\link[=fit_warm_start_model]{fit_warm_start_model()}} adds nested
+validation and OOF calibration. Core models remain explicitly uncalibrated.
 
 Format version 1 is an S3 list with these deployment fields:
 \itemize{
@@ -45,10 +45,13 @@ preprocessed predictor scale, in retained feature order, and intercept.
 \item \code{outcome}: \code{definition = "within_task_z"}, original training mean and sample
 SD, and \code{sd_convention = "sample"}. The target is \code{(theta - mean) / sd}.
 \item \code{calibration}: \code{status = "uncalibrated"}, with \code{intercept = NULL} and
-\code{slope = NULL}. These are not identity or learned calibration coefficients.
+\code{slope = NULL} for core fits. Public fits store \code{status = "oof_linear"},
+learned intercept/slope, calibration row count, method, QR tolerance and OOF source.
 \item \code{training}: task ID, training row count, requested alpha/lambda, nonzero
 coefficient count, engine/version, and package version.
-\item \code{tuning} and \code{validation}: \code{NULL}, reserved for later model development.
+\item \code{tuning} and \code{validation}: NULL for core fits; public fits retain exact
+alpha/lambda traces, fold preprocessing, OOF calibration inputs, outer
+held-out predictions and metrics, and warning messages. See \code{\link[=fit_warm_start_model]{fit_warm_start_model()}}.
 }
 
 Preprocessing is fitted only on the supplied training rows. It first removes
