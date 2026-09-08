@@ -48,6 +48,7 @@ Suggests:
     purrr,
     readr,
     rmarkdown,
+    reticulate (>= 1.41),
     sirt,
     stringr,
     testthat (>= 3.0.0),
@@ -57,7 +58,9 @@ Suggests:
 Additional_repositories:
     https://stan-dev.r-universe.dev/
 SystemRequirements: CmdStan and a C++17 toolchain (optional; needed only for
-    Bayesian and adaptive modeling)
+    Bayesian and adaptive modeling); Python 3.12.3 with spaCy,
+    TextDescriptives, textstat and English resources (optional; needed only for
+    warm-start text feature extraction)
 Config/testthat/edition: 3
 URL: https://github.com/shmercer/pairwiseLLM, https://shmercer.github.io/pairwiseLLM/
 BugReports: https://github.com/shmercer/pairwiseLLM/issues
@@ -130,4 +133,6 @@ Collate:
     'utils-null-coalesce.R'
     'vertex_live.R'
     'warm_start_feature_schema.R'
+    'warm_start_features.R'
+    'warm_start_python.R'
 Config/roxygen2/version: 8.1.0
