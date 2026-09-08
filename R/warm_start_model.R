@@ -34,6 +34,11 @@
 #'   alpha/lambda traces, fold preprocessing, OOF calibration inputs, outer
 #'   held-out predictions and metrics, and warning messages. See [fit_warm_start_model()].
 #'
+#' Explicit [prepare_warm_start_model()] audit omission creates format 2 with
+#' `audit_status = "summary_only"`. It preserves deployment parameters and
+#' validation summaries but omits row-level evidence. Those summaries cannot be
+#' recomputed from the reduced artifact. Format 1 remains fully audited.
+#'
 #' Preprocessing is fitted only on the supplied training rows. It first removes
 #' all-missing columns and columns with missing fraction strictly above 0.20,
 #' then median-imputes remaining columns. It removes constants and columns with
@@ -92,8 +97,9 @@ NULL
   if (!inherits(model, "pairwiseLLM_warm_model") || !is.list(model) ||
       anyDuplicated(names(model)) || !all(required %in% names(model)) ||
       !.warm_start_portable(model)) invalid()
-  if (!identical(model$format_version, 1L)) {
-    rlang::abort("Unsupported warm-start model format version; expected 1.")
+  if (!identical(model$format_version, 1L) && !identical(model$format_version, 2L)) {
+    rlang::abort(paste0("Unsupported warm-start model format version; supported: 1 and 2. ",
+      "Update pairwiseLLM or re-export from a supported version."))
   }
   definition <- warm_start_feature_schema(model$schema)
   if (!identical(model$features, definition$feature)) invalid()
@@ -116,11 +122,17 @@ NULL
     if (!is.character(training[[field]]) || length(training[[field]]) != 1L ||
         is.na(training[[field]]) || !nzchar(training[[field]])) invalid()
   }
+  if ("metadata" %in% names(model)) .validate_warm_start_metadata(model$metadata)
+  if (identical(model$format_version, 2L)) {
+    .validate_warm_start_reduced(model)
+  } else if ("audit_status" %in% names(model)) {
+    invalid()
+  }
   if (model$calibration$status == "uncalibrated") {
     if (!is.null(model$tuning) || !is.null(model$validation)) {
       rlang::abort("Uncalibrated core models cannot contain tuning or validation results.")
     }
-  } else {
+  } else if (identical(model$format_version, 1L)) {
     .validate_warm_start_development(model)
   }
   invisible(model)
@@ -128,12 +140,15 @@ NULL
 
 .new_warm_start_model <- function(schema, preprocessing, coefficients, intercept, outcome, training,
                                    calibration = list(status = "uncalibrated", intercept = NULL, slope = NULL),
-                                   tuning = NULL, validation = NULL) {
-  model <- structure(list(format_version = 1L, schema = schema,
+                                   tuning = NULL, validation = NULL, format_version = 1L,
+                                   audit_status = NULL, metadata = NULL) {
+  model <- structure(list(format_version = format_version, schema = schema,
     features = warm_start_feature_schema(schema)$feature, preprocessing = preprocessing,
     coefficients = coefficients, intercept = intercept, outcome = outcome,
     calibration = calibration, training = training, tuning = tuning, validation = validation),
     class = "pairwiseLLM_warm_model")
+  if (!is.null(audit_status)) model$audit_status <- audit_status
+  if (!is.null(metadata)) model$metadata <- metadata
   .validate_warm_start_model(model)
   model
 }
@@ -220,6 +235,7 @@ summary.pairwiseLLM_warm_model <- function(object, ...) {
     removed_predictors = object$preprocessing$removed, nonzero_coefficients = object$training$n_nonzero,
     alpha = object$training$alpha, lambda = object$training$lambda,
     calibration = object$calibration$status,
+    audit_status = if (object$format_version == 2L) "summary_only" else "full",
     validation = if (is.null(object$validation)) "not performed" else object$validation$metrics)
 }
 
@@ -233,7 +249,7 @@ print.pairwiseLLM_warm_model <- function(x, ...) {
   cat("Training rows:", info$n, "| Retained predictors:", info$retained_predictors,
     "| Nonzero coefficients:", info$nonzero_coefficients, "\n")
   cat("Alpha:", info$alpha, "| Lambda:", info$lambda, "\n")
-  cat("Calibration:", info$calibration, "\n")
+  cat("Calibration:", info$calibration, "| Audit:", info$audit_status, "\n")
   if (is.list(info$validation)) {
     cat("Nested validation: Pearson r =", info$validation$pearson_r,
       "| RMSE =", info$validation$rmse, "| MAE =", info$validation$mae, "\n")

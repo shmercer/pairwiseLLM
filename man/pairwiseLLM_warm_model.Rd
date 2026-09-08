@@ -54,6 +54,11 @@ alpha/lambda traces, fold preprocessing, OOF calibration inputs, outer
 held-out predictions and metrics, and warning messages. See \code{\link[=fit_warm_start_model]{fit_warm_start_model()}}.
 }
 
+Explicit \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}} audit omission creates format 2 with
+\code{audit_status = "summary_only"}. It preserves deployment parameters and
+validation summaries but omits row-level evidence. Those summaries cannot be
+recomputed from the reduced artifact. Format 1 remains fully audited.
+
 Preprocessing is fitted only on the supplied training rows. It first removes
 all-missing columns and columns with missing fraction strictly above 0.20,
 then median-imputes remaining columns. It removes constants and columns with
