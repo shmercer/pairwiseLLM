@@ -13,7 +13,7 @@ remove_warm_start_model(name)
 list_warm_start_models(source = c("all", "user", "bundled"))
 }
 \arguments{
-\item{model}{A valid \link{pairwiseLLM_warm_model}.}
+\item{model}{A valid \link{pairwiseLLM_warm_model} or \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}} ensemble.}
 
 \item{name}{Model registry name, separate from the assessment task ID.}
 
@@ -26,6 +26,10 @@ Registration/removal invisibly return the entry path. Listing returns
 a tibble with name, source, path, version, format_version, schema, target, n,
 calibration, audit_status, size_bytes, metadata, and validation. Metadata and
 validation are list columns; unspecified metadata versions are NA character values.
+Additional columns \code{artifact_type} and \code{component_count} distinguish ensembles.
+Ensemble n is NA (no pooled sample size), calibration is component_oof_linear,
+and audit status is full, summary_only, or mixed. Ensemble validation contains
+named component metrics, not ensemble-performance estimates.
 }
 \description{
 Register, inspect, or remove user warm-start models

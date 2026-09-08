@@ -1,6 +1,6 @@
 #' Register, inspect, or remove user warm-start models
 #'
-#' @param model A valid [pairwiseLLM_warm_model].
+#' @param model A valid [pairwiseLLM_warm_model] or [ensemble_warm_start_models()] ensemble.
 #' @param name Model registry name, separate from the assessment task ID.
 #' @param overwrite Explicitly replace an existing user entry. Default FALSE.
 #' @param source Which registries to list.
@@ -8,6 +8,10 @@
 #'   a tibble with name, source, path, version, format_version, schema, target, n,
 #'   calibration, audit_status, size_bytes, metadata, and validation. Metadata and
 #'   validation are list columns; unspecified metadata versions are NA character values.
+#'   Additional columns `artifact_type` and `component_count` distinguish ensembles.
+#'   Ensemble n is NA (no pooled sample size), calibration is component_oof_linear,
+#'   and audit status is full, summary_only, or mixed. Ensemble validation contains
+#'   named component metrics, not ensemble-performance estimates.
 #' @details
 #' User models live in the `models` subdirectory of
 #' `tools::R_user_dir("pairwiseLLM", "data")`. Only explicit registration creates
@@ -29,7 +33,7 @@
 #' No user models are written into the installed package tree.
 #' @export
 register_warm_start_model <- function(model, name, overwrite = FALSE) {
-  .validate_warm_start_model(model)
+  .validate_warm_start_artifact(model)
   .warm_start_flag(overwrite, "overwrite")
   name <- .warm_start_model_name(name)
   root <- .warm_start_registry_root("user")
@@ -123,12 +127,17 @@ remove_warm_start_model <- function(name) {
   model <- .warm_start_read_model(path)
   metadata <- model$metadata
   version <- if (is.null(metadata$version)) NA_character_ else metadata$version
+  ensemble <- inherits(model, "pairwiseLLM_warm_ensemble")
   tibble::tibble(name = name, source = source, path = path, version = version,
     format_version = model$format_version, schema = model$schema, target = model$outcome$definition,
-    n = model$training$n, calibration = model$calibration$status,
-    audit_status = if (model$format_version == 2L) "summary_only" else "full",
+    n = if (ensemble) NA_integer_ else model$training$n,
+    calibration = if (ensemble) "component_oof_linear" else model$calibration$status,
+    audit_status = .warm_start_audit_status(model),
+    artifact_type = if (ensemble) "ensemble" else "model",
+    component_count = if (ensemble) length(model$components) else 1L,
     size_bytes = unname(file.info(path)$size), metadata = list(metadata),
-    validation = list(model$validation$metrics))
+    validation = list(if (ensemble) lapply(model$components, function(x) x$validation$metrics)
+      else model$validation$metrics))
 }
 
 #' @rdname register_warm_start_model
@@ -139,7 +148,7 @@ list_warm_start_models <- function(source = c("all", "user", "bundled")) {
   out <- tibble::tibble(name = character(), source = character(), path = character(),
     version = character(), format_version = integer(), schema = character(), target = character(),
     n = integer(), calibration = character(), audit_status = character(), size_bytes = double(),
-    metadata = list(), validation = list())
+    artifact_type = character(), component_count = integer(), metadata = list(), validation = list())
   for (s in sources) {
     root <- .warm_start_registry_root(s)
     if (!nzchar(root) || !dir.exists(root)) next

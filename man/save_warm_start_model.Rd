@@ -14,7 +14,7 @@ load_warm_start_model(
 )
 }
 \arguments{
-\item{model}{A valid \link{pairwiseLLM_warm_model}.}
+\item{model}{A valid \link{pairwiseLLM_warm_model} or \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}} ensemble.}
 
 \item{path}{Explicit file path. Its parent must already exist when saving.}
 
@@ -34,7 +34,8 @@ Save or load a portable warm-start model
 \details{
 Artifacts are compressed RDS objects, without an envelope or serialized glmnet
 engine. Format versions 1 (full audit) and 2 (explicit summary-only) are supported,
-independently of package version. Use \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}} to add
+independently of package version. Ensembles use their own format 1 and may
+contain either supported single-model format. Use \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}} to add
 metadata or explicitly omit audit records before saving. Saving never strips
 records or adds timestamps. Neither loading nor prediction from precomputed
 features needs glmnet or Python.

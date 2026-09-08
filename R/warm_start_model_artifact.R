@@ -122,7 +122,7 @@
 
 #' Prepare metadata or a summary-only warm-start artifact
 #'
-#' @param model A valid [pairwiseLLM_warm_model].
+#' @param model A valid [pairwiseLLM_warm_model] or [ensemble_warm_start_models()] ensemble.
 #' @param metadata Named list with optional scalar character `name`, `version`,
 #'   `domain`, `notes`, `license`, `prepared_at`, `preparation_package_version`,
 #'   and `extraction_provenance` (a named character vector). Supplied fields replace
@@ -142,13 +142,17 @@
 #' Summaries cannot be recomputed without the original evidence. An already
 #' reduced artifact cannot recover its audit through this function.
 #'
+#' Ensembles retain ensemble format 1; audit omission recursively reduces each
+#' component to model format 2, preserving existing component metadata. Supplied
+#' preparation metadata applies to the ensemble only.
+#'
 #' No raw texts are added. Review task labels, notes, domain, and provenance for
 #' restricted information before bundling; this is not a general anonymizer.
 #' User models do not need complete publication metadata. Task-specific outcome
 #' scales remain standardized independently; storage does not link BTL scales.
 #' @export
 prepare_warm_start_model <- function(model, metadata = list(), omit_audit = FALSE) {
-  .validate_warm_start_model(model)
+  .validate_warm_start_artifact(model)
   .validate_warm_start_metadata(metadata)
   .warm_start_flag(omit_audit, "omit_audit")
   existing <- model$metadata
@@ -160,7 +164,13 @@ prepare_warm_start_model <- function(model, metadata = list(), omit_audit = FALS
   absent <- setdiff(names(defaults), names(existing))
   existing[absent] <- defaults[absent]
   model$metadata <- existing
-  if (omit_audit) model <- .warm_start_reduced(model)
-  .validate_warm_start_model(model)
+  if (omit_audit) {
+    if (inherits(model, "pairwiseLLM_warm_ensemble")) {
+      model$components <- lapply(model$components, .warm_start_reduced)
+    } else {
+      model <- .warm_start_reduced(model)
+    }
+  }
+  .validate_warm_start_artifact(model)
   model
 }

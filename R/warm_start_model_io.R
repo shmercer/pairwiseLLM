@@ -1,6 +1,6 @@
 #' Save or load a portable warm-start model
 #'
-#' @param model A valid [pairwiseLLM_warm_model].
+#' @param model A valid [pairwiseLLM_warm_model] or [ensemble_warm_start_models()] ensemble.
 #' @param path Explicit file path. Its parent must already exist when saving.
 #' @param overwrite Allow replacement of an existing artifact. Default FALSE.
 #' @param name Registered model name, mutually exclusive with `path`.
@@ -10,7 +10,8 @@
 #' @details
 #' Artifacts are compressed RDS objects, without an envelope or serialized glmnet
 #' engine. Format versions 1 (full audit) and 2 (explicit summary-only) are supported,
-#' independently of package version. Use [prepare_warm_start_model()] to add
+#' independently of package version. Ensembles use their own format 1 and may
+#' contain either supported single-model format. Use [prepare_warm_start_model()] to add
 #' metadata or explicitly omit audit records before saving. Saving never strips
 #' records or adds timestamps. Neither loading nor prediction from precomputed
 #' features needs glmnet or Python.
@@ -34,7 +35,7 @@
 #' }
 #' @export
 save_warm_start_model <- function(model, path, overwrite = FALSE) {
-  .validate_warm_start_model(model)
+  .validate_warm_start_artifact(model)
   .warm_start_flag(overwrite, "overwrite")
   path <- .warm_start_file_path(path)
   if (!dir.exists(dirname(path))) rlang::abort("The artifact parent directory must already exist.")
@@ -72,7 +73,7 @@ save_warm_start_model <- function(model, path, overwrite = FALSE) {
 .warm_start_read_model <- function(path) {
   tryCatch({
     model <- readRDS(path)
-    .validate_warm_start_model(model)
+    .validate_warm_start_artifact(model)
     model
   }, error = function(e) rlang::abort(paste0("Cannot load warm-start artifact '", path, "'."), parent = e))
 }

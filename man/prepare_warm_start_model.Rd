@@ -7,7 +7,7 @@
 prepare_warm_start_model(model, metadata = list(), omit_audit = FALSE)
 }
 \arguments{
-\item{model}{A valid \link{pairwiseLLM_warm_model}.}
+\item{model}{A valid \link{pairwiseLLM_warm_model} or \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}} ensemble.}
 
 \item{metadata}{Named list with optional scalar character \code{name}, \code{version},
 \code{domain}, \code{notes}, \code{license}, \code{prepared_at}, \code{preparation_package_version},
@@ -34,6 +34,10 @@ settings and nested-validation summaries. IDs, OOF rows, fold records, tuning
 traces and contextual warning messages are omitted; warning counts remain.
 Summaries cannot be recomputed without the original evidence. An already
 reduced artifact cannot recover its audit through this function.
+
+Ensembles retain ensemble format 1; audit omission recursively reduces each
+component to model format 2, preserving existing component metadata. Supplied
+preparation metadata applies to the ensemble only.
 
 No raw texts are added. Review task labels, notes, domain, and provenance for
 restricted information before bundling; this is not a general anonymizer.
