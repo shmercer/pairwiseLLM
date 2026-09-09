@@ -321,7 +321,11 @@ test_that("fit_bayes_btl_mcmc_adaptive succeeds with deterministic model_fn and 
     }
   )
   fake_model_fn <- function(stan_file, cpp_options) {
-    list(sample = function(...) fake_fit)
+    list(sample = function(data, ...) {
+      expect_identical(data$prior_mean, c(0, 0))
+      expect_identical(data$prior_sd, c(1, 1))
+      fake_fit
+    })
   }
 
   out <- testthat::with_mocked_bindings(

@@ -13,7 +13,8 @@ fit_bayes_btl_mcmc(
   pair_counts = NULL,
   subset_method = c("first", "sample"),
   seed = NULL,
-  inference_contract = NULL
+  inference_contract = NULL,
+  warm_start_prior = NULL
 )
 }
 \arguments{
@@ -56,6 +57,9 @@ the first \code{n} rows of that permutation for each refit.}
 \item{inference_contract}{Optional list of inference-routing semantics to
 attach to each fit contract. When omitted, values are inferred from
 \code{results$phase} and optional \code{results$judge_scope}.}
+
+\item{warm_start_prior}{Optional \code{\link[=make_warm_start_prior]{make_warm_start_prior()}} object. Defaults to
+no predictive prior (raw theta prior mean 0, SD 1). IDs must match \code{ids}.}
 }
 \value{
 A list with:
@@ -68,7 +72,9 @@ reuse with \code{\link[=summarize_items]{summarize_items()}}.}
 a refit; \code{refit_id} identifies the refit.}
 \item{round_log}{Tibble matching the canonical adaptive round log schema
 (one row per refit).}
-\item{fits}{List of BTL fit contracts (one per refit).}
+\item{fits}{List of BTL fit contracts (one per refit). Each records the actual
+per-item raw theta prior in \code{theta_prior}; predictive fits also include
+compact provenance in \code{predictive_prior}.}
 \item{fit}{Single fit contract (only when one refit is run).}
 }
 }
@@ -119,7 +125,7 @@ summarize_items(fit)
 
 }
 \seealso{
-\code{\link[=build_btl_results_data]{build_btl_results_data()}}
+\code{\link[=build_btl_results_data]{build_btl_results_data()}}, \code{\link[=make_warm_start_prior]{make_warm_start_prior()}}, \code{\link[=adaptive_rank]{adaptive_rank()}}
 
 Other Bayesian models:
 \code{\link[=build_btl_results_data]{build_btl_results_data()}}

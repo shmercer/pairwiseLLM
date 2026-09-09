@@ -11,7 +11,12 @@ adaptive_rank_start(
   persist_item_log = FALSE,
   ...,
   adaptive_config = NULL,
-  checkpoint_every_steps = NULL
+  checkpoint_every_steps = NULL,
+  warm_start_model = NULL,
+  warm_start_prior = NULL,
+  warm_start_features = NULL,
+  warm_start_python = NULL,
+  warm_start_prior_sd = NULL
 )
 }
 \arguments{
@@ -40,6 +45,21 @@ and defaults.}
 
 \item{checkpoint_every_steps}{Optional positive integer checkpoint cadence for
 ordinary live persistence. If \code{NULL}, defaults to \code{100L}.}
+
+\item{warm_start_model}{Optional calibrated model/ensemble, path string, or
+loader reference list (\code{name}/\code{source} or \code{path}). Mutually exclusive with
+\code{warm_start_prior}. Resolve and predict once when creating an assessment.}
+
+\item{warm_start_prior}{Optional \code{\link[=make_warm_start_prior]{make_warm_start_prior()}} object covering all
+items. Saved numeric scores are centered within each BTL refit scope.}
+
+\item{warm_start_features}{Optional precomputed feature rows for model input;
+otherwise use item texts. Precomputed prediction needs neither Python nor glmnet.}
+
+\item{warm_start_python}{Explicit Python interpreter for text extraction only.}
+
+\item{warm_start_prior_sd}{Optional model-derived raw theta prior SD override;
+scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.}
 }
 \value{
 An adaptive state object containing \code{step_log}, \code{round_log}, and
@@ -84,6 +104,12 @@ The returned state contains canonical logs:
 }
 If \code{session_dir} is supplied, the initialized state is persisted
 immediately using \code{\link[=save_adaptive_session]{save_adaptive_session()}}.
+
+Predictive priors affect ordinary/within-set BTL estimation. Transform,
+anchored-joint, and pooled judge refits keep their existing prior rules; predictive
+evidence is not injected again. Initial pairing queues and selection rules retain
+their existing meaning. Custom fit functions must consume \code{state$predictive_prior}
+explicitly. Resume uses saved predictions; omit all warm-start arguments on resume.
 }
 \examples{
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 11)
@@ -91,7 +117,7 @@ summarize_adaptive(state)
 
 }
 \seealso{
-\code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
+\code{\link[=make_warm_start_prior]{make_warm_start_prior()}}, \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
 \code{\link[=adaptive_step_log]{adaptive_step_log()}}, \code{\link[=adaptive_round_log]{adaptive_round_log()}}, \code{\link[=adaptive_item_log]{adaptive_item_log()}}
 
 Other adaptive ranking:

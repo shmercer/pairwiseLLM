@@ -950,6 +950,9 @@ test_that("adaptive_rank_run_live rejects removed phase-specific judge mode", {
 })
 
 test_that("global-shared Phase B startup falls back deterministically without link judge estimates", {
+  local_mocked_bindings(
+    .btl_mcmc_require_cmdstanr = function() stop("This unit test must not invoke CmdStan.")
+  )
   items <- tibble::tibble(
     item_id = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
     text = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
@@ -1038,6 +1041,8 @@ test_that("global-shared Phase B startup falls back deterministically without li
     state,
     judge,
     n_steps = 1L,
+    btl_config = test_link_btl_config(),
+    fit_fn = make_deterministic_fit_fn(state$item_ids, fit = state$btl_fit)$fit_fn,
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,

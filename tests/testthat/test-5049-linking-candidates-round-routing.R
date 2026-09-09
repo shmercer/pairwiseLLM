@@ -334,10 +334,14 @@ test_that("phase B non-anchor routing activates only after a committed active-li
       .adaptive_assign_strata = function(scores, defaults) {
         ids <- names(scores)
         ranks <- stats::setNames(seq_along(ids), ids)
+        # Place one spoke item within the stage domain so every stage is exercised.
+        strata <- ranks
+        distance <- c(long_link = 5L, mid_link = 3L, local_link = 1L)[[stage]]
+        strata[["4"]] <- strata[["1"]] + distance
         list(
           rank_index = ranks,
-          stratum_id = as.integer(ranks[ids]),
-          stratum_map = ranks,
+          stratum_id = as.integer(strata[ids]),
+          stratum_map = strata,
           top_band_ids = character()
         )
       },
@@ -350,13 +354,12 @@ test_that("phase B non-anchor routing activates only after a committed active-li
       ),
       .package = "pairwiseLLM"
     )
-    if (nrow(cand) > 0L) {
-      set_i <- as.integer(set_map[cand$i])
-      set_j <- as.integer(set_map[cand$j])
-      expect_true(all((set_i == 1L & set_j == 2L) | (set_i == 2L & set_j == 1L)))
-      hub_item <- ifelse(set_i == 1L, cand$i, cand$j)
-      expect_true(all(hub_item %in% c("1", "2")))
-    }
+    expect_gt(nrow(cand), 0L, label = paste(stage, "candidate count"))
+    set_i <- as.integer(set_map[cand$i])
+    set_j <- as.integer(set_map[cand$j])
+    expect_true(all((set_i == 1L & set_j == 2L) | (set_i == 2L & set_j == 1L)))
+    hub_item <- ifelse(set_i == 1L, cand$i, cand$j)
+    expect_true(all(hub_item %in% c("1", "2")))
   }
 })
 
@@ -1820,22 +1823,33 @@ test_that("concurrent fallback ordering is deterministic under fixed state and s
     `3` = list(uncertainty = 0)
   )
 
-  draw_once <- function() {
+  draw_once <- function(ambient_seed) {
+    withr::local_seed(ambient_seed)
+    # Clone the memo environment as well as the list for independent selections.
+    fresh_state <- unserialize(serialize(state, NULL))
     testthat::with_mocked_bindings(
       generate_stage_candidates_from_state = function(state, stage_name, fallback_name, C_max, seed,
                                                       link_spoke_id = NA_integer_) {
         if (is.na(link_spoke_id) || as.integer(link_spoke_id) == 2L) {
           return(tibble::tibble(i = character(), j = character()))
         }
-        tibble::tibble(i = "h1", j = "s31")
+        tibble::tibble(i = c("h1", "h2"), j = c("s31", "s32"))
       },
-      pairwiseLLM:::select_next_pair(state, step_id = 5L),
+      pairwiseLLM:::select_next_pair(fresh_state, step_id = 5L),
       .package = "pairwiseLLM"
     )
   }
 
-  out1 <- draw_once()
-  out2 <- draw_once()
+  out1 <- draw_once(1L)
+  out2 <- draw_once(902L)
+  for (out in list(out1, out2)) {
+    expect_false(out$candidate_starved)
+    expect_identical(out$link_spoke_id_selected, 3L)
+    expect_gte(out$n_candidates_scored, 2L)
+    expect_true(pairwiseLLM:::make_unordered_key(
+      state$item_ids[[out$i]], state$item_ids[[out$j]]
+    ) %in% c("h1:s31", "h2:s32"))
+  }
   expect_identical(out1$link_spoke_id_selected, out2$link_spoke_id_selected)
   expect_identical(out1$i, out2$i)
   expect_identical(out1$j, out2$j)
@@ -2900,12 +2914,11 @@ test_that("cross-set logged predictive probability uses final A/B orientation", 
     .package = "pairwiseLLM"
   )
 
-  if (!isTRUE(out$candidate_starved)) {
-    expect_equal(out$A, 2L)
-    expect_equal(out$B, 1L)
-    expect_equal(out$p_ij, 0.2, tolerance = 1e-12)
-    expect_equal(out$U0_ij, 0.16, tolerance = 1e-12)
-  }
+  expect_false(out$candidate_starved)
+  expect_equal(out$A, 2L)
+  expect_equal(out$B, 1L)
+  expect_equal(out$p_ij, 0.2, tolerance = 1e-12)
+  expect_equal(out$U0_ij, 0.16, tolerance = 1e-12)
 })
 
 test_that("active linking hub domain excludes anchor-only hub items before any committed cross-set edge", {
@@ -3263,7 +3276,7 @@ test_that("phase-B routing score source switches between Phase A and current the
   expect_true(isTRUE(all.equal(out_shift[["h1"]], out_joint[["h1"]], tolerance = 1e-12)))
 })
 
-test_that("linking candidates and step log carry global distance strata", {
+test_that("long-link candidates carry global distance strata", {
   items <- tibble::tibble(
     item_id = c(paste0("h", seq_len(10L)), paste0("s2", seq_len(6L))),
     set_id = c(rep(1L, 10L), rep(2L, 6L)),
@@ -3315,11 +3328,47 @@ test_that("linking candidates and step log carry global distance strata", {
   expect_true(nrow(cand) > 0L)
   expect_true("dist_stratum_global" %in% names(cand))
   expect_true(all(!is.na(cand$dist_stratum_global)))
+})
 
-  judge <- make_deterministic_judge("i_wins")
-  out <- pairwiseLLM:::run_one_step(state, judge)
-  row <- out$step_log[nrow(out$step_log), , drop = FALSE]
-  expect_false(is.na(row$dist_stratum_global[[1L]]))
+test_that("active linking step log preserves the selected global distance stratum", {
+  items <- tibble::tibble(
+    item_id = c(paste0("h", seq_len(10L)), paste0("s", seq_len(6L))),
+    set_id = c(rep(1L, 10L), rep(2L, 6L)),
+    global_item_id = paste0("g", seq_len(16L))
+  )
+  state <- adaptive_rank_start(
+    items,
+    seed = 1L,
+    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+  )
+  state$warm_start_done <- TRUE
+  state <- mark_link_phase_b_ready(state)
+  n_before <- nrow(state$step_log)
+  original_select <- pairwiseLLM:::select_next_pair
+  selected <- NULL
+  out <- testthat::with_mocked_bindings(
+    # Probe scheduling has separate tests; this test requires an active-link commit.
+    .adaptive_link_probe_ensure_panels = function(state, ...) state,
+    .adaptive_link_probe_next_holdout_spoke = function(...) NA_integer_,
+    select_next_pair = function(...) {
+      selected <<- original_select(...)
+      selected
+    },
+    pairwiseLLM:::run_one_step(state, make_deterministic_judge("i_wins")),
+    .package = "pairwiseLLM"
+  )
+  expect_false(selected$candidate_starved)
+  expect_false(is.na(selected$dist_stratum_global))
+  expect_identical(nrow(out$step_log), n_before + 1L)
+  row <- out$step_log[n_before + 1L, , drop = FALSE]
+  expect_identical(row$status[[1L]], "ok")
+  expect_false(row$candidate_starved[[1L]])
+  expect_false(row$is_probe_step[[1L]])
+  expect_true(row$is_cross_set[[1L]])
+  expect_identical(row$round_stage[[1L]], "anchor_link")
+  expect_identical(row$i[[1L]], selected$i)
+  expect_identical(row$j[[1L]], selected$j)
+  expect_identical(row$dist_stratum_global[[1L]], selected$dist_stratum_global)
 })
 
 test_that("link stage log is appended per refit and spoke in linking mode", {

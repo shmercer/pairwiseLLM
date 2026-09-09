@@ -324,6 +324,9 @@ read_log <- function(path) {
 
 .adaptive_align_round_log_post_stop_columns <- function(round_log) {
   out <- tibble::as_tibble(round_log)
+  if (!"predictive_prior_digest" %in% names(out)) {
+    out <- tibble::add_column(out, predictive_prior_digest = rep(NA_character_, nrow(out)), .before = 1L)
+  }
   n <- nrow(out)
   defaults <- c(
     max_pairs_after_stop = 0L,
@@ -500,6 +503,7 @@ read_log <- function(path) {
       "."
     ))
   }
+  .warm_start_adaptive_validate(state)
   if (!is.list(state$item_log)) {
     rlang::abort("`state$item_log` must be a list.")
   }
@@ -1157,6 +1161,7 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
     rlang::abort("`overwrite` must be TRUE or FALSE.")
   }
 
+  .warm_start_adaptive_validate(state)
   dir.create(session_dir, recursive = TRUE, showWarnings = FALSE)
   paths <- .adaptive_session_paths(session_dir)
   phase_a_artifacts <- state$linking$phase_a$artifacts %||% list()
@@ -1201,7 +1206,8 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
   metadata <- list(
     schema_version = as.character(state$meta$schema_version %||% "adaptive-session"),
     package_version = as.character(utils::packageVersion("pairwiseLLM")),
-    n_items = as.integer(state$n_items)
+    n_items = as.integer(state$n_items),
+    predictive_prior_digest = state$meta$predictive_prior_digest %||% NULL
   )
 
   write_log(tibble::as_tibble(state$step_log), paths$step_log)
@@ -1273,6 +1279,9 @@ load_adaptive_session <- function(session_dir) {
   state <- .adaptive_phase_a_strip_runtime_prepare_memo(state)
 
   state <- .adaptive_validate_state_for_resume(state)
+  if (!identical(metadata$predictive_prior_digest, state$meta$predictive_prior_digest)) {
+    rlang::abort("Session metadata predictive prior integrity mismatch.")
+  }
   state$meta$schema_version <- metadata$schema_version
   state$linking <- state$linking %||% list()
   state$linking$probe <- .adaptive_link_probe_state(state)

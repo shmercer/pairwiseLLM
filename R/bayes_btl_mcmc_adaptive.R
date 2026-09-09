@@ -162,21 +162,32 @@
 
   item_id <- bt_data$item_id %||% NULL
   if (!is.null(item_id)) {
-    if (!is.character(item_id) || length(item_id) != N || any(is.na(item_id)) || any(item_id == "")) {
+    if (!is.character(item_id) || length(item_id) != N || any(is.na(item_id)) ||
+        any(item_id == "") || anyDuplicated(item_id)) {
       rlang::abort("`bt_data$item_id` must be length N with non-empty strings.")
     }
   }
+
+  if (is.null(bt_data$prior_mean) != is.null(bt_data$prior_sd)) {
+    rlang::abort("`bt_data` must supply both prior_mean and prior_sd, or neither.")
+  }
+  prior_mean <- bt_data$prior_mean %||% rep(0, N)
+  prior_sd <- bt_data$prior_sd %||% rep(1, N)
+  .warm_start_prior_numeric(prior_mean, N, "means")
+  .warm_start_prior_numeric(prior_sd, N, "SDs", positive = TRUE)
 
   list(
     A = A,
     B = B,
     Y = Y,
     N = N,
-    item_id = item_id
+    item_id = item_id,
+    prior_mean = as.double(prior_mean),
+    prior_sd = as.double(prior_sd)
   )
 }
 
-.btl_mcmc_prepare_bt_data <- function(results, ids) {
+.btl_mcmc_prepare_bt_data <- function(results, ids, warm_start_prior = NULL) {
   results <- tibble::as_tibble(results)
   required <- c("A_id", "B_id", "better_id")
   .adaptive_required_cols(results, "results", required)
@@ -189,6 +200,7 @@
     rlang::abort("All ids in `results` must be contained in `ids`.")
   }
 
+  prior <- .warm_start_btl_prior_data(warm_start_prior, ids)
   A_idx <- match(results$A_id, ids)
   B_idx <- match(results$B_id, ids)
   if (any(is.na(A_idx)) || any(is.na(B_idx))) {
@@ -215,7 +227,9 @@
     N = as.integer(length(ids)),
     item_id = as.character(ids),
     phase = phase,
-    judge_scope = judge_scope
+    judge_scope = judge_scope,
+    prior_mean = prior$prior_mean,
+    prior_sd = prior$prior_sd
   )
 }
 
@@ -511,7 +525,7 @@ as_btl_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
     }
   }
 
-  build_btl_fit_contract(
+  out <- build_btl_fit_contract(
     theta_draws = theta_draws,
     epsilon_draws = epsilon_draws,
     beta_draws = beta_draws,
@@ -519,6 +533,14 @@ as_btl_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
     model_variant = model_variant,
     mcmc_config_used = mcmc_fit$mcmc_config_used %||% NULL
   )
+  if (!is.null(mcmc_fit$theta_prior)) {
+    prior <- mcmc_fit$theta_prior
+    .warm_start_validate_fit_prior(prior, prior$item_id)
+    if (!setequal(prior$item_id, ids)) rlang::abort("Fit theta prior IDs must match fitted IDs.")
+    index <- match(ids, prior$item_id)
+    out$theta_prior <- list(item_id = ids, prior_mean = prior$prior_mean[index], prior_sd = prior$prior_sd[index])
+  }
+  out
 }
 
 #' @keywords internal
@@ -539,7 +561,9 @@ as_btl_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
     M = as.integer(M),
     A = as.integer(bt_data$A),
     B = as.integer(bt_data$B),
-    Y = as.integer(bt_data$Y)
+    Y = as.integer(bt_data$Y),
+    prior_mean = bt_data$prior_mean,
+    prior_sd = bt_data$prior_sd
   )
 
   cmdstan <- config[["cmdstan"]] %||% list()
@@ -656,6 +680,8 @@ as_btl_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
     epsilon_summary = summaries$epsilon_summary,
     diagnostics = diagnostics,
     mcmc_config_used = resolved_cmdstan,
+    theta_prior = list(item_id = colnames(theta_draws),
+      prior_mean = bt_data$prior_mean, prior_sd = bt_data$prior_sd),
     model_variant = model_variant
   )
 }

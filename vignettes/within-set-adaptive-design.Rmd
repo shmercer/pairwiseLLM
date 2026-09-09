@@ -378,7 +378,7 @@ global positional tendency; it is not a forward/reverse consistency statistic. T
 models a global probability of an uninformative 50:50 response and should not be interpreted as a
 directly observed error rate.
 
-The Stan models use
+Without a predictive prior, the Stan models use
 
 \[
  \theta_i^{\mathrm{raw}}\sim\mathcal N(0,1),\qquad
@@ -393,6 +393,14 @@ differences. The priors discourage extreme values when evidence is sparse. Conse
 with only wins or only losses can still have finite posterior summaries; this is Bayesian
 regularization under separation, not evidence that sparse or one-sided comparison data are
 adequate.
+
+Optional predictive warm-start priors replace the raw-theta Normal locations and SDs
+in all four active variants. The default predictive SD is 0.5; it is not the
+marginal SD after centering. Each refit subsets saved predictions to its fitted
+items and centers within that scope. This does not alter the initial pairing
+schedule or pair-selection algorithm. See
+[Guide: Adaptive Warm Start](adaptive-warm-start.html) for model development,
+prior conversion, and artifact-independent resume.
 
 Refit eligibility depends on committed comparisons only. With \(M_t\) the committed count and
 \(M_r\) the count at the last refit, a refit occurs when

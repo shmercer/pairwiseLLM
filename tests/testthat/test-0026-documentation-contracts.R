@@ -149,8 +149,16 @@ test_that("every exported function has workflow links and family metadata", {
         which(seq_along(lines) < export_idx & !grepl("^#'", lines))
       )) + 1L
       block <- lines[block_start:export_idx]
-      expect_true(any(grepl("@seealso", block)), info = fun)
-      expect_true(any(grepl("@family", block)), info = fun)
+      shared <- grep("^#' @rdname ", block, value = TRUE)
+      if (length(shared)) {
+        topic <- sub("^#' @rdname ", "", shared)
+        manual <- readLines(file.path(root, "man", paste0(topic, ".Rd")))
+        expect_true(any(grepl("\\\\seealso", manual)), info = fun)
+        expect_true(any(grepl("\\\\concept", manual)), info = fun)
+      } else {
+        expect_true(any(grepl("@seealso", block)), info = fun)
+        expect_true(any(grepl("@family", block)), info = fun)
+      }
       break
     }
     expect_true(found, info = fun)
@@ -251,7 +259,7 @@ test_that("Task 09 release documentation keeps navigation and citation contracts
     paste(readLines(path, warn = FALSE), collapse = "\n")
   })
 
-  expect_identical(unname(description[1L, "Version"]), "1.3.1")
+  expect_identical(unname(description[1L, "Version"]), "1.3.2")
   expect_true(grepl("badge/dynamic/regex", readme, fixed = TRUE))
   expect_true(grepl("raw.githubusercontent.com", readme, fixed = TRUE))
   expect_true(grepl("## Research Studies Using pairwiseLLM", readme, fixed = TRUE))
@@ -265,7 +273,7 @@ test_that("Task 09 release documentation keeps navigation and citation contracts
   expect_false(grepl("template_positional_bias", pkgdown, fixed = TRUE))
   expect_true(grepl("articles/prompt-template-bias.html", pkgdown, fixed = TRUE))
 
-  expect_length(vignette_paths, 11L)
+  expect_length(vignette_paths, 12L)
   expect_true(all(vapply(vignette_text, function(text) {
     normalized <- gsub("\n> ", " ", text, fixed = TRUE)
     grepl("Citation", normalized, fixed = TRUE) &&
@@ -598,7 +606,7 @@ test_that("within-set design vignette tracks current adaptive contracts", {
   for (model in c("btl.stan", "btl_e.stan", "btl_b.stan", "btl_e_b.stan")) {
     stan <- paste(readLines(file.path(stan_dir, model), warn = FALSE), collapse = "\n")
     expect_true(grepl("theta_raw - mean(theta_raw)", stan, fixed = TRUE))
-    expect_true(grepl("theta_raw ~ normal(0, 1)", stan, fixed = TRUE))
+    expect_true(grepl("theta_raw ~ normal(prior_mean, prior_sd)", stan, fixed = TRUE))
   }
 })
 

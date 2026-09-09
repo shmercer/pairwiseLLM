@@ -313,6 +313,7 @@ validate_btl_fit_contract <- function(fit, ids, where = rlang::caller_env()) {
     )
   }
 
+  if (!is.null(fit$theta_prior)) .warm_start_validate_fit_prior(fit$theta_prior, ids)
   theta_draws <- fit$theta_draws %||% NULL
   if (is.null(theta_draws) || !is.matrix(theta_draws) || !is.numeric(theta_draws)) {
     rlang::abort("`fit$theta_draws` must be a numeric matrix.", call = where)

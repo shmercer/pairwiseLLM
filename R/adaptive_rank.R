@@ -1242,7 +1242,24 @@ make_adaptive_judge_llm <- function(
 #' @seealso [make_adaptive_judge_llm()], [adaptive_rank_run_live()],
 #'   [adaptive_rank_start()], [adaptive_rank_resume()], [llm_compare_pair()]
 #'
+#' @seealso [make_warm_start_prior()], [fit_warm_start_model()]
 #' @family adaptive ranking
+#' @param warm_start_model Optional calibrated model/ensemble, path string, or
+#'   loader reference list (`name`/`source` or `path`). Mutually exclusive with
+#'   `warm_start_prior`. Resolve and predict once when creating an assessment.
+#' @param warm_start_prior Optional [make_warm_start_prior()] object covering all
+#'   items. Saved numeric scores are centered within each BTL refit scope.
+#' @param warm_start_features Optional precomputed feature rows for model input;
+#'   otherwise use item texts. Precomputed prediction needs neither Python nor glmnet.
+#' @param warm_start_python Explicit Python interpreter for text extraction only.
+#' @param warm_start_prior_sd Optional model-derived raw theta prior SD override;
+#'   scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
+#' @details
+#' Predictive priors affect ordinary/within-set BTL estimation. Transform,
+#' anchored-joint, and pooled judge refits keep their existing prior rules; predictive
+#' evidence is not injected again. Initial pairing queues and selection rules retain
+#' their existing meaning. Custom fit functions must consume `state$predictive_prior`
+#' explicitly. Resume uses saved predictions; omit all warm-start arguments on resume.
 #' @export
 adaptive_rank <- function(
     data,
@@ -1274,7 +1291,12 @@ adaptive_rank <- function(
     progress_errors = TRUE,
     save_outputs = FALSE,
     output_file = NULL,
-    judge = NULL
+    judge = NULL,
+    warm_start_model = NULL,
+    warm_start_prior = NULL,
+    warm_start_features = NULL,
+    warm_start_python = NULL,
+    warm_start_prior_sd = NULL
 ) {
   backend <- match.arg(backend)
   if (identical(backend, "openai")) {
@@ -1358,9 +1380,16 @@ adaptive_rank <- function(
       adaptive_config = adaptive_config,
       session_dir = session_dir,
       persist_item_log = persist_item_log,
-      checkpoint_every_steps = checkpoint_every_steps
+      checkpoint_every_steps = checkpoint_every_steps,
+      warm_start_model = warm_start_model,
+      warm_start_prior = warm_start_prior,
+      warm_start_features = warm_start_features,
+      warm_start_python = warm_start_python,
+      warm_start_prior_sd = warm_start_prior_sd
     )
   } else {
+    .warm_start_resume_inputs(warm_start_model, warm_start_prior, warm_start_features,
+      warm_start_python, warm_start_prior_sd)
     loaded_ids <- as.character(state$item_ids)
     input_ids <- as.character(items$item_id)
     if (!identical(loaded_ids, input_ids)) {

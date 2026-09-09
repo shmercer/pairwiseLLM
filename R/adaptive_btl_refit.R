@@ -7692,6 +7692,7 @@
     round_id_at_refit = round_id_at_refit,
     step_id_at_refit = as.integer(step_id_at_refit),
     timestamp = refit_context$timestamp,
+    predictive_prior_digest = state$meta$predictive_prior_digest %||% NA_character_,
     model_variant = as.character(model_variant),
     n_items = as.integer(state$n_items),
     total_pairs_done = as.integer(total_pairs_done),
@@ -7815,6 +7816,7 @@ default_btl_fit_fn <- function(state, config) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
+  .warm_start_adaptive_validate(state)
   config <- .adaptive_btl_resolve_config(state, config)
   scope <- .adaptive_stop_metric_scope(state, ids = state$item_ids)
   ids_fit <- as.character(scope$scope_ids %||% state$item_ids)
@@ -7827,7 +7829,8 @@ default_btl_fit_fn <- function(state, config) {
     results = results,
     ids = ids_fit,
     model_variant = config$model_variant %||% "btl_e_b",
-    cmdstan = config[["cmdstan"]] %||% list()
+    cmdstan = config[["cmdstan"]] %||% list(),
+    warm_start_prior = .warm_start_prior_scope(state$predictive_prior, ids_fit)
   )
 
   fit_contract <- .adaptive_btl_extract_fit_contract(fit_out)

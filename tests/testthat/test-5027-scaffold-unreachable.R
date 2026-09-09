@@ -34,6 +34,7 @@ make_items_reachability <- function(n = 3L) {
 }
 
 test_that("adaptive canonical entrypoints do not call legacy scaffold constructors", {
+  original_constructor <- pairwiseLLM:::btl_mcmc_state_new
   testthat::with_mocked_bindings(
     btl_mcmc_state_new = function(...) {
       rlang::abort("legacy constructor reached")
@@ -45,11 +46,14 @@ test_that("adaptive canonical entrypoints do not call legacy scaffold constructo
       expect_s3_class(out, "adaptive_state")
       expect_equal(nrow(out$step_log), 2L)
     },
-    .env = asNamespace("pairwiseLLM")
+    .package = "pairwiseLLM"
   )
+  expect_identical(pairwiseLLM:::btl_mcmc_state_new, original_constructor)
 })
 
 test_that("fit_bayes_btl_mcmc does not call legacy scaffold constructors", {
+  original_fit <- pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive
+  original_constructor <- pairwiseLLM:::btl_mcmc_state_new
   results <- tibble::tibble(
     pair_uid = c("A:B#1", "A:C#1"),
     unordered_key = c("A:B", "A:C"),
@@ -79,6 +83,8 @@ test_that("fit_bayes_btl_mcmc does not call legacy scaffold constructors", {
       expect_true(is.list(out))
       expect_equal(nrow(out$round_log), 1L)
     },
-    .env = asNamespace("pairwiseLLM")
+    .package = "pairwiseLLM"
   )
+  expect_identical(pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive, original_fit)
+  expect_identical(pairwiseLLM:::btl_mcmc_state_new, original_constructor)
 })

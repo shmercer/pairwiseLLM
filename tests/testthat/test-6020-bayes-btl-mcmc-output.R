@@ -72,7 +72,7 @@ testthat::test_that("fit_bayes_btl_mcmc returns schema-stable outputs across var
         }
       }
     },
-    .env = asNamespace("pairwiseLLM")
+    .package = "pairwiseLLM"
   )
 })
 
@@ -105,6 +105,6 @@ testthat::test_that("fit_bayes_btl_mcmc subset fitting is deterministic with see
       testthat::expect_equal(out1$item_summary$deg, out2$item_summary$deg)
       testthat::expect_equal(out1$item_summary$refit_id, out2$item_summary$refit_id)
     },
-    .env = asNamespace("pairwiseLLM")
+    .package = "pairwiseLLM"
   )
 })

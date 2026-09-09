@@ -573,7 +573,8 @@ test_that("default_btl_fit_fn scopes Phase A linking refits to active set ids", 
 
   observed <- NULL
   testthat::with_mocked_bindings(
-    fit_bayes_btl_mcmc = function(results, ids, model_variant, cmdstan) {
+    fit_bayes_btl_mcmc = function(results, ids, model_variant, cmdstan, warm_start_prior = NULL) {
+      expect_null(warm_start_prior)
       observed <<- list(results = results, ids = as.character(ids))
       list(
         fit = make_test_btl_fit(

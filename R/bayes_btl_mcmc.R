@@ -476,6 +476,8 @@ build_btl_results_data <- function(
 #' @param seed Optional integer seed for deterministic subset selection when
 #'   \code{subset_method = "sample"}. When \code{NULL}, falls back to
 #'   \code{cmdstan$seed} if provided.
+#' @param warm_start_prior Optional [make_warm_start_prior()] object. Defaults to
+#'   no predictive prior (raw theta prior mean 0, SD 1). IDs must match `ids`.
 #' @param inference_contract Optional list of inference-routing semantics to
 #'   attach to each fit contract. When omitted, values are inferred from
 #'   \code{results$phase} and optional \code{results$judge_scope}.
@@ -490,7 +492,9 @@ build_btl_results_data <- function(
 #'     a refit; \code{refit_id} identifies the refit.}
 #'   \item{round_log}{Tibble matching the canonical adaptive round log schema
 #'     (one row per refit).}
-#'   \item{fits}{List of BTL fit contracts (one per refit).}
+#'   \item{fits}{List of BTL fit contracts (one per refit). Each records the actual
+#'     per-item raw theta prior in `theta_prior`; predictive fits also include
+#'     compact provenance in `predictive_prior`.}
 #'   \item{fit}{Single fit contract (only when one refit is run).}
 #' }
 #'
@@ -522,7 +526,7 @@ build_btl_results_data <- function(
 #' summarize_items(fit)
 #' }
 #'
-#' @seealso [build_btl_results_data()]
+#' @seealso [build_btl_results_data()], [make_warm_start_prior()], [adaptive_rank()]
 #' @family Bayesian models
 #' @export
 fit_bayes_btl_mcmc <- function(
@@ -538,7 +542,8 @@ fit_bayes_btl_mcmc <- function(
     pair_counts = NULL,
     subset_method = c("first", "sample"),
     seed = NULL,
-    inference_contract = NULL
+    inference_contract = NULL,
+    warm_start_prior = NULL
 ) {
   if (is.list(model_variant) && !is.character(model_variant)) {
     cmdstan <- model_variant
@@ -548,6 +553,7 @@ fit_bayes_btl_mcmc <- function(
   validate_results_tbl(results)
 
   ids <- .btl_validate_ids(ids)
+  warm_start_prior <- .warm_start_prior_scope(warm_start_prior, ids, exact = TRUE)
   model_variant <- normalize_model_variant(model_variant %||% "btl_e_b")
 
   cmdstan <- cmdstan %||% list()
@@ -591,7 +597,7 @@ fit_bayes_btl_mcmc <- function(
     subset_idx <- perm[seq_len(n_pairs)]
     results_subset <- results[subset_idx, , drop = FALSE]
 
-    bt_data <- .btl_mcmc_prepare_bt_data(results_subset, ids)
+    bt_data <- .btl_mcmc_prepare_bt_data(results_subset, ids, warm_start_prior)
     mcmc_config <- btl_mcmc_config(length(ids), list(
       model_variant = model_variant,
       cmdstan = cmdstan
@@ -603,6 +609,8 @@ fit_bayes_btl_mcmc <- function(
       inference_contract = inference_contract
     )
     fit_contract <- as_btl_fit_contract_from_mcmc(mcmc_fit, ids = ids)
+    fit_contract$theta_prior <- bt_data[c("item_id", "prior_mean", "prior_sd")]
+    fit_contract$predictive_prior <- .warm_start_prior_fit_metadata(warm_start_prior)
     fit_contract$inference_contract <- contract_meta
     fit_metrics <- .btl_mcmc_standalone_fit_metrics(fit_contract, mcmc_config)
     fit_contract$diagnostics_pass <- as.logical(fit_metrics$diagnostics_pass)

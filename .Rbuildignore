@@ -45,3 +45,7 @@
 ^inst/extdata/model_smoke_matrix[.]csv$
 ^inst/scripts/smoke_model_compatibility.*[.]R$
 ^inst/scripts/promote_model_smoke_results.*[.]R$
+^\.positai$
+^\.claude$
+^inst/python/__pycache__$
+^tests/testthat/fixtures/warm-start-features/__pycache__$

@@ -28,3 +28,8 @@ inst/stan/link_transform_refit
 /scripts/
 /tasklists/
 /prompts/
+.positai
+
+# Generated optional warm-start Python bytecode
+/inst/python/__pycache__/
+/tests/testthat/fixtures/warm-start-features/__pycache__/

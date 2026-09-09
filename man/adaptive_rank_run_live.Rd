@@ -360,7 +360,7 @@ print(summarize_adaptive(state_live))
 
 }
 \seealso{
-\code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
+\code{\link[=make_warm_start_prior]{make_warm_start_prior()}}, \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
 \code{\link[=adaptive_step_log]{adaptive_step_log()}}, \code{\link[=adaptive_round_log]{adaptive_round_log()}}, \code{\link[=adaptive_item_log]{adaptive_item_log()}}
 
 Other adaptive ranking:
