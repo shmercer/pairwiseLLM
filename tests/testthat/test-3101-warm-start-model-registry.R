@@ -25,7 +25,12 @@ test_that("user registration is explicit, normalized, lossless and removable", {
   expect_identical(rows$metadata[[2]], model$metadata)
   expect_true(all(rows$size_bytes > 0))
   expect_null(rows$validation[[1]])
-  expect_identical(remove_warm_start_model("MY_MODEL"), path)
+  removed <- remove_warm_start_model("MY_MODEL")
+  # Resolve the surviving parent: the artifact itself has already been removed.
+  expect_identical(
+    file.path(normalizePath(dirname(removed), winslash = "/", mustWork = TRUE), basename(removed)),
+    path
+  )
   expect_false(file.exists(path))
   expect_error(remove_warm_start_model("my-model"), "does not exist")
   expect_identical(nrow(list_warm_start_models("user")), 1L)

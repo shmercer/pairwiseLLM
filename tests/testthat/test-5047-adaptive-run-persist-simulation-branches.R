@@ -999,6 +999,9 @@ test_that("phase B global stop remains blocked until linking stop is terminally 
 })
 
 test_that("link_multi_spoke Phase B starvation is non-terminal until all spokes exhaust", {
+  local_mocked_bindings(
+    .btl_mcmc_require_cmdstanr = function() stop("This unit test must not invoke CmdStan.")
+  )
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
     set_id = c(1L, 1L, 2L, 2L, 3L, 3L),
@@ -1077,6 +1080,7 @@ test_that("link_multi_spoke Phase B starvation is non-terminal until all spokes 
     {
       pairwiseLLM::adaptive_rank_run_live(
         state = state,
+        btl_config = test_link_btl_config(),
         judge = make_deterministic_judge("invalid"),
         n_steps = 1L,
         progress = "none"
@@ -1127,6 +1131,9 @@ test_that("phase B all-spokes-exhausted stop uses explicit linking reason", {
 })
 
 test_that("phase B run stops immediately when all effective spokes are exhausted", {
+  local_mocked_bindings(
+    .btl_mcmc_require_cmdstanr = function() stop("This unit test must not invoke CmdStan.")
+  )
   state <- pairwiseLLM::adaptive_rank_start(
     tibble::tibble(
       item_id = c("h1", "h2", "s21", "s22", "s31", "s32"),
@@ -1188,6 +1195,7 @@ test_that("phase B run stops immediately when all effective spokes are exhausted
     {
       pairwiseLLM::adaptive_rank_run_live(
         state = state,
+        btl_config = test_link_btl_config(),
         judge = make_deterministic_judge("invalid"),
         n_steps = 1L,
         progress = "none"
