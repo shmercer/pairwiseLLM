@@ -43,6 +43,8 @@ features needs glmnet or Python.
 Exactly one of \code{path} or \code{name} is required for loading. Positional input means
 a path; a missing file never falls back to a registry search. Explicit paths
 require \code{source = "auto"}. Registry names follow \code{\link[=register_warm_start_model]{register_warm_start_model()}}.
+Named bundled lookup verifies the installed manifest and artifact checksum.
+Explicit file paths use ordinary artifact validation without a manifest.
 Load only trusted RDS files; contract validation is not a serialization sandbox.
 
 Writes are staged in the destination directory and validated before publishing.

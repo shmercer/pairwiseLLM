@@ -133,6 +133,7 @@ Collate:
     'traits.R'
     'utils-null-coalesce.R'
     'vertex_live.R'
+    'warm_start_bundle.R'
     'warm_start_calibration.R'
     'warm_start_cv.R'
     'warm_start_ensemble.R'

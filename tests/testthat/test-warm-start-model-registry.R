@@ -74,8 +74,8 @@ test_that("bundled lookup shares the public load path and ambiguity requires sou
     if (source == "user") root else bundle
   })
   user <- warm_core_model()
-  bundled <- prepare_warm_start_model(user, list(version = "bundle-test"), omit_audit = TRUE)
-  save_warm_start_model(bundled, file.path(bundle, "same.rds"))
+  bundled <- warm_bundle_model("same")
+  warm_bundle_write(bundle, bundled)
   expect_identical(load_warm_start_model(name = "same"), bundled)
   register_warm_start_model(user, "same")
   expect_error(load_warm_start_model(name = "same"), "Ambiguous")

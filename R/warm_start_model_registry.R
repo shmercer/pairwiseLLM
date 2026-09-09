@@ -24,6 +24,9 @@
 #' sources use the same model validator and prediction method. Listing reads and
 #' validates artifacts without glmnet or Python; corrupt entries produce errors
 #' naming their paths. Missing registries return empty results and are not created.
+#' Bundled lookup/listing additionally require manifest version 1, matching file
+#' inventory, MD5 checksum, size, and artifact metadata. Checksums detect changes;
+#' they do not authenticate publishers. User artifacts do not require a manifest.
 #'
 #' Registration preserves full audit evidence unless explicitly reduced beforehand.
 #' Compressed files replace entries only with explicit overwrite; no backup history
@@ -120,11 +123,15 @@ remove_warm_start_model <- function(name) {
   paths <- paths[file.exists(paths)]
   if (!length(paths)) rlang::abort(paste0("No registered or bundled model named '", name, "'."))
   if (length(paths) > 1L) rlang::abort("Ambiguous model name; specify source = 'user' or 'bundled'.")
+  if (identical(names(paths)[1], "bundled")) {
+    .warm_start_bundle_model(.warm_start_registry_root("bundled"), name)
+  }
   unname(paths[[1]])
 }
 
 .warm_start_model_metadata <- function(path, name, source) {
-  model <- .warm_start_read_model(path)
+  model <- if (source == "bundled") .warm_start_bundle_model(dirname(path), name)
+    else .warm_start_read_model(path)
   metadata <- model$metadata
   version <- if (is.null(metadata$version)) NA_character_ else metadata$version
   ensemble <- inherits(model, "pairwiseLLM_warm_ensemble")
@@ -152,6 +159,7 @@ list_warm_start_models <- function(source = c("all", "user", "bundled")) {
   for (s in sources) {
     root <- .warm_start_registry_root(s)
     if (!nzchar(root) || !dir.exists(root)) next
+    if (s == "bundled") .warm_start_bundle_manifest(root)
     files <- sort(list.files(root, pattern = "\\.rds$", all.files = TRUE))
     for (file in files) {
       name <- sub("\\.rds$", "", file)
