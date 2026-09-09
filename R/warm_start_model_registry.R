@@ -34,6 +34,39 @@
 #' not automatically removed based on age. Removal never affects bundled models.
 #' Tests and examples must redirect `R_USER_DATA_DIR` to a temporary directory.
 #' No user models are written into the installed package tree.
+#' @family adaptive warm start
+#' @seealso [save_warm_start_model()], [load_warm_start_model()], [ensemble_warm_start_models()]
+#' @examples
+#' if (requireNamespace("glmnet", quietly = TRUE) &&
+#'     requireNamespace("withr", quietly = TRUE)) {
+#'   local({
+#'     # Synthetic features illustrate the interface, not predictive validity.
+#'     example_features <- function(seed) {
+#'       withr::local_seed(seed)
+#'       fields <- warm_start_feature_schema()$feature
+#'       x <- as.data.frame(matrix(runif(15 * length(fields)), nrow = 15))
+#'       names(x) <- fields
+#'       x$n_tokens <- 11:25
+#'       x$token_length_mean <- 2 + 10 * x$token_length_mean
+#'       x$token_length_std <- 0.2 + x$token_length_std
+#'       x$dale_chall_readability_score <- 5 + 20 * x$dale_chall_readability_score
+#'       x <- data.frame(item_id = as.character(1:15), x)
+#'       attr(x, "warm_start_schema") <- "writing_features_v1"
+#'       x
+#'     }
+#'     features <- example_features(3103)
+#'     theta <- 10 + 0.4 * features$n_tokens - 2 * features$token_length_mean
+#'     # A small alpha grid keeps this example fast; the default has 41 values.
+#'     model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
+#'       features = features, alpha_grid = c(0, 1))
+#'     registry <- withr::local_tempdir()
+#'     withr::local_envvar(c(R_USER_DATA_DIR = registry))
+#'     register_warm_start_model(model, name = "example")
+#'     list_warm_start_models(source = "user")
+#'     restored <- load_warm_start_model(name = "example", source = "user")
+#'     remove_warm_start_model("example")
+#'   })
+#' }
 #' @export
 register_warm_start_model <- function(model, name, overwrite = FALSE) {
   .validate_warm_start_artifact(model)

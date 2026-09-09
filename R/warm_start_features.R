@@ -40,6 +40,8 @@
 #' extract_warm_start_features(c("a", "b"), c("A short text.", "Another text."),
 #'   python = "/path/to/venv/bin/python")
 #' }
+#' @family adaptive warm start
+#' @seealso [warm_start_python_status()], [warm_start_feature_schema()], [fit_warm_start_model()]
 #' @export
 extract_warm_start_features <- function(ids, texts, schema = "writing_features_v1",
                                         python = NULL) {

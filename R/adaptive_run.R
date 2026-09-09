@@ -4059,7 +4059,7 @@
 #' state <- adaptive_rank_start(c("a", "b", "c"), seed = 11)
 #' summarize_adaptive(state)
 #'
-#' @seealso [adaptive_rank_run_live()], [adaptive_rank_resume()],
+#' @seealso [make_warm_start_prior()], [adaptive_rank_run_live()], [adaptive_rank_resume()],
 #'   [adaptive_step_log()], [adaptive_round_log()], [adaptive_item_log()]
 #'
 #' @family adaptive ranking
@@ -4471,7 +4471,7 @@ adaptive_rank_start <- function(items,
 #' print(summarize_adaptive(state_live))
 #' }
 #'
-#' @seealso [adaptive_rank_start()], [adaptive_rank_resume()],
+#' @seealso [make_warm_start_prior()], [adaptive_rank_start()], [adaptive_rank_resume()],
 #'   [adaptive_step_log()], [adaptive_round_log()], [adaptive_item_log()]
 #'
 #' @family adaptive ranking
@@ -4897,7 +4897,7 @@ adaptive_rank_run_live <- function(state,
 #' restored <- adaptive_rank_resume(dir)
 #' summarize_adaptive(restored)
 #'
-#' @seealso [adaptive_rank_start()], [adaptive_rank_run_live()],
+#' @seealso [make_warm_start_prior()], [adaptive_rank_start()], [adaptive_rank_run_live()],
 #'   [save_adaptive_session()], [load_adaptive_session()]
 #'
 #' @family adaptive ranking

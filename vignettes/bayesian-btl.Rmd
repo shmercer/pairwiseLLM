@@ -136,6 +136,15 @@ For adaptive selection and stopping, use
 [Guide: Adaptive Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html). For
 fixed-pair frequentist alternatives, see `fit_bt_model()` and `fit_elo_model()`.
 
+## Predictive warm-start priors
+
+`fit_bayes_btl_mcmc()` accepts `warm_start_prior`, constructed with
+`make_warm_start_prior()` from calibrated model predictions or explicit expert scores.
+The four active variants use centered predictive locations and a default raw-theta
+SD of 0.5. Omitting the argument preserves raw means zero and SDs one. Ensemble
+prediction SD is diagnostic disagreement, not an automatic prior SD.
+See [Guide: Adaptive Warm Start](adaptive-warm-start.html) for the offline workflow.
+
 ## Citation
 
 > Mercer, S. H. (2026). *Standalone Bayesian BTL with CmdStan* [R package vignette]. Comprehensive

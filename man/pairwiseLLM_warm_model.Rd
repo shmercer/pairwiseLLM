@@ -83,3 +83,51 @@ optional for development; neither is needed to inspect or predict from a
 deployment object with precomputed features. Schema metadata is an input
 contract, not verified extraction provenance or evidence of predictive validity.
 }
+\examples{
+if (requireNamespace("glmnet", quietly = TRUE) &&
+    requireNamespace("withr", quietly = TRUE)) {
+  local({
+    # Synthetic features illustrate the interface, not predictive validity.
+    example_features <- function(seed) {
+      withr::local_seed(seed)
+      fields <- warm_start_feature_schema()$feature
+      x <- as.data.frame(matrix(runif(15 * length(fields)), nrow = 15))
+      names(x) <- fields
+      x$n_tokens <- 11:25
+      x$token_length_mean <- 2 + 10 * x$token_length_mean
+      x$token_length_std <- 0.2 + x$token_length_std
+      x$dale_chall_readability_score <- 5 + 20 * x$dale_chall_readability_score
+      x <- data.frame(item_id = as.character(1:15), x)
+      attr(x, "warm_start_schema") <- "writing_features_v1"
+      x
+    }
+    features <- example_features(3103)
+    theta <- 10 + 0.4 * features$n_tokens - 2 * features$token_length_mean
+    # A small alpha grid keeps this example fast; the default has 41 values.
+    model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
+      features = features, alpha_grid = c(0, 1))
+    print(model)
+    summary(model)
+  })
+}
+}
+\seealso{
+\code{\link[=fit_warm_start_model]{fit_warm_start_model()}}, \code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}},
+\code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}}
+
+Other adaptive warm start:
+\code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}},
+\code{\link[=extract_warm_start_features]{extract_warm_start_features()}},
+\code{\link[=fit_warm_start_model]{fit_warm_start_model()}},
+\code{\link[=make_warm_start_prior]{make_warm_start_prior()}},
+\code{\link[=predict.pairwiseLLM_warm_ensemble]{predict.pairwiseLLM_warm_ensemble()}},
+\code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}},
+\code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}},
+\code{\link[=register_warm_start_model]{register_warm_start_model()}},
+\code{\link[=save_warm_start_model]{save_warm_start_model()}},
+\code{\link[=summary.pairwiseLLM_warm_ensemble]{summary.pairwiseLLM_warm_ensemble()}},
+\code{\link[=summary.pairwiseLLM_warm_predictions]{summary.pairwiseLLM_warm_predictions()}},
+\code{\link[=warm_start_feature_schema]{warm_start_feature_schema()}},
+\code{\link[=warm_start_python_status]{warm_start_python_status()}}
+}
+\concept{adaptive warm start}

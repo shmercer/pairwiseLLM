@@ -16,6 +16,8 @@
 #' \dontrun{
 #' warm_start_python_status(python = "/path/to/venv/bin/python")
 #' }
+#' @family adaptive warm start
+#' @seealso [extract_warm_start_features()], [warm_start_feature_schema()]
 #' @export
 warm_start_python_status <- function(schema = "writing_features_v1", python = NULL) {
   warm_start_feature_schema(schema)

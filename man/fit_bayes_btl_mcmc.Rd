@@ -125,7 +125,7 @@ summarize_items(fit)
 
 }
 \seealso{
-\code{\link[=build_btl_results_data]{build_btl_results_data()}}
+\code{\link[=build_btl_results_data]{build_btl_results_data()}}, \code{\link[=make_warm_start_prior]{make_warm_start_prior()}}, \code{\link[=adaptive_rank]{adaptive_rank()}}
 
 Other Bayesian models:
 \code{\link[=build_btl_results_data]{build_btl_results_data()}}

@@ -27,13 +27,37 @@
 #' Failed writes clean up staging files. Replacement uses filesystem rename; if
 #' the platform cannot replace an existing file this way, the operation fails and
 #' leaves that file intact. No persistent backup history is created.
+#' @family adaptive warm start
+#' @seealso [prepare_warm_start_model()], [register_warm_start_model()], [list_warm_start_models()]
 #' @examples
-#' # A model already fitted from one assessment can be saved explicitly:
-#' if (FALSE) {
-#'   path <- tempfile(fileext = ".rds")
-#'   save_warm_start_model(model, path)
-#'   restored <- load_warm_start_model(path)
-#'   unlink(path)
+#' if (requireNamespace("glmnet", quietly = TRUE) &&
+#'     requireNamespace("withr", quietly = TRUE)) {
+#'   local({
+#'     # Synthetic features illustrate the interface, not predictive validity.
+#'     example_features <- function(seed) {
+#'       withr::local_seed(seed)
+#'       fields <- warm_start_feature_schema()$feature
+#'       x <- as.data.frame(matrix(runif(15 * length(fields)), nrow = 15))
+#'       names(x) <- fields
+#'       x$n_tokens <- 11:25
+#'       x$token_length_mean <- 2 + 10 * x$token_length_mean
+#'       x$token_length_std <- 0.2 + x$token_length_std
+#'       x$dale_chall_readability_score <- 5 + 20 * x$dale_chall_readability_score
+#'       x <- data.frame(item_id = as.character(1:15), x)
+#'       attr(x, "warm_start_schema") <- "writing_features_v1"
+#'       x
+#'     }
+#'     features <- example_features(3103)
+#'     theta <- 10 + 0.4 * features$n_tokens - 2 * features$token_length_mean
+#'     # A small alpha grid keeps this example fast; the default has 41 values.
+#'     model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
+#'       features = features, alpha_grid = c(0, 1))
+#'     path <- tempfile(fileext = ".rds")
+#'     on.exit(unlink(path), add = TRUE)
+#'     save_warm_start_model(model, path = path)
+#'     restored <- load_warm_start_model(path = path)
+#'     predict(restored, features)
+#'   })
 #' }
 #' @export
 save_warm_start_model <- function(model, path, overwrite = FALSE) {

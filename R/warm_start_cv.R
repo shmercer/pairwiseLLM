@@ -70,6 +70,36 @@
 #'   training texts. Each outer record includes its tuning, scaling, preprocessing,
 #'   calibration, hyperparameters and nonzero coefficient count. Final tuning
 #'   metadata is separate from outer validation. No glmnet fit is retained.
+#' @family adaptive warm start
+#' @seealso [predict.pairwiseLLM_warm_model()], [ensemble_warm_start_models()],
+#'   [save_warm_start_model()]
+#' @examples
+#' if (requireNamespace("glmnet", quietly = TRUE) &&
+#'     requireNamespace("withr", quietly = TRUE)) {
+#'   local({
+#'     # Synthetic features illustrate the interface, not predictive validity.
+#'     example_features <- function(seed) {
+#'       withr::local_seed(seed)
+#'       fields <- warm_start_feature_schema()$feature
+#'       x <- as.data.frame(matrix(runif(15 * length(fields)), nrow = 15))
+#'       names(x) <- fields
+#'       x$n_tokens <- 11:25
+#'       x$token_length_mean <- 2 + 10 * x$token_length_mean
+#'       x$token_length_std <- 0.2 + x$token_length_std
+#'       x$dale_chall_readability_score <- 5 + 20 * x$dale_chall_readability_score
+#'       x <- data.frame(item_id = as.character(1:15), x)
+#'       attr(x, "warm_start_schema") <- "writing_features_v1"
+#'       x
+#'     }
+#'     features <- example_features(3103)
+#'     theta <- 10 + 0.4 * features$n_tokens - 2 * features$token_length_mean
+#'     # A small alpha grid keeps this example fast; the default has 41 values.
+#'     model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
+#'       features = features, alpha_grid = c(0, 1))
+#'     summary(model)
+#'     model$validation$metrics
+#'   })
+#' }
 #' @export
 fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = NULL,
                                  schema = "writing_features_v1", python = NULL, seed = 1L,

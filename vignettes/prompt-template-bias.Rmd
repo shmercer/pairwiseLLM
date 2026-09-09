@@ -263,15 +263,30 @@ Below we print the 20 writing samples included in the file.
 This dataset provides a reproducible testing base; in real applications,
 you would use your own writing samples.
 
-```{r}
+<style>
+.writing-samples-table { width: 100%; table-layout: fixed; }
+.writing-samples-table th, .writing-samples-table td {
+  text-align: left; vertical-align: top; white-space: normal; overflow-wrap: break-word;
+  hyphens: none;
+}
+.writing-samples-table th:first-child, .writing-samples-table td:first-child {
+  width: 3.5rem; white-space: nowrap;
+}
+.writing-samples-table th:last-child, .writing-samples-table td:last-child {
+  width: 5rem;
+}
+</style>
+
+```{r writing-samples, results='asis'}
 data("example_writing_samples", package = "pairwiseLLM")
 
-# Inspect the structure
-glimpse(example_writing_samples)
-
-# Print the 20 samples (full text)
+# Preserve all 20 responses, including their full text.
 example_writing_samples |>
-  kable(
+  dplyr::select(ID, text, quality_score) |>
+  knitr::kable(
+    format = "html", escape = TRUE,
+    table.attr = 'class="writing-samples-table"',
+    col.names = c("ID", "Writing sample", "Quality score"),
     caption = "20 example writing samples included with pairwiseLLM."
   )
 ```

@@ -40,6 +40,8 @@ navbar:
           href: articles/advanced-batch-workflows.html
         - text: "Guide: Adaptive Pairing"
           href: articles/adaptive-pairing.html
+        - text: "Guide: Adaptive Warm Start"
+          href: articles/adaptive-warm-start.html
         - text: "Design: Adaptive Pairing"
           href: articles/within-set-adaptive-design.html
         - text: "Guide: Adaptive Linking"
@@ -75,6 +77,7 @@ articles:
   - title: "Adaptive Pairing"
     contents:
       - adaptive-pairing
+      - adaptive-warm-start
       - within-set-adaptive-design
       - adaptive-linking
       - adaptive-linking-design
@@ -175,6 +178,9 @@ reference:
     contents:
       - build_btl_results_data
       - fit_bayes_btl_mcmc
+  - title: "Adaptive warm start"
+    contents:
+      - has_concept("adaptive warm start")
   - title: "Adaptive lifecycle"
     contents:
       - adaptive_rank

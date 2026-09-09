@@ -26,6 +26,9 @@
 #' @examples
 #' prior <- make_warm_start_prior(c(a = -1, b = 0, c = 1))
 #' prior$prior_mean
+#' @family adaptive warm start
+#' @seealso [predict.pairwiseLLM_warm_model()], [predict.pairwiseLLM_warm_ensemble()],
+#'   [fit_bayes_btl_mcmc()], [adaptive_rank_start()], [adaptive_rank_resume()]
 #' @export
 make_warm_start_prior <- function(predictions, ids = NULL, prior_sd = 0.5) {
   diagnostics <- data.frame()

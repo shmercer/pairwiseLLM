@@ -32,7 +32,7 @@ summarize_adaptive(restored)
 
 }
 \seealso{
-\code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
+\code{\link[=make_warm_start_prior]{make_warm_start_prior()}}, \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
 \code{\link[=save_adaptive_session]{save_adaptive_session()}}, \code{\link[=load_adaptive_session]{load_adaptive_session()}}
 
 Other adaptive ranking:

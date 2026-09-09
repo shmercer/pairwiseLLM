@@ -35,6 +35,8 @@
 #' @examples
 #' features <- warm_start_feature_schema()
 #' features[c("position", "feature", "family")]
+#' @family adaptive warm start
+#' @seealso [extract_warm_start_features()], [fit_warm_start_model()]
 #' @export
 warm_start_feature_schema <- function(schema = "writing_features_v1") {
   if (!is.character(schema) || length(schema) != 1L || is.na(schema) || !nzchar(schema)) {

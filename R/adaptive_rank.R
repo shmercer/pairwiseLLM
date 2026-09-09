@@ -1242,6 +1242,7 @@ make_adaptive_judge_llm <- function(
 #' @seealso [make_adaptive_judge_llm()], [adaptive_rank_run_live()],
 #'   [adaptive_rank_start()], [adaptive_rank_resume()], [llm_compare_pair()]
 #'
+#' @seealso [make_warm_start_prior()], [fit_warm_start_model()]
 #' @family adaptive ranking
 #' @param warm_start_model Optional calibrated model/ensemble, path string, or
 #'   loader reference list (`name`/`source` or `path`). Mutually exclusive with

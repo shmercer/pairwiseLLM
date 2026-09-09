@@ -117,7 +117,7 @@ summarize_adaptive(state)
 
 }
 \seealso{
-\code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
+\code{\link[=make_warm_start_prior]{make_warm_start_prior()}}, \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
 \code{\link[=adaptive_step_log]{adaptive_step_log()}}, \code{\link[=adaptive_round_log]{adaptive_round_log()}}, \code{\link[=adaptive_item_log]{adaptive_item_log()}}
 
 Other adaptive ranking:
