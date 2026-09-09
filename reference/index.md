@@ -174,6 +174,43 @@
 - [`fit_bayes_btl_mcmc()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bayes_btl_mcmc.md)
   : Full Bayesian BTL inference via CmdStanR (adaptive-compatible)
 
+## Adaptive warm start
+
+- [`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md)
+  : Combine independently trained warm-start models
+- [`extract_warm_start_features()`](https://shmercer.github.io/pairwiseLLM/reference/extract_warm_start_features.md)
+  : Extract frozen writing features for warm-start prediction
+- [`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md)
+  : Train a task-specific warm-start model with nested validation
+- [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md)
+  : Convert warm-start predictions to Bayesian BTL priors
+- [`summary(`*`<pairwiseLLM_warm_model>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/pairwiseLLM_warm_model.md)
+  [`print(`*`<pairwiseLLM_warm_model>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/pairwiseLLM_warm_model.md)
+  : Portable task-specific warm-start models
+- [`predict(`*`<pairwiseLLM_warm_ensemble>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_ensemble.md)
+  : Predict with an equal-weight warm-start ensemble
+- [`predict(`*`<pairwiseLLM_warm_model>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_model.md)
+  : Predict relative quality from a portable warm-start model
+- [`prepare_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_warm_start_model.md)
+  : Prepare metadata or a summary-only warm-start artifact
+- [`register_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/register_warm_start_model.md)
+  [`remove_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/register_warm_start_model.md)
+  [`list_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/register_warm_start_model.md)
+  : Register, inspect, or remove user warm-start models
+- [`save_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/save_warm_start_model.md)
+  [`load_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/save_warm_start_model.md)
+  : Save or load a portable warm-start model
+- [`summary(`*`<pairwiseLLM_warm_ensemble>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_ensemble.md)
+  [`print(`*`<pairwiseLLM_warm_ensemble>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_ensemble.md)
+  : Inspect a warm-start ensemble
+- [`summary(`*`<pairwiseLLM_warm_predictions>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_predictions.md)
+  [`print(`*`<pairwiseLLM_warm_predictions>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_predictions.md)
+  : Inspect ensemble predictions
+- [`warm_start_feature_schema()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_feature_schema.md)
+  : Inspect the frozen warm-start writing feature schema
+- [`warm_start_python_status()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_python_status.md)
+  : Check the optional warm-start feature environment
+
 ## Adaptive lifecycle
 
 - [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)

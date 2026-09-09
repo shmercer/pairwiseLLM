@@ -22,7 +22,7 @@
 
     <a class="navbar-brand me-2" href="index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -41,6 +41,7 @@
     <li><a class="dropdown-item" href="articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
     <li><a class="dropdown-item" href="articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
@@ -70,19 +71,15 @@ pairwiseLLM banner
 </h1></div>
 <!-- badges: start -->
 
-<p><code>pairwiseLLM</code> is a R package that provides a unified, extensible framework for generating, submitting, and modeling pairwise comparisons of writing quality using large language models (LLMs).</p>
+<p><code>pairwiseLLM</code> is an R package that provides a unified, extensible framework for generating, submitting, and modeling pairwise comparisons of writing quality using large language models (LLMs).</p>
 <p>It includes:</p>
 <ul>
-<li>Unified live APIs across OpenAI, Anthropic, Gemini Developer API, Vertex AI Gemini API, Together.ai, and Ollama, plus batch APIs for OpenAI, Anthropic, and Gemini Developer API<br>
-</li>
+<li>Unified live APIs across OpenAI, Anthropic, Gemini Developer API, Vertex AI Gemini API, Together.ai, and Ollama, plus batch APIs for OpenAI, Anthropic, and Gemini Developer API</li>
 <li>An adaptive pairing workflow to run adaptively selected pairs until stopping criteria are met</li>
 <li>Adaptive linking workflows that place separately ranked sets on a shared scale through hub-and-spoke comparisons</li>
-<li>A prompt template registry with tested templates designed to reduce positional bias<br>
-</li>
-<li>Positional-bias diagnostics (forward vs reverse design)<br>
-</li>
-<li>Bradley–Terry (BT), Bayesian BT, and Elo modeling<br>
-</li>
+<li>A prompt template registry with tested templates designed to reduce positional bias</li>
+<li>Positional-bias diagnostics (forward vs reverse design)</li>
+<li>Bradley–Terry (BT), Bayesian BT, and Elo modeling</li>
 <li>Consistent data structures for all providers</li>
 </ul>
 <hr>
@@ -185,18 +182,14 @@ pairwiseLLM banner
 <div class="section level2">
 <h2 id="api-keys">API Keys<a class="anchor" aria-label="anchor" href="#api-keys"></a>
 </h2>
-<p><code>pairwiseLLM</code> reads keys only from environment variables.<br>
-Keys are <strong>never printed</strong>, <strong>never stored</strong>, and <strong>never written</strong> to disk. Configure only the key for the cloud backend you plan to use. Local Ollama does not require a provider API key.</p>
-<p>Cloud comparisons transmit the prompt and sample text you supply to the selected third-party provider. Review that provider’s privacy and retention terms before submitting sensitive, confidential, student, or personal data. Enabling raw-response or reasoning retention can also write returned text to an output path you select.</p>
+<p><code>pairwiseLLM</code> reads keys only from environment variables. Keys are <strong>never printed</strong>, <strong>never stored</strong>, and <strong>never written</strong> to disk. Configure only the key for the cloud backend you plan to use. Local Ollama does not require a provider API key. Cloud comparisons transmit the prompt and sample text you supply to the selected third-party provider. Review that provider’s privacy and retention terms before submitting sensitive, confidential, student, or personal data. Enabling raw-response or reasoning retention can also write returned text to an output path you select.</p>
 <p>You can verify which providers are available using:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p>This returns a tibble showing whether R can see the required keys for:</p>
 <ul>
-<li>OpenAI<br>
-</li>
-<li>Anthropic<br>
-</li>
+<li>OpenAI</li>
+<li>Anthropic</li>
 <li>Gemini Developer API</li>
 <li>Vertex AI Gemini API</li>
 <li>Together.ai</li>
@@ -212,8 +205,7 @@ Keys are <strong>never printed</strong>, <strong>never stored</strong>, and <str
 <span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>GEMINI_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>VERTEX_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>TOGETHER_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span></code></pre></div>
-<p>…but it is <strong>strongly recommended</strong><br>
-to store them in your <code>~/.Renviron</code> file.</p>
+<p>For persistent use, store keys in your <code>~/.Renviron</code> file as described below.</p>
 </div>
 <div class="section level3">
 <h3 id="recommended-method-adding-keys-to-renviron">Recommended method: Adding keys to <code>~/.Renviron</code>
@@ -290,6 +282,8 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <li>
 <a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html">Guide: Adaptive Pairing</a> — run, inspect, save, and resume an adaptive within-set ranking.</li>
 <li>
+<a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a> — train, store, ensemble, and use predictive BTL priors.</li>
+<li>
 <a href="https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a> — understand the within-set selection, refitting, and stopping design.</li>
 <li>
 <a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.html">Guide: Adaptive Linking</a> — place separately ranked sets on a common scale with a practical hub-and-spoke workflow.</li>
@@ -316,6 +310,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <p>To get started, see:</p>
 <ul>
 <li><a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
+<li><a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
 <li><a href="https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
 <li><a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
 <li><a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
@@ -327,9 +322,8 @@ to store them in your <code>~/.Renviron</code> file.</p>
 </h2>
 <p><code>pairwiseLLM</code> includes:</p>
 <ul>
-<li>A <strong>default template</strong> tested for positional bias<br>
-</li>
-<li>Support for <strong>multiple templates stored by name</strong><br>
+<li>A <strong>default template</strong> tested for positional bias</li>
+<li>Support for <strong>multiple templates stored by name</strong>
 </li>
 <li>User-defined templates via <code><a href="reference/register_prompt_template.html">register_prompt_template()</a></code>
 </li>
@@ -346,8 +340,12 @@ to store them in your <code>~/.Renviron</code> file.</p>
 </h3>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"default"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/substr.html" class="external-link">substr</a></span><span class="op">(</span><span class="va">tmpl</span>, <span class="fl">1</span>, <span class="fl">400</span><span class="op">)</span>, <span class="st">"...\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.</span></span>
+<span><span class="va">preview</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/strsplit.html" class="external-link">strsplit</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/substr.html" class="external-link">substr</a></span><span class="op">(</span><span class="va">tmpl</span>, <span class="fl">1</span>, <span class="fl">400</span><span class="op">)</span>, <span class="st">"\n"</span>, fixed <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
+<span><span class="kw">for</span> <span class="op">(</span><span class="va">line</span> <span class="kw">in</span> <span class="va">preview</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/strwrap.html" class="external-link">strwrap</a></span><span class="op">(</span><span class="va">line</span>, width <span class="op">=</span> <span class="fl">72</span><span class="op">)</span>, collapse <span class="op">=</span> <span class="st">"\n"</span><span class="op">)</span>, <span class="st">"\n"</span>, sep <span class="op">=</span> <span class="st">""</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="co">#&gt; You are a debate adjudicator. Your task is to weigh the comparative</span></span>
+<span><span class="co">#&gt; strengths of two writing samples regarding a specific trait.</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; TRAIT: {TRAIT_NAME}</span></span>
 <span><span class="co">#&gt; DEFINITION: {TRAIT_DESCRIPTION}</span></span>
@@ -362,7 +360,10 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; EVALUATION PROCESS (Mental Simulation):</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; 1.  **Advocate for SAMPLE_1**: Mentally list the single strongest point of evidence that makes SAMPLE_1 the  ...</span></span></code></pre></div>
+<span><span class="co">#&gt; 1.  **Advocate for SAMPLE_1**: Mentally list the single strongest point</span></span>
+<span><span class="co">#&gt; of evidence that makes SAMPLE_1 the</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"...\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; ...</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="register-your-own-template">Register your own template<a class="anchor" aria-label="anchor" href="#register-your-own-template"></a>
@@ -393,12 +394,13 @@ to store them in your <code>~/.Renviron</code> file.</p>
 </h2>
 <p>Traits define what “quality” means.</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; $name</span></span>
-<span><span class="co">#&gt; [1] "Overall Quality"</span></span>
+<code class="sourceCode R"><span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="va">td</span><span class="op">$</span><span class="va">name</span>, <span class="st">"\n\n"</span>, <span class="va">td</span><span class="op">$</span><span class="va">description</span>, <span class="st">"\n"</span>, sep <span class="op">=</span> <span class="st">""</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Overall Quality</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; $description</span></span>
-<span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed,\nhow clearly the writing is organized, and how effective the language and\nconventions are."</span></span></code></pre></div>
+<span><span class="co">#&gt; Overall quality of the writing, considering how well ideas are expressed,</span></span>
+<span><span class="co">#&gt; how clearly the writing is organized, and how effective the language and</span></span>
+<span><span class="co">#&gt; conventions are.</span></span></code></pre></div>
 <p>You can also provide custom traits:</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/trait_description.html">trait_description</a></span><span class="op">(</span></span>
@@ -413,16 +415,18 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <p>Use the unified API for direct API calls. The <code><a href="reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> function supports <strong>parallel processing</strong> and <strong>incremental output saving</strong> for all live backends (OpenAI, Anthropic, Gemini Developer API, Vertex AI Gemini API, Together.ai, and Ollama).</p>
 <ul>
 <li>
-<code><a href="reference/llm_compare_pair.html">llm_compare_pair()</a></code> — compare one pair<br>
-</li>
+<code><a href="reference/llm_compare_pair.html">llm_compare_pair()</a></code> — compare one pair</li>
 <li>
 <code><a href="reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> — compare many pairs at once</li>
 </ul>
-<p>Key Features:</p>
+<p>Key features:</p>
 <ul>
-<li>Parallel Execution: Set <code>parallel = TRUE</code> and <code>workers = n</code> to speed up processing.</li>
-<li>Resume Capability: Provide a <code>save_path</code> (e.g., <code>"results.csv"</code>). The function writes results as they finish. If interrupted, running the command again will automatically skip pairs already present in the file.</li>
-<li>Robust Output: Returns a list containing <code>$results</code> (successful comparisons) and <code>$failed_pairs</code> (scheduled pairs with no observed outcome) plus <code>$failed_attempts</code> (attempt-level failures, including retry/timeout/parse issues), ensuring one bad request doesn’t crash the whole job.</li>
+<li>
+<strong>Parallel execution:</strong> Set <code>parallel = TRUE</code> and <code>workers = n</code> to speed up processing.</li>
+<li>
+<strong>Resume capability:</strong> Provide a <code>save_path</code> (e.g., <code>"results.csv"</code>). The function writes results as they finish. If interrupted, running the command again will automatically skip pairs already present in the file.</li>
+<li>
+<strong>Robust output:</strong> Returns a list containing <code>$results</code> (successful comparisons) and <code>$failed_pairs</code> (scheduled pairs with no observed outcome) plus <code>$failed_attempts</code> (attempt-level failures, including retry/timeout/parse issues), ensuring one bad request doesn’t crash the whole job.</li>
 </ul>
 <p>Example:</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
@@ -515,9 +519,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <p>Batch helpers are available for OpenAI, Anthropic, and Gemini Developer API. Vertex batch is intentionally unsupported in this series, and <code>llm_submit_pairs_batch(backend = "vertex", ...)</code> aborts explicitly.</p>
 <p>For large-scale runs use:</p>
 <ul>
-<li>
-<code><a href="reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch()</a></code><br>
-</li>
+<li><code><a href="reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch()</a></code></li>
 <li><code><a href="reference/llm_download_batch_results.html">llm_download_batch_results()</a></code></li>
 </ul>
 <p>Example:</p>
@@ -528,8 +530,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <span>  pairs             <span class="op">=</span> <span class="va">pairs</span>,</span>
 <span>  trait_name        <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
 <span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
-<span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span>
-<span>  service_tier      <span class="op">=</span> <span class="st">"priority"</span></span>
+<span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/llm_download_batch_results.html">llm_download_batch_results</a></span><span class="op">(</span><span class="va">batch</span><span class="op">)</span></span></code></pre></div>
@@ -590,16 +591,19 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <span><span class="va">remaining_pairs</span> <span class="op">&lt;-</span> <span class="va">est</span><span class="op">$</span><span class="va">remaining_pairs</span></span>
 <span></span>
 <span><span class="co"># Submit remaining pairs using your preferred workflow (live):</span></span>
-<span><span class="va">res_live</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span><span class="va">remaining_pairs</span>, backend <span class="op">=</span> <span class="st">"openai"</span>, model <span class="op">=</span> <span class="st">"gpt-4.1"</span>, <span class="va">...</span><span class="op">)</span></span>
+<span><span class="va">res_live</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
+<span>  <span class="va">remaining_pairs</span>, backend <span class="op">=</span> <span class="st">"openai"</span>, model <span class="op">=</span> <span class="st">"gpt-4.1"</span>, <span class="va">...</span></span>
+<span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># For batch:</span></span>
 <span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch</a></span><span class="op">(</span></span>
-<span>          backend <span class="op">=</span> <span class="st">"openai"</span>,</span>
-<span>          model <span class="op">=</span> <span class="st">"gpt-4.1"</span>,</span>
-<span>          pairs <span class="op">=</span> <span class="va">remaining_pairs</span>,</span>
-<span>          trait_name <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
-<span>          trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
-<span>          prompt_template <span class="op">=</span> <span class="va">tmpl</span><span class="op">)</span></span>
+<span>  backend <span class="op">=</span> <span class="st">"openai"</span>,</span>
+<span>  model <span class="op">=</span> <span class="st">"gpt-4.1"</span>,</span>
+<span>  pairs <span class="op">=</span> <span class="va">remaining_pairs</span>,</span>
+<span>  trait_name <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>  prompt_template <span class="op">=</span> <span class="va">tmpl</span></span>
+<span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/llm_download_batch_results.html">llm_download_batch_results</a></span><span class="op">(</span><span class="va">batch</span><span class="op">)</span></span></code></pre></div>
 <hr>
@@ -662,7 +666,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <div class="section level2">
 <h2 id="positional-bias-testing">Positional Bias Testing<a class="anchor" aria-label="anchor" href="#positional-bias-testing"></a>
 </h2>
-<p>LLMs often show a first-position or second-position bias.<br><code>pairwiseLLM</code> includes explicit tools for testing this.</p>
+<p>LLMs often show a first-position or second-position bias. <code>pairwiseLLM</code> includes explicit tools for testing this.</p>
 <div class="section level3">
 <h3 id="typical-workflow">Typical workflow<a class="anchor" aria-label="anchor" href="#typical-workflow"></a>
 </h3>
@@ -737,7 +741,6 @@ to store them in your <code>~/.Renviron</code> file.</p>
 </h2>
 <p><code>pairwiseLLM</code> fits rankings using Bayesian Bradley–Terry–Luce (BTL) models. These models estimate a latent quality parameter for each item based on pairwise comparison outcomes, while providing uncertainty estimates and principled stopping diagnostics.</p>
 <p>The package supports four closely related BTL variants, differing in how they model LLM judge behavior.</p>
-<hr>
 <div class="section level3">
 <h3 id="model-variants">Model variants<a class="anchor" aria-label="anchor" href="#model-variants"></a>
 </h3>
@@ -788,18 +791,16 @@ to store them in your <code>~/.Renviron</code> file.</p>
 </tr>
 </tbody>
 </table>
-<p><strong>Recommended default:</strong> <code>btl_e_b</code> This is the most robust option when the judge is an LLM or other noisy rater.</p>
-<hr>
+<p><strong>Recommended default:</strong> <code>btl_e_b</code>. This is the most robust option when the judge is an LLM or other noisy rater.</p>
 </div>
 <div class="section level3">
 <h3 id="when-should-you-include-lapse-or-position-bias">When should you include lapse or position bias?<a class="anchor" aria-label="anchor" href="#when-should-you-include-lapse-or-position-bias"></a>
 </h3>
 <ul>
-<li><p><strong>Lapse (<code>ε</code>)</strong> Useful when judgments occasionally appear random or inconsistent. The lapse parameter absorbs these errors without distorting item-level quality estimates.</p></li>
-<li><p><strong>Position bias (<code>b</code>)</strong> Useful when the judge systematically prefers the first or second item presented. This is especially important when prompts present items in a fixed order.</p></li>
+<li><p><strong>Lapse (<code>ε</code>):</strong> Useful when judgments occasionally appear random or inconsistent. The lapse parameter absorbs these errors without distorting item-level quality estimates.</p></li>
+<li><p><strong>Position bias (<code>b</code>):</strong> Useful when the judge systematically prefers the first or second item presented. This is especially important when prompts present items in a fixed order.</p></li>
 </ul>
 <p>If you are confident that neither effect is present, you can use the simpler <code>btl</code> model.</p>
-<hr>
 </div>
 <div class="section level3">
 <h3 id="fitting-a-bayesian-btl-model">Fitting a Bayesian BTL model<a class="anchor" aria-label="anchor" href="#fitting-a-bayesian-btl-model"></a>
@@ -817,7 +818,6 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <span>  model_variant <span class="op">=</span> <span class="st">"btl_e_b"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <p>This fits the model using MCMC via <code>cmdstanr</code> and returns posterior samples and summaries.</p>
-<hr>
 </div>
 <div class="section level3">
 <h3 id="inspecting-model-results">Inspecting model results<a class="anchor" aria-label="anchor" href="#inspecting-model-results"></a>
@@ -843,7 +843,6 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <li>divergence counts,</li>
 <li>reliability metrics.</li>
 </ul>
-<hr>
 </div>
 <div class="section level3">
 <h3 id="relationship-to-adaptive-pairing">Relationship to adaptive pairing<a class="anchor" aria-label="anchor" href="#relationship-to-adaptive-pairing"></a>
@@ -921,9 +920,10 @@ to store them in your <code>~/.Renviron</code> file.</p>
 </h2>
 <p>Contributions to <strong>pairwiseLLM</strong> are very welcome!</p>
 <ul>
-<li>Bug reports (with reproducible examples when possible)</li>
-<li>Feature requests, ideas, and discussion</li>
-<li>Pull requests improving:
+<li><p>Bug reports (with reproducible examples when possible)</p></li>
+<li><p>Feature requests, ideas, and discussion</p></li>
+<li>
+<p>Pull requests improving:</p>
 <ul>
 <li>functionality</li>
 <li>documentation</li>
@@ -931,8 +931,8 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <li>test coverage</li>
 </ul>
 </li>
-<li>Backend integrations (e.g., additional LLM providers or local inference engines)</li>
-<li>Modeling extensions</li>
+<li><p>Backend integrations (e.g., additional LLM providers or local inference engines)</p></li>
+<li><p>Modeling extensions</p></li>
 </ul>
 </div>
 <div class="section level2">
@@ -954,7 +954,7 @@ to store them in your <code>~/.Renviron</code> file.</p>
 <li>your operating system</li>
 </ul>
 </li>
-<li><p>Open an issue at:<br><a href="https://github.com/shmercer/pairwiseLLM/issues" class="external-link uri">https://github.com/shmercer/pairwiseLLM/issues</a></p></li>
+<li><p>Open an issue at: <a href="https://github.com/shmercer/pairwiseLLM/issues" class="external-link uri">https://github.com/shmercer/pairwiseLLM/issues</a></p></li>
 </ol>
 <hr>
 </div>
@@ -981,7 +981,7 @@ Google Scholar: <a href="https://scholar.google.ca/citations?user=YJg4svsAAAAJ&a
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
-<p>Mercer, S. H. (2026). <em>pairwiseLLM: Pairwise writing quality comparisons with large language models</em> (Version 1.3.1) [R package; Computer software]. <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
+<p>Mercer, S. H. (2026). <em>pairwiseLLM: Pairwise writing quality comparisons with large language models</em> (Version 1.3.2) [R package; Computer software]. <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
 </blockquote>
 </div>
 </div>

@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,7 @@
     <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
     <li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
@@ -70,7 +71,7 @@
       <h1>Prompt Template Positional Bias Testing</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/v1.3.1/vignettes/prompt-template-bias.Rmd" class="external-link"><code>vignettes/prompt-template-bias.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/master/vignettes/prompt-template-bias.Rmd" class="external-link"><code>vignettes/prompt-template-bias.Rmd</code></a></small>
       <div class="d-none name"><code>prompt-template-bias.Rmd</code></div>
     </div>
 
@@ -375,137 +376,321 @@ package.</p>
 <p>Below we print the 20 writing samples included in the file.<br>
 This dataset provides a reproducible testing base; in real applications,
 you would use your own writing samples.</p>
+<style>
+.writing-samples-table { width: 100%; table-layout: fixed; }
+.writing-samples-table th, .writing-samples-table td {
+  text-align: left; vertical-align: top; white-space: normal; overflow-wrap: break-word;
+  hyphens: none;
+}
+.writing-samples-table th:first-child, .writing-samples-table td:first-child {
+  width: 3.5rem; white-space: nowrap;
+}
+.writing-samples-table th:last-child, .writing-samples-table td:last-child {
+  width: 5rem;
+}
+</style>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Inspect the structure</span></span>
-<span><span class="fu"><a href="https://pillar.r-lib.org/reference/glimpse.html" class="external-link">glimpse</a></span><span class="op">(</span><span class="va">example_writing_samples</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Rows: 20</span></span>
-<span><span class="co">#&gt; Columns: 3</span></span>
-<span><span class="co">#&gt; $ ID            <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> "S01"<span style="color: #949494;">, </span>"S02"<span style="color: #949494;">, </span>"S03"<span style="color: #949494;">, </span>"S04"<span style="color: #949494;">, </span>"S05"<span style="color: #949494;">, </span>"S06"<span style="color: #949494;">, </span>"S07"<span style="color: #949494;">, </span>"S08"<span style="color: #949494;">, </span>…</span></span>
-<span><span class="co">#&gt; $ text          <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> "Writing assessment is hard. People write different thin…</span></span>
-<span><span class="co">#&gt; $ quality_score <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> 1<span style="color: #949494;">, </span>2<span style="color: #949494;">, </span>3<span style="color: #949494;">, </span>4<span style="color: #949494;">, </span>5<span style="color: #949494;">, </span>6<span style="color: #949494;">, </span>7<span style="color: #949494;">, </span>8<span style="color: #949494;">, </span>9<span style="color: #949494;">, </span>10<span style="color: #949494;">, </span>11<span style="color: #949494;">, </span>12<span style="color: #949494;">, </span>13<span style="color: #949494;">, </span>14<span style="color: #949494;">, </span>15<span style="color: #949494;">, </span>16<span style="color: #949494;">, </span>1…</span></span>
-<span></span>
-<span><span class="co"># Print the 20 samples (full text)</span></span>
+<span><span class="co"># Preserve all 20 responses, including their full text.</span></span>
 <span><span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu">kable</span><span class="op">(</span></span>
+<span>  <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span><span class="va">ID</span>, <span class="va">text</span>, <span class="va">quality_score</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span></span>
+<span>    format <span class="op">=</span> <span class="st">"html"</span>, escape <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    table.attr <span class="op">=</span> <span class="st">'class="writing-samples-table"'</span>,</span>
+<span>    col.names <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ID"</span>, <span class="st">"Writing sample"</span>, <span class="st">"Quality score"</span><span class="op">)</span>,</span>
 <span>    caption <span class="op">=</span> <span class="st">"20 example writing samples included with pairwiseLLM."</span></span>
 <span>  <span class="op">)</span></span></code></pre></div>
-<table class="table">
-<caption>20 example writing samples included with pairwiseLLM.</caption>
-<colgroup>
-<col width="0%">
-<col width="95%">
-<col width="3%">
-</colgroup>
-<thead><tr class="header">
-<th align="left">ID</th>
-<th align="left">text</th>
-<th align="right">quality_score</th>
+<table class="table writing-samples-table">
+<caption>
+20 example writing samples included with pairwiseLLM.
+</caption>
+<thead><tr>
+<th style="text-align:left;">
+ID
+</th>
+<th style="text-align:left;">
+Writing sample
+</th>
+<th style="text-align:right;">
+Quality score
+</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
-<td align="left">S01</td>
-<td align="left">Writing assessment is hard. People write different
-things. It is</td>
-<td align="right"></td>
+<tr>
+<td style="text-align:left;">
+S01
+</td>
+<td style="text-align:left;">
+Writing assessment is hard. People write different things. It is
+confusing.
+</td>
+<td style="text-align:right;">
+1
+</td>
 </tr>
-<tr class="even">
-<td align="left">confusing.</td>
-<td align="left">1</td>
-<td align="right"></td>
+<tr>
+<td style="text-align:left;">
+S02
+</td>
+<td style="text-align:left;">
+It is hard to grade writing. Some are long and some are short. I do not
+know which is best.
+</td>
+<td style="text-align:right;">
+2
+</td>
 </tr>
-<tr class="odd">
-<td align="left">S02</td>
-<td align="left">It is hard to grade writing. Some are long and some are
-short. I do not</td>
-<td align="right"></td>
+<tr>
+<td style="text-align:left;">
+S03
+</td>
+<td style="text-align:left;">
+Assessing writing is difficult because everyone writes differently and
+it can be hard to decide what is good or bad.
+</td>
+<td style="text-align:right;">
+3
+</td>
 </tr>
-<tr class="even">
-<td align="left">know which is best.</td>
-<td align="left">2</td>
-<td align="right"></td>
+<tr>
+<td style="text-align:left;">
+S04
+</td>
+<td style="text-align:left;">
+Grading essays is tough work. You have to read a lot. Sometimes the
+handwriting is bad or the grammar is wrong, and that makes it hard to
+give a score.
+</td>
+<td style="text-align:right;">
+4
+</td>
 </tr>
-<tr class="odd">
-<td align="left">S03</td>
-<td align="left">Assessing writing is difficult because everyone writes
-differently and it</td>
-<td align="right"></td>
+<tr>
+<td style="text-align:left;">
+S05
+</td>
+<td style="text-align:left;">
+Writing assessment is challenging because teachers must judge ideas,
+organization, grammar, and style all at once. Different raters may focus
+on different things.
+</td>
+<td style="text-align:right;">
+5
+</td>
 </tr>
-<tr class="even">
-<td align="left">can be hard to decide what is good or bad.</td>
-<td align="left">3</td>
-<td align="right"></td>
+<tr>
+<td style="text-align:left;">
+S06
+</td>
+<td style="text-align:left;">
+It is difficult to assess writing because it is subjective. One teacher
+might like a creative style while another teacher wants a strict
+structure. This makes the scores unfair sometimes.
+</td>
+<td style="text-align:right;">
+6
+</td>
 </tr>
-<tr class="odd">
-<td align="left">S04</td>
-<td align="left">Grading essays is tough work. You have to read a lot.
-Sometimes the</td>
-<td align="right"></td>
+<tr>
+<td style="text-align:left;">
+S07
+</td>
+<td style="text-align:left;">
+Writing assessment is difficult because writing is a complex skill.
+Raters must consider ideas, organization, style, and conventions, and
+these features do not always align.
+</td>
+<td style="text-align:right;">
+7
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+S08
+</td>
+<td style="text-align:left;">
+A paper with strong ideas might have weak grammar, while another has
+flawless sentences but no clear argument. Deciding which one deserves a
+higher score is a major challenge in assessment.
+</td>
+<td style="text-align:right;">
+8
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+S09
+</td>
+<td style="text-align:left;">
+Assessing writing is difficult because the construct is
+multidimensional. Even with detailed rubrics, raters interpret criteria
+differently, and their judgments can be influenced by fatigue or
+expectations.
+</td>
+<td style="text-align:right;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+S10
+</td>
+<td style="text-align:left;">
+The difficulty in writing assessment lies in consistency. Because raters
+bring their own background knowledge and preferences to the task,
+achieving high inter-rater reliability requires extensive training and
+calibration.
+</td>
+<td style="text-align:right;">
+10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+S11
+</td>
+<td style="text-align:left;">
+Writing assessment is difficult because we are trying to compress a
+rich, multi-dimensional performance into a single score. Raters must
+weigh content, organization, style, and mechanics, while also dealing
+with time pressure.
+</td>
+<td style="text-align:right;">
+11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+S12
+</td>
+<td style="text-align:left;">
+Evaluating writing is challenging because no rubric can fully capture
+what makes a text effective for a particular audience. Two essays might
+receive the same score for completely different reasons, obscuring the
+feedback loop.
+</td>
+<td style="text-align:right;">
+12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+S13
+</td>
+<td style="text-align:left;">
+Writing assessment is difficult because it is context-dependent. A style
+that works for a narrative is inappropriate for a report. Raters must
+constantly adjust their internal standard based on the specific purpose
+of the prompt.
+</td>
+<td style="text-align:right;">
+13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+S14
+</td>
+<td style="text-align:left;">
+The challenge of writing assessment is distinguishing between
+surface-level errors and deep structural flaws. Raters often
+over-penalize mechanical mistakes while missing more significant issues
+in logic or argumentation due to cognitive load.
+</td>
+<td style="text-align:right;">
+14
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+S15
+</td>
+<td style="text-align:left;">
+Writing assessment is difficult because it sits at the intersection of
+measurement and interpretation. Raters must translate complex judgments
+about ideas, voice, and language into discrete rubric categories, often
+losing nuance in the process.
+</td>
+<td style="text-align:right;">
+15
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+S16
+</td>
+<td style="text-align:left;">
+Assessing writing is inherently difficult because it requires balancing
+consistency with sensitivity. A rubric describes general qualities, but
+individual texts vary in genre and voice. Raters must decide if an
+unconventional choice is a mistake or a stylistic innovation.
+</td>
+<td style="text-align:right;">
+16
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+S17
+</td>
+<td style="text-align:left;">
+Writing assessment is challenging because of the trade-off between
+validity and reliability. Highly standardized scoring protocols often
+strip away the subjective appreciation of voice and creativity, while
+holistic scoring captures the ‘whole’ but risks being unreliable.
+</td>
+<td style="text-align:right;">
+17
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+S18
+</td>
+<td style="text-align:left;">
+The fundamental difficulty in writing assessment is cognitive
+complexity. The rater must construct a mental model of the writer’s
+argument while simultaneously evaluating against specific criteria. This
+dual processing makes the task prone to bias and halo effects.
+</td>
+<td style="text-align:right;">
+18
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+S19
+</td>
+<td style="text-align:left;">
+Writing assessment is difficult because it asks us to quantify something
+fundamentally qualitative. To evaluate a piece of writing, raters
+integrate judgments about content, organization, and style, while also
+considering task demands. Scores often reflect both the text and the
+rater’s implicit theory of writing.
+</td>
+<td style="text-align:right;">
+19
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+S20
+</td>
+<td style="text-align:left;">
+Writing assessment is inherently problematic because it attempts to
+standardize a socially situated act. The assessment process often
+decontextualizes the writing, stripping it of its communicative purpose.
+Consequently, the score represents a construct of ‘school writing’
+rather than authentic communication, creating a validity gap that simple
+psychometrics cannot resolve.
+</td>
+<td style="text-align:right;">
+20
+</td>
 </tr>
 </tbody>
 </table>
-<pre><code>handwriting is bad or the grammar is wrong, and that makes it hard to give
-a score.                                                                                                                                                                                                                                           |             4|</code></pre>
-<p>|S05 |Writing assessment is challenging because teachers must judge
-ideas, organization, grammar, and style all at once. Different raters
-may focus on different things. | 5| |S06 |It is difficult to assess
-writing because it is subjective. One teacher might like a creative
-style while another teacher wants a strict structure. This makes the
-scores unfair sometimes. | 6| |S07 |Writing assessment is difficult
-because writing is a complex skill. Raters must consider ideas,
-organization, style, and conventions, and these features do not always
-align. | 7| |S08 |A paper with strong ideas might have weak grammar,
-while another has flawless sentences but no clear argument. Deciding
-which one deserves a higher score is a major challenge in assessment. |
-8| |S09 |Assessing writing is difficult because the construct is
-multidimensional. Even with detailed rubrics, raters interpret criteria
-differently, and their judgments can be influenced by fatigue or
-expectations. | 9| |S10 |The difficulty in writing assessment lies in
-consistency. Because raters bring their own background knowledge and
-preferences to the task, achieving high inter-rater reliability requires
-extensive training and calibration. | 10| |S11 |Writing assessment is
-difficult because we are trying to compress a rich, multi-dimensional
-performance into a single score. Raters must weigh content,
-organization, style, and mechanics, while also dealing with time
-pressure. | 11| |S12 |Evaluating writing is challenging because no
-rubric can fully capture what makes a text effective for a particular
-audience. Two essays might receive the same score for completely
-different reasons, obscuring the feedback loop. | 12| |S13 |Writing
-assessment is difficult because it is context-dependent. A style that
-works for a narrative is inappropriate for a report. Raters must
-constantly adjust their internal standard based on the specific purpose
-of the prompt. | 13| |S14 |The challenge of writing assessment is
-distinguishing between surface-level errors and deep structural flaws.
-Raters often over-penalize mechanical mistakes while missing more
-significant issues in logic or argumentation due to cognitive load. |
-14| |S15 |Writing assessment is difficult because it sits at the
-intersection of measurement and interpretation. Raters must translate
-complex judgments about ideas, voice, and language into discrete rubric
-categories, often losing nuance in the process. | 15| |S16 |Assessing
-writing is inherently difficult because it requires balancing
-consistency with sensitivity. A rubric describes general qualities, but
-individual texts vary in genre and voice. Raters must decide if an
-unconventional choice is a mistake or a stylistic innovation. | 16| |S17
-|Writing assessment is challenging because of the trade-off between
-validity and reliability. Highly standardized scoring protocols often
-strip away the subjective appreciation of voice and creativity, while
-holistic scoring captures the ‘whole’ but risks being unreliable. | 17|
-|S18 |The fundamental difficulty in writing assessment is cognitive
-complexity. The rater must construct a mental model of the writer’s
-argument while simultaneously evaluating against specific criteria. This
-dual processing makes the task prone to bias and halo effects. | 18|
-|S19 |Writing assessment is difficult because it asks us to quantify
-something fundamentally qualitative. To evaluate a piece of writing,
-raters integrate judgments about content, organization, and style, while
-also considering task demands. Scores often reflect both the text and
-the rater’s implicit theory of writing. | 19| |S20 |Writing assessment
-is inherently problematic because it attempts to standardize a socially
-situated act. The assessment process often decontextualizes the writing,
-stripping it of its communicative purpose. Consequently, the score
-represents a construct of ‘school writing’ rather than authentic
-communication, creating a validity gap that simple psychometrics cannot
-resolve. | 20|</p>
 <hr>
 </div>
 <div class="section level2">
@@ -514,12 +699,12 @@ resolve. | 20|</p>
 <p>The tested templates are stored as plain-text files in the package
 and exposed via the template registry. You can retrieve them with
 <code><a href="../reference/get_prompt_template.html">get_prompt_template()</a></code>:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">template_ids</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"test"</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">5</span><span class="op">)</span></span>
 <span><span class="va">template_ids</span></span>
 <span><span class="co">#&gt; [1] "test1" "test2" "test3" "test4" "test5"</span></span></code></pre></div>
 <p>Use <code><a href="../reference/get_prompt_template.html">get_prompt_template()</a></code> to view the text:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/substr.html" class="external-link">substr</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"test1"</span><span class="op">)</span>, <span class="fl">1</span>, <span class="fl">500</span><span class="op">)</span>, <span class="st">"...\n"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.</span></span>
 <span><span class="co">#&gt; </span></span>
@@ -539,7 +724,7 @@ and exposed via the template registry. You can retrieve them with
 <span><span class="co">#&gt; 1.  **Advocate for SAMPLE_1**: Mentally list the single strongest point of evidence that makes SAMPLE_1 the winner.</span></span>
 <span><span class="co">#&gt; 2.  **Advocate for SAMPLE_2**: Mentally list the single strongest point of evidence that mak ...</span></span></code></pre></div>
 <p>The same pattern works for all templates:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Retrieve another template</span></span>
 <span><span class="va">tmpl_test3</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"test3"</span><span class="op">)</span></span>
 <span></span>
@@ -564,7 +749,7 @@ and exposed via the template registry. You can retrieve them with
 </h2>
 <p>Here is a small example of how we constructed forward and reverse
 datasets for each experiment:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pairs_all</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
@@ -833,7 +1018,7 @@ extracted to <code>thoughts</code>
 <code>inst/extdata/template_test_summary_all.csv</code>. Only aggregate
 rows remain, so the raw judgments cannot be reanalyzed with the current
 paired test.</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"extdata"</span>, <span class="st">"template_test_summary_all.csv"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
 <span><span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nzchar</a></span><span class="op">(</span><span class="va">summary_path</span><span class="op">)</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="st">"Data file not found in installed package."</span><span class="op">)</span></span>
 <span></span>
@@ -1001,7 +1186,7 @@ thinking) configuration and columns:</p>
 <div class="section level4">
 <h4 id="template-text">9.1.1 Template text<a class="anchor" aria-label="anchor" href="#template-text"></a>
 </h4>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"test1"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.</span></span>
 <span><span class="co">#&gt; </span></span>
@@ -1039,7 +1224,7 @@ thinking) configuration and columns:</p>
 <div class="section level4">
 <h4 id="summary-table">9.1.2 Summary table<a class="anchor" aria-label="anchor" href="#summary-table"></a>
 </h4>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test1"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">backend</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -1208,7 +1393,7 @@ thinking) configuration and columns:</p>
 <div class="section level4">
 <h4 id="template-text-1">9.2.1 Template text<a class="anchor" aria-label="anchor" href="#template-text-1"></a>
 </h4>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"test2"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; You are an impartial, expert writing evaluator. You will be provided with two student writing samples.</span></span>
 <span><span class="co">#&gt; </span></span>
@@ -1250,7 +1435,7 @@ thinking) configuration and columns:</p>
 <div class="section level4">
 <h4 id="summary-table-1">9.2.2 Summary table<a class="anchor" aria-label="anchor" href="#summary-table-1"></a>
 </h4>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test2"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">backend</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -1419,7 +1604,7 @@ thinking) configuration and columns:</p>
 <div class="section level4">
 <h4 id="template-text-2">9.3.1 Template text<a class="anchor" aria-label="anchor" href="#template-text-2"></a>
 </h4>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"test3"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; You are an expert writing assessor.</span></span>
 <span><span class="co">#&gt; </span></span>
@@ -1469,7 +1654,7 @@ thinking) configuration and columns:</p>
 <div class="section level4">
 <h4 id="summary-table-2">9.3.2 Summary table<a class="anchor" aria-label="anchor" href="#summary-table-2"></a>
 </h4>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test3"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">backend</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -1638,7 +1823,7 @@ thinking) configuration and columns:</p>
 <div class="section level4">
 <h4 id="template-text-3">9.4.1 Template text<a class="anchor" aria-label="anchor" href="#template-text-3"></a>
 </h4>
-<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"test4"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; You are an expert writing assessor.</span></span>
 <span><span class="co">#&gt; </span></span>
@@ -1672,7 +1857,7 @@ thinking) configuration and columns:</p>
 <div class="section level4">
 <h4 id="summary-table-3">9.4.2 Summary table<a class="anchor" aria-label="anchor" href="#summary-table-3"></a>
 </h4>
-<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test4"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">backend</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -1841,7 +2026,7 @@ thinking) configuration and columns:</p>
 <div class="section level4">
 <h4 id="template-text-4">9.5.1 Template text<a class="anchor" aria-label="anchor" href="#template-text-4"></a>
 </h4>
-<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"test5"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; You are a critique-focused evaluator. Instead of looking for general quality, you will look for deviations from the ideal.</span></span>
 <span><span class="co">#&gt; </span></span>
@@ -1876,7 +2061,7 @@ thinking) configuration and columns:</p>
 <div class="section level4">
 <h4 id="summary-table-4">9.5.2 Summary table<a class="anchor" aria-label="anchor" href="#summary-table-4"></a>
 </h4>
-<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">template_id</span> <span class="op">==</span> <span class="st">"test5"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">backend</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -2071,7 +2256,7 @@ used in testing.</p>
 <div class="section level3">
 <h3 id="anthropic-models">10.1 Anthropic models<a class="anchor" aria-label="anchor" href="#anthropic-models"></a>
 </h3>
-<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">backend</span> <span class="op">==</span> <span class="st">"anthropic"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -2359,7 +2544,7 @@ thinking configuration.</caption>
 <div class="section level3">
 <h3 id="gemini-models">10.2 Gemini models<a class="anchor" aria-label="anchor" href="#gemini-models"></a>
 </h3>
-<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">backend</span> <span class="op">==</span> <span class="st">"gemini"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -2447,7 +2632,7 @@ thinking configuration.</caption>
 <div class="section level3">
 <h3 id="openai-models">10.3 OpenAI models<a class="anchor" aria-label="anchor" href="#openai-models"></a>
 </h3>
-<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">backend</span> <span class="op">==</span> <span class="st">"openai"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -2655,7 +2840,7 @@ thinking configuration.</caption>
 <div class="section level3">
 <h3 id="togetherai-hosted-models">10.4 TogetherAI-hosted models<a class="anchor" aria-label="anchor" href="#togetherai-hosted-models"></a>
 </h3>
-<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">backend</span> <span class="op">==</span> <span class="st">"together"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/arrange.html" class="external-link">arrange</a></span><span class="op">(</span><span class="va">template_id</span>, <span class="va">model</span>, <span class="va">thinking</span><span class="op">)</span> <span class="op">|&gt;</span></span>

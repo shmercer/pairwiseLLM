@@ -22,7 +22,8 @@ fit_bayes_btl_mcmc(
   pair_counts = NULL,
   subset_method = c("first", "sample"),
   seed = NULL,
-  inference_contract = NULL
+  inference_contract = NULL,
+  warm_start_prior = NULL
 )
 ```
 
@@ -99,6 +100,13 @@ fit_bayes_btl_mcmc(
   contract. When omitted, values are inferred from `results$phase` and
   optional `results$judge_scope`.
 
+- warm_start_prior:
+
+  Optional
+  [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md)
+  object. Defaults to no predictive prior (raw theta prior mean 0, SD
+  1). IDs must match `ids`.
+
 ## Value
 
 A list with:
@@ -123,7 +131,9 @@ A list with:
 
 - fits:
 
-  List of BTL fit contracts (one per refit).
+  List of BTL fit contracts (one per refit). Each records the actual
+  per-item raw theta prior in `theta_prior`; predictive fits also
+  include compact provenance in `predictive_prior`.
 
 - fit:
 
@@ -142,7 +152,9 @@ treated as a "refit" in the adaptive logging sense, producing:
 
 ## See also
 
-[`build_btl_results_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_btl_results_data.md)
+[`build_btl_results_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_btl_results_data.md),
+[`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md),
+[`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
 
 Other Bayesian models:
 [`build_btl_results_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_btl_results_data.md)

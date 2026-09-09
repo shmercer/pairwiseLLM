@@ -156,6 +156,19 @@ For fixed-pair frequentist alternatives, see
 and
 [`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md).
 
+## Predictive warm-start priors
+
+[`fit_bayes_btl_mcmc()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bayes_btl_mcmc.md)
+accepts `warm_start_prior`, constructed with
+[`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md)
+from calibrated model predictions or explicit expert scores. The four
+active variants use centered predictive locations and a default
+raw-theta SD of 0.5. Omitting the argument preserves raw means zero and
+SDs one. Ensemble prediction SD is diagnostic disagreement, not an
+automatic prior SD. See [Guide: Adaptive Warm
+Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.md)
+for the offline workflow.
+
 ## Citation
 
 > Mercer, S. H. (2026). *Standalone Bayesian BTL with CmdStan* \[R

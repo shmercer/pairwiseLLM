@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,7 @@
     <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
     <li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
@@ -70,7 +71,7 @@
       <h1>Standalone Bayesian BTL with CmdStan</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/v1.3.1/vignettes/bayesian-btl.Rmd" class="external-link"><code>vignettes/bayesian-btl.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/master/vignettes/bayesian-btl.Rmd" class="external-link"><code>vignettes/bayesian-btl.Rmd</code></a></small>
       <div class="d-none name"><code>bayesian-btl.Rmd</code></div>
     </div>
 
@@ -225,6 +226,18 @@ rankings.</p>
 <p>For adaptive selection and stopping, use <a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html">Guide:
 Adaptive Pairing</a>. For fixed-pair frequentist alternatives, see
 <code><a href="../reference/fit_bt_model.html">fit_bt_model()</a></code> and <code><a href="../reference/fit_elo_model.html">fit_elo_model()</a></code>.</p>
+</div>
+<div class="section level2">
+<h2 id="predictive-warm-start-priors">Predictive warm-start priors<a class="anchor" aria-label="anchor" href="#predictive-warm-start-priors"></a>
+</h2>
+<p><code><a href="../reference/fit_bayes_btl_mcmc.html">fit_bayes_btl_mcmc()</a></code> accepts
+<code>warm_start_prior</code>, constructed with
+<code><a href="../reference/make_warm_start_prior.html">make_warm_start_prior()</a></code> from calibrated model predictions
+or explicit expert scores. The four active variants use centered
+predictive locations and a default raw-theta SD of 0.5. Omitting the
+argument preserves raw means zero and SDs one. Ensemble prediction SD is
+diagnostic disagreement, not an automatic prior SD. See <a href="adaptive-warm-start.html">Guide: Adaptive Warm Start</a> for the
+offline workflow.</p>
 </div>
 <div class="section level2">
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>

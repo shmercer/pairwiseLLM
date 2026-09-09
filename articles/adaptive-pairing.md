@@ -598,6 +598,21 @@ argument and schema details. For the within-set algorithm and
 statistical rationale, see [Design: Adaptive
 Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html).
 
+## Predictive warm-start priors
+
+At initialization,
+[`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
+accepts either `warm_start_model` or a resolved `warm_start_prior`. With
+model input, precomputed `warm_start_features` avoids Python; otherwise
+`warm_start_python` selects an existing extraction environment.
+Prediction runs once and the session stores numeric priors. On resume,
+omit all warm-start arguments: the saved prior remains usable after the
+original model is removed. Predictive priors affect Bayesian estimation,
+while the initial pairing schedule and selection algorithm retain their
+existing behavior. See [Guide: Adaptive Warm
+Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.md)
+for training and prior conversion.
+
 ## Citation
 
 > Mercer, S. H. (2026). *Guide: Adaptive pairing* \[R package

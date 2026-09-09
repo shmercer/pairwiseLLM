@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -24,6 +24,7 @@
     <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
     <li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
@@ -44,11 +45,24 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/v1.3.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="1.3.1" id="pairwisellm-131">pairwiseLLM 1.3.1<a class="anchor" aria-label="anchor" href="#pairwisellm-131"></a></h2>
+<h2 class="pkg-version" data-toc-text="1.3.2" id="pairwisellm-132">pairwiseLLM 1.3.2<a class="anchor" aria-label="anchor" href="#pairwisellm-132"></a></h2>
+<div class="section level3">
+<h3 id="new-features-1-3-2">New Features<a class="anchor" aria-label="anchor" href="#new-features-1-3-2"></a></h3>
+<div class="section level4">
+<h4 id="adaptive-pairing-warm-start-1-3-2">Adaptive pairing warm start<a class="anchor" aria-label="anchor" href="#adaptive-pairing-warm-start-1-3-2"></a></h4>
+<ul><li>Added warm start model development workflow: task-specific<br>
+elastic-net training with nested cross-validation and out-of-fold calibration, and portable model storage.</li>
+<li>Added user model registration, equal-weight task-model ensembles, and centered predictive priors for standalone and adaptive Bayesian BTL estimation. Adaptive sessions retain numeric priors for resume without the original model or Python.</li>
+<li>Added the adaptive warm start help family and a practical workflow guide. Python is optional for extraction; precomputed prediction needs neither Python nor glmnet. Real bundled predictors remain deferred; no default model ships.</li>
+</ul></div>
+</div>
+</div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.3.1" id="pairwisellm-131">pairwiseLLM 1.3.1<a class="anchor" aria-label="anchor" href="#pairwisellm-131"></a></h2><p class="text-muted">CRAN release: 2026-09-07</p>
 <div class="section level3">
 <h3 id="new-features-1-3-1">New Features<a class="anchor" aria-label="anchor" href="#new-features-1-3-1"></a></h3>
 <div class="section level4">

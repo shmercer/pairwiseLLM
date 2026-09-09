@@ -20,6 +20,8 @@
 
 - [Guide: Adaptive
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md):
+- [Guide: Adaptive Warm
+  Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.md):
 - [Design: Adaptive
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.md):
 - [Guide: Adaptive

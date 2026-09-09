@@ -38,7 +38,12 @@ adaptive_rank(
   progress_errors = TRUE,
   save_outputs = FALSE,
   output_file = NULL,
-  judge = NULL
+  judge = NULL,
+  warm_start_model = NULL,
+  warm_start_prior = NULL,
+  warm_start_features = NULL,
+  warm_start_python = NULL,
+  warm_start_prior_sd = NULL
 )
 ```
 
@@ -544,6 +549,34 @@ adaptive_rank(
   `judge(A, B, state, ...)`. If supplied, model/trait/template options
   are ignored and this function is used directly.
 
+- warm_start_model:
+
+  Optional calibrated model/ensemble, path string, or loader reference
+  list (`name`/`source` or `path`). Mutually exclusive with
+  `warm_start_prior`. Resolve and predict once when creating an
+  assessment.
+
+- warm_start_prior:
+
+  Optional
+  [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md)
+  object covering all items. Saved numeric scores are centered within
+  each BTL refit scope.
+
+- warm_start_features:
+
+  Optional precomputed feature rows for model input; otherwise use item
+  texts. Precomputed prediction needs neither Python nor glmnet.
+
+- warm_start_python:
+
+  Explicit Python interpreter for text extraction only.
+
+- warm_start_prior_sd:
+
+  Optional model-derived raw theta prior SD override; scalar or per-item
+  vector, default 0.5. Supplied prior objects retain their SDs.
+
 ## Value
 
 A list with:
@@ -657,6 +690,13 @@ Resume behavior: when `resume = TRUE` and `session_dir` already contains
 adaptive artifacts, failed session loads abort with an actionable error
 instead of starting a fresh run silently.
 
+Predictive priors affect ordinary/within-set BTL estimation. Transform,
+anchored-joint, and pooled judge refits keep their existing prior rules;
+predictive evidence is not injected again. Initial pairing queues and
+selection rules retain their existing meaning. Custom fit functions must
+consume `state$predictive_prior` explicitly. Resume uses saved
+predictions; omit all warm-start arguments on resume.
+
 ## See also
 
 [`make_adaptive_judge_llm()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_llm.md),
@@ -664,6 +704,9 @@ instead of starting a fresh run silently.
 [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md),
 [`adaptive_rank_resume()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_resume.md),
 [`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
+
+[`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md),
+[`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md)
 
 Other adaptive ranking:
 [`adaptive_rank_resume()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_resume.md),
@@ -700,10 +743,10 @@ head(out$logs$step_log)
 #> # A tibble: 4 × 97
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-09-07 00:01:38       1     1     4 S01   S04       4     1 S04  
-#> 2       2 2026-09-07 00:01:38       2     4     8 S04   S08       8     4 S08  
-#> 3       3 2026-09-07 00:01:38       3     8     2 S08   S02       2     8 S02  
-#> 4       4 2026-09-07 00:01:38       4     2     6 S02   S06       6     2 S06  
+#> 1       1 2026-09-09 20:00:12       1     1     4 S01   S04       4     1 S04  
+#> 2       2 2026-09-09 20:00:12       2     4     8 S04   S08       8     4 S08  
+#> 3       3 2026-09-09 20:00:12       3     8     2 S08   S02       2     8 S02  
+#> 4       4 2026-09-09 20:00:12       4     2     6 S02   S06       6     2 S06  
 #> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,

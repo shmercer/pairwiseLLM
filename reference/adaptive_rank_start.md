@@ -12,7 +12,12 @@ adaptive_rank_start(
   persist_item_log = FALSE,
   ...,
   adaptive_config = NULL,
-  checkpoint_every_steps = NULL
+  checkpoint_every_steps = NULL,
+  warm_start_model = NULL,
+  warm_start_prior = NULL,
+  warm_start_features = NULL,
+  warm_start_python = NULL,
+  warm_start_prior_sd = NULL
 )
 ```
 
@@ -56,6 +61,34 @@ adaptive_rank_start(
 
   Optional positive integer checkpoint cadence for ordinary live
   persistence. If `NULL`, defaults to `100L`.
+
+- warm_start_model:
+
+  Optional calibrated model/ensemble, path string, or loader reference
+  list (`name`/`source` or `path`). Mutually exclusive with
+  `warm_start_prior`. Resolve and predict once when creating an
+  assessment.
+
+- warm_start_prior:
+
+  Optional
+  [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md)
+  object covering all items. Saved numeric scores are centered within
+  each BTL refit scope.
+
+- warm_start_features:
+
+  Optional precomputed feature rows for model input; otherwise use item
+  texts. Precomputed prediction needs neither Python nor glmnet.
+
+- warm_start_python:
+
+  Explicit Python interpreter for text extraction only.
+
+- warm_start_prior_sd:
+
+  Optional model-derived raw theta prior SD override; scalar or per-item
+  vector, default 0.5. Supplied prior objects retain their SDs.
 
 ## Value
 
@@ -102,8 +135,16 @@ If `session_dir` is supplied, the initialized state is persisted
 immediately using
 [`save_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_adaptive_session.md).
 
+Predictive priors affect ordinary/within-set BTL estimation. Transform,
+anchored-joint, and pooled judge refits keep their existing prior rules;
+predictive evidence is not injected again. Initial pairing queues and
+selection rules retain their existing meaning. Custom fit functions must
+consume `state$predictive_prior` explicitly. Resume uses saved
+predictions; omit all warm-start arguments on resume.
+
 ## See also
 
+[`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md),
 [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md),
 [`adaptive_rank_resume()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_resume.md),
 [`adaptive_step_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_step_log.md),

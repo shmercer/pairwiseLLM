@@ -49,9 +49,12 @@ validate_session_dir(dir)
 #> [1] "adaptive-session"
 #> 
 #> $package_version
-#> [1] "1.3.1"
+#> [1] "1.3.2"
 #> 
 #> $n_items
 #> [1] 3
+#> 
+#> $predictive_prior_digest
+#> NULL
 #> 
 ```

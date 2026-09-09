@@ -106,11 +106,11 @@ Other adaptive logs:
 ``` r
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
 adaptive_round_log(state)
-#> # A tibble: 0 × 116
-#> # ℹ 116 variables: refit_id <int>, round_id_at_refit <int>,
-#> #   step_id_at_refit <int>, timestamp <dttm>, model_variant <chr>,
-#> #   n_items <int>, total_pairs_done <int>, new_pairs_since_last_refit <int>,
-#> #   new_active_pairs_since_last_refit <int>,
+#> # A tibble: 0 × 117
+#> # ℹ 117 variables: predictive_prior_digest <chr>, refit_id <int>,
+#> #   round_id_at_refit <int>, step_id_at_refit <int>, timestamp <dttm>,
+#> #   model_variant <chr>, n_items <int>, total_pairs_done <int>,
+#> #   new_pairs_since_last_refit <int>, new_active_pairs_since_last_refit <int>,
 #> #   new_probe_pairs_since_last_refit <int>,
 #> #   new_total_cross_pairs_since_last_refit <int>, n_unique_pairs_seen <int>,
 #> #   proposed_pairs_mode <dbl>, starve_rate_since_last_refit <dbl>, …

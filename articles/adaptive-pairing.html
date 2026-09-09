@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,7 @@
     <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
     <li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
@@ -70,7 +71,7 @@
       <h1>Guide: Adaptive Pairing</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/v1.3.1/vignettes/adaptive-pairing.Rmd" class="external-link"><code>vignettes/adaptive-pairing.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/master/vignettes/adaptive-pairing.Rmd" class="external-link"><code>vignettes/adaptive-pairing.Rmd</code></a></small>
       <div class="d-none name"><code>adaptive-pairing.Rmd</code></div>
     </div>
 
@@ -618,6 +619,21 @@ starved attempts do not advance that count.</p>
 [validate_session_dir()] for complete argument and schema details. For
 the within-set algorithm and statistical rationale, see <a href="https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html">Design:
 Adaptive Pairing</a>.</p>
+</div>
+<div class="section level2">
+<h2 id="predictive-warm-start-priors">Predictive warm-start priors<a class="anchor" aria-label="anchor" href="#predictive-warm-start-priors"></a>
+</h2>
+<p>At initialization, <code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code> accepts either
+<code>warm_start_model</code> or a resolved
+<code>warm_start_prior</code>. With model input, precomputed
+<code>warm_start_features</code> avoids Python; otherwise
+<code>warm_start_python</code> selects an existing extraction
+environment. Prediction runs once and the session stores numeric priors.
+On resume, omit all warm-start arguments: the saved prior remains usable
+after the original model is removed. Predictive priors affect Bayesian
+estimation, while the initial pairing schedule and selection algorithm
+retain their existing behavior. See <a href="adaptive-warm-start.html">Guide: Adaptive Warm Start</a> for
+training and prior conversion.</p>
 </div>
 <div class="section level2">
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>

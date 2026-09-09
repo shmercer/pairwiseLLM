@@ -11,7 +11,7 @@ returns state plus summary outputs."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -28,6 +28,7 @@ returns state plus summary outputs."></head><body>
     <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
     <li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
@@ -48,7 +49,7 @@ returns state plus summary outputs."></head><body>
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Run adaptive ranking end-to-end from data and model settings</h1>
-      <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/v1.3.1/R/adaptive_rank.R" class="external-link"><code>R/adaptive_rank.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/master/R/adaptive_rank.R" class="external-link"><code>R/adaptive_rank.R</code></a></small>
       <div class="d-none name"><code>adaptive_rank.Rd</code></div>
     </div>
 
@@ -90,7 +91,12 @@ returns state plus summary outputs.</p>
 <span>  progress_errors <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  save_outputs <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  output_file <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  judge <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  judge <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  warm_start_model <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  warm_start_prior <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  warm_start_features <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  warm_start_python <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  warm_start_prior_sd <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -541,6 +547,31 @@ when <code>session_dir</code> is set, otherwise to a temporary file.</p></dd>
 <code>judge(A, B, state, ...)</code>. If supplied, model/trait/template options are
 ignored and this function is used directly.</p></dd>
 
+
+<dt id="arg-warm-start-model">warm_start_model<a class="anchor" aria-label="anchor" href="#arg-warm-start-model"></a></dt>
+<dd><p>Optional calibrated model/ensemble, path string, or
+loader reference list (<code>name</code>/<code>source</code> or <code>path</code>). Mutually exclusive with
+<code>warm_start_prior</code>. Resolve and predict once when creating an assessment.</p></dd>
+
+
+<dt id="arg-warm-start-prior">warm_start_prior<a class="anchor" aria-label="anchor" href="#arg-warm-start-prior"></a></dt>
+<dd><p>Optional <code><a href="make_warm_start_prior.html">make_warm_start_prior()</a></code> object covering all
+items. Saved numeric scores are centered within each BTL refit scope.</p></dd>
+
+
+<dt id="arg-warm-start-features">warm_start_features<a class="anchor" aria-label="anchor" href="#arg-warm-start-features"></a></dt>
+<dd><p>Optional precomputed feature rows for model input;
+otherwise use item texts. Precomputed prediction needs neither Python nor glmnet.</p></dd>
+
+
+<dt id="arg-warm-start-python">warm_start_python<a class="anchor" aria-label="anchor" href="#arg-warm-start-python"></a></dt>
+<dd><p>Explicit Python interpreter for text extraction only.</p></dd>
+
+
+<dt id="arg-warm-start-prior-sd">warm_start_prior_sd<a class="anchor" aria-label="anchor" href="#arg-warm-start-prior-sd"></a></dt>
+<dd><p>Optional model-derived raw theta prior SD override;
+scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -629,11 +660,17 @@ They are not used to choose the next pair.</p>
 when <code>resume = TRUE</code> and <code>session_dir</code> already contains adaptive artifacts,
 failed session loads abort with an actionable error instead of starting a
 fresh run silently.</p>
+<p>Predictive priors affect ordinary/within-set BTL estimation. Transform,
+anchored-joint, and pooled judge refits keep their existing prior rules; predictive
+evidence is not injected again. Initial pairing queues and selection rules retain
+their existing meaning. Custom fit functions must consume <code>state$predictive_prior</code>
+explicitly. Resume uses saved predictions; omit all warm-start arguments on resume.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="make_adaptive_judge_llm.html">make_adaptive_judge_llm()</a></code>, <code><a href="adaptive_rank_run_live.html">adaptive_rank_run_live()</a></code>,
 <code><a href="adaptive_rank_start.html">adaptive_rank_start()</a></code>, <code><a href="adaptive_rank_resume.html">adaptive_rank_resume()</a></code>, <code><a href="llm_compare_pair.html">llm_compare_pair()</a></code></p>
+<p><code><a href="make_warm_start_prior.html">make_warm_start_prior()</a></code>, <code><a href="fit_warm_start_model.html">fit_warm_start_model()</a></code></p>
 <p>Other adaptive ranking:
 <code><a href="adaptive_rank_resume.html">adaptive_rank_resume()</a></code>,
 <code><a href="adaptive_rank_run_live.html">adaptive_rank_run_live()</a></code>,
@@ -669,10 +706,10 @@ fresh run silently.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 4 × 97</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-07 <span style="color: #949494;">00:01:38</span>       1     1     4 S01   S04       4     1 S04  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-07 <span style="color: #949494;">00:01:38</span>       2     4     8 S04   S08       8     4 S08  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-07 <span style="color: #949494;">00:01:38</span>       3     8     2 S08   S02       2     8 S02  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-07 <span style="color: #949494;">00:01:38</span>       4     2     6 S02   S06       6     2 S06  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-09 <span style="color: #949494;">20:00:12</span>       1     1     4 S01   S04       4     1 S04  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-09 <span style="color: #949494;">20:00:12</span>       2     4     8 S04   S08       8     4 S08  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-09 <span style="color: #949494;">20:00:12</span>       3     8     2 S08   S02       2     8 S02  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-09 <span style="color: #949494;">20:00:12</span>       4     2     6 S02   S06       6     2 S06  </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 87 more variables: B_id &lt;chr&gt;, unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   Y &lt;int&gt;, status &lt;chr&gt;, judge_backend &lt;chr&gt;, judge_model &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   judge_endpoint &lt;chr&gt;, judge_valid &lt;lgl&gt;, judge_invalid_reason &lt;chr&gt;,</span></span>

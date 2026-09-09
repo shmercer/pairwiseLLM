@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,7 @@
     <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
     <li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
@@ -70,7 +71,7 @@
       <h1>Design: Adaptive Pairing</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/v1.3.1/vignettes/within-set-adaptive-design.Rmd" class="external-link"><code>vignettes/within-set-adaptive-design.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/master/vignettes/within-set-adaptive-design.Rmd" class="external-link"><code>vignettes/within-set-adaptive-design.Rmd</code></a></small>
       <div class="d-none name"><code>within-set-adaptive-design.Rmd</code></div>
     </div>
 
@@ -683,7 +684,7 @@ positional tendency; it is not a forward/reverse consistency statistic.
 The lapse mixture models a global probability of an uninformative 50:50
 response and should not be interpreted as a directly observed error
 rate.</p>
-<p>The Stan models use</p>
+<p>Without a predictive prior, the Stan models use</p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msubsup><mi>θ</mi><mi>i</mi><mrow><mi mathvariant="normal">r</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">w</mi></mrow></msubsup><mo>∼</mo><mi>𝒩</mi><mo stretchy="false" form="prefix">(</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false" form="postfix">)</mo><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>θ</mi><mi>i</mi></msub><mo>=</mo><msubsup><mi>θ</mi><mi>i</mi><mrow><mi mathvariant="normal">r</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">w</mi></mrow></msubsup><mo>−</mo><mfrac><mn>1</mn><mi>N</mi></mfrac><munderover><mo>∑</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover><msubsup><mi>θ</mi><mi>j</mi><mrow><mi mathvariant="normal">r</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">w</mi></mrow></msubsup><mo>,</mo></mrow><annotation encoding="application/x-tex">
  \theta_i^{\mathrm{raw}}\sim\mathcal N(0,1),\qquad
  \theta_i=\theta_i^{\mathrm{raw}}-\frac{1}{N}\sum_{j=1}^N\theta_j^{\mathrm{raw}},
@@ -700,6 +701,14 @@ priors discourage extreme values when evidence is sparse. Consequently,
 items with only wins or only losses can still have finite posterior
 summaries; this is Bayesian regularization under separation, not
 evidence that sparse or one-sided comparison data are adequate.</p>
+<p>Optional predictive warm-start priors replace the raw-theta Normal
+locations and SDs in all four active variants. The default predictive SD
+is 0.5; it is not the marginal SD after centering. Each refit subsets
+saved predictions to its fitted items and centers within that scope.
+This does not alter the initial pairing schedule or pair-selection
+algorithm. See <a href="adaptive-warm-start.html">Guide: Adaptive Warm
+Start</a> for model development, prior conversion, and
+artifact-independent resume.</p>
 <p>Refit eligibility depends on committed comparisons only. With
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>M</mi><mi>t</mi></msub><annotation encoding="application/x-tex">M_t</annotation></semantics></math>
 the committed count and

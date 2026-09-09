@@ -4,7 +4,7 @@
 
 pairwiseLLM banner
 
-`pairwiseLLM` is a R package that provides a unified, extensible
+`pairwiseLLM` is an R package that provides a unified, extensible
 framework for generating, submitting, and modeling pairwise comparisons
 of writing quality using large language models (LLMs).
 
@@ -12,15 +12,15 @@ It includes:
 
 - Unified live APIs across OpenAI, Anthropic, Gemini Developer API,
   Vertex AI Gemini API, Together.ai, and Ollama, plus batch APIs for
-  OpenAI, Anthropic, and Gemini Developer API  
+  OpenAI, Anthropic, and Gemini Developer API
 - An adaptive pairing workflow to run adaptively selected pairs until
   stopping criteria are met
 - Adaptive linking workflows that place separately ranked sets on a
   shared scale through hub-and-spoke comparisons
 - A prompt template registry with tested templates designed to reduce
-  positional bias  
-- Positional-bias diagnostics (forward vs reverse design)  
-- Bradley–Terry (BT), Bayesian BT, and Elo modeling  
+  positional bias
+- Positional-bias diagnostics (forward vs reverse design)
+- Bradley–Terry (BT), Bayesian BT, and Elo modeling
 - Consistent data structures for all providers
 
 ------------------------------------------------------------------------
@@ -122,16 +122,15 @@ BT, and Elo workflows do not require CmdStan.
 
 ## API Keys
 
-`pairwiseLLM` reads keys only from environment variables.  
-Keys are **never printed**, **never stored**, and **never written** to
-disk. Configure only the key for the cloud backend you plan to use.
-Local Ollama does not require a provider API key.
-
-Cloud comparisons transmit the prompt and sample text you supply to the
-selected third-party provider. Review that provider’s privacy and
-retention terms before submitting sensitive, confidential, student, or
-personal data. Enabling raw-response or reasoning retention can also
-write returned text to an output path you select.
+`pairwiseLLM` reads keys only from environment variables. Keys are
+**never printed**, **never stored**, and **never written** to disk.
+Configure only the key for the cloud backend you plan to use. Local
+Ollama does not require a provider API key. Cloud comparisons transmit
+the prompt and sample text you supply to the selected third-party
+provider. Review that provider’s privacy and retention terms before
+submitting sensitive, confidential, student, or personal data. Enabling
+raw-response or reasoning retention can also write returned text to an
+output path you select.
 
 You can verify which providers are available using:
 
@@ -142,8 +141,8 @@ check_llm_api_keys()
 
 This returns a tibble showing whether R can see the required keys for:
 
-- OpenAI  
-- Anthropic  
+- OpenAI
+- Anthropic
 - Gemini Developer API
 - Vertex AI Gemini API
 - Together.ai
@@ -165,8 +164,8 @@ Sys.setenv(VERTEX_API_KEY = "your-key-here")
 Sys.setenv(TOGETHER_API_KEY = "your-key-here")
 ```
 
-…but it is **strongly recommended**  
-to store them in your `~/.Renviron` file.
+For persistent use, store keys in your `~/.Renviron` file as described
+below.
 
 ### Recommended method: Adding keys to `~/.Renviron`
 
@@ -257,6 +256,9 @@ design article for your task.
 - [Guide: Adaptive
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html)
   — run, inspect, save, and resume an adaptive within-set ranking.
+- [Guide: Adaptive Warm
+  Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html)
+  — train, store, ensemble, and use predictive BTL priors.
 - [Design: Adaptive
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html)
   — understand the within-set selection, refitting, and stopping design.
@@ -292,6 +294,8 @@ To get started, see:
 
 - [Guide: Adaptive
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html)
+- [Guide: Adaptive Warm
+  Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html)
 - [Design: Adaptive
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html)
 - [Guide: Adaptive
@@ -305,8 +309,8 @@ To get started, see:
 
 `pairwiseLLM` includes:
 
-- A **default template** tested for positional bias  
-- Support for **multiple templates stored by name**  
+- A **default template** tested for positional bias
+- Support for **multiple templates stored by name**
 - User-defined templates via
   [`register_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/register_prompt_template.md)
 
@@ -323,8 +327,12 @@ list_prompt_templates()
 ``` r
 
 tmpl <- get_prompt_template("default")
-cat(substr(tmpl, 1, 400), "...\n")
-#> You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.
+preview <- strsplit(substr(tmpl, 1, 400), "\n", fixed = TRUE)[[1]]
+for (line in preview) {
+  cat(paste(strwrap(line, width = 72), collapse = "\n"), "\n", sep = "")
+}
+#> You are a debate adjudicator. Your task is to weigh the comparative
+#> strengths of two writing samples regarding a specific trait.
 #> 
 #> TRAIT: {TRAIT_NAME}
 #> DEFINITION: {TRAIT_DESCRIPTION}
@@ -339,7 +347,10 @@ cat(substr(tmpl, 1, 400), "...\n")
 #> 
 #> EVALUATION PROCESS (Mental Simulation):
 #> 
-#> 1.  **Advocate for SAMPLE_1**: Mentally list the single strongest point of evidence that makes SAMPLE_1 the  ...
+#> 1.  **Advocate for SAMPLE_1**: Mentally list the single strongest point
+#> of evidence that makes SAMPLE_1 the
+cat("...\n")
+#> ...
 ```
 
 ### Register your own template
@@ -377,12 +388,13 @@ Traits define what “quality” means.
 
 ``` r
 
-trait_description("overall_quality")
-#> $name
-#> [1] "Overall Quality"
+td <- trait_description("overall_quality")
+cat(td$name, "\n\n", td$description, "\n", sep = "")
+#> Overall Quality
 #> 
-#> $description
-#> [1] "Overall quality of the writing, considering how well ideas are expressed,\nhow clearly the writing is organized, and how effective the language and\nconventions are."
+#> Overall quality of the writing, considering how well ideas are expressed,
+#> how clearly the writing is organized, and how effective the language and
+#> conventions are.
 ```
 
 You can also provide custom traits:
@@ -406,19 +418,19 @@ saving** for all live backends (OpenAI, Anthropic, Gemini Developer API,
 Vertex AI Gemini API, Together.ai, and Ollama).
 
 - [`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
-  — compare one pair  
+  — compare one pair
 - [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
   — compare many pairs at once
 
-Key Features:
+Key features:
 
-- Parallel Execution: Set `parallel = TRUE` and `workers = n` to speed
-  up processing.
-- Resume Capability: Provide a `save_path` (e.g., `"results.csv"`). The
-  function writes results as they finish. If interrupted, running the
-  command again will automatically skip pairs already present in the
+- **Parallel execution:** Set `parallel = TRUE` and `workers = n` to
+  speed up processing.
+- **Resume capability:** Provide a `save_path` (e.g., `"results.csv"`).
+  The function writes results as they finish. If interrupted, running
+  the command again will automatically skip pairs already present in the
   file.
-- Robust Output: Returns a list containing `$results` (successful
+- **Robust output:** Returns a list containing `$results` (successful
   comparisons) and `$failed_pairs` (scheduled pairs with no observed
   outcome) plus `$failed_attempts` (attempt-level failures, including
   retry/timeout/parse issues), ensuring one bad request doesn’t crash
@@ -500,7 +512,7 @@ API. Vertex batch is intentionally unsupported in this series, and
 
 For large-scale runs use:
 
-- [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md)  
+- [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md)
 - [`llm_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.md)
 
 Example:
@@ -513,8 +525,7 @@ batch <- llm_submit_pairs_batch(
   pairs             = pairs,
   trait_name        = td$name,
   trait_description = td$description,
-  prompt_template   = tmpl,
-  service_tier      = "priority"
+  prompt_template   = tmpl
 )
 
 results <- llm_download_batch_results(batch)
@@ -589,16 +600,19 @@ judgments into a later submission result automatically:
 remaining_pairs <- est$remaining_pairs
 
 # Submit remaining pairs using your preferred workflow (live):
-res_live <- submit_llm_pairs(remaining_pairs, backend = "openai", model = "gpt-4.1", ...)
+res_live <- submit_llm_pairs(
+  remaining_pairs, backend = "openai", model = "gpt-4.1", ...
+)
 
 # For batch:
 batch <- llm_submit_pairs_batch(
-          backend = "openai",
-          model = "gpt-4.1",
-          pairs = remaining_pairs,
-          trait_name = td$name,
-          trait_description = td$description,
-          prompt_template = tmpl)
+  backend = "openai",
+  model = "gpt-4.1",
+  pairs = remaining_pairs,
+  trait_name = td$name,
+  trait_description = td$description,
+  prompt_template = tmpl
+)
 
 results <- llm_download_batch_results(batch)
 ```
@@ -675,8 +689,8 @@ even if the R session is interrupted.
 
 ## Positional Bias Testing
 
-LLMs often show a first-position or second-position bias.  
-`pairwiseLLM` includes explicit tools for testing this.
+LLMs often show a first-position or second-position bias. `pairwiseLLM`
+includes explicit tools for testing this.
 
 ### Typical workflow
 
@@ -773,8 +787,6 @@ estimates and principled stopping diagnostics.
 The package supports four closely related BTL variants, differing in how
 they model LLM judge behavior.
 
-------------------------------------------------------------------------
-
 ### Model variants
 
 All models estimate one latent quality parameter per item. They differ
@@ -790,25 +802,21 @@ only in whether they include:
 | `btl_b` | ✗ | ✓ | BTL with position bias |
 | `btl_e_b` | ✓ | ✓ | BTL with both lapse and position bias (default) |
 
-**Recommended default:** `btl_e_b` This is the most robust option when
+**Recommended default:** `btl_e_b`. This is the most robust option when
 the judge is an LLM or other noisy rater.
-
-------------------------------------------------------------------------
 
 ### When should you include lapse or position bias?
 
-- **Lapse (`ε`)** Useful when judgments occasionally appear random or
+- **Lapse (`ε`):** Useful when judgments occasionally appear random or
   inconsistent. The lapse parameter absorbs these errors without
   distorting item-level quality estimates.
 
-- **Position bias (`b`)** Useful when the judge systematically prefers
+- **Position bias (`b`):** Useful when the judge systematically prefers
   the first or second item presented. This is especially important when
   prompts present items in a fixed order.
 
 If you are confident that neither effect is present, you can use the
 simpler `btl` model.
-
-------------------------------------------------------------------------
 
 ### Fitting a Bayesian BTL model
 
@@ -831,8 +839,6 @@ fit <- fit_bayes_btl_mcmc(
 
 This fits the model using MCMC via `cmdstanr` and returns posterior
 samples and summaries.
-
-------------------------------------------------------------------------
 
 ### Inspecting model results
 
@@ -864,8 +870,6 @@ This reports:
 - effective sample sizes,
 - divergence counts,
 - reliability metrics.
-
-------------------------------------------------------------------------
 
 ### Relationship to adaptive pairing
 
@@ -922,14 +926,19 @@ EdArXiv. <https://osf.io/preprints/edarxiv/4k9r8_v2>
 Contributions to **pairwiseLLM** are very welcome!
 
 - Bug reports (with reproducible examples when possible)
+
 - Feature requests, ideas, and discussion
+
 - Pull requests improving:
+
   - functionality
   - documentation
   - examples / vignettes
   - test coverage
+
 - Backend integrations (e.g., additional LLM providers or local
   inference engines)
+
 - Modeling extensions
 
 ## Reporting issues
@@ -950,8 +959,7 @@ If you encounter a problem:
     - the model/backend involved
     - your operating system
 
-3.  Open an issue at:  
-    <https://github.com/shmercer/pairwiseLLM/issues>
+3.  Open an issue at: <https://github.com/shmercer/pairwiseLLM/issues>
 
 ------------------------------------------------------------------------
 
@@ -974,7 +982,7 @@ MIT License. See `LICENSE`.
 ## Citation
 
 > Mercer, S. H. (2026). *pairwiseLLM: Pairwise writing quality
-> comparisons with large language models* (Version 1.3.1) \[R package;
+> comparisons with large language models* (Version 1.3.2) \[R package;
 > Computer software\]. <https://github.com/shmercer/pairwiseLLM>
 
 # Package index
@@ -1153,6 +1161,43 @@ MIT License. See `LICENSE`.
 - [`fit_bayes_btl_mcmc()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bayes_btl_mcmc.md)
   : Full Bayesian BTL inference via CmdStanR (adaptive-compatible)
 
+## Adaptive warm start
+
+- [`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md)
+  : Combine independently trained warm-start models
+- [`extract_warm_start_features()`](https://shmercer.github.io/pairwiseLLM/reference/extract_warm_start_features.md)
+  : Extract frozen writing features for warm-start prediction
+- [`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md)
+  : Train a task-specific warm-start model with nested validation
+- [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md)
+  : Convert warm-start predictions to Bayesian BTL priors
+- [`summary(`*`<pairwiseLLM_warm_model>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/pairwiseLLM_warm_model.md)
+  [`print(`*`<pairwiseLLM_warm_model>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/pairwiseLLM_warm_model.md)
+  : Portable task-specific warm-start models
+- [`predict(`*`<pairwiseLLM_warm_ensemble>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_ensemble.md)
+  : Predict with an equal-weight warm-start ensemble
+- [`predict(`*`<pairwiseLLM_warm_model>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_model.md)
+  : Predict relative quality from a portable warm-start model
+- [`prepare_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_warm_start_model.md)
+  : Prepare metadata or a summary-only warm-start artifact
+- [`register_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/register_warm_start_model.md)
+  [`remove_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/register_warm_start_model.md)
+  [`list_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/register_warm_start_model.md)
+  : Register, inspect, or remove user warm-start models
+- [`save_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/save_warm_start_model.md)
+  [`load_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/save_warm_start_model.md)
+  : Save or load a portable warm-start model
+- [`summary(`*`<pairwiseLLM_warm_ensemble>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_ensemble.md)
+  [`print(`*`<pairwiseLLM_warm_ensemble>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_ensemble.md)
+  : Inspect a warm-start ensemble
+- [`summary(`*`<pairwiseLLM_warm_predictions>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_predictions.md)
+  [`print(`*`<pairwiseLLM_warm_predictions>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_predictions.md)
+  : Inspect ensemble predictions
+- [`warm_start_feature_schema()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_feature_schema.md)
+  : Inspect the frozen warm-start writing feature schema
+- [`warm_start_python_status()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_python_status.md)
+  : Check the optional warm-start feature environment
+
 ## Adaptive lifecycle
 
 - [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
@@ -1223,6 +1268,8 @@ MIT License. See `LICENSE`.
 
 - [Guide: Adaptive
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md):
+- [Guide: Adaptive Warm
+  Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.md):
 - [Design: Adaptive
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.md):
 - [Guide: Adaptive

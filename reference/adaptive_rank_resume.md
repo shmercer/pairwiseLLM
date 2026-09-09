@@ -16,7 +16,7 @@ adaptive_rank_resume(session_dir, ...)
 
 - ...:
 
-  Reserved for future extensions; currently unused.
+  Reserved; must be empty. Resume uses persisted predictive priors.
 
 ## Value
 
@@ -32,6 +32,7 @@ used for adaptive auditability.
 
 ## See also
 
+[`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md),
 [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md),
 [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md),
 [`save_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_adaptive_session.md),

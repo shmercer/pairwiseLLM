@@ -1,6 +1,26 @@
 # Changelog
 
+## pairwiseLLM 1.3.2
+
+### New Features
+
+#### Adaptive pairing warm start
+
+- Added warm start model development workflow: task-specific  
+  elastic-net training with nested cross-validation and out-of-fold
+  calibration, and portable model storage.
+- Added user model registration, equal-weight task-model ensembles, and
+  centered predictive priors for standalone and adaptive Bayesian BTL
+  estimation. Adaptive sessions retain numeric priors for resume without
+  the original model or Python.
+- Added the adaptive warm start help family and a practical workflow
+  guide. Python is optional for extraction; precomputed prediction needs
+  neither Python nor glmnet. Real bundled predictors remain deferred; no
+  default model ships.
+
 ## pairwiseLLM 1.3.1
+
+CRAN release: 2026-09-07
 
 ### New Features
 
