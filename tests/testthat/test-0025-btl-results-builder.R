@@ -84,12 +84,14 @@ test_that("fit_bayes_btl_mcmc accepts converted non-adaptive data", {
   results_tbl <- build_results(example_writing_pairs)
   ids <- sort(unique(c(results_tbl$A_id, results_tbl$B_id)))
 
+  original_fit <- pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive
   out <- testthat::with_mocked_bindings(
     .fit_bayes_btl_mcmc_adaptive = mock_fit,
     pairwiseLLM::fit_bayes_btl_mcmc(results_tbl, ids = ids, model_variant = "btl_e_b"),
-    .env = asNamespace("pairwiseLLM")
+    .package = "pairwiseLLM"
   )
 
+  expect_identical(pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive, original_fit)
   expect_s3_class(out$round_log, "tbl_df")
   expect_s3_class(out$item_summary, "tbl_df")
   expect_true(out$fit$diagnostics_pass)

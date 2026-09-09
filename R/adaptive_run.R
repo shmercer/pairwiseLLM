@@ -4063,6 +4063,22 @@
 #'   [adaptive_step_log()], [adaptive_round_log()], [adaptive_item_log()]
 #'
 #' @family adaptive ranking
+#' @param warm_start_model Optional calibrated model/ensemble, path string, or
+#'   loader reference list (`name`/`source` or `path`). Mutually exclusive with
+#'   `warm_start_prior`. Resolve and predict once when creating an assessment.
+#' @param warm_start_prior Optional [make_warm_start_prior()] object covering all
+#'   items. Saved numeric scores are centered within each BTL refit scope.
+#' @param warm_start_features Optional precomputed feature rows for model input;
+#'   otherwise use item texts. Precomputed prediction needs neither Python nor glmnet.
+#' @param warm_start_python Explicit Python interpreter for text extraction only.
+#' @param warm_start_prior_sd Optional model-derived raw theta prior SD override;
+#'   scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
+#' @details
+#' Predictive priors affect ordinary/within-set BTL estimation. Transform,
+#' anchored-joint, and pooled judge refits keep their existing prior rules; predictive
+#' evidence is not injected again. Initial pairing queues and selection rules retain
+#' their existing meaning. Custom fit functions must consume `state$predictive_prior`
+#' explicitly. Resume uses saved predictions; omit all warm-start arguments on resume.
 #' @export
 adaptive_rank_start <- function(items,
                                 seed = 1L,
@@ -4070,7 +4086,12 @@ adaptive_rank_start <- function(items,
                                 persist_item_log = FALSE,
                                 ...,
                                 adaptive_config = NULL,
-                                checkpoint_every_steps = NULL) {
+                                checkpoint_every_steps = NULL,
+                                warm_start_model = NULL,
+                                warm_start_prior = NULL,
+                                warm_start_features = NULL,
+                                warm_start_python = NULL,
+                                warm_start_prior_sd = NULL) {
   dots <- list(...)
   if (length(dots) > 0L) {
     dot_names <- names(dots)
@@ -4098,6 +4119,8 @@ adaptive_rank_start <- function(items,
   seed <- .adaptive_validate_seed(seed)
   now_fn <- dots$now_fn %||% function() Sys.time()
   state <- new_adaptive_state(items, now_fn = now_fn)
+  state <- .warm_start_adaptive_init(state, warm_start_model, warm_start_prior,
+    warm_start_features, warm_start_python, warm_start_prior_sd)
   state$meta$seed <- seed
   state$warm_start_pairs <- .adaptive_build_warm_start_pairs(state$item_ids, seed)
   state$warm_start_idx <- 1L
@@ -4500,6 +4523,7 @@ adaptive_rank_run_live <- function(state,
     state,
     checkpoint_every_steps = checkpoint_every_steps
   )
+  .warm_start_adaptive_validate(state)
   resumed_from_session <- .adaptive_is_resumed_session(state)
   state$config$resumed_from_session <- isTRUE(resumed_from_session)
   state$meta$resumed_from_session <- isTRUE(resumed_from_session)
@@ -4862,7 +4886,7 @@ adaptive_rank_run_live <- function(state,
 #' adaptive auditability.
 #'
 #' @param session_dir Directory containing session artifacts.
-#' @param ... Reserved for future extensions; currently unused.
+#' @param ... Reserved; must be empty. Resume uses persisted predictive priors.
 #'
 #' @return An \code{adaptive_state} object restored from disk.
 #'
@@ -4879,6 +4903,7 @@ adaptive_rank_run_live <- function(state,
 #' @family adaptive ranking
 #' @export
 adaptive_rank_resume <- function(session_dir, ...) {
+  rlang::check_dots_empty()
   if (missing(session_dir) || is.null(session_dir)) {
     rlang::abort("`session_dir` must be provided.")
   }

@@ -103,6 +103,7 @@ schema_step_log <- c(
 )
 
 schema_round_log <- c(
+  predictive_prior_digest = "character",
   refit_id = "integer",
   round_id_at_refit = "integer",
   step_id_at_refit = "integer",

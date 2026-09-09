@@ -9,7 +9,7 @@ adaptive_rank_resume(session_dir, ...)
 \arguments{
 \item{session_dir}{Directory containing session artifacts.}
 
-\item{...}{Reserved for future extensions; currently unused.}
+\item{...}{Reserved; must be empty. Resume uses persisted predictive priors.}
 }
 \value{
 An \code{adaptive_state} object restored from disk.

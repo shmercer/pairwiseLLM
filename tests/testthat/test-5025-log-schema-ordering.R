@@ -30,6 +30,7 @@ test_that("canonical log schemas follow the expected column order", {
     "hub_lock_mode", "hub_lock_kappa"
   )
   expected_round <- c(
+    "predictive_prior_digest",
     "refit_id", "round_id_at_refit", "step_id_at_refit", "timestamp", "model_variant", "n_items",
     "total_pairs_done", "new_pairs_since_last_refit",
     "new_active_pairs_since_last_refit", "new_probe_pairs_since_last_refit",

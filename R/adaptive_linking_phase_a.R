@@ -226,7 +226,8 @@
 }
 
 .adaptive_phase_a_fit_contract_surface <- function(judge_param_mode,
-                                                   model_variant) {
+                                                   model_variant,
+                                                   predictive_prior_digest = NULL) {
   judge_param_mode <- as.character(judge_param_mode %||% "global_shared")
   model_variant <- normalize_model_variant(model_variant %||% "btl_e_b")
 
@@ -237,10 +238,12 @@
     rlang::abort("Phase A fit contract surface requires a single non-empty `model_variant`.")
   }
 
-  list(
+  out <- list(
     judge_param_mode = judge_param_mode,
     model_variant = model_variant
   )
+  if (!is.null(predictive_prior_digest)) out$predictive_prior_digest <- predictive_prior_digest
+  out
 }
 
 .adaptive_phase_a_required_config_surface <- function(state, set_id) {
@@ -249,7 +252,8 @@
   btl_config <- state$config$btl_config %||% list()
   .adaptive_phase_a_fit_contract_surface(
     judge_param_mode = controller$judge_param_mode %||% "global_shared",
-    model_variant = btl_config$model_variant %||% fit$model_variant %||% "btl_e_b"
+    model_variant = btl_config$model_variant %||% fit$model_variant %||% "btl_e_b",
+    predictive_prior_digest = .warm_start_phase_a_identity(state, set_id)
   )
 }
 
@@ -611,7 +615,8 @@
     model_variant = artifact_surface$model_variant %||%
       artifact$fit_model_id %||%
       artifact$model_variant %||%
-      "btl_e_b"
+      "btl_e_b",
+    predictive_prior_digest = artifact_surface$predictive_prior_digest %||% NULL
   )
 }
 
@@ -1754,6 +1759,9 @@
 
   required_surface <- .adaptive_phase_a_required_config_surface(state, set_id = set_id)
   artifact_surface <- .adaptive_phase_a_artifact_fit_contract_surface(artifact)
+  if (!identical(artifact_surface$predictive_prior_digest, required_surface$predictive_prior_digest)) {
+    rlang::abort("Phase A artifact predictive prior configuration mismatch.")
+  }
   fit_model_id <- artifact$fit_model_id %||% NULL
   if (!is.null(fit_model_id)) {
     fit_model_id <- normalize_model_variant(fit_model_id)

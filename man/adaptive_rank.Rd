@@ -34,7 +34,12 @@ adaptive_rank(
   progress_errors = TRUE,
   save_outputs = FALSE,
   output_file = NULL,
-  judge = NULL
+  judge = NULL,
+  warm_start_model = NULL,
+  warm_start_prior = NULL,
+  warm_start_features = NULL,
+  warm_start_python = NULL,
+  warm_start_prior_sd = NULL
 )
 }
 \arguments{
@@ -315,6 +320,21 @@ when \code{session_dir} is set, otherwise to a temporary file.}
 \item{judge}{Optional prebuilt judge function with contract
 \code{judge(A, B, state, ...)}. If supplied, model/trait/template options are
 ignored and this function is used directly.}
+
+\item{warm_start_model}{Optional calibrated model/ensemble, path string, or
+loader reference list (\code{name}/\code{source} or \code{path}). Mutually exclusive with
+\code{warm_start_prior}. Resolve and predict once when creating an assessment.}
+
+\item{warm_start_prior}{Optional \code{\link[=make_warm_start_prior]{make_warm_start_prior()}} object covering all
+items. Saved numeric scores are centered within each BTL refit scope.}
+
+\item{warm_start_features}{Optional precomputed feature rows for model input;
+otherwise use item texts. Precomputed prediction needs neither Python nor glmnet.}
+
+\item{warm_start_python}{Explicit Python interpreter for text extraction only.}
+
+\item{warm_start_prior_sd}{Optional model-derived raw theta prior SD override;
+scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.}
 }
 \value{
 A list with:
@@ -405,6 +425,12 @@ Resume behavior:
 when \code{resume = TRUE} and \code{session_dir} already contains adaptive artifacts,
 failed session loads abort with an actionable error instead of starting a
 fresh run silently.
+
+Predictive priors affect ordinary/within-set BTL estimation. Transform,
+anchored-joint, and pooled judge refits keep their existing prior rules; predictive
+evidence is not injected again. Initial pairing queues and selection rules retain
+their existing meaning. Custom fit functions must consume \code{state$predictive_prior}
+explicitly. Resume uses saved predictions; omit all warm-start arguments on resume.
 }
 \examples{
 data("example_writing_samples", package = "pairwiseLLM")

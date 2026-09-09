@@ -276,6 +276,7 @@ validate_btl_mcmc_config <- function(config) {
 #' @noRd
 round_log_schema <- function() {
   tibble::tibble(
+    predictive_prior_digest = character(),
     round_id = integer(),
     iter_at_refit = integer(),
     mode = character(),
@@ -739,6 +740,7 @@ build_round_log_row <- function(state,
   row$round_id <- as.integer(round_id)
   row$iter_at_refit <- as.integer(state$iter %||% NA_integer_)
   row$mode <- as.character(state$mode %||% NA_character_)
+  row$predictive_prior_digest <- fit$predictive_prior$digest %||% NA_character_
   row$model_variant <- as.character(fit$model_variant %||%
     state$posterior$model_variant %||% NA_character_)
   row$n_items <- as.integer(state$N)
