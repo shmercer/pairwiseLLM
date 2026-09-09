@@ -1,5 +1,8 @@
 # Portable audit validation uses base values only; no development engine is loaded.
-.warm_start_audit_equal <- function(x, y) isTRUE(all.equal(x, y, tolerance = 1e-10))
+.warm_start_audit_equal <- function(x, y) {
+  isTRUE(all.equal(x, y, tolerance = 1e-10)) ||
+    isTRUE(all.equal(x, y, tolerance = 1e-10, scale = 1))
+}
 
 .validate_warm_start_tuning <- function(x, n) {
   invalid <- function() rlang::abort("Invalid warm-start tuning contract.")

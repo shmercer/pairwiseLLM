@@ -91,6 +91,19 @@ test_that("portable model validation rejects inconsistent nested predictions and
   expect_error(.validate_warm_start_model(bad), "validation contract")
 })
 
+test_that("nested validation tolerates near-zero outcome mean reconstruction drift", {
+  expect_true(.warm_start_audit_equal(1.18e-08, 1.18e-08 + 1.7e-18))
+  expect_false(.warm_start_audit_equal(1.18e-08, 1e-6))
+  skip_if_not_installed("glmnet")
+  features <- warm_core_features(15)
+  theta <- warm_core_theta(features)
+  theta <- theta - mean(theta) + 1.18e-08
+  model <- fit_warm_start_model(features$item_id, theta, "near-zero-mean",
+    features = features, alpha_grid = c(0, 0.5, 1))
+  expect_lt(abs(mean(theta) - 1.18e-08), 1e-15)
+  expect_invisible(.validate_warm_start_model(model))
+})
+
 test_that("warning provenance retains context and fatal errors retain their parent", {
   expect_warning(value <- .warm_start_cv_context("Outer fold 2", function() {
     .warm_start_cv_context("Alpha 0.5", function() {
