@@ -378,6 +378,106 @@ summary(predictions)
 #> [1] "Between-model sample SD is diagnostic, not Bayesian prior SD."
 ```
 
+## Inspect calibrated standardized coefficients
+
+Use
+[`warm_start_coefficients()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_coefficients.md)
+to inspect the fitted model weights without reconstructing a glmnet fit.
+Individual models return one row per frozen feature in schema order:
+
+``` text
+feature | retained | calibrated_std_coefficient
+```
+
+``` r
+
+coef_tbl <- warm_start_coefficients(model)
+coef_tbl
+#> # A tibble: 20 × 3
+#>    feature                                retained calibrated_std_coefficient
+#>    <chr>                                  <lgl>                         <dbl>
+#>  1 n_tokens                               TRUE                          0.260
+#>  2 proportion_unique_tokens               TRUE                          0    
+#>  3 token_length_mean                      TRUE                         -1.01 
+#>  4 token_length_std                       TRUE                          0    
+#>  5 sentence_length_mean                   TRUE                          0    
+#>  6 sentence_length_std                    TRUE                          0    
+#>  7 pos_prop_noun                          TRUE                          0    
+#>  8 pos_prop_verb                          TRUE                          0    
+#>  9 pos_prop_adj                           TRUE                          0    
+#> 10 pos_prop_adv                           TRUE                          0    
+#> 11 pos_prop_pron                          TRUE                          0    
+#> 12 pos_prop_adp                           TRUE                          0    
+#> 13 pos_prop_cconj                         TRUE                          0    
+#> 14 pos_prop_sconj                         TRUE                          0    
+#> 15 dependency_distance_mean               TRUE                          0    
+#> 16 dependency_distance_std                TRUE                          0    
+#> 17 prop_adjacent_dependency_relation_mean TRUE                          0    
+#> 18 upstream_entropy_per_token             TRUE                          0    
+#> 19 first_order_coherence                  TRUE                          0    
+#> 20 dale_chall_readability_score           TRUE                          0
+
+coef_ensemble <- warm_start_coefficients(ensemble)
+coef_ensemble
+#> # A tibble: 20 × 3
+#>    feature                         assessment_a_std_coe…¹ assessment_b_std_coe…²
+#>    <chr>                                            <dbl>                  <dbl>
+#>  1 n_tokens                                         0.260                  0.420
+#>  2 proportion_unique_tokens                         0                      0    
+#>  3 token_length_mean                               -1.01                  -0.918
+#>  4 token_length_std                                 0                      0    
+#>  5 sentence_length_mean                             0                      0    
+#>  6 sentence_length_std                              0                      0    
+#>  7 pos_prop_noun                                    0                      0    
+#>  8 pos_prop_verb                                    0                      0    
+#>  9 pos_prop_adj                                     0                      0    
+#> 10 pos_prop_adv                                     0                      0    
+#> 11 pos_prop_pron                                    0                      0    
+#> 12 pos_prop_adp                                     0                      0    
+#> 13 pos_prop_cconj                                   0                      0    
+#> 14 pos_prop_sconj                                   0                      0    
+#> 15 dependency_distance_mean                         0                      0    
+#> 16 dependency_distance_std                          0                      0    
+#> 17 prop_adjacent_dependency_relat…                  0                      0    
+#> 18 upstream_entropy_per_token                       0                      0    
+#> 19 first_order_coherence                            0                      0    
+#> 20 dale_chall_readability_score                     0                      0    
+#> # ℹ abbreviated names: ¹​assessment_a_std_coefficient,
+#> #   ²​assessment_b_std_coefficient
+```
+
+The predictors were centered and divided by their training-sample SDs,
+and the fitted target was within-task standardized BT/BTL quality. For a
+retained feature, the reported coefficient is the stored elastic-net
+coefficient multiplied by the learned OOF calibration slope. Holding the
+other included predictors fixed, it is therefore the change in
+calibrated within-task standardized prediction for a one-training-SD
+increase in that feature.
+
+`retained = FALSE` with coefficient `NA` means preprocessing removed the
+feature, so no fitted standardized coefficient exists. `retained = TRUE`
+with coefficient `0` means the feature survived preprocessing but
+elastic net assigned it zero calibrated weight at the selected alpha and
+lambda. Positive and negative signs describe fitted conditional
+direction. Correlated predictors can redistribute weight, so coefficient
+magnitude is not unique predictive importance, causal influence, or a
+share of explained variance.
+
+Ensemble output has one ordered column per component:
+
+``` text
+feature | assessment_a_std_coefficient | assessment_b_std_coefficient | ...
+```
+
+Each component used its own training distribution to standardize
+predictors; the columns do not share one raw-feature SD. Side-by-side
+values show fitted direction, magnitude, and stability across
+independently trained task models. `NA` and `0` retain their
+component-specific meanings. The table neither estimates an aggregate
+ensemble coefficient nor changes equal-weight prediction averaging. Once
+a portable model exists, this inspection needs neither Python nor
+glmnet.
+
 For a named list of models, use
 `do.call(ensemble_warm_start_models, models)`. Components must share a
 frozen schema and standardized outcome definition, and have learned

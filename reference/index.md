@@ -206,6 +206,8 @@
 - [`summary(`*`<pairwiseLLM_warm_predictions>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_predictions.md)
   [`print(`*`<pairwiseLLM_warm_predictions>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_predictions.md)
   : Inspect ensemble predictions
+- [`warm_start_coefficients()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_coefficients.md)
+  : Inspect calibrated standardized warm-start coefficients
 - [`warm_start_feature_schema()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_feature_schema.md)
   : Inspect the frozen warm-start writing feature schema
 - [`warm_start_python_status()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_python_status.md)

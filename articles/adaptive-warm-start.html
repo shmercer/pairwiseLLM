@@ -435,6 +435,94 @@ data does not establish independence.</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $sd_interpretation</span></span>
 <span><span class="co">#&gt; [1] "Between-model sample SD is diagnostic, not Bayesian prior SD."</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="inspect-calibrated-standardized-coefficients">Inspect calibrated standardized coefficients<a class="anchor" aria-label="anchor" href="#inspect-calibrated-standardized-coefficients"></a>
+</h2>
+<p>Use <code><a href="../reference/warm_start_coefficients.html">warm_start_coefficients()</a></code> to inspect the fitted
+model weights without reconstructing a glmnet fit. Individual models
+return one row per frozen feature in schema order:</p>
+<pre class="text"><code><span><span class="va">feature</span> <span class="op">|</span> <span class="va">retained</span> <span class="op">|</span> <span class="va">calibrated_std_coefficient</span></span></code></pre>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">coef_tbl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/warm_start_coefficients.html">warm_start_coefficients</a></span><span class="op">(</span><span class="va">model</span><span class="op">)</span></span>
+<span><span class="va">coef_tbl</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 20 × 3</span></span></span>
+<span><span class="co">#&gt;    feature                                retained calibrated_std_coefficient</span></span>
+<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                                  <span style="color: #949494; font-style: italic;">&lt;lgl&gt;</span>                         <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> n_tokens                               TRUE                          0.260</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> proportion_unique_tokens               TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> token_length_mean                      TRUE                         -<span style="color: #BB0000;">1.01</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> token_length_std                       TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> sentence_length_mean                   TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> sentence_length_std                    TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> pos_prop_noun                          TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> pos_prop_verb                          TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> pos_prop_adj                           TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> pos_prop_adv                           TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">11</span> pos_prop_pron                          TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">12</span> pos_prop_adp                           TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">13</span> pos_prop_cconj                         TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">14</span> pos_prop_sconj                         TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">15</span> dependency_distance_mean               TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">16</span> dependency_distance_std                TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">17</span> prop_adjacent_dependency_relation_mean TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">18</span> upstream_entropy_per_token             TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">19</span> first_order_coherence                  TRUE                          0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">20</span> dale_chall_readability_score           TRUE                          0</span></span>
+<span></span>
+<span><span class="va">coef_ensemble</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/warm_start_coefficients.html">warm_start_coefficients</a></span><span class="op">(</span><span class="va">ensemble</span><span class="op">)</span></span>
+<span><span class="va">coef_ensemble</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 20 × 3</span></span></span>
+<span><span class="co">#&gt;    feature                         assessment_a_std_coe…¹ assessment_b_std_coe…²</span></span>
+<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                                            <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>                  <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> n_tokens                                         0.260                  0.420</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> proportion_unique_tokens                         0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> token_length_mean                               -<span style="color: #BB0000;">1.01</span>                  -<span style="color: #BB0000;">0.918</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> token_length_std                                 0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> sentence_length_mean                             0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> sentence_length_std                              0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> pos_prop_noun                                    0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> pos_prop_verb                                    0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> pos_prop_adj                                     0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> pos_prop_adv                                     0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">11</span> pos_prop_pron                                    0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">12</span> pos_prop_adp                                     0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">13</span> pos_prop_cconj                                   0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">14</span> pos_prop_sconj                                   0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">15</span> dependency_distance_mean                         0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">16</span> dependency_distance_std                          0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">17</span> prop_adjacent_dependency_relat…                  0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">18</span> upstream_entropy_per_token                       0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">19</span> first_order_coherence                            0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">20</span> dale_chall_readability_score                     0                      0    </span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ abbreviated names: ¹​assessment_a_std_coefficient,</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;">#   ²​assessment_b_std_coefficient</span></span></span></code></pre></div>
+<p>The predictors were centered and divided by their training-sample
+SDs, and the fitted target was within-task standardized BT/BTL quality.
+For a retained feature, the reported coefficient is the stored
+elastic-net coefficient multiplied by the learned OOF calibration slope.
+Holding the other included predictors fixed, it is therefore the change
+in calibrated within-task standardized prediction for a one-training-SD
+increase in that feature.</p>
+<p><code>retained = FALSE</code> with coefficient <code>NA</code> means
+preprocessing removed the feature, so no fitted standardized coefficient
+exists. <code>retained = TRUE</code> with coefficient <code>0</code>
+means the feature survived preprocessing but elastic net assigned it
+zero calibrated weight at the selected alpha and lambda. Positive and
+negative signs describe fitted conditional direction. Correlated
+predictors can redistribute weight, so coefficient magnitude is not
+unique predictive importance, causal influence, or a share of explained
+variance.</p>
+<p>Ensemble output has one ordered column per component:</p>
+<pre class="text"><code><span><span class="va">feature</span> <span class="op">|</span> <span class="va">assessment_a_std_coefficient</span> <span class="op">|</span> <span class="va">assessment_b_std_coefficient</span> <span class="op">|</span> <span class="va">...</span></span></code></pre>
+<p>Each component used its own training distribution to standardize
+predictors; the columns do not share one raw-feature SD. Side-by-side
+values show fitted direction, magnitude, and stability across
+independently trained task models. <code>NA</code> and <code>0</code>
+retain their component-specific meanings. The table neither estimates an
+aggregate ensemble coefficient nor changes equal-weight prediction
+averaging. Once a portable model exists, this inspection needs neither
+Python nor glmnet.</p>
 <p>For a named list of models, use
 <code>do.call(ensemble_warm_start_models, models)</code>. Components
 must share a frozen schema and standardized outcome definition, and have
@@ -485,7 +573,7 @@ assume generic slicing updates nested metadata. For text input, ensemble
 prediction extracts once using <code>texts</code>, <code>ids</code>, and
 <code>python</code>. Single-model <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code> accepts
 precomputed features only.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Empty in this release. Future reviewed bundles use the same public prediction path.</span></span>
 <span><span class="fu"><a href="../reference/register_warm_start_model.html">list_warm_start_models</a></span><span class="op">(</span>source <span class="op">=</span> <span class="st">"bundled"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 0 × 15</span></span></span>
@@ -503,7 +591,7 @@ not authenticate a publisher.</p>
 <div class="section level2">
 <h2 id="convert-predictions-to-btl-priors-and-resume">Convert predictions to BTL priors and resume<a class="anchor" aria-label="anchor" href="#convert-predictions-to-btl-priors-and-resume"></a>
 </h2>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">prior</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_warm_start_prior.html">make_warm_start_prior</a></span><span class="op">(</span><span class="va">predictions</span>, ids <span class="op">=</span> <span class="va">features</span><span class="op">$</span><span class="va">item_id</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>item_id <span class="op">=</span> <span class="va">prior</span><span class="op">$</span><span class="va">item_id</span>, mean <span class="op">=</span> <span class="va">prior</span><span class="op">$</span><span class="va">prior_mean</span>, sd <span class="op">=</span> <span class="va">prior</span><span class="op">$</span><span class="va">prior_sd</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   item_id        mean  sd</span></span>
@@ -531,7 +619,7 @@ pooled judge refits retain their existing priors; evidence is not
 injected twice.</p>
 <p>Standalone sampling requires your installed CmdStan toolchain and is
 not run here:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/build_btl_results_data.html">build_btl_results_data</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>ID1 <span class="op">=</span> <span class="st">"1"</span>, ID2 <span class="op">=</span> <span class="st">"2"</span>, better_id <span class="op">=</span> <span class="st">"1"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_bayes_btl_mcmc.html">fit_bayes_btl_mcmc</a></span><span class="op">(</span><span class="va">results</span>, ids <span class="op">=</span> <span class="va">features</span><span class="op">$</span><span class="va">item_id</span>, warm_start_prior <span class="op">=</span> <span class="va">prior</span><span class="op">)</span></span></code></pre></div>
 <p>Instead of supplying a prior, initialize with
@@ -543,7 +631,7 @@ features, supply assessment texts and select
 resume never train. Model-specific feature/Python/SD arguments cannot
 accompany an already resolved prior. Custom fit functions must consume
 <code>state$predictive_prior</code>; their signatures are unchanged.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>  <span class="va">directory</span> <span class="op">&lt;-</span> <span class="fu">withr</span><span class="fu">::</span><span class="fu"><a href="https://withr.r-lib.org/reference/with_tempfile.html" class="external-link">local_tempdir</a></span><span class="op">(</span><span class="op">)</span></span>
 <span>  <span class="va">artifact</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">directory</span>, <span class="st">"ensemble.rds"</span><span class="op">)</span></span>
