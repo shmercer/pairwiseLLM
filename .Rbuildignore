@@ -49,3 +49,4 @@
 ^\.claude$
 ^inst/python/__pycache__$
 ^tests/testthat/fixtures/warm-start-features/__pycache__$
+^study$
