@@ -26,7 +26,7 @@
 #' independent of component formats and remains 1 after reduction.
 #' @family adaptive warm start
 #' @seealso [fit_warm_start_model()], [predict.pairwiseLLM_warm_ensemble()],
-#'   [summary.pairwiseLLM_warm_ensemble()]
+#'   [warm_start_coefficients()], [summary.pairwiseLLM_warm_ensemble()]
 #' @examples
 #' if (requireNamespace("glmnet", quietly = TRUE) &&
 #'     requireNamespace("withr", quietly = TRUE)) {

@@ -8,25 +8,38 @@
 #'   `pairwiseLLM_warm_ensemble` object.
 #' @param ... Reserved for future extensions; must be empty.
 #'
-#' @return For an individual model, a tibble with `feature`, `retained`, and
-#'   `calibrated_std_coefficient`. For an ensemble, a tibble with `feature` and
-#'   one `<component>_std_coefficient` column per component.
+#' @return For an individual model, a tibble with exactly `feature`, `retained`,
+#'   and `calibrated_std_coefficient`, in the model's frozen feature order. For
+#'   an ensemble, a tibble with `feature` followed by one
+#'   `<component>_std_coefficient` column per component, in component order.
 #'
 #' @details
 #' Predictors use each component model's fitted training medians, centers, and
-#' sample SDs. The outcome is within-task standardized BT/BTL quality. For each
-#' retained feature, the reported value is the stored elastic-net coefficient
-#' multiplied by the learned OOF calibration slope. `NA` means preprocessing
-#' removed the feature; zero means it was retained but has zero calibrated
-#' weight.
+#' sample SDs. The fitted target is within-task standardized BT/BTL quality. For
+#' each retained feature, the reported value is the stored elastic-net
+#' coefficient multiplied by the learned OOF calibration slope. Thus, holding
+#' the other included predictors fixed, it is the change in calibrated
+#' within-task standardized prediction for a one-training-SD increase in that
+#' feature.
 #'
-#' Signs describe direction conditional on the other included predictors.
-#' Correlated predictors can share or trade fitted weight, so coefficient
-#' magnitudes are not unique predictive-importance or causal-effect estimates.
-#' Ensemble coefficients are shown side by side; they neither define an
-#' aggregate coefficient nor change equal prediction weighting. Inspection from
-#' an existing artifact needs neither Python nor glmnet.
+#' `retained = FALSE` with an `NA` coefficient means preprocessing removed the
+#' feature and no fitted standardized coefficient exists. `retained = TRUE`
+#' with coefficient zero means the feature survived preprocessing but elastic
+#' net assigned it zero calibrated weight at the selected alpha and lambda.
 #'
+#' Positive and negative signs describe fitted direction conditional on the
+#' other included predictors. Correlated predictors can share or trade fitted
+#' weight, so coefficient magnitude is not a unique measure of predictive
+#' importance, causal influence, or explained variance.
+#'
+#' Ensemble columns show component coefficients side by side. Each component
+#' standardized predictors using its own training distribution, so columns do
+#' not imply one common raw-feature SD. The table exposes fitted direction,
+#' magnitude, and stability across task models; it neither defines an aggregate
+#' coefficient nor changes equal prediction weighting. Inspection from an
+#' existing portable artifact needs neither Python nor glmnet.
+#'
+#' @family adaptive warm start
 #' @seealso [fit_warm_start_model()], [ensemble_warm_start_models()],
 #'   [predict.pairwiseLLM_warm_model()]
 #' @examples

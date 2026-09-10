@@ -98,6 +98,7 @@ Other adaptive warm start:
 \code{\link[=register_warm_start_model]{register_warm_start_model()}},
 \code{\link[=summary.pairwiseLLM_warm_ensemble]{summary.pairwiseLLM_warm_ensemble()}},
 \code{\link[=summary.pairwiseLLM_warm_predictions]{summary.pairwiseLLM_warm_predictions()}},
+\code{\link[=warm_start_coefficients]{warm_start_coefficients()}},
 \code{\link[=warm_start_feature_schema]{warm_start_feature_schema()}},
 \code{\link[=warm_start_python_status]{warm_start_python_status()}}
 }

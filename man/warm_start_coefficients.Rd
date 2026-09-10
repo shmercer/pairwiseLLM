@@ -19,9 +19,10 @@ warm_start_coefficients(object, ...)
 \item{...}{Reserved for future extensions; must be empty.}
 }
 \value{
-For an individual model, a tibble with \code{feature}, \code{retained}, and
-\code{calibrated_std_coefficient}. For an ensemble, a tibble with \code{feature} and
-one \verb{<component>_std_coefficient} column per component.
+For an individual model, a tibble with exactly \code{feature}, \code{retained},
+and \code{calibrated_std_coefficient}, in the model's frozen feature order. For
+an ensemble, a tibble with \code{feature} followed by one
+\verb{<component>_std_coefficient} column per component, in component order.
 }
 \description{
 \code{warm_start_coefficients()} reports the fitted elastic-net coefficients after
@@ -30,18 +31,29 @@ calibrated warm-start models and equal-weight warm-start ensembles.
 }
 \details{
 Predictors use each component model's fitted training medians, centers, and
-sample SDs. The outcome is within-task standardized BT/BTL quality. For each
-retained feature, the reported value is the stored elastic-net coefficient
-multiplied by the learned OOF calibration slope. \code{NA} means preprocessing
-removed the feature; zero means it was retained but has zero calibrated
-weight.
+sample SDs. The fitted target is within-task standardized BT/BTL quality. For
+each retained feature, the reported value is the stored elastic-net
+coefficient multiplied by the learned OOF calibration slope. Thus, holding
+the other included predictors fixed, it is the change in calibrated
+within-task standardized prediction for a one-training-SD increase in that
+feature.
 
-Signs describe direction conditional on the other included predictors.
-Correlated predictors can share or trade fitted weight, so coefficient
-magnitudes are not unique predictive-importance or causal-effect estimates.
-Ensemble coefficients are shown side by side; they neither define an
-aggregate coefficient nor change equal prediction weighting. Inspection from
-an existing artifact needs neither Python nor glmnet.
+\code{retained = FALSE} with an \code{NA} coefficient means preprocessing removed the
+feature and no fitted standardized coefficient exists. \code{retained = TRUE}
+with coefficient zero means the feature survived preprocessing but elastic
+net assigned it zero calibrated weight at the selected alpha and lambda.
+
+Positive and negative signs describe fitted direction conditional on the
+other included predictors. Correlated predictors can share or trade fitted
+weight, so coefficient magnitude is not a unique measure of predictive
+importance, causal influence, or explained variance.
+
+Ensemble columns show component coefficients side by side. Each component
+standardized predictors using its own training distribution, so columns do
+not imply one common raw-feature SD. The table exposes fitted direction,
+magnitude, and stability across task models; it neither defines an aggregate
+coefficient nor changes equal prediction weighting. Inspection from an
+existing portable artifact needs neither Python nor glmnet.
 }
 \examples{
 if (requireNamespace("glmnet", quietly = TRUE) &&
@@ -67,4 +79,21 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 \seealso{
 \code{\link[=fit_warm_start_model]{fit_warm_start_model()}}, \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}},
 \code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}}
+
+Other adaptive warm start:
+\code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}},
+\code{\link[=extract_warm_start_features]{extract_warm_start_features()}},
+\code{\link[=fit_warm_start_model]{fit_warm_start_model()}},
+\code{\link[=make_warm_start_prior]{make_warm_start_prior()}},
+\code{\link{pairwiseLLM_warm_model}},
+\code{\link[=predict.pairwiseLLM_warm_ensemble]{predict.pairwiseLLM_warm_ensemble()}},
+\code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}},
+\code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}},
+\code{\link[=register_warm_start_model]{register_warm_start_model()}},
+\code{\link[=save_warm_start_model]{save_warm_start_model()}},
+\code{\link[=summary.pairwiseLLM_warm_ensemble]{summary.pairwiseLLM_warm_ensemble()}},
+\code{\link[=summary.pairwiseLLM_warm_predictions]{summary.pairwiseLLM_warm_predictions()}},
+\code{\link[=warm_start_feature_schema]{warm_start_feature_schema()}},
+\code{\link[=warm_start_python_status]{warm_start_python_status()}}
 }
+\concept{adaptive warm start}

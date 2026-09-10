@@ -113,7 +113,7 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 }
 \seealso{
 \code{\link[=fit_warm_start_model]{fit_warm_start_model()}}, \code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}},
-\code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}}
+\code{\link[=warm_start_coefficients]{warm_start_coefficients()}}, \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}}
 
 Other adaptive warm start:
 \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}},
@@ -127,6 +127,7 @@ Other adaptive warm start:
 \code{\link[=save_warm_start_model]{save_warm_start_model()}},
 \code{\link[=summary.pairwiseLLM_warm_ensemble]{summary.pairwiseLLM_warm_ensemble()}},
 \code{\link[=summary.pairwiseLLM_warm_predictions]{summary.pairwiseLLM_warm_predictions()}},
+\code{\link[=warm_start_coefficients]{warm_start_coefficients()}},
 \code{\link[=warm_start_feature_schema]{warm_start_feature_schema()}},
 \code{\link[=warm_start_python_status]{warm_start_python_status()}}
 }
