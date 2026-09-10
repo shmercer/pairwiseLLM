@@ -743,10 +743,10 @@ head(out$logs$step_log)
 #> # A tibble: 4 × 97
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-09-09 20:00:12       1     1     4 S01   S04       4     1 S04  
-#> 2       2 2026-09-09 20:00:12       2     4     8 S04   S08       8     4 S08  
-#> 3       3 2026-09-09 20:00:12       3     8     2 S08   S02       2     8 S02  
-#> 4       4 2026-09-09 20:00:12       4     2     6 S02   S06       6     2 S06  
+#> 1       1 2026-09-10 00:21:18       1     1     4 S01   S04       4     1 S04  
+#> 2       2 2026-09-10 00:21:18       2     4     8 S04   S08       8     4 S08  
+#> 3       3 2026-09-10 00:21:18       3     8     2 S08   S02       2     8 S02  
+#> 4       4 2026-09-10 00:21:18       4     2     6 S02   S06       6     2 S06  
 #> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,
