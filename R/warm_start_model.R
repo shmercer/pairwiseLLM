@@ -68,7 +68,7 @@
 #'   calibration status and stored nested-validation metrics when available.
 #' @family adaptive warm start
 #' @seealso [fit_warm_start_model()], [predict.pairwiseLLM_warm_model()],
-#'   [prepare_warm_start_model()]
+#'   [warm_start_coefficients()], [prepare_warm_start_model()]
 #' @examples
 #' if (requireNamespace("glmnet", quietly = TRUE) &&
 #'     requireNamespace("withr", quietly = TRUE)) {

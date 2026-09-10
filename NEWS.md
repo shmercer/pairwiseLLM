@@ -14,6 +14,9 @@
   Python is optional for extraction; precomputed prediction needs
   neither Python nor glmnet. Real bundled predictors remain deferred;
   no default model ships.
+* Added `warm_start_coefficients()` for inspecting calibrated standardized
+  elastic-net coefficients from individual models and ensemble components,
+  preserving the distinction between preprocessing removal and shrinkage to zero.
 
 # pairwiseLLM 1.3.1
 

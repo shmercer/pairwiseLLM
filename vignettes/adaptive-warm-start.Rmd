@@ -200,6 +200,52 @@ predictions
 summary(predictions)
 ```
 
+## Inspect calibrated standardized coefficients
+
+Use `warm_start_coefficients()` to inspect the fitted model weights without
+reconstructing a glmnet fit. Individual models return one row per frozen feature in
+schema order:
+
+```text
+feature | retained | calibrated_std_coefficient
+```
+
+```{r coefficients, eval=requireNamespace("glmnet", quietly=TRUE) && requireNamespace("withr", quietly=TRUE)}
+coef_tbl <- warm_start_coefficients(model)
+coef_tbl
+
+coef_ensemble <- warm_start_coefficients(ensemble)
+coef_ensemble
+```
+
+The predictors were centered and divided by their training-sample SDs, and the
+fitted target was within-task standardized BT/BTL quality. For a retained feature,
+the reported coefficient is the stored elastic-net coefficient multiplied by the
+learned OOF calibration slope. Holding the other included predictors fixed, it is
+therefore the change in calibrated within-task standardized prediction for a
+one-training-SD increase in that feature.
+
+`retained = FALSE` with coefficient `NA` means preprocessing removed the feature,
+so no fitted standardized coefficient exists. `retained = TRUE` with coefficient
+`0` means the feature survived preprocessing but elastic net assigned it zero
+calibrated weight at the selected alpha and lambda. Positive and negative signs
+describe fitted conditional direction. Correlated predictors can redistribute
+weight, so coefficient magnitude is not unique predictive importance, causal
+influence, or a share of explained variance.
+
+Ensemble output has one ordered column per component:
+
+```text
+feature | assessment_a_std_coefficient | assessment_b_std_coefficient | ...
+```
+
+Each component used its own training distribution to standardize predictors; the
+columns do not share one raw-feature SD. Side-by-side values show fitted direction,
+magnitude, and stability across independently trained task models. `NA` and `0`
+retain their component-specific meanings. The table neither estimates an aggregate
+ensemble coefficient nor changes equal-weight prediction averaging. Once a
+portable model exists, this inspection needs neither Python nor glmnet.
+
 For a named list of models, use `do.call(ensemble_warm_start_models, models)`.
 Components must share a frozen schema and standardized outcome definition, and have
 learned calibration. Different preprocessing and full/reduced audit formats are
