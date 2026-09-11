@@ -30,6 +30,7 @@ inst/stan/link_transform_refit
 /prompts/
 .positai
 /study/
+/data-raw/studies/ellipse-adaptive/
 /.posit/
 
 # Generated optional warm-start Python bytecode
