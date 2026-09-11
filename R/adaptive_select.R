@@ -2195,33 +2195,42 @@ adaptive_defaults <- function(N) {
     candidates <- candidates[has_order, , drop = FALSE]
   }
 
+  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
+  link_phase_b <- .adaptive_link_mode_active(controller) &&
+    identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")
   gate_active <- identical(generation_stage, "long_link") && isTRUE(controller$global_identified)
   if (isTRUE(gate_active) && nrow(candidates) > 0L) {
     p_long_low <- as.double(controller$p_long_low)
     p_long_high <- as.double(controller$p_long_high)
-    posterior_available <- isTRUE(.adaptive_long_link_gate_has_posterior(state))
-    if (isTRUE(posterior_available)) {
-      p_gate <- .adaptive_long_link_gate_posterior_prob_vec(
-        state = state,
-        i_id = as.character(candidates$i),
-        j_id = as.character(candidates$j)
-      )
-    } else {
-      p_gate <- as.double(candidates$p)
-    }
-    if (any(!is.finite(p_gate))) {
-      posterior_available <- FALSE
-      p_gate <- as.double(candidates$p)
-    }
-    keep <- p_gate >= p_long_low & p_gate <= p_long_high
-    if (isTRUE(posterior_available)) {
-      long_gate_reason <- if (any(keep)) "posterior_inside_gate" else "posterior_extreme"
-    } else {
-      long_gate_reason <- if (any(keep)) {
-        "posterior_unavailable_fallback"
+    if (isTRUE(link_phase_b)) {
+      posterior_available <- isTRUE(.adaptive_long_link_gate_has_posterior(state))
+      if (isTRUE(posterior_available)) {
+        p_gate <- .adaptive_long_link_gate_posterior_prob_vec(
+          state = state,
+          i_id = as.character(candidates$i),
+          j_id = as.character(candidates$j)
+        )
       } else {
-        "posterior_unavailable_fallback_trueskill_extreme"
+        p_gate <- as.double(candidates$p)
       }
+      if (any(!is.finite(p_gate))) {
+        posterior_available <- FALSE
+        p_gate <- as.double(candidates$p)
+      }
+      keep <- p_gate >= p_long_low & p_gate <= p_long_high
+      if (isTRUE(posterior_available)) {
+        long_gate_reason <- if (any(keep)) "posterior_inside_gate" else "posterior_extreme"
+      } else {
+        long_gate_reason <- if (any(keep)) {
+          "posterior_unavailable_fallback"
+        } else {
+          "posterior_unavailable_fallback_trueskill_extreme"
+        }
+      }
+    } else {
+      p_gate <- as.double(candidates$p)
+      keep <- p_gate >= p_long_low & p_gate <= p_long_high
+      long_gate_reason <- if (any(keep)) "trueskill_inside_gate" else "trueskill_extreme"
     }
     long_gate_pass <- any(keep)
     candidates <- candidates[keep, , drop = FALSE]
@@ -2231,9 +2240,6 @@ adaptive_defaults <- function(N) {
   cap_count <- ceiling(config$cap_frac * config$W_cap)
   recent_deg <- .adaptive_history_state_recent_deg(history_state, ids, config$W_cap)
   allow_repeats <- identical(stage$dup_policy, "relaxed")
-  phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
-  link_phase_b <- .adaptive_link_mode_active(controller) &&
-    identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")
   dup_max_obs_active <- if (isTRUE(link_phase_b)) 1L else config$dup_max_obs
   dup_max_obs_relaxed_active <- if (isTRUE(link_phase_b)) 1L else config$dup_max_obs_relaxed
 

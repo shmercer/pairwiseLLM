@@ -1128,8 +1128,8 @@ test_that("adaptive selector branch guards and validation errors are exercised",
     .package = "pairwiseLLM"
   )
   expect_true(out_gate$long_gate_reason %in% c(
-    "posterior_unavailable_fallback",
-    "posterior_unavailable_fallback_trueskill_extreme"
+    "trueskill_inside_gate",
+    "trueskill_extreme"
   ))
 
   lp <- pairwiseLLM:::.adaptive_local_priority_select(tibble::tibble(), state, state$round, 0L, 1L, defaults)

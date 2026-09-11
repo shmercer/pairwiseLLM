@@ -198,18 +198,55 @@ test_that("rolling anchors refresh deterministically from trueskill", {
   expect_equal(state_1$round$anchor_refresh_source, "trueskill_mu")
 
   state_1$btl_fit <- list(
-    theta_mean = stats::setNames(seq(10, 1), as.character(items$item_id))
+    theta_mean = stats::setNames(seq(1, 10), as.character(items$item_id))
   )
   state_1$refit_meta$last_refit_round_id <- 1L
   state_2 <- pairwiseLLM:::.adaptive_refresh_round_anchors(state_1)
 
-  expect_equal(state_2$round$anchor_refresh_source, "btl_theta_eap")
+  expect_equal(state_2$round$anchor_refresh_source, "trueskill_mu")
   expect_identical(state_2$round$anchor_ids, anchors_1)
   expect_equal(state_2$round$anchor_refit_round_id, 1L)
 
   state_3 <- pairwiseLLM:::.adaptive_refresh_round_anchors(state_2)
   expect_identical(state_3$round$anchor_ids, state_2$round$anchor_ids)
   expect_equal(state_3$round$anchor_refit_round_id, 1L)
+})
+
+test_that("linking anchor refresh changes source only in Phase A", {
+  items <- tibble::tibble(item_id = 1:10, set_id = rep(1:2, each = 5L))
+  trueskill_state <- make_test_trueskill_state(items, mu = seq(10, 1))
+  state <- make_test_state(items, trueskill_state)
+  state$controller <- pairwiseLLM:::.adaptive_controller_defaults(length(state$item_ids))
+  state$controller$run_mode <- "link_one_spoke"
+  state$controller$hub_id <- 1L
+  state$btl_fit <- list(
+    theta_mean = stats::setNames(seq(1, 10), as.character(items$item_id))
+  )
+  state$refit_meta$last_refit_round_id <- 1L
+
+  state$linking$phase_a$phase <- "phase_a"
+  phase_a <- pairwiseLLM:::.adaptive_refresh_round_anchors(state)
+  ts_scores <- stats::setNames(seq(10, 1), as.character(items$item_id))
+  expect_identical(phase_a$round$anchor_refresh_source, "trueskill_mu")
+  expect_identical(
+    phase_a$round$anchor_ids,
+    pairwiseLLM:::.adaptive_select_rolling_anchors(
+      ts_scores,
+      pairwiseLLM:::adaptive_defaults(10L)
+    )
+  )
+
+  state$linking$phase_a$phase <- "phase_b"
+  phase_b <- pairwiseLLM:::.adaptive_refresh_round_anchors(state)
+  btl_scores <- stats::setNames(seq(1, 10), as.character(items$item_id))
+  expect_identical(phase_b$round$anchor_refresh_source, "btl_theta_eap")
+  expect_identical(
+    phase_b$round$anchor_ids,
+    pairwiseLLM:::.adaptive_select_rolling_anchors(
+      btl_scores,
+      pairwiseLLM:::adaptive_defaults(10L)
+    )
+  )
 })
 
 test_that("rank proxy falls back to trueskill when BTL theta is incomplete", {

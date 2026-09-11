@@ -167,7 +167,11 @@
     return(out)
   }
 
-  proxy <- .adaptive_rank_proxy(out, prefer_btl = TRUE)
+  controller <- .adaptive_controller_resolve(out)
+  phase_ctx <- .adaptive_link_phase_context(out, controller = controller)
+  link_phase_b <- .adaptive_link_mode_active(controller) &&
+    identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")
+  proxy <- .adaptive_rank_proxy(out, prefer_btl = link_phase_b)
   anchors <- .adaptive_select_rolling_anchors(proxy$scores, defaults)
   out$round$anchor_ids <- as.character(anchors)
   out$round$anchor_refresh_source <- as.character(proxy$source)

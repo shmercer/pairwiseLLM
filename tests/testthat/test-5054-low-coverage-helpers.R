@@ -1504,7 +1504,7 @@ test_that("low-coverage holdout commit, selector fallback, CmdStan wrapper, and 
     ),
     .package = "pairwiseLLM"
   )
-  expect_identical(long_fallback$long_gate_reason, "posterior_unavailable_fallback")
+  expect_identical(long_fallback$long_gate_reason, "trueskill_inside_gate")
 
   fake_fit <- list(
     draws = function(variables, format) matrix(1:4, nrow = 2L),
