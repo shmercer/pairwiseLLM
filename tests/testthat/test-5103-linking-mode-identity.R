@@ -31,6 +31,41 @@ phase_identity_link <- function(state, artifacts = list(), mode = "import") {
   ))
 }
 
+test_that("Phase A identity distinguishes the study ceiling and retains explicit imports", {
+  ordinary <- phase_identity_state()
+  study <- pairwiseLLM:::.adaptive_apply_controller_config(ordinary, list(dup_max_obs_relaxed = 2L))
+  surface <- pairwiseLLM:::.adaptive_phase_a_required_config_surface(study, 1L)
+  expect_identical(surface$dup_max_obs_relaxed, 2L)
+  expect_null(pairwiseLLM:::.adaptive_phase_a_required_config_surface(ordinary, 1L)$dup_max_obs_relaxed)
+  ordinary_artifact <- phase_identity_artifacts(ordinary)[[1L]]
+  study_artifact <- phase_identity_artifacts(study)[[1L]]
+  expect_false(identical(ordinary_artifact$fit_config_hash, study_artifact$fit_config_hash))
+  validate <- function(artifact, state, source = "run") {
+    pairwiseLLM:::.adaptive_phase_a_validate_imported_artifact(
+      artifact, state, 1L, state$controller, source = source)
+  }
+  expect_identical(validate(study_artifact, study), study_artifact)
+  expect_error(validate(ordinary_artifact, study), "relaxed duplicate ceiling")
+  expect_error(validate(study_artifact, ordinary), "relaxed duplicate ceiling")
+  expect_identical(validate(study_artifact, ordinary, "import"), study_artifact)
+  expect_identical(validate(ordinary_artifact, study, "import"), ordinary_artifact)
+  for (bad in list(NA, 2.5, "2", c(2, 3))) {
+    malformed <- study_artifact
+    malformed$fit_config_surface$dup_max_obs_relaxed <- bad
+    expect_error(validate(malformed, study), "dup_max_obs_relaxed")
+  }
+  context <- function(state, source) {
+    pairwiseLLM:::.adaptive_phase_a_prepare_context_hash(
+      state, 1L, source, state$controller, import_artifact = ordinary_artifact)
+  }
+  expect_identical(context(ordinary, "import"), context(study, "import"))
+  expect_false(identical(context(ordinary, "run"), context(study, "run")))
+  linked <- phase_identity_link(study, phase_identity_artifacts(ordinary))
+  prepared <- pairwiseLLM:::.adaptive_phase_a_prepare(linked)
+  expect_true(all(prepared$linking$phase_a$set_status$status == "ready"))
+  expect_identical(prepared$linking$phase_a$phase, "phase_b")
+})
+
 test_that("Phase A generation hashes distinguish warm destinations and pairing policies", {
   modes <- c("cold", "btl_only", "trueskill_only", "both")
   strategies <- c("hybrid", "random", "trueskill_p50", "trueskill_pollitt")

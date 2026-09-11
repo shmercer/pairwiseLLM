@@ -275,9 +275,19 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_relaxed_duplicate_limit <- function(value) {
+  if (is.null(value)) return(3L)
+  if (!is.numeric(value) || length(value) != 1L || !is.null(dim(value)) ||
+    is.na(value) || !value %in% c(2, 3)) {
+    rlang::abort("`adaptive_config$dup_max_obs_relaxed` must be a single integer: 2 or 3.")
+  }
+  as.integer(value)
+}
+
 .adaptive_controller_normalize_legacy_fields <- function(controller, n_items) {
   out <- controller %||% list()
   defaults <- .adaptive_controller_defaults(n_items)
+  out$dup_max_obs_relaxed <- .adaptive_relaxed_duplicate_limit(out$dup_max_obs_relaxed)
   out$link_estimation_mode <- .adaptive_normalize_link_estimation_mode(
     out$link_estimation_mode %||% defaults$link_estimation_mode
   )
@@ -520,6 +530,7 @@
   list(
     global_identified = FALSE,
     pairing_strategy = "hybrid",
+    dup_max_obs_relaxed = defaults$dup_max_obs_relaxed,
     global_identified_reliability_min = as.double(defaults$global_identified_reliability_min),
     global_identified_rank_corr_min = as.double(defaults$global_identified_rank_corr_min),
     p_long_low = as.double(defaults$p_long_low),
@@ -674,6 +685,7 @@
 .adaptive_controller_public_keys <- function() {
   c(
     "pairing_strategy",
+    "dup_max_obs_relaxed",
     "global_identified_reliability_min",
     "global_identified_rank_corr_min",
     "p_long_low",
@@ -941,6 +953,9 @@
   }
 
   out$global_identified_reliability_min <- read_double("global_identified_reliability_min", 0, 1)
+  if (!is.null(out$dup_max_obs_relaxed)) {
+    out$dup_max_obs_relaxed <- .adaptive_relaxed_duplicate_limit(out$dup_max_obs_relaxed)
+  }
   out$global_identified_rank_corr_min <- read_double("global_identified_rank_corr_min", 0, 1)
   out$p_long_low <- read_double("p_long_low", 0, 1)
   out$p_long_high <- read_double("p_long_high", 0, 1)

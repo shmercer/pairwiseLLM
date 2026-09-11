@@ -2618,6 +2618,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     }
   }
   defaults <- adaptive_defaults(effective_n)
+  defaults$dup_max_obs_relaxed <- controller_full$dup_max_obs_relaxed
   controller <- .adaptive_resolve_controller(state, defaults)
   # Use the full controller for linking predictive utility paths, which need
   # transform and judge-mode fields not carried by the reduced selector view.

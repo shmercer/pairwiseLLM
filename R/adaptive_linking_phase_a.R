@@ -229,7 +229,8 @@
                                                    model_variant,
                                                    predictive_prior_digest = NULL,
                                                    warm_start_mode = NULL,
-                                                   pairing_strategy = NULL) {
+                                                   pairing_strategy = NULL,
+                                                   dup_max_obs_relaxed = 3L) {
   judge_param_mode <- as.character(judge_param_mode %||% "global_shared")
   model_variant <- normalize_model_variant(model_variant %||% "btl_e_b")
 
@@ -251,6 +252,10 @@
   if (!is.null(predictive_prior_digest)) out$predictive_prior_digest <- predictive_prior_digest
   if (warm_start_mode != "cold") out$warm_start_mode <- warm_start_mode
   if (pairing_strategy != "hybrid") out$pairing_strategy <- pairing_strategy
+  dup_max_obs_relaxed <- .adaptive_relaxed_duplicate_limit(dup_max_obs_relaxed)
+  if (dup_max_obs_relaxed != 3L) {
+    out$dup_max_obs_relaxed <- dup_max_obs_relaxed
+  }
   out
 }
 
@@ -263,7 +268,8 @@
     model_variant = btl_config$model_variant %||% fit$model_variant %||% "btl_e_b",
     predictive_prior_digest = .warm_start_phase_a_identity(state, set_id),
     warm_start_mode = state$meta$warm_start_mode,
-    pairing_strategy = .adaptive_pairing_strategy(controller)
+    pairing_strategy = .adaptive_pairing_strategy(controller),
+    dup_max_obs_relaxed = controller$dup_max_obs_relaxed
   )
 }
 
@@ -561,7 +567,8 @@
   if (identical(requested_source, "import")) {
     # Explicit imports retain their own generation identity. New predictions
     # only govern sets run in this session, and cannot invalidate imported work.
-    required_surface[c("predictive_prior_digest", "warm_start_mode", "pairing_strategy")] <- NULL
+    required_surface[c("predictive_prior_digest", "warm_start_mode", "pairing_strategy",
+      "dup_max_obs_relaxed")] <- NULL
   }
 
   context <- list(
@@ -630,7 +637,8 @@
       "btl_e_b",
     predictive_prior_digest = artifact_surface$predictive_prior_digest %||% NULL,
     warm_start_mode = artifact_surface$warm_start_mode,
-    pairing_strategy = artifact_surface$pairing_strategy
+    pairing_strategy = artifact_surface$pairing_strategy,
+    dup_max_obs_relaxed = artifact_surface$dup_max_obs_relaxed
   )
 }
 
@@ -1780,7 +1788,8 @@
       model_variant = required_surface$model_variant,
       predictive_prior_digest = artifact_surface$predictive_prior_digest,
       warm_start_mode = artifact_surface$warm_start_mode,
-      pairing_strategy = artifact_surface$pairing_strategy
+      pairing_strategy = artifact_surface$pairing_strategy,
+      dup_max_obs_relaxed = artifact_surface$dup_max_obs_relaxed
     )
   }
   if (!identical(artifact_surface$predictive_prior_digest, required_surface$predictive_prior_digest)) {
@@ -1791,6 +1800,9 @@
   }
   if (!identical(artifact_surface$pairing_strategy, required_surface$pairing_strategy)) {
     rlang::abort("Phase A artifact pairing strategy configuration mismatch.")
+  }
+  if (!identical(artifact_surface$dup_max_obs_relaxed, required_surface$dup_max_obs_relaxed)) {
+    rlang::abort("Phase A artifact relaxed duplicate ceiling configuration mismatch.")
   }
   fit_model_id <- artifact$fit_model_id %||% NULL
   if (!is.null(fit_model_id)) {

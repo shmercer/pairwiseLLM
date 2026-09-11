@@ -117,6 +117,12 @@ for presented A over B. Target distance is symmetric under reversal and is
 NA for random pairing. BTL estimation, refit cadence, and stopping remain
 unchanged. On resume, omit this field or supply the saved strategy; changing
 strategy requires a new session.}
+\item{\code{dup_max_obs_relaxed}}{Hybrid's maximum observations per unordered pair
+under the relaxed near-tie fallback: \code{3L} (historical default) or \code{2L}.
+Use \code{2L} with \code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}} to cap study evidence at the
+two collected orientations. The ordinary ceiling remains two; direct
+strategies already cap at two. Phase B retains its existing ceiling.
+This setting persists with the controller and defaults to three for legacy sessions.}
 \item{\code{global_identified_reliability_min}}{Global EAP reliability threshold
 used to mark the run as globally identified after a refit. Default is
 \code{0.80}.}
