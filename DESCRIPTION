@@ -76,6 +76,7 @@ Collate:
     'adaptive_linking_calibration.R'
     'adaptive_linking_phase_a.R'
     'adaptive_logs.R'
+    'adaptive_pairing_strategy.R'
     'adaptive_persist.R'
     'adaptive_print.R'
     'adaptive_rank.R'

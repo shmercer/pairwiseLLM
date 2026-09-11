@@ -2630,6 +2630,13 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   }
   seed_base <- as.integer(state$meta$seed %||% 1L)
   round <- state$round %||% list()
+  strategy <- .adaptive_pairing_strategy(controller_full)
+  if (strategy != "hybrid") {
+    if (.adaptive_warm_start_active(state)) {
+      return(.adaptive_warm_start_selection(state, step_id))
+    }
+    return(.adaptive_select_direct(state, strategy, history_state, counts, defaults))
+  }
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   link_phase_b <- .adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")
   link_phase_b_concurrent <- isTRUE(link_phase_b) &&

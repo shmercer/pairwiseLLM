@@ -40,6 +40,9 @@ Default is \code{FALSE}.}
 for timestamps.}
 
 \item{adaptive_config}{Optional named list of adaptive controller overrides.
+\code{pairing_strategy} defaults to \code{hybrid}; \code{random}, \code{trueskill_p50}, and
+\code{trueskill_pollitt} select direct pairs after the common connected shuffled
+bootstrap and currently require \code{run_mode = "within_set"}.
 Unknown fields and invalid values abort with an actionable error. See
 \code{\link[=adaptive_rank]{adaptive_rank()}} for the full list of supported keys, detailed semantics,
 and defaults.}

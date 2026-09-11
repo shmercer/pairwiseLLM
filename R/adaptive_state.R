@@ -519,6 +519,7 @@
   defaults <- adaptive_defaults(n_items)
   list(
     global_identified = FALSE,
+    pairing_strategy = "hybrid",
     global_identified_reliability_min = as.double(defaults$global_identified_reliability_min),
     global_identified_rank_corr_min = as.double(defaults$global_identified_rank_corr_min),
     p_long_low = as.double(defaults$p_long_low),
@@ -672,6 +673,7 @@
 #' @noRd
 .adaptive_controller_public_keys <- function() {
   c(
+    "pairing_strategy",
     "global_identified_reliability_min",
     "global_identified_rank_corr_min",
     "p_long_low",
@@ -952,6 +954,9 @@
   out$p_star_override_margin <- read_double("p_star_override_margin", 0, 0.5)
   out$star_override_budget_per_round <- read_integer("star_override_budget_per_round", 0L, Inf)
   out$run_mode <- read_choice("run_mode", c("within_set", "link_one_spoke", "link_multi_spoke"))
+  if ("pairing_strategy" %in% names(out)) {
+    out$pairing_strategy <- .adaptive_pairing_strategy(out)
+  }
   out$hub_id <- read_integer("hub_id", 1L, Inf)
   out$link_estimation_mode <- read_choice(
     "link_estimation_mode",
@@ -1323,6 +1328,19 @@
   }
   controller <- .adaptive_controller_resolve(out)
   phase_ctx <- .adaptive_link_phase_context(out, controller = controller)
+  if (.adaptive_pairing_strategy(controller) != "hybrid") {
+    round$stage_order <- character()
+    round$stage_quotas <- round$stage_committed <- round$stage_shortfalls <- integer()
+    out$round <- round
+    return(out)
+  }
+  if (identical(round$stage_order, character())) {
+    out$round <- .adaptive_new_round_state(out$item_ids,
+      round_id = as.integer(round$round_id + 1L),
+      staged_active = isTRUE(round$staged_active), controller = controller)
+    out$round$committed_total <- round$committed_total
+    return(out)
+  }
   controller_for_quota <- controller
   controller_for_quota$link_phase <- as.character(phase_ctx$phase %||% "phase_a")
   round$star_override_budget_per_round <- as.integer(controller$star_override_budget_per_round)
@@ -1925,12 +1943,13 @@
     }
   }
   defaults <- adaptive_defaults(effective_n)
-  stage_order <- .adaptive_stage_order()
+  direct <- .adaptive_pairing_strategy(controller) != "hybrid"
+  stage_order <- if (direct) character() else .adaptive_stage_order()
   quota_controller <- controller
   if (mode %in% c("link_one_spoke", "link_multi_spoke") && !identical(phase, "phase_b")) {
     quota_controller$run_mode <- "within_set"
   }
-  stage_quotas <- .adaptive_round_compute_quotas(
+  stage_quotas <- if (direct) integer() else .adaptive_round_compute_quotas(
     round_id = round_id,
     n_items = effective_n,
     controller = quota_controller

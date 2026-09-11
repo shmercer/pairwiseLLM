@@ -898,6 +898,23 @@ make_adaptive_judge_llm <- function(
 #'
 #'   Supported keys (with defaults) include:
 #'   \describe{
+#'   \item{`pairing_strategy`}{Post-bootstrap strategy: `hybrid` (default), `random`,
+#'     `trueskill_p50`, or `trueskill_pollitt`. Direct strategies currently require
+#'     `run_mode = "within_set"`. All strategies retain the same connected shuffled
+#'     bootstrap. Direct strategies choose a focal item uniformly from sorted IDs
+#'     at minimum committed degree, using the run seed and committed count; invalid
+#'     judgments retry the same draw. Among legal partners, `random` chooses uniformly,
+#'     `trueskill_p50` minimizes distance to TrueSkill probability 0.50, and
+#'     `trueskill_pollitt` minimizes distance to 1/3 or 2/3, with item-ID tie breaking.
+#'     Pollitt is inspired by the earlier BTL policy, not an exact replication.
+#'     Direct strategies allow at most two observations per unordered pair, with
+#'     canonical presentation balancing and reversal on repeat. They stop on focal
+#'     partner exhaustion and do not use hybrid stage quotas or coverage overrides.
+#'     Step logs identify `direct_pairing`, `pairing_strategy`, and `target_distance`;
+#'     `i_id` is the focal item and `p_ij` is the pre-judgment TrueSkill probability
+#'     for presented A over B. Target distance is symmetric under reversal and is
+#'     NA for random pairing. BTL estimation, refit cadence, and stopping remain
+#'     unchanged.}
 #'   \item{`global_identified_reliability_min`}{Global EAP reliability threshold
 #'     used to mark the run as globally identified after a refit. Default is
 #'     `0.80`.}

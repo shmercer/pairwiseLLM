@@ -33,6 +33,8 @@ schema_step_log <- c(
   round_id = "integer",
   round_stage = "character",
   pair_type = "character",
+  pairing_strategy = "character",
+  target_distance = "double",
   used_in_round_i = "integer",
   used_in_round_j = "integer",
   is_anchor_i = "logical",

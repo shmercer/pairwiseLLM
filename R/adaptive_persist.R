@@ -150,6 +150,18 @@ read_log <- function(path) {
     )
   }
   if (identical(name, "step_log")) {
+    strategy_fields <- c("pairing_strategy", "target_distance")
+    missing_strategy_fields <- !all(strategy_fields %in% names(out))
+    if (!"pairing_strategy" %in% names(out)) {
+      out$pairing_strategy <- rep("hybrid", nrow(out))
+    }
+    if (!"target_distance" %in% names(out)) {
+      out$target_distance <- rep(NA_real_, nrow(out))
+    }
+    if (missing_strategy_fields && "pair_type" %in% names(out)) {
+      old_names <- setdiff(names(out), strategy_fields)
+      out <- out[, append(old_names, strategy_fields, after = match("pair_type", old_names))]
+    }
     if ("posterior_win_prob_pre" %in% names(out) && !"posterior_win_prob_ij_pre" %in% names(out)) {
       out$posterior_win_prob_ij_pre <- out$posterior_win_prob_pre
     }

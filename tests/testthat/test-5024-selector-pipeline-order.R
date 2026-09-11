@@ -35,7 +35,7 @@ test_that("selector stage scores before hard-filter feasibility checks", {
       seed_base = 1L,
       candidates = candidates
     ),
-    .env = asNamespace("pairwiseLLM")
+    .package = "pairwiseLLM"
   )
 
   expect_equal(scored_n, 2L)
@@ -82,7 +82,7 @@ test_that("hard-filter count includes round exposure filtering", {
       seed_base = 1L,
       candidates = candidates
     ),
-    .env = asNamespace("pairwiseLLM")
+    .package = "pairwiseLLM"
   )
 
   expect_equal(out$counts$n_candidates_generated, 2L)

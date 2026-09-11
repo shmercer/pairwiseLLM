@@ -203,6 +203,9 @@
     )
   }
   if (isTRUE(out$warm_start_done)) {
+    if (.adaptive_pairing_strategy(out) != "hybrid" && !isTRUE(out$round$staged_active)) {
+      out$round$round_committed <- 0L
+    }
     out$round$staged_active <- TRUE
     if ((out$round$round_committed %||% 0L) >= (out$round$round_pairs_target %||% 0L)) {
       out <- .adaptive_round_start_next(out)
@@ -3629,6 +3632,9 @@
 #' @keywords internal
 #' @noRd
 .adaptive_round_active_stage <- function(state) {
+  if (inherits(state, "adaptive_state") && .adaptive_pairing_strategy(state) != "hybrid") {
+    return(if (.adaptive_warm_start_active(state)) "warm_start" else "direct_pairing")
+  }
   if (!inherits(state, "adaptive_state")) {
     round <- state$round %||% NULL
     if (is.null(round) || !isTRUE(round$staged_active)) {
@@ -3765,6 +3771,16 @@
   }
 
   stage <- as.character(step_row$round_stage[[1L]] %||% NA_character_)
+  if (identical(stage, "direct_pairing") && isTRUE(is_adaptive) &&
+    .adaptive_pairing_strategy(out) != "hybrid") {
+    round$committed_total <- as.integer(round$committed_total + 1L)
+    round$round_committed <- as.integer(round$round_committed + 1L)
+    out$round <- round
+    if (round$round_committed >= round$round_pairs_target) {
+      out <- .adaptive_round_start_next(out)
+    }
+    return(out)
+  }
   if (is.na(stage) || !stage %in% round$stage_order) {
     return(out)
   }
@@ -3849,6 +3865,9 @@
 #' @noRd
 .adaptive_round_starvation <- function(state, step_row) {
   out <- state
+  if (identical(step_row$round_stage[[1L]], "direct_pairing")) {
+    return(list(state = out, exhausted = TRUE))
+  }
   round <- out$round %||% NULL
   if (is.null(round) || !isTRUE(round$staged_active)) {
     return(list(state = out, exhausted = TRUE))
@@ -4038,6 +4057,9 @@
 #' @param seed Integer seed used for deterministic warm-start shuffling and
 #'   selection randomness. Default is `1L`.
 #' @param adaptive_config Optional named list of adaptive controller overrides.
+#'   `pairing_strategy` defaults to `hybrid`; `random`, `trueskill_p50`, and
+#'   `trueskill_pollitt` select direct pairs after the common connected shuffled
+#'   bootstrap and currently require `run_mode = "within_set"`.
 #'   Unknown fields and invalid values abort with an actionable error. See
 #'   [adaptive_rank()] for the full list of supported keys, detailed semantics,
 #'   and defaults.

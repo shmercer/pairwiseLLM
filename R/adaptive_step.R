@@ -1110,7 +1110,9 @@ run_one_step <- function(state, judge, ...) {
       selection
     }
 
-    state <- .adaptive_refresh_round_anchors(state)
+    if (.adaptive_pairing_strategy(state) == "hybrid") {
+      state <- .adaptive_refresh_round_anchors(state)
+    }
     selection <- select_next_pair(state, step_id = step_id)
     if (.adaptive_link_mode_active(controller) &&
       identical(phase_ctx$phase, "phase_b")) {
@@ -1440,6 +1442,8 @@ run_one_step <- function(state, judge, ...) {
     round_id = selection$round_id,
     round_stage = selection$round_stage,
     pair_type = selection$pair_type,
+    pairing_strategy = .adaptive_pairing_strategy(state),
+    target_distance = as.double(selection$target_distance %||% NA_real_),
     used_in_round_i = selection$used_in_round_i,
     used_in_round_j = selection$used_in_round_j,
     is_anchor_i = selection$is_anchor_i,

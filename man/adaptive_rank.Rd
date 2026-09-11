@@ -99,6 +99,23 @@ Unknown fields and invalid values abort with actionable errors.
 
 Supported keys (with defaults) include:
 \describe{
+\item{\code{pairing_strategy}}{Post-bootstrap strategy: \code{hybrid} (default), \code{random},
+\code{trueskill_p50}, or \code{trueskill_pollitt}. Direct strategies currently require
+\code{run_mode = "within_set"}. All strategies retain the same connected shuffled
+bootstrap. Direct strategies choose a focal item uniformly from sorted IDs
+at minimum committed degree, using the run seed and committed count; invalid
+judgments retry the same draw. Among legal partners, \code{random} chooses uniformly,
+\code{trueskill_p50} minimizes distance to TrueSkill probability 0.50, and
+\code{trueskill_pollitt} minimizes distance to 1/3 or 2/3, with item-ID tie breaking.
+Pollitt is inspired by the earlier BTL policy, not an exact replication.
+Direct strategies allow at most two observations per unordered pair, with
+canonical presentation balancing and reversal on repeat. They stop on focal
+partner exhaustion and do not use hybrid stage quotas or coverage overrides.
+Step logs identify \code{direct_pairing}, \code{pairing_strategy}, and \code{target_distance};
+\code{i_id} is the focal item and \code{p_ij} is the pre-judgment TrueSkill probability
+for presented A over B. Target distance is symmetric under reversal and is
+NA for random pairing. BTL estimation, refit cadence, and stopping remain
+unchanged.}
 \item{\code{global_identified_reliability_min}}{Global EAP reliability threshold
 used to mark the run as globally identified after a refit. Default is
 \code{0.80}.}
