@@ -30,6 +30,7 @@ inst/stan/link_transform_refit
 /prompts/
 .positai
 /study/
+/.posit/
 
 # Generated optional warm-start Python bytecode
 /inst/python/__pycache__/

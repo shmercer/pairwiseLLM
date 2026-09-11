@@ -1254,12 +1254,18 @@ make_adaptive_judge_llm <- function(
 #' @param warm_start_python Explicit Python interpreter for text extraction only.
 #' @param warm_start_prior_sd Optional model-derived raw theta prior SD override;
 #'   scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
+#'   Not accepted with `trueskill_only`; never controls TrueSkill sigma.
+#' @param warm_start_mode Predictive destination: `cold`, `btl_only`, `trueskill_only`,
+#'   or `both`. NULL defaults to `btl_only` with predictive input, otherwise `cold`.
+#'   TrueSkill-warm modes use `mu = 25 + (25/3) * prior_mean`, with unchanged sigma.
 #' @details
 #' Predictive priors affect ordinary/within-set BTL estimation. Transform,
 #' anchored-joint, and pooled judge refits keep their existing prior rules; predictive
 #' evidence is not injected again. Initial pairing queues and selection rules retain
-#' their existing meaning. Custom fit functions must consume `state$predictive_prior`
-#' explicitly. Resume uses saved predictions; omit all warm-start arguments on resume.
+#' their existing meaning: every mode retains the same seeded connected shuffled
+#' bootstrap. Custom BTL fit functions should consume `state$predictive_prior` only
+#' when `state$meta$warm_start_mode` is `btl_only` or `both`; its presence alone does
+#' not imply BTL warming. Resume uses saved predictions; omit warm-start arguments.
 #' @export
 adaptive_rank <- function(
     data,
@@ -1296,7 +1302,8 @@ adaptive_rank <- function(
     warm_start_prior = NULL,
     warm_start_features = NULL,
     warm_start_python = NULL,
-    warm_start_prior_sd = NULL
+    warm_start_prior_sd = NULL,
+    warm_start_mode = NULL
 ) {
   backend <- match.arg(backend)
   if (identical(backend, "openai")) {
@@ -1385,11 +1392,12 @@ adaptive_rank <- function(
       warm_start_prior = warm_start_prior,
       warm_start_features = warm_start_features,
       warm_start_python = warm_start_python,
-      warm_start_prior_sd = warm_start_prior_sd
+      warm_start_prior_sd = warm_start_prior_sd,
+      warm_start_mode = warm_start_mode
     )
   } else {
     .warm_start_resume_inputs(warm_start_model, warm_start_prior, warm_start_features,
-      warm_start_python, warm_start_prior_sd)
+      warm_start_python, warm_start_prior_sd, warm_start_mode)
     loaded_ids <- as.character(state$item_ids)
     input_ids <- as.character(items$item_id)
     if (!identical(loaded_ids, input_ids)) {

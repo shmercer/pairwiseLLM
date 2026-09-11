@@ -7830,7 +7830,7 @@ default_btl_fit_fn <- function(state, config) {
     ids = ids_fit,
     model_variant = config$model_variant %||% "btl_e_b",
     cmdstan = config[["cmdstan"]] %||% list(),
-    warm_start_prior = .warm_start_prior_scope(state$predictive_prior, ids_fit)
+    warm_start_prior = .warm_start_prior_scope(.warm_start_btl_prior_for_state(state), ids_fit)
   )
 
   fit_contract <- .adaptive_btl_extract_fit_contract(fit_out)

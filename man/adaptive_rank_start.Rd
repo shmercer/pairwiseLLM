@@ -16,7 +16,8 @@ adaptive_rank_start(
   warm_start_prior = NULL,
   warm_start_features = NULL,
   warm_start_python = NULL,
-  warm_start_prior_sd = NULL
+  warm_start_prior_sd = NULL,
+  warm_start_mode = NULL
 )
 }
 \arguments{
@@ -59,7 +60,12 @@ otherwise use item texts. Precomputed prediction needs neither Python nor glmnet
 \item{warm_start_python}{Explicit Python interpreter for text extraction only.}
 
 \item{warm_start_prior_sd}{Optional model-derived raw theta prior SD override;
-scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.}
+scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
+Not accepted with \code{trueskill_only}; never controls TrueSkill sigma.}
+
+\item{warm_start_mode}{Predictive destination: \code{cold}, \code{btl_only}, \code{trueskill_only},
+or \code{both}. NULL defaults to \code{btl_only} with predictive input, otherwise \code{cold}.
+TrueSkill-warm modes use \code{mu = 25 + (25/3) * prior_mean}, with unchanged sigma.}
 }
 \value{
 An adaptive state object containing \code{step_log}, \code{round_log}, and
@@ -108,8 +114,10 @@ immediately using \code{\link[=save_adaptive_session]{save_adaptive_session()}}.
 Predictive priors affect ordinary/within-set BTL estimation. Transform,
 anchored-joint, and pooled judge refits keep their existing prior rules; predictive
 evidence is not injected again. Initial pairing queues and selection rules retain
-their existing meaning. Custom fit functions must consume \code{state$predictive_prior}
-explicitly. Resume uses saved predictions; omit all warm-start arguments on resume.
+their existing meaning: every mode retains the same seeded connected shuffled
+bootstrap. Custom BTL fit functions should consume \code{state$predictive_prior} only
+when \code{state$meta$warm_start_mode} is \code{btl_only} or \code{both}; its presence alone does
+not imply BTL warming. Resume uses saved predictions; omit warm-start arguments.
 }
 \examples{
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 11)
