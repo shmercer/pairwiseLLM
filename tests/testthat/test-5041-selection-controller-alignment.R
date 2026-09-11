@@ -293,6 +293,40 @@ test_that("Phase A uses inclusive trueskill bounds and Phase B keeps its posteri
   expect_equal(phase_b$selected$p, 0.99)
 })
 
+test_that("the preserved Phase B long gate falls back when posterior evidence is unusable", {
+  items <- tibble::tibble(item_id = letters[1:4], set_id = c(1L, 1L, 2L, 2L))
+  for (accepted in c(FALSE, TRUE)) {
+    for (extreme in c(FALSE, TRUE)) {
+      ts <- make_test_trueskill_state(items, mu = c(if (extreme) 100 else 25, 25, 25, 25))
+      state <- make_test_state(items, ts)
+      state$controller$run_mode <- "link_one_spoke"
+      state$controller$global_identified <- TRUE
+      state$controller$p_long_low <- 0.45
+      state$controller$p_long_high <- 0.55
+      state$linking$phase_a$phase <- "phase_b"
+      if (accepted) {
+        # Accepted draws lack the requested IDs: the existing gate must fall back.
+        state$btl_fit <- make_test_btl_fit(c("other_a", "other_b"))
+        state$round_log <- tibble::tibble(diagnostics_pass = TRUE)
+      }
+      history <- pairwiseLLM:::.adaptive_history_state_resolve(state)
+      out <- pairwiseLLM:::.adaptive_select_stage(
+        stage = list(name = "base", dup_policy = "default"), state = state,
+        config = pairwiseLLM:::adaptive_defaults(4L), controller = state$controller,
+        generation_stage = "long_link", round = state$round, history_state = history,
+        counts = pairwiseLLM:::.adaptive_history_state_counts(history, state$item_ids),
+        step_id = 1L, seed_base = 71L, candidates = tibble::tibble(i = "a", j = "c"))
+      expect_identical(out$long_gate_pass, !extreme)
+      expected <- if (extreme) {
+        "posterior_unavailable_fallback_trueskill_extreme"
+      } else {
+        "posterior_unavailable_fallback"
+      }
+      expect_identical(out$long_gate_reason, expected)
+    }
+  }
+})
+
 test_that("explore_rate_used applies identifiability taper", {
   items <- make_test_items(6)
   trueskill_state <- make_test_trueskill_state(items)

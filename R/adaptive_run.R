@@ -194,7 +194,7 @@
 .adaptive_round_activate_if_ready <- function(state) {
   out <- state
   out$controller <- .adaptive_controller_with_phase_scope(out, controller = .adaptive_controller_resolve(out))
-  if (is.null(out$round) || !is.list(out$round)) {
+  if (is.null(out[["round"]]) || !is.list(out[["round"]])) {
     out$round <- .adaptive_new_round_state(
       out$item_ids,
       round_id = 1L,

@@ -1,4 +1,4 @@
-test_that("within-set pair selection does not depend on BTL posterior draws outside long-link gating", {
+test_that("within-set selection ignores BTL draws when controller state is held fixed", {
   items <- make_test_items(5)
   judge <- make_deterministic_judge("i_wins")
 
@@ -23,6 +23,8 @@ test_that("within-set pair selection does not depend on BTL posterior draws outs
   expect_identical(selected_with_fit$j, selected_base$j)
   expect_identical(selected_with_fit$A, selected_base$A)
   expect_identical(selected_with_fit$B, selected_base$B)
-  expect_identical(selected_with_fit$p, selected_base$p)
-  expect_identical(selected_with_fit$u0, selected_base$u0)
+  expect_true(is.finite(selected_base$p_ij))
+  expect_true(is.finite(selected_base$U0_ij))
+  expect_identical(selected_with_fit$p_ij, selected_base$p_ij)
+  expect_identical(selected_with_fit$U0_ij, selected_base$U0_ij)
 })

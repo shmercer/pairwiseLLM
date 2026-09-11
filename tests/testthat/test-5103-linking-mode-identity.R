@@ -235,6 +235,50 @@ test_that("Phase A memo identity follows source and installs explicit replacemen
   expect_error(pairwiseLLM:::.adaptive_phase_a_gate_or_abort(rejected), "y_A")
 })
 
+test_that("Phase A memo reuse restores absent stop flags without regenerating imported work", {
+  artifacts <- phase_identity_artifacts(phase_identity_state())
+  state <- phase_identity_link(phase_identity_state("both"), artifacts)
+  prepared <- pairwiseLLM:::.adaptive_phase_a_prepare(state)
+  prepared$linking$phase_a$set_stop_pass_by_set <- NULL
+  reused <- pairwiseLLM:::.adaptive_phase_a_prepare(prepared)
+  expect_identical(reused$linking$phase_a$artifacts, artifacts)
+  expect_true(all(unlist(reused$linking$phase_a$set_stop_pass_by_set)))
+  expect_identical(reused$trueskill_state, prepared$trueskill_state)
+  expect_identical(reused$history_pairs, prepared$history_pairs)
+  reused$linking$phase_a$set_stop_pass_by_set <- NULL
+  finalized <- pairwiseLLM:::.adaptive_phase_a_finalize_if_ready(reused)
+  expect_true(all(unlist(finalized$linking$phase_a$set_stop_pass_by_set)))
+  expect_identical(finalized$linking$phase_a$phase, "phase_b")
+  expect_identical(finalized$linking$phase_a$artifacts, artifacts)
+
+  artifact <- artifacts[[1L]]
+  artifact$phase_a_within_set_evidence_hash <- NULL
+  surface <- pairwiseLLM:::.adaptive_phase_a_artifact_memo_surface(artifact)
+  expect_identical(surface$phase_a_within_set_evidence_hash,
+    pairwiseLLM:::.adaptive_phase_a_hash_object(artifact$phase_a_within_set_evidence))
+  changed <- artifact
+  changed$phase_a_within_set_evidence$y_A[1L] <- 0L
+  expect_false(identical(pairwiseLLM:::.adaptive_phase_a_artifact_memo_hash(changed),
+    pairwiseLLM:::.adaptive_phase_a_artifact_memo_hash(artifact)))
+  path <- file.path(withr::local_tempdir(), "single-artifact.rds")
+  saveRDS(artifact, path)
+  expect_identical(pairwiseLLM:::.adaptive_rank_normalize_phase_a_artifacts(path), list(`1` = artifact))
+})
+
+test_that("Phase A committed cache rejects malformed counts and generation contracts", {
+  validate <- pairwiseLLM:::.adaptive_phase_a_committed_pairs_validate
+  expect_error(validate(c(`1` = 0, `2` = 0), 1:2), "integer vector")
+  expect_error(validate(c(`2` = 0L, `1` = 0L), 1:2), "set-id names")
+  for (value in c(NA_integer_, -1L)) {
+    expect_error(validate(c(`1` = value, `2` = 0L), 1:2), "non-missing and non-negative")
+  }
+  expect_true(validate(c(`1` = 1L, `2` = 2L), 1:2))
+  surface <- pairwiseLLM:::.adaptive_phase_a_fit_contract_surface
+  expect_error(surface(c("global_shared", "phase_specific"), "btl_e_b"), "judge_param_mode")
+  expect_identical(surface("", "btl_e_b")$judge_param_mode, "global_shared")
+  expect_error(surface("global_shared", "unknown"), "model_variant")
+})
+
 test_that("Phase B pooled evidence and anchored initialization ignore session warm metadata", {
   artifacts <- phase_identity_artifacts(phase_identity_state())
   outputs <- lapply(c("cold", "btl_only", "trueskill_only", "both"), function(mode) {
