@@ -1,5 +1,5 @@
 
-<!-- README-source-md5: d50e9d56d5d0882e468abc7710cf9bb1 -->
+<!-- README-source-md5: d7370ad3e1a82ace29116090a7527fdc -->
 
 <figure>
 <img src="man/figures/pairwiseLLM-banner.jpg"
@@ -269,7 +269,8 @@ design article for your task.
   — run, inspect, save, and resume an adaptive within-set ranking.
 - [Guide: Adaptive Warm
   Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html)
-  — train, store, ensemble, and use predictive BTL priors.
+  — train, store, ensemble, and choose predictive BTL/TrueSkill
+  initialization.
 - [Design: Adaptive
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html)
   — understand the within-set selection, refitting, and stopping design.
@@ -297,9 +298,25 @@ design article for your task.
 ## Adaptive pairing & ranking (overview)
 
 `pairwiseLLM` includes an adaptive pairing workflow for ranking writing
-samples using pairwise comparisons. Instead of allocating comparisons
-uniformly at random, the within-set controller uses current rank,
-uncertainty, coverage, and degree information to choose each next pair.
+samples using pairwise comparisons. After a connected shuffled
+bootstrap, `adaptive_config$pairing_strategy` chooses `hybrid`
+(default), `random`, `trueskill_p50`, or `trueskill_pollitt`. Direct
+strategies currently require ordinary within-set runs. The
+Pollitt-inspired strategy targets TrueSkill win probabilities near 1/3
+or 2/3.
+
+Predictive initialization supports `cold`, `btl_only`, `trueskill_only`,
+and `both`. Omitted mode defaults to `cold` without predictive input and
+`btl_only` with it, preserving historical callers. Request
+`warm_start_mode = "both"` explicitly to initialize both models.
+TrueSkill locations use `25 + (25/3) * prior_mean` with unchanged sigma.
+Every mode retains the same seeded `N - 1` connected bootstrap. Saved
+mode, strategy, and current model state remain authoritative on resume.
+
+For offline directed-outcome replay, use `validate_adaptive_replay()`
+and `make_adaptive_judge_replay()` with
+`adaptive_config$dup_max_obs_relaxed = 2L`. Replay returns the exact
+stored orientation and rejects reuse by default.
 
 To get started, see:
 
@@ -860,14 +877,19 @@ This reports:
 When using adaptive pairing (`adaptive_rank()`), the same Bayesian BTL
 models are fit intermittently during the run:
 
-- Pair selection is guided by the fast TrueSkill model.
+- Within-set/Phase-A hybrid ranks, strata, rolling anchors, pair
+  probabilities, and the long-link gate use TrueSkill throughout.
+  Ordinary within-set runs also offer direct `random`, `trueskill_p50`,
+  and `trueskill_pollitt` strategies.
 
 - Bayesian BTL refits provide:
 
   - uncertainty estimates,
   - diagnostics,
   - stopping decisions,
-  - and late-stage adaptation signals.
+  - EAP reliability and the existing `global_identified` signal, which
+    can change later hybrid tapering and routing. Phase B linking is
+    unchanged.
 
 You can therefore:
 
@@ -964,5 +986,5 @@ MIT License. See `LICENSE`.
 ## Citation
 
 > Mercer, S. H. (2026). *pairwiseLLM: Pairwise writing quality
-> comparisons with large language models* (Version 1.3.2) \[R package;
+> comparisons with large language models* (Version 1.4.0) \[R package;
 > Computer software\]. <https://github.com/shmercer/pairwiseLLM>

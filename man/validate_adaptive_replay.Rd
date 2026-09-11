@@ -26,6 +26,20 @@ Validate one primary observation per ordered pair. No rows are dropped or
 reordered; optional metadata columns are retained and do not determine lookup.
 Subset to one panel and one primary judgment layer before validation.
 }
+\examples{
+outcomes <- data.frame(A_id = c("a", "b"), B_id = c("b", "a"), Y = c(1L, 1L))
+validate_adaptive_replay(outcomes, item_ids = c("a", "b"))
+}
 \seealso{
 \code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}}
+
+Other adaptive ranking:
+\code{\link[=adaptive_rank]{adaptive_rank()}},
+\code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
+\code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
+\code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
+\code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}},
+\code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}},
+\code{\link[=summarize_adaptive]{summarize_adaptive()}}
 }
+\concept{adaptive ranking}

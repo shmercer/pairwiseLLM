@@ -22,7 +22,13 @@
 #' The normal prior applies to `theta_raw`; Stan centers this to obtain `theta`.
 #' Centering induces dependence, so the supplied SD is not the marginal SD of
 #' centered theta. Without predictive input, BTL retains raw prior mean 0 and SD 1.
-#' This estimation prior is separate from initial warm-start pairing schedules.
+#' Adaptive BTL consumes this prior only in `btl_only` and `both` modes. Adaptive
+#' `trueskill_only` and `both` also use its centered `prior_mean` to initialize
+#' TrueSkill locations as `25 + (25/3) * prior_mean`, with unchanged sigma.
+#' The BTL prior SD and ensemble disagreement never determine TrueSkill sigma.
+#' Every adaptive mode retains the same seeded connected shuffled bootstrap.
+#' Standalone [fit_bayes_btl_mcmc()] retains its `warm_start_prior` interface
+#' without the adaptive four-mode argument.
 #' @examples
 #' prior <- make_warm_start_prior(c(a = -1, b = 0, c = 1))
 #' prior$prior_mean

@@ -31,6 +31,10 @@
 #'   orientations of every unordered pair. Default `TRUE`. `FALSE` permits a
 #'   partial table; requests for absent orientations still fail during replay.
 #' @return A tibble retaining the input rows and metadata, with integer `Y`.
+#' @examples
+#' outcomes <- data.frame(A_id = c("a", "b"), B_id = c("b", "a"), Y = c(1L, 1L))
+#' validate_adaptive_replay(outcomes, item_ids = c("a", "b"))
+#' @family adaptive ranking
 #' @seealso [make_adaptive_judge_replay()]
 #' @export
 validate_adaptive_replay <- function(outcomes, item_ids, complete = TRUE) {
@@ -121,6 +125,7 @@ validate_adaptive_replay <- function(outcomes, item_ids, complete = TRUE) {
 #' state <- adaptive_rank_start(ids, seed = 42,
 #'   adaptive_config = list(dup_max_obs_relaxed = 2L))
 #' state <- adaptive_rank_run_live(state, judge, n_steps = 3L, progress = "none")
+#' @family adaptive ranking
 #' @seealso [validate_adaptive_replay()], [adaptive_rank()]
 #' @export
 make_adaptive_judge_replay <- function(outcomes, item_ids, strict_use = TRUE, complete = TRUE) {

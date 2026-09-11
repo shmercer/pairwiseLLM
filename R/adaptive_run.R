@@ -4016,12 +4016,13 @@
 #'
 #' @details
 #' This function creates the stepwise controller state and seeds all canonical
-#' logs used in the adaptive pairing workflow. Warm start pair construction
-#' follows the shuffled chain design, which guarantees a connected comparison
+#' logs used in the adaptive pairing workflow. Connected bootstrap pair construction
+#' follows the same seeded shuffled chain in every mode, giving a connected comparison
 #' graph after \eqn{N - 1} committed comparisons.
 #'
 #' Pair selection in this framework is stepwise and uncertainty-aware.
-#' Within-set routing uses TrueSkill base utility
+#' Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling anchors,
+#' pair probabilities, and base utility
 #' \deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
 #' win probability for pair \eqn{\{i, j\}}. In linking Phase B, anchor/strata
 #' routing uses a linking-global score derived from Phase A raw summaries and
@@ -4034,9 +4035,12 @@
 #' Phase B uses pooled within-set Phase A judge-parameter estimates, using the
 #' configured BTL model variant, as the accepted shared source for fixed
 #' \code{beta}/\code{epsilon} constants.
-#' Bayesian BTL posterior draws are not used as general pair-selection
-#' objectives; within-set pairing remains TrueSkill-routed, with accepted
-#' posterior refits contributing only to the long-link probability gate.
+#' The within-set/Phase-A hybrid long-link gate uses TrueSkill throughout.
+#' Bayesian BTL supplies item estimates, posterior uncertainty, EAP reliability,
+#' diagnostics, stopping, and the existing `global_identified` signal. This signal
+#' can affect later hybrid tapering and routing; selection is not wholly independent
+#' of BTL. Direct within-set strategies use their documented partner targets after
+#' the common bootstrap. Phase B selection and prior rules are unchanged.
 #' Linking Phase B refits use Bayesian posterior estimation and posterior
 #' summaries/diagnostics are logged per spoke at each linking refit.
 #'
@@ -4054,7 +4058,7 @@
 #'   include integer `set_id` values and globally unique `global_item_id`
 #'   values. Item IDs may be character; internal logs use integer indices
 #'   derived from these IDs.
-#' @param seed Integer seed used for deterministic warm-start shuffling and
+#' @param seed Integer seed used for deterministic connected-bootstrap shuffling and
 #'   selection randomness. Default is `1L`.
 #' @param adaptive_config Optional named list of adaptive controller overrides.
 #'   `pairing_strategy` defaults to `hybrid`; `random`, `trueskill_p50`, and
@@ -4074,7 +4078,7 @@
 #'
 #' @return An adaptive state object containing `step_log`, `round_log`, and
 #'   `item_log`. The object includes class \code{"adaptive_state"}, item ID
-#'   mappings, TrueSkill state, warm-start queue, refit metadata, and runtime
+#'   mappings, TrueSkill state, connected bootstrap queue, refit metadata, and runtime
 #'   configuration.
 #'
 #' @examples
@@ -4096,17 +4100,31 @@
 #' @param warm_start_prior_sd Optional model-derived raw theta prior SD override;
 #'   scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
 #'   Not accepted with `trueskill_only`; never controls TrueSkill sigma.
-#' @param warm_start_mode Predictive destination: `cold`, `btl_only`, `trueskill_only`,
-#'   or `both`. NULL defaults to `btl_only` with predictive input, otherwise `cold`.
-#'   TrueSkill-warm modes use `mu = 25 + (25/3) * prior_mean`, with unchanged sigma.
+#' @param warm_start_mode Predictive destination: `cold` (neither model), `btl_only`
+#'   (BTL prior), `trueskill_only` (TrueSkill locations), or `both` (both models).
+#'   Omitted/NULL mode defaults to `btl_only` with predictive input, otherwise `cold`.
+#'   Request `both` explicitly to initialize both models. In TrueSkill-warm modes,
+#'   exact item-ID alignment precedes `mu = mu0 + sigma0 * prior_mean`, with
+#'   `mu0 = 25`, `sigma0 = 25/3`, fixed multiplier 1, and unchanged sigma.
+#'   Explicit `cold` with predictive input, or a non-cold mode without it, errors.
 #' @details
-#' Predictive priors affect ordinary/within-set BTL estimation. Transform,
-#' anchored-joint, and pooled judge refits keep their existing prior rules; predictive
-#' evidence is not injected again. Initial pairing queues and selection rules retain
-#' their existing meaning: every mode retains the same seeded connected shuffled
-#' bootstrap. Custom BTL fit functions should consume `state$predictive_prior` only
-#' when `state$meta$warm_start_mode` is `btl_only` or `both`; its presence alone does
-#' not imply BTL warming. Resume uses saved predictions; omit warm-start arguments.
+#' Predictive initialization is separate from observed connectivity: every mode
+#' retains the same seeded connected shuffled bootstrap of N - 1 valid comparisons,
+#' with common presentation balancing and invalid-result retries. Predictive
+#' locations can affect later TrueSkill-based selection; they do not replace the
+#' initial observed spanning path. BTL prior SD and ensemble diagnostics never
+#' determine TrueSkill sigma. No historical training-score units are restored.
+#'
+#' Predictive BTL priors apply only in `btl_only` and `both`, including run-required
+#' linking Phase A. TrueSkill initialization applies in `trueskill_only` and `both`.
+#' Imported Phase-A artifacts retain their own generation identity and are not
+#' rerun because predictive input exists. Transform, anchored-joint, and pooled
+#' judge refits keep their existing prior rules; predictive evidence is not
+#' injected into Phase B priors, D-optimal selection, or probes.
+#' Custom BTL fit functions should consume `state$predictive_prior` only when
+#' `state$meta$warm_start_mode` is `btl_only` or `both`; its presence alone does
+#' not imply BTL warming. Resume preserves saved predictions, current TrueSkill
+#' state, mode, strategy, and bootstrap progress; omit all warm-start arguments.
 #' @export
 adaptive_rank_start <- function(items,
                                 seed = 1L,
@@ -4187,11 +4205,12 @@ adaptive_rank_start <- function(items,
 #' Invalid responses produce a logged step with
 #' \code{pair_id = NA} and must not update committed-comparison state.
 #'
-#' Within-set routing is TrueSkill-based with utility
+#' Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling anchors,
+#' pair probabilities, and utility
 #' \deqn{U_0 = p_{ij}(1 - p_{ij})}.
-#' After an accepted posterior refit is available, the long-link gate uses the
-#' BTL posterior win probability for candidate eligibility; before that it
-#' falls back deterministically to TrueSkill.
+#' The long-link probability gate uses TrueSkill throughout within-set/Phase-A
+#' hybrid selection. Direct strategies apply their partner targets after the same
+#' connected shuffled bootstrap and currently require ordinary within-set mode.
 #' In linking Phase B, anchor/strata routing uses linking-global scores built
 #' from Phase A summaries and the accepted anchored-joint state. Linking Phase B
 #' routing ranks eligible
@@ -4204,7 +4223,7 @@ adaptive_rank_start <- function(items,
 #' Exploration/exploitation routing and fallback handling are recorded in
 #' \code{step_log}.
 #'
-#' Round scheduling uses stage-specific admissibility:
+#' Hybrid round scheduling uses stage-specific admissibility:
 #' \itemize{
 #'   \item rolling-anchor links compare one anchor and one non-anchor endpoint;
 #'   \item long/mid links exclude anchor endpoints and enforce stratum-distance
@@ -4213,7 +4232,7 @@ adaptive_rank_start <- function(items,
 #'   pairs within local stage bounds.
 #' }
 #'
-#' Exposure and repeat handling are soft, stage-local constraints:
+#' Hybrid exposure and repeat handling are soft, stage-local constraints:
 #' under-represented exploration uses degree set `deg <= D_min + 1`, while
 #' repeat-pressure gating uses bottom-quantile `recent_deg` (default quantile
 #' `0.25`) and per-endpoint repeat-slot accounting against
@@ -4223,13 +4242,15 @@ adaptive_rank_start <- function(items,
 #' `top_band_pct = 0.10` and `top_band_bins = 5`, with top-band size
 #' `ceiling(top_band_pct * N)`.
 #'
-#' Bayesian BTL refits are triggered on step-based cadence and evaluated with
+#' Bayesian BTL refits are triggered by committed comparisons and evaluated with
 #' diagnostics gates (including ESS thresholds), reliability, and lagged
 #' stability criteria. Refit-level outcomes are
 #' appended to \code{round_log}; per-item posterior summaries are appended to
 #' \code{item_log}. Controller behavior can change after refits via
 #' identifiability-gated settings in \code{adaptive_config}; those controls
-#' affect pair routing and quotas, while BTL remains inference-only.
+#' affect hybrid pair routing and quotas through the existing `global_identified`
+#' signal. BTL supplies item estimates, posterior uncertainty, EAP reliability,
+#' diagnostics, and stopping. Phase B selection and prior rules are unchanged.
 #' If \code{adaptive_config$max_pairs_after_stop > 0}, the run records a stop
 #' boundary at the first refit with \code{stop_decision = TRUE} and allows at
 #' most that many additional committed comparisons before deterministic

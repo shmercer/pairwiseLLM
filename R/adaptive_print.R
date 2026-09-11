@@ -734,7 +734,9 @@ adaptive_get_logs <- function(state) {
 #'   \code{prompt_tokens}, \code{completion_tokens}, \code{total_tokens},
 #'   \code{raw_response_json}.
 #'   \item Routing/scheduling: \code{round_id}, \code{round_stage},
-#'   \code{pair_type}, \code{stage_committed_so_far}, \code{stage_quota}.
+#'   \code{pair_type}, \code{pairing_strategy}, \code{stage_committed_so_far},
+#'   \code{stage_quota}. Direct strategies use \code{direct_pairing} rather than
+#'   hybrid stages; hybrid-only diagnostics are missing where inapplicable.
 #'   \item Exposure/strata: \code{used_in_round_i}, \code{used_in_round_j},
 #'   \code{is_anchor_i}, \code{is_anchor_j}, \code{stratum_i},
 #'   \code{stratum_j}, \code{dist_stratum}.
@@ -749,7 +751,10 @@ adaptive_get_logs <- function(state) {
 #'   \code{n_candidates_after_star_caps}, \code{n_candidates_scored}.
 #'   \item Endpoint diagnostics: \code{deg_i}, \code{deg_j},
 #'   \code{recent_deg_i}, \code{recent_deg_j}, \code{mu_i}, \code{mu_j},
-#'   \code{sigma_i}, \code{sigma_j}, \code{p_ij}, \code{U0_ij}.
+#'   \code{sigma_i}, \code{sigma_j}, \code{p_ij}, \code{U0_ij}, \code{target_distance}.
+#'   For direct strategies, \code{i_id} is the focal item and \code{p_ij} is
+#'   the pre-judgment TrueSkill probability for presented A over B.
+#'   \code{target_distance} is missing for random selection.
 #'   \item Star-cap diagnostics: \code{star_cap_rejects},
 #'   \code{star_cap_reject_items}.
 #' }

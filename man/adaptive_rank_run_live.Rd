@@ -124,11 +124,12 @@ applies transactional updates if and only if the judge response is valid.
 Invalid responses produce a logged step with
 \code{pair_id = NA} and must not update committed-comparison state.
 
-Within-set routing is TrueSkill-based with utility
+Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling anchors,
+pair probabilities, and utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})}.
-After an accepted posterior refit is available, the long-link gate uses the
-BTL posterior win probability for candidate eligibility; before that it
-falls back deterministically to TrueSkill.
+The long-link probability gate uses TrueSkill throughout within-set/Phase-A
+hybrid selection. Direct strategies apply their partner targets after the same
+connected shuffled bootstrap and currently require ordinary within-set mode.
 In linking Phase B, anchor/strata routing uses linking-global scores built
 from Phase A summaries and the accepted anchored-joint state. Linking Phase B
 routing ranks eligible
@@ -141,7 +142,7 @@ before the first linking refit.
 Exploration/exploitation routing and fallback handling are recorded in
 \code{step_log}.
 
-Round scheduling uses stage-specific admissibility:
+Hybrid round scheduling uses stage-specific admissibility:
 \itemize{
 \item rolling-anchor links compare one anchor and one non-anchor endpoint;
 \item long/mid links exclude anchor endpoints and enforce stratum-distance
@@ -150,7 +151,7 @@ bounds;
 pairs within local stage bounds.
 }
 
-Exposure and repeat handling are soft, stage-local constraints:
+Hybrid exposure and repeat handling are soft, stage-local constraints:
 under-represented exploration uses degree set \code{deg <= D_min + 1}, while
 repeat-pressure gating uses bottom-quantile \code{recent_deg} (default quantile
 \code{0.25}) and per-endpoint repeat-slot accounting against
@@ -160,13 +161,15 @@ Top-band defaults for stratum construction are
 \code{top_band_pct = 0.10} and \code{top_band_bins = 5}, with top-band size
 \code{ceiling(top_band_pct * N)}.
 
-Bayesian BTL refits are triggered on step-based cadence and evaluated with
+Bayesian BTL refits are triggered by committed comparisons and evaluated with
 diagnostics gates (including ESS thresholds), reliability, and lagged
 stability criteria. Refit-level outcomes are
 appended to \code{round_log}; per-item posterior summaries are appended to
 \code{item_log}. Controller behavior can change after refits via
 identifiability-gated settings in \code{adaptive_config}; those controls
-affect pair routing and quotas, while BTL remains inference-only.
+affect hybrid pair routing and quotas through the existing \code{global_identified}
+signal. BTL supplies item estimates, posterior uncertainty, EAP reliability,
+diagnostics, and stopping. Phase B selection and prior rules are unchanged.
 If \code{adaptive_config$max_pairs_after_stop > 0}, the run records a stop
 boundary at the first refit with \code{stop_decision = TRUE} and allows at
 most that many additional committed comparisons before deterministic
@@ -372,6 +375,8 @@ Other adaptive ranking:
 \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
 \code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
 \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}},
-\code{\link[=summarize_adaptive]{summarize_adaptive()}}
+\code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}},
+\code{\link[=summarize_adaptive]{summarize_adaptive()}},
+\code{\link[=validate_adaptive_replay]{validate_adaptive_replay()}}
 }
 \concept{adaptive ranking}
