@@ -115,7 +115,8 @@ Step logs identify \code{direct_pairing}, \code{pairing_strategy}, and \code{tar
 \code{i_id} is the focal item and \code{p_ij} is the pre-judgment TrueSkill probability
 for presented A over B. Target distance is symmetric under reversal and is
 NA for random pairing. BTL estimation, refit cadence, and stopping remain
-unchanged.}
+unchanged. On resume, omit this field or supply the saved strategy; changing
+strategy requires a new session.}
 \item{\code{global_identified_reliability_min}}{Global EAP reliability threshold
 used to mark the run as globally identified after a refit. Default is
 \code{0.80}.}
@@ -264,7 +265,8 @@ and aborts early for incompatible \code{run_mode}/set structure combinations.}
 
 \item{btl_config}{Optional named list passed to \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}
 to control BTL refit cadence, stopping diagnostics, and selected
-round-log diagnostics. Supported fields:
+round-log diagnostics. Within-set resume reuses the saved configuration when
+omitted; an explicit list resolves against the defaults. Supported fields:
 \describe{
 \item{\code{refit_pairs_target}}{Minimum new committed comparisons required
 before the next BTL refit. Default is \code{ceiling(N / 2)} clamped to
@@ -313,6 +315,10 @@ reuse the persisted cadence unless overridden.}
 
 \item{resume}{Logical; when \code{TRUE} and \code{session_dir} contains a valid session,
 resume from disk; otherwise initialize a new state.
+Saved predictive mode, prior, TrueSkill state, bootstrap queue, and pairing
+strategy are retained without loading a model or regenerating predictions.
+Omit all predictive initialization arguments on resume. Other supported
+controller overrides remain available.
 Default is \code{TRUE}.}
 
 \item{seed}{Integer seed used when creating a new adaptive state. Default is

@@ -227,7 +227,9 @@
 
 .adaptive_phase_a_fit_contract_surface <- function(judge_param_mode,
                                                    model_variant,
-                                                   predictive_prior_digest = NULL) {
+                                                   predictive_prior_digest = NULL,
+                                                   warm_start_mode = NULL,
+                                                   pairing_strategy = NULL) {
   judge_param_mode <- as.character(judge_param_mode %||% "global_shared")
   model_variant <- normalize_model_variant(model_variant %||% "btl_e_b")
 
@@ -242,7 +244,13 @@
     judge_param_mode = judge_param_mode,
     model_variant = model_variant
   )
+  warm_start_mode <- .warm_start_mode(warm_start_mode, !is.null(predictive_prior_digest))
+  pairing_strategy <- .adaptive_pairing_strategy(list(pairing_strategy = pairing_strategy))
+  # Preserve historical cold/hybrid hashes; absent legacy fields mean cold or
+  # BTL-only according to the saved digest, and hybrid according to the strategy.
   if (!is.null(predictive_prior_digest)) out$predictive_prior_digest <- predictive_prior_digest
+  if (warm_start_mode != "cold") out$warm_start_mode <- warm_start_mode
+  if (pairing_strategy != "hybrid") out$pairing_strategy <- pairing_strategy
   out
 }
 
@@ -253,7 +261,9 @@
   .adaptive_phase_a_fit_contract_surface(
     judge_param_mode = controller$judge_param_mode %||% "global_shared",
     model_variant = btl_config$model_variant %||% fit$model_variant %||% "btl_e_b",
-    predictive_prior_digest = .warm_start_phase_a_identity(state, set_id)
+    predictive_prior_digest = .warm_start_phase_a_identity(state, set_id),
+    warm_start_mode = state$meta$warm_start_mode,
+    pairing_strategy = .adaptive_pairing_strategy(controller)
   )
 }
 
@@ -547,17 +557,19 @@
                                                    import_artifact = NULL) {
   requested_source <- as.character(requested_source %||% NA_character_)
   reliability_min <- as.double(controller$phase_a_required_reliability_min %||% 0.80)
+  required_surface <- .adaptive_phase_a_required_config_surface(state, set_id)
+  if (identical(requested_source, "import")) {
+    # Explicit imports retain their own generation identity. New predictions
+    # only govern sets run in this session, and cannot invalidate imported work.
+    required_surface[c("predictive_prior_digest", "warm_start_mode", "pairing_strategy")] <- NULL
+  }
 
   context <- list(
     set_id = as.integer(set_id),
     requested_source = requested_source,
     link_estimation_mode = as.character(controller$link_estimation_mode %||% "transform"),
     phase_a_required_reliability_min = reliability_min,
-    required_config_hash = .adaptive_phase_a_required_config_hash(
-      state,
-      set_id = set_id,
-      hash_fn = .adaptive_runtime_hash_object
-    )
+    required_config_hash = .adaptive_runtime_hash_object(required_surface)
   )
   if (identical(requested_source, "import")) {
     context$import_artifact_hash <- .adaptive_phase_a_artifact_memo_hash(
@@ -616,7 +628,9 @@
       artifact$fit_model_id %||%
       artifact$model_variant %||%
       "btl_e_b",
-    predictive_prior_digest = artifact_surface$predictive_prior_digest %||% NULL
+    predictive_prior_digest = artifact_surface$predictive_prior_digest %||% NULL,
+    warm_start_mode = artifact_surface$warm_start_mode,
+    pairing_strategy = artifact_surface$pairing_strategy
   )
 }
 
@@ -1746,7 +1760,8 @@
   as.double(diagnostics$reliability_EAP_within %||% artifact$reliability_EAP_within %||% NA_real_)
 }
 
-.adaptive_phase_a_validate_imported_artifact <- function(artifact, state, set_id, controller) {
+.adaptive_phase_a_validate_imported_artifact <- function(artifact, state, set_id, controller,
+                                                        source = "run") {
   if (!is.list(artifact)) {
     rlang::abort("Imported Phase A artifact must be a list.")
   }
@@ -1759,8 +1774,23 @@
 
   required_surface <- .adaptive_phase_a_required_config_surface(state, set_id = set_id)
   artifact_surface <- .adaptive_phase_a_artifact_fit_contract_surface(artifact)
+  if (identical(source, "import")) {
+    required_surface <- .adaptive_phase_a_fit_contract_surface(
+      judge_param_mode = required_surface$judge_param_mode,
+      model_variant = required_surface$model_variant,
+      predictive_prior_digest = artifact_surface$predictive_prior_digest,
+      warm_start_mode = artifact_surface$warm_start_mode,
+      pairing_strategy = artifact_surface$pairing_strategy
+    )
+  }
   if (!identical(artifact_surface$predictive_prior_digest, required_surface$predictive_prior_digest)) {
     rlang::abort("Phase A artifact predictive prior configuration mismatch.")
+  }
+  if (!identical(artifact_surface$warm_start_mode, required_surface$warm_start_mode)) {
+    rlang::abort("Phase A artifact warm-start mode configuration mismatch.")
+  }
+  if (!identical(artifact_surface$pairing_strategy, required_surface$pairing_strategy)) {
+    rlang::abort("Phase A artifact pairing strategy configuration mismatch.")
   }
   fit_model_id <- artifact$fit_model_id %||% NULL
   if (!is.null(fit_model_id)) {
@@ -1790,7 +1820,7 @@
   }
 
   fit_config_hash <- as.character(artifact$fit_config_hash %||% NA_character_)
-  required_hash <- .adaptive_phase_a_required_config_hash(state, set_id = set_id)
+  required_hash <- .adaptive_phase_a_hash_object(required_surface)
   artifact_contract_hash <- .adaptive_phase_a_hash_object(artifact_surface)
   if (is.na(fit_config_hash) || fit_config_hash == "") {
     rlang::abort(paste0("Phase A artifact missing fit_config_hash for set ", set_id, "."))
@@ -2087,7 +2117,10 @@
     )
     prepare_context_by_set[[set_key]] <- current_context_hash
 
-    can_reuse <- nrow(persisted_row) > 0L &&
+    # Supplied evidence hashes are not proof that an explicit import is unchanged.
+    # Compare the actual artifact before either memo or ready-artifact reuse.
+    unchanged_import <- !identical(source, "import") || identical(persisted, import_artifact)
+    can_reuse <- isTRUE(unchanged_import) && nrow(persisted_row) > 0L &&
       identical(as.character(prior_prepare_context_by_set[[set_key]] %||% NA_character_), current_context_hash)
     if (isTRUE(can_reuse)) {
       reused_source <- as.character(persisted_row$source[[1L]] %||% source)
@@ -2111,14 +2144,18 @@
       next
     }
 
-    if (!is.null(persisted)) {
+    # A replacement explicitly supplied by the caller must be validated and
+    # installed; an older ready artifact must not mask its changed identity.
+    reuse_persisted <- !is.null(persisted) && isTRUE(unchanged_import)
+    if (isTRUE(reuse_persisted)) {
       persisted_ok <- tryCatch(
         {
           normalized <- .adaptive_phase_a_validate_imported_artifact(
             persisted,
             out,
             set_id = set_id,
-            controller = controller
+            controller = controller,
+            source = requested_source
           )
           if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
             normalized$phase_a_within_set_evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
@@ -2165,7 +2202,8 @@
               artifact,
               out,
               set_id = set_id,
-              controller = controller
+              controller = controller,
+              source = "import"
             )
             if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
               normalized$phase_a_within_set_evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
@@ -2510,16 +2548,17 @@
           )
         )
       }
-      .adaptive_phase_a_validate_imported_artifact(
-        artifact = artifact,
-        state = state,
-        set_id = as.integer(set_id),
-        controller = controller
-      )
       source <- NA_character_
       if (nrow(status_tbl) > 0L && set_id %in% as.integer(status_tbl$set_id)) {
         source <- as.character(status_tbl$source[match(set_id, as.integer(status_tbl$set_id))] %||% NA_character_)
       }
+      .adaptive_phase_a_validate_imported_artifact(
+        artifact = artifact,
+        state = state,
+        set_id = as.integer(set_id),
+        controller = controller,
+        source = source
+      )
       if (!isTRUE(.adaptive_phase_a_set_stop_passed(artifact = artifact, source = source, controller = controller))) {
         rlang::abort(
           paste0(

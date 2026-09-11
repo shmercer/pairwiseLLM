@@ -38,11 +38,15 @@ to \code{default_btl_fit_fn()} when a refit is due.}
 
 \item{adaptive_config}{Optional named list overriding adaptive controller
 behavior. Unknown fields and invalid values abort with an actionable error.
+A resumed session retains its saved pairing strategy: omit \code{pairing_strategy}
+or supply the same value. Other supported controller overrides remain available.
 See \code{\link[=adaptive_rank]{adaptive_rank()}} for the full list of supported keys, detailed
 semantics, and defaults.}
 
 \item{btl_config}{Optional named list overriding BTL refit cadence, stopping
-thresholds, and selected round-log diagnostics. Supported fields:
+thresholds, and selected round-log diagnostics. Within-set continuation and
+resume reuse the saved configuration when this argument is omitted; an
+explicit list resolves against the defaults. Supported fields:
 \describe{
 \item{\code{refit_pairs_target}}{Minimum new committed comparisons required
 before the next BTL refit. Default is \code{ceiling(N / 2)} clamped to

@@ -4248,10 +4248,14 @@ adaptive_rank_start <- function(items,
 #'   to `default_btl_fit_fn()` when a refit is due.
 #' @param adaptive_config Optional named list overriding adaptive controller
 #'   behavior. Unknown fields and invalid values abort with an actionable error.
+#'   A resumed session retains its saved pairing strategy: omit `pairing_strategy`
+#'   or supply the same value. Other supported controller overrides remain available.
 #'   See [adaptive_rank()] for the full list of supported keys, detailed
 #'   semantics, and defaults.
 #' @param btl_config Optional named list overriding BTL refit cadence, stopping
-#'   thresholds, and selected round-log diagnostics. Supported fields:
+#'   thresholds, and selected round-log diagnostics. Within-set continuation and
+#'   resume reuse the saved configuration when this argument is omitted; an
+#'   explicit list resolves against the defaults. Supported fields:
 #'   \describe{
 #'   \item{`refit_pairs_target`}{Minimum new committed comparisons required
 #'   before the next BTL refit. Default is `ceiling(N / 2)` clamped to
@@ -4556,6 +4560,19 @@ adaptive_rank_run_live <- function(state,
   resumed_from_session <- .adaptive_is_resumed_session(state)
   state$config$resumed_from_session <- isTRUE(resumed_from_session)
   state$meta$resumed_from_session <- isTRUE(resumed_from_session)
+  if (isTRUE(resumed_from_session) && is.list(adaptive_config) &&
+    "pairing_strategy" %in% names(adaptive_config)) {
+    requested_strategy <- .adaptive_pairing_strategy(adaptive_config)
+    saved_strategy <- .adaptive_pairing_strategy(state)
+    if (!identical(requested_strategy, saved_strategy)) {
+      rlang::abort(paste0(
+        "Cannot change `adaptive_config$pairing_strategy` on resume (saved: `",
+        saved_strategy, "`, requested: `", requested_strategy,
+        "`). Omit the override or initialize a new session."
+      ))
+    }
+    adaptive_config$pairing_strategy <- NULL
+  }
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   if (isTRUE(resumed_from_session)) {
     state <- .adaptive_validate_probe_state_for_resume(state)
@@ -4575,6 +4592,10 @@ adaptive_rank_run_live <- function(state,
     progress_show_events = progress_show_events,
     progress_errors = progress_errors
   )
+  if (is.null(btl_config) &&
+    identical(as.character(state$controller$run_mode %||% "within_set"), "within_set")) {
+    btl_config <- state$config$btl_config %||% NULL
+  }
   btl_cfg <- .adaptive_btl_resolve_config(state, btl_config)
   btl_cfg$refit_pairs_target <- .adaptive_refit_pairs_target(state, btl_cfg)
   state$config$btl_config <- btl_cfg
@@ -4912,7 +4933,9 @@ adaptive_rank_run_live <- function(state,
 #' This is a thin wrapper around [load_adaptive_session()] and performs schema
 #' and log-shape checks during load. Returned state preserves canonical
 #' \code{step_log}, \code{round_log}, and \code{item_log} contents used for
-#' adaptive auditability.
+#' adaptive auditability. The saved predictive mode, prior, pairing strategy,
+#' current TrueSkill state, and connected shuffled bootstrap queue are authoritative.
+#' Resume does not reload a predictive model or regenerate its predictions.
 #'
 #' @param session_dir Directory containing session artifacts.
 #' @param ... Reserved; must be empty. Resume uses persisted predictive priors.

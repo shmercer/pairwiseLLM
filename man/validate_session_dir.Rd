@@ -11,7 +11,8 @@ validate_session_dir(session_dir)
 }
 \value{
 A metadata list containing at least \code{schema_version},
-\code{package_version}, and \code{n_items}.
+\code{package_version}, \code{n_items}, \code{warm_start_mode}, and
+\code{pairing_strategy}.
 }
 \description{
 Validate an adaptive session directory.
@@ -21,8 +22,9 @@ Verifies that required session artifacts exist and that serialized logs match
 canonical schemas for \code{step_log} and \code{round_log}. This check is
 intended as a preflight for \code{\link[=load_adaptive_session]{load_adaptive_session()}} and enforces the
 canonical adaptive session metadata shape. Validation is strict:
-added/removed/reordered columns in persisted logs are treated as schema
-incompatibilities and abort resume.
+known legacy fields are backfilled before checking canonical columns and types.
+Other added/removed/reordered columns abort validation. Saved mode/strategy
+metadata must agree with the authoritative state.
 }
 \examples{
 dir <- tempfile("pwllm-session-")

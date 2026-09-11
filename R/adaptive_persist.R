@@ -421,6 +421,58 @@ read_log <- function(path) {
   out
 }
 
+.adaptive_backfill_session_behavior <- function(state, metadata = NULL) {
+  if (!inherits(state, "adaptive_state")) {
+    rlang::abort("`state.rds` does not contain an adaptive_state object.")
+  }
+  if (!is.list(state$meta) ||
+    (!is.null(state$controller) && !is.list(state$controller))) {
+    rlang::abort("Session `meta` and `controller` must be lists.")
+  }
+  .warm_start_adaptive_validate(state)
+  # Only absent fields migrate. Never infer initialization from current mu values,
+  # or rerun initialization: saved TrueSkill and bootstrap/round state are authoritative.
+  mode <- .warm_start_mode(state$meta$warm_start_mode, !is.null(state$predictive_prior))
+  strategy <- .adaptive_pairing_strategy(state)
+  initialized <- .warm_start_uses_trueskill(mode)
+  if (is.null(state$meta$trueskill_initialized_from_predictive)) {
+    state$meta$trueskill_initialized_from_predictive <- initialized
+  }
+  if (!identical(state$meta$trueskill_initialized_from_predictive, initialized)) {
+    rlang::abort("Session TrueSkill initialization metadata conflicts with `warm_start_mode`.")
+  }
+  defaults <- .trueskill_defaults()
+  mapping <- list(trueskill_warm_scale = 1.0,
+    trueskill_mu0_used = defaults$mu0, trueskill_sigma0_used = defaults$sigma0)
+  if (initialized) {
+    for (field in names(mapping)) {
+      value <- state$meta[[field]]
+      if (is.null(value)) {
+        state$meta[[field]] <- mapping[[field]]
+      } else if (!is.numeric(value) || length(value) != 1L || !is.null(dim(value)) ||
+        !isTRUE(value == mapping[[field]])) {
+        rlang::abort(paste0("Session `", field, "` conflicts with the fixed TrueSkill mapping."))
+      }
+    }
+  } else if (any(!vapply(state$meta[names(mapping)], is.null, logical(1)))) {
+    rlang::abort("Session TrueSkill mapping metadata conflicts with `warm_start_mode`.")
+  }
+  state$meta$warm_start_mode <- mode
+  state$controller$pairing_strategy <- strategy
+  if (!is.null(metadata)) {
+    for (field in c("warm_start_mode", "pairing_strategy")) {
+      expected <- if (field == "warm_start_mode") mode else strategy
+      if (!is.null(metadata[[field]]) && !identical(metadata[[field]], expected)) {
+        rlang::abort(paste0("Session metadata `", field, "` integrity mismatch."))
+      }
+    }
+    if (!identical(metadata$predictive_prior_digest, state$meta$predictive_prior_digest)) {
+      rlang::abort("Session metadata predictive prior integrity mismatch.")
+    }
+  }
+  state
+}
+
 .adaptive_item_log_current_schema <- function() {
   cols <- .adaptive_item_log_columns()
   int_cols <- c(
@@ -1006,6 +1058,12 @@ read_log <- function(path) {
   if (!.adaptive_is_integerish(n_items) || length(n_items) != 1L || is.na(n_items) || n_items < 1L) {
     rlang::abort("Session metadata `n_items` must be a positive integer.")
   }
+  if (!is.null(metadata$warm_start_mode)) {
+    .warm_start_mode(metadata$warm_start_mode, !is.null(metadata$predictive_prior_digest))
+  }
+  if (!is.null(metadata$pairing_strategy)) {
+    .adaptive_pairing_strategy(list(pairing_strategy = metadata$pairing_strategy))
+  }
   metadata
 }
 
@@ -1071,13 +1129,15 @@ read_log <- function(path) {
 #' canonical schemas for \code{step_log} and \code{round_log}. This check is
 #' intended as a preflight for [load_adaptive_session()] and enforces the
 #' canonical adaptive session metadata shape. Validation is strict:
-#' added/removed/reordered columns in persisted logs are treated as schema
-#' incompatibilities and abort resume.
+#' known legacy fields are backfilled before checking canonical columns and types.
+#' Other added/removed/reordered columns abort validation. Saved mode/strategy
+#' metadata must agree with the authoritative state.
 #'
 #' @param session_dir Directory containing session artifacts.
 #'
 #' @return A metadata list containing at least \code{schema_version},
-#'   \code{package_version}, and \code{n_items}.
+#'   \code{package_version}, \code{n_items}, \code{warm_start_mode}, and
+#'   \code{pairing_strategy}.
 #'
 #' @examples
 #' dir <- tempfile("pwllm-session-")
@@ -1104,6 +1164,9 @@ validate_session_dir <- function(session_dir) {
   }
 
   metadata <- .adaptive_read_session_metadata(paths)
+  state <- .adaptive_backfill_session_behavior(readRDS(paths$state), metadata)
+  metadata$warm_start_mode <- state$meta$warm_start_mode
+  metadata$pairing_strategy <- state$controller$pairing_strategy
 
   step_log <- .adaptive_align_log_schema_for_resume(
     read_log(paths$step_log),
@@ -1173,7 +1236,7 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
     rlang::abort("`overwrite` must be TRUE or FALSE.")
   }
 
-  .warm_start_adaptive_validate(state)
+  state <- .adaptive_backfill_session_behavior(state)
   dir.create(session_dir, recursive = TRUE, showWarnings = FALSE)
   paths <- .adaptive_session_paths(session_dir)
   phase_a_artifacts <- state$linking$phase_a$artifacts %||% list()
@@ -1219,7 +1282,9 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
     schema_version = as.character(state$meta$schema_version %||% "adaptive-session"),
     package_version = as.character(utils::packageVersion("pairwiseLLM")),
     n_items = as.integer(state$n_items),
-    predictive_prior_digest = state$meta$predictive_prior_digest %||% NULL
+    predictive_prior_digest = state$meta$predictive_prior_digest %||% NULL,
+    warm_start_mode = state$meta$warm_start_mode,
+    pairing_strategy = state$controller$pairing_strategy
   )
 
   write_log(tibble::as_tibble(state$step_log), paths$step_log)
@@ -1260,6 +1325,18 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
 #' strict schema validation for canonical logs; incompatible saved schemas abort
 #' with explicit errors.
 #'
+#' Legacy sessions without a saved predictive mode migrate to \code{cold} when
+#' no predictive prior exists, and \code{btl_only} otherwise. An absent pairing
+#' strategy migrates to \code{hybrid}. Saved TrueSkill values, the connected
+#' shuffled bootstrap queue and its index, and round progress remain authoritative;
+#' loading never recomputes predictions or initializes TrueSkill again.
+#'
+#' \code{metadata.rds} records effective \code{warm_start_mode} and
+#' \code{pairing_strategy} for session-level audit. Direct step logs already record
+#' \code{pairing_strategy}, the presented A-over-B TrueSkill probability
+#' \code{p_ij}, and \code{target_distance} (missing for random pairing). Predictive
+#' vectors and provenance are retained once in \code{state$predictive_prior}.
+#'
 #' @param session_dir Directory containing session artifacts.
 #'
 #' @return An \code{adaptive_state} object ready for resume.
@@ -1291,9 +1368,7 @@ load_adaptive_session <- function(session_dir) {
   state <- .adaptive_phase_a_strip_runtime_prepare_memo(state)
 
   state <- .adaptive_validate_state_for_resume(state)
-  if (!identical(metadata$predictive_prior_digest, state$meta$predictive_prior_digest)) {
-    rlang::abort("Session metadata predictive prior integrity mismatch.")
-  }
+  state <- .adaptive_backfill_session_behavior(state, metadata)
   state$meta$schema_version <- metadata$schema_version
   state$linking <- state$linking %||% list()
   state$linking$probe <- .adaptive_link_probe_state(state)
