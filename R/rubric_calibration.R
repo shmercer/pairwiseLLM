@@ -139,6 +139,7 @@
   if (object$status == "unfitted" && (!is.null(object$backend) || !is.null(object$transformation))) {
     rlang::abort("An unfitted calibration cannot contain statistical results.")
   }
+  if (object$status == "fitted" && object$method == "percentile") .rubric_validate_percentile(object)
   invisible(object)
 }
 
@@ -146,8 +147,8 @@
 #'
 #' @description
 #' Establish a trait-specific rubric conversion from completed Bayesian BTL
-#' results. This foundation API validates inputs; the statistical method
-#' backends are not yet implemented and valid fitting calls currently error.
+#' results. Percentile scoring assigns deterministic, distribution-matched
+#' performance levels. The ordinal method backends are not yet implemented.
 #'
 #' @param cj A completed [fit_bayes_btl_mcmc()] result, a completed within-set
 #'   [adaptive_rank()] result (or its `adaptive_state`), or an import-ready Phase A
@@ -171,12 +172,33 @@
 #'   and any target proportions. Typically 3--6.
 #' @param target_distribution Optional positive proportions in level order,
 #'   summing to one, for percentile scoring. Omission requests equal proportions.
+#'   The absolute sum tolerance is `1e-8`; accepted proportions are normalized
+#'   to sum to one for computation, while the requested values are retained.
+#'   Named proportions must match the labels in their specified order.
 #' @param ... Reserved for future method arguments; currently must be empty.
 #'
 #' @details
 #' Higher CJ locations and higher ordered rubric levels must mean better
 #' performance; no orientation is silently reversed. All requested categories
 #' must be observed for ordinal calibration.
+#'
+#' Percentile scoring uses [stats::quantile()] with type 8 at cumulative target
+#' proportions. This quantile type is fixed. A score equal to a cutpoint enters
+#' the higher category: category is one plus the number of cutpoints less than
+#' or equal to the score. Repeated cutpoints can leave categories empty; all
+#' exact-score ties receive the same category, even when every score is equal
+#' (in which case all items enter the highest category). Requested proportions
+#' may be unattainable because of ties or finite sample size. Cutpoint tie counts
+#' count all source observations exactly equal to each cutpoint, including a
+#' count of one when only one observation equals that cutpoint.
+#'
+#' These are norm-referenced CJ-derived performance levels, not criterion-referenced
+#' scores. Matching a historical rubric distribution does not establish agreement
+#' with rubric raters. Recomputing cutpoints on another cohort changes the reference
+#' distribution. Stored percentile cutpoints support reuse of the original completed
+#' result only; independent cohorts and linked target prediction are not supported.
+#' Scoring conditions on accepted point locations, even when CJ posterior draws
+#' are available. Category probabilities and uncertainty propagation are unavailable.
 #'
 #' Phase A artifacts are checked using existing import-readiness rules, including
 #' the existing explicit quality-gate override. Import readiness does not assert
@@ -190,16 +212,36 @@
 #' or change Phase B estimation. Ordinal calibration will condition on accepted
 #' CJ locations; joint CJ/rubric likelihood estimation is outside this API.
 #'
-#' @return Once a statistical backend is implemented, an object of class
-#'   `pairwiseLLM_rubric_calibration`. At this foundation stage, valid calls raise
-#'   `pairwiseLLM_rubric_backend_unavailable`; no fitted object is fabricated.
+#' @return For percentile scoring, a fitted `pairwiseLLM_rubric_calibration`
+#'   containing labels, `K`, normalized `cj`, source `calibration_range`, trait,
+#'   provenance, diagnostics, and an identity `transformation` (center 0, scale 1).
+#'   Its `backend` stores `quantile_type`, `cutpoints`, `cumulative_probs`,
+#'   `requested_proportions`, normalized `effective_proportions`,
+#'   `achieved_proportions`, `achieved_counts`, and `cutpoint_tie_counts`.
+#'   Category summaries include every requested level, including empty levels.
+#'   `target_distribution` retains the requested proportions (or equal defaults).
+#'   `calibration_data` and `category_counts` remain `NULL` because no human labels
+#'   are fitted. `diagnostics$category_probabilities_available` is `FALSE`.
+#'   Valid ordinal fitting calls still raise `pairwiseLLM_rubric_backend_unavailable`.
 #' @seealso [predict.pairwiseLLM_rubric_calibration()]
+#' @examples
+#' \dontrun{
+#' # Starting from an already completed CJ result; no sampling occurs here.
+#' fit <- fit_rubric_calibration(completed_cj, method = "percentile",
+#'   trait = "organization", levels = c("developing", "proficient", "advanced"),
+#'   target_distribution = c(0.2, 0.5, 0.3))
+#' predict(fit)
+#' fit$backend$achieved_proportions
+#' fit$backend$cutpoint_tie_counts
+#' }
 #' @export
 fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
                                    calibration_design = "same_set", trait = NULL,
                                    levels = NULL, K = NULL, target_distribution = NULL, ...) {
   rlang::check_dots_empty()
-  .rubric_prepare_calibration(cj, rubric, method, calibration_design, trait, levels, K, target_distribution)
+  object <- .rubric_prepare_calibration(cj, rubric, method, calibration_design, trait, levels, K,
+    target_distribution)
+  if (method == "percentile") return(.rubric_fit_percentile(object))
   rlang::abort(paste0("The `", method, "` rubric backend is not implemented yet."),
     class = "pairwiseLLM_rubric_backend_unavailable")
 }
@@ -208,13 +250,22 @@ fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
 #'
 #' @param object A `pairwiseLLM_rubric_calibration` object.
 #' @param newdata Completed CJ result to predict, or `NULL` for the original
-#'   items. Historical linked prediction requires accepted Phase B scores on the
-#'   stored reference scale; independently centered target scores are invalid.
+#'   items. Percentile scoring accepts the original completed result with unchanged
+#'   item IDs, exact accepted scores and uncertainty, and matching fit/reference
+#'   evidence. Item reordering is allowed; collection provenance does not affect
+#'   scoring. Raw tables, independent cohorts, refits, and Phase B targets are not
+#'   supported for percentile prediction. Future ordinal linked prediction requires
+#'   accepted Phase B scores on the stored reference scale.
 #' @param hard_score Ordinal hard-score rule: `"median"` (default) or `"mode"`.
 #'   Ordinal output will also retain all category probabilities and expected level.
+#'   Both choices give the same deterministic category for percentile scoring.
 #' @param ... Reserved arguments; currently must be empty.
-#' @return Prediction backends are not yet implemented. Unfitted objects fail
-#'   clearly; this foundation method does not return synthetic predictions.
+#' @return For percentile scoring, a tibble with `item_id`, accepted source `theta`,
+#'   integer `category` in `1:K`, original-label `rubric_score`, and `extrapolated`
+#'   (outside the fitted CJ range). Under the original-result restriction,
+#'   extrapolation flags are always false. Stored cutpoints are reused unchanged.
+#'   No category probabilities or probabilistic summaries are returned.
+#'   Unfitted objects fail clearly; ordinal prediction backends remain unavailable.
 #' @seealso [fit_rubric_calibration()]
 #' @export
 predict.pairwiseLLM_rubric_calibration <- function(object, newdata = NULL,
@@ -224,6 +275,7 @@ predict.pairwiseLLM_rubric_calibration <- function(object, newdata = NULL,
   if (missing(hard_score)) hard_score <- "median"
   .rubric_choice(hard_score, c("median", "mode"), "hard_score")
   if (object$status != "fitted") rlang::abort("Cannot predict from an unfitted rubric calibration.")
+  if (object$method == "percentile") return(.rubric_predict_percentile(object, newdata))
   rlang::abort("Rubric prediction backends are not implemented yet.",
     class = "pairwiseLLM_rubric_backend_unavailable")
 }

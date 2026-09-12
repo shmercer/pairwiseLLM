@@ -10,17 +10,26 @@
 \item{object}{A \code{pairwiseLLM_rubric_calibration} object.}
 
 \item{newdata}{Completed CJ result to predict, or \code{NULL} for the original
-items. Historical linked prediction requires accepted Phase B scores on the
-stored reference scale; independently centered target scores are invalid.}
+items. Percentile scoring accepts the original completed result with unchanged
+item IDs, exact accepted scores and uncertainty, and matching fit/reference
+evidence. Item reordering is allowed; collection provenance does not affect
+scoring. Raw tables, independent cohorts, refits, and Phase B targets are not
+supported for percentile prediction. Future ordinal linked prediction requires
+accepted Phase B scores on the stored reference scale.}
 
 \item{hard_score}{Ordinal hard-score rule: \code{"median"} (default) or \code{"mode"}.
-Ordinal output will also retain all category probabilities and expected level.}
+Ordinal output will also retain all category probabilities and expected level.
+Both choices give the same deterministic category for percentile scoring.}
 
 \item{...}{Reserved arguments; currently must be empty.}
 }
 \value{
-Prediction backends are not yet implemented. Unfitted objects fail
-clearly; this foundation method does not return synthetic predictions.
+For percentile scoring, a tibble with \code{item_id}, accepted source \code{theta},
+integer \code{category} in \code{1:K}, original-label \code{rubric_score}, and \code{extrapolated}
+(outside the fitted CJ range). Under the original-result restriction,
+extrapolation flags are always false. Stored cutpoints are reused unchanged.
+No category probabilities or probabilistic summaries are returned.
+Unfitted objects fail clearly; ordinal prediction backends remain unavailable.
 }
 \description{
 Predict rubric scores from a calibration

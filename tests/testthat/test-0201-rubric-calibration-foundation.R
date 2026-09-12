@@ -100,8 +100,7 @@ test_that("public API dispatch reports unimplemented backends without fabricated
     expect_error(fit(fixed, rubric, method = method, trait = "trait"),
       class = "pairwiseLLM_rubric_backend_unavailable")
   }
-  expect_error(fit(fixed, method = "percentile", trait = "trait", K = 3),
-    class = "pairwiseLLM_rubric_backend_unavailable")
+  expect_identical(fit(fixed, method = "percentile", trait = "trait", K = 3)$status, "fitted")
   expect_error(fit(fixed, rubric, method = "auto", trait = "trait"), "method")
   expect_error(fit(fixed, rubric, method = "joint", trait = "trait"), "method")
   expect_error(fit(fixed, rubric, calibration_design = "joint", trait = "trait"), "calibration_design")

@@ -45,24 +45,53 @@ Character and unordered-factor scores require explicit levels.}
 and any target proportions. Typically 3--6.}
 
 \item{target_distribution}{Optional positive proportions in level order,
-summing to one, for percentile scoring. Omission requests equal proportions.}
+summing to one, for percentile scoring. Omission requests equal proportions.
+The absolute sum tolerance is \code{1e-8}; accepted proportions are normalized
+to sum to one for computation, while the requested values are retained.
+Named proportions must match the labels in their specified order.}
 
 \item{...}{Reserved for future method arguments; currently must be empty.}
 }
 \value{
-Once a statistical backend is implemented, an object of class
-\code{pairwiseLLM_rubric_calibration}. At this foundation stage, valid calls raise
-\code{pairwiseLLM_rubric_backend_unavailable}; no fitted object is fabricated.
+For percentile scoring, a fitted \code{pairwiseLLM_rubric_calibration}
+containing labels, \code{K}, normalized \code{cj}, source \code{calibration_range}, trait,
+provenance, diagnostics, and an identity \code{transformation} (center 0, scale 1).
+Its \code{backend} stores \code{quantile_type}, \code{cutpoints}, \code{cumulative_probs},
+\code{requested_proportions}, normalized \code{effective_proportions},
+\code{achieved_proportions}, \code{achieved_counts}, and \code{cutpoint_tie_counts}.
+Category summaries include every requested level, including empty levels.
+\code{target_distribution} retains the requested proportions (or equal defaults).
+\code{calibration_data} and \code{category_counts} remain \code{NULL} because no human labels
+are fitted. \code{diagnostics$category_probabilities_available} is \code{FALSE}.
+Valid ordinal fitting calls still raise \code{pairwiseLLM_rubric_backend_unavailable}.
 }
 \description{
 Establish a trait-specific rubric conversion from completed Bayesian BTL
-results. This foundation API validates inputs; the statistical method
-backends are not yet implemented and valid fitting calls currently error.
+results. Percentile scoring assigns deterministic, distribution-matched
+performance levels. The ordinal method backends are not yet implemented.
 }
 \details{
 Higher CJ locations and higher ordered rubric levels must mean better
 performance; no orientation is silently reversed. All requested categories
 must be observed for ordinal calibration.
+
+Percentile scoring uses \code{\link[stats:quantile]{stats::quantile()}} with type 8 at cumulative target
+proportions. This quantile type is fixed. A score equal to a cutpoint enters
+the higher category: category is one plus the number of cutpoints less than
+or equal to the score. Repeated cutpoints can leave categories empty; all
+exact-score ties receive the same category, even when every score is equal
+(in which case all items enter the highest category). Requested proportions
+may be unattainable because of ties or finite sample size. Cutpoint tie counts
+count all source observations exactly equal to each cutpoint, including a
+count of one when only one observation equals that cutpoint.
+
+These are norm-referenced CJ-derived performance levels, not criterion-referenced
+scores. Matching a historical rubric distribution does not establish agreement
+with rubric raters. Recomputing cutpoints on another cohort changes the reference
+distribution. Stored percentile cutpoints support reuse of the original completed
+result only; independent cohorts and linked target prediction are not supported.
+Scoring conditions on accepted point locations, even when CJ posterior draws
+are available. Category probabilities and uncertainty propagation are unavailable.
 
 Phase A artifacts are checked using existing import-readiness rules, including
 the existing explicit quality-gate override. Import readiness does not assert
@@ -75,6 +104,17 @@ represents its accepted MAP location with Laplace/Hessian uncertainty.
 Rubric scoring is downstream of CJ estimation and does not run comparisons
 or change Phase B estimation. Ordinal calibration will condition on accepted
 CJ locations; joint CJ/rubric likelihood estimation is outside this API.
+}
+\examples{
+\dontrun{
+# Starting from an already completed CJ result; no sampling occurs here.
+fit <- fit_rubric_calibration(completed_cj, method = "percentile",
+  trait = "organization", levels = c("developing", "proficient", "advanced"),
+  target_distribution = c(0.2, 0.5, 0.3))
+predict(fit)
+fit$backend$achieved_proportions
+fit$backend$cutpoint_tie_counts
+}
 }
 \seealso{
 \code{\link[=predict.pairwiseLLM_rubric_calibration]{predict.pairwiseLLM_rubric_calibration()}}

@@ -133,6 +133,7 @@ Collate:
     'rubric_calibration.R'
     'rubric_cj_contract.R'
     'rubric_cj_linked.R'
+    'rubric_percentile.R'
     'seed_helpers.R'
     'together_live.R'
     'traits.R'
