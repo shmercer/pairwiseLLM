@@ -253,9 +253,15 @@ test_that("Phase A memo reuse restores absent stop flags without regenerating im
 
   artifact <- artifacts[[1L]]
   artifact$phase_a_within_set_evidence_hash <- NULL
+  # Explicit row names can serialize differently from as_tibble()'s compact
+  # row names despite identical evidence values (as observed on oldrel-1).
+  attr(artifact$phase_a_within_set_evidence, "row.names") <-
+    seq_len(nrow(artifact$phase_a_within_set_evidence))
   surface <- pairwiseLLM:::.adaptive_phase_a_artifact_memo_surface(artifact)
+  expect_identical(surface$phase_a_within_set_evidence, artifact$phase_a_within_set_evidence)
   expect_identical(surface$phase_a_within_set_evidence_hash,
-    pairwiseLLM:::.adaptive_phase_a_hash_object(artifact$phase_a_within_set_evidence))
+    pairwiseLLM:::.adaptive_phase_a_hash_object(
+      tibble::as_tibble(artifact$phase_a_within_set_evidence)))
   changed <- artifact
   changed$phase_a_within_set_evidence$y_A[1L] <- 0L
   expect_false(identical(pairwiseLLM:::.adaptive_phase_a_artifact_memo_hash(changed),

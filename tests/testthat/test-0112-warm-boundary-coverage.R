@@ -24,10 +24,11 @@ test_that("ensemble validation rejects unnamed, scalar, and incomplete component
 
 test_that("registry ancestry checks distinguish sibling names from descendants", {
   root <- withr::local_tempdir()
+  canonical_root <- normalizePath(root, winslash = "/", mustWork = TRUE)
   nested <- file.path(root, "new", "models")
   canonical <- pairwiseLLM:::.warm_start_canonical_path(nested)
-  expect_identical(canonical, file.path(normalizePath(root), "new", "models"))
+  expect_identical(canonical, file.path(canonical_root, "new", "models"))
   expect_false(dir.exists(nested))
-  expect_true(pairwiseLLM:::.warm_start_within(canonical, normalizePath(root)))
-  expect_false(pairwiseLLM:::.warm_start_within(paste0(root, "-sibling"), root))
+  expect_true(pairwiseLLM:::.warm_start_within(canonical, canonical_root))
+  expect_false(pairwiseLLM:::.warm_start_within(paste0(canonical_root, "-sibling"), canonical_root))
 })
