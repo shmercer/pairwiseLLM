@@ -577,3 +577,35 @@ test_that("controller config hard-gates unsupported Phase B public controls", {
     "allow_spoke_spoke_cross_set"
   )
 })
+test_that("legacy schema guards reject inconsistent refit accounting after valid observations", {
+  state <- make_legacy_schema_state()
+  for (field in c("N", "M1_target", "new_since_refit")) {
+    bad <- state
+    bad[[field]] <- 1
+    expect_error(validate_btl_mcmc_state(bad), field, fixed = TRUE)
+  }
+  bad <- state
+  bad$results_seen <- 1
+  expect_error(validate_btl_mcmc_state(bad), "named logical vector or environment")
+  bad <- state
+  bad$last_refit_at <- -1L
+  expect_error(validate_btl_mcmc_state(bad), "last_refit_at.*non-negative")
+  state$history_results <- build_btl_results_data(
+    data.frame(ID1 = "A", ID2 = "B", better_id = "A"))
+  state$history_pairs <- tibble::tibble(pair_uid = "A:B#1", unordered_key = "A:B", ordered_key = "A:B",
+    A_id = "A", B_id = "B", A_text = "a", B_text = "b", phase = "phase2", iter = 1L,
+    created_at = as.POSIXct("2026-09-11", tz = "UTC"))
+  state$comparisons_scheduled <- 1L
+  state$comparisons_observed <- 1L
+  expect_error(validate_btl_mcmc_state(state), "new_since_refit.*must equal")
+  state$new_since_refit <- 1L
+  expect_invisible(validate_btl_mcmc_state(state))
+  state$history_results <- state$history_results[FALSE, ]
+  expect_error(validate_btl_mcmc_state(state), "history_results.*rows equal")
+  state <- task09_link_state()
+  state$set_ids <- "bad"
+  expect_error(validate_state(state), "set_ids.*integer")
+  state <- task09_link_state()
+  state$linking$run_mode <- "link_one_spoke"
+  expect_error(validate_state(state), "exactly one spoke set")
+})

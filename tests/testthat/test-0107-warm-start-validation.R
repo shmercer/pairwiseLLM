@@ -53,6 +53,17 @@ test_that("portable model validation rejects inconsistent nested predictions and
   model <- fit_warm_start_model(features$item_id, warm_core_theta(features), "audit",
     features = features, alpha_grid = c(0, 1))
   expect_invisible(.validate_warm_start_model(model))
+  bad <- model
+  bad$tuning$oof$observed <- bad$tuning$oof$observed + 1
+  bad$calibration <- pairwiseLLM:::.warm_start_calibration_fit(
+    bad$tuning$oof$raw_prediction, bad$tuning$oof$observed)
+  expect_error(.validate_warm_start_model(bad), "validation contract")
+  bad <- model
+  bad$validation$folds[1] <- list(1)
+  expect_error(.validate_warm_start_model(bad), "validation contract")
+  bad <- model
+  bad$validation$folds[[1]]$predictions$item_id[1] <- "wrong-id"
+  expect_error(.validate_warm_start_model(bad), "validation contract")
   for (field in names(model$validation)) {
     bad <- model
     bad$validation[field] <- list(NULL)
@@ -121,7 +132,7 @@ test_that("warning provenance retains context and fatal errors retain their pare
   local_mocked_bindings(.warm_start_train_cv = function(...) {
     rlang::warn("stored warning")
     original(...)
-  })
+  }, .package = "pairwiseLLM")
   model <- suppressWarnings(fit_warm_start_model(features$item_id, warm_core_theta(features), "warnings",
     features = features, alpha_grid = 0))
   expect_length(model$validation$warnings, 6)

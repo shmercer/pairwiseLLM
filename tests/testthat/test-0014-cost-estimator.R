@@ -1,3 +1,34 @@
+testthat::test_that("stratified pilots preserve singleton strata and distinct requested pairs", {
+  pairs <- tibble::tibble(ID1 = letters[1:6], ID2 = LETTERS[1:6],
+    text1 = strrep("a", 1:6), text2 = "b")
+  submit <- function(pairs, ...) {
+    tibble::tibble(ID1 = pairs$ID1, ID2 = pairs$ID2, better_id = pairs$ID1,
+      prompt_tokens = as.integer(100 + match(pairs$ID1, letters)^2),
+      completion_tokens = 10L, status_code = 200L)
+  }
+  withr::local_seed(91L)
+  before <- .Random.seed
+  for (seed in c(1L, 5L, 31L)) {
+    est <- estimate_llm_pairs_cost(pairs, model = "fixture", trait_name = "quality",
+      trait_description = "quality", n_test = 6L, seed = seed,
+      cost_per_million_input = 1, cost_per_million_output = 2,
+      .submit_fun = submit)
+    testthat::expect_identical(est$test_pairs$ID1, pairs$ID1)
+    testthat::expect_equal(nrow(est$remaining_pairs), 0L)
+    testthat::expect_equal(est$summary$pilot_prompt_tokens, 691)
+  }
+  for (seed in 1:12) {
+    est <- estimate_llm_pairs_cost(pairs, model = "fixture", trait_name = "quality",
+      trait_description = "quality", n_test = 5L, seed = seed,
+      cost_per_million_input = 1, cost_per_million_output = 2,
+      .submit_fun = submit)
+    # The first four byte-length strata contain exactly one row apiece.
+    testthat::expect_true(all(letters[1:4] %in% est$test_pairs$ID1), info = paste("seed", seed))
+    testthat::expect_equal(sum(est$test_pairs$ID1 %in% letters[5:6]), 1L)
+  }
+  testthat::expect_identical(.Random.seed, before)
+})
+
 testthat::test_that("estimate_llm_pairs_cost returns expected and budget cost with batch discount", {
   pairs <- tibble::tibble(
     ID1 = paste0("S", sprintf("%02d", 1:10)),

@@ -26,8 +26,6 @@ test_that("gemini_compare_pair_live parses a successful response without
           thoughts", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
-
   fake_resp <- structure(list(), class = "httr2_response")
 
   fake_body <- list(
@@ -55,7 +53,7 @@ test_that("gemini_compare_pair_live parses a successful response without
     .gemini_req_perform = function(req) fake_resp,
     .gemini_resp_status = function(resp) 200L,
     .gemini_resp_body_json = function(resp, ...) fake_body,
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -108,8 +106,6 @@ test_that("gemini_compare_pair_live parses thoughts and content when
           include_thoughts = TRUE", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
-
   fake_resp <- structure(list(), class = "httr2_response")
 
   fake_body <- list(
@@ -132,7 +128,7 @@ test_that("gemini_compare_pair_live parses thoughts and content when
     .gemini_req_perform = function(req) fake_resp,
     .gemini_resp_status = function(resp) 200L,
     .gemini_resp_body_json = function(resp, ...) fake_body,
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -172,8 +168,6 @@ test_that("gemini_compare_pair_live handles responses without
           <BETTER_SAMPLE> tag", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
-
   fake_resp <- structure(list(), class = "httr2_response")
 
   fake_body <- list(
@@ -194,7 +188,7 @@ test_that("gemini_compare_pair_live handles responses without
     .gemini_req_perform = function(req) fake_resp,
     .gemini_resp_status = function(resp) 200L,
     .gemini_resp_body_json = function(resp, ...) fake_body,
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -221,15 +215,13 @@ test_that("gemini_compare_pair_live returns an error row when
           request fails", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
-
   # Simulate a generic error thrown by .gemini_req_perform
   testthat::local_mocked_bindings(
     .gemini_api_key = function(api_key = NULL) "TEST_GEMINI_KEY",
     .gemini_req_perform = function(req) stop("HTTP 500 Internal Server Error"),
     .gemini_resp_status = function(resp) 500L,
     .gemini_resp_body_json = function(resp, ...) NULL,
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -261,7 +253,6 @@ test_that("gemini_compare_pair_live returns an error row when
 
 test_that("gemini_compare_pair_live handles httr2_http errors and extracts body", {
   skip_if_not_installed("httr2")
-  ns <- asNamespace("pairwiseLLM")
 
   # Create a real httr2 response with a body
   # Note: httr2::response() requires httr2 >= 0.2.0
@@ -283,7 +274,7 @@ test_that("gemini_compare_pair_live handles httr2_http errors and extracts body"
     .gemini_request = function(...) structure(list(), class = "httr2_request"),
     .gemini_req_body_json = function(req, body) req,
     .gemini_req_perform = function(...) stop(cnd),
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -307,8 +298,6 @@ test_that("gemini_compare_pair_live validates model and maps thinking_level
           medium to High", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
-
   fake_resp <- structure(list(), class = "httr2_response")
   fake_body <- list(candidates = list())
 
@@ -317,7 +306,7 @@ test_that("gemini_compare_pair_live validates model and maps thinking_level
     .gemini_req_perform = function(req) fake_resp,
     .gemini_resp_status = function(resp) 200L,
     .gemini_resp_body_json = function(resp, ...) fake_body,
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -382,7 +371,6 @@ test_that("gemini_compare_pair_live validates model and maps thinking_level
 
 test_that("gemini_compare_pair_live correctly constructs request body with config", {
   skip_if_not_installed("httr2")
-  ns <- asNamespace("pairwiseLLM")
 
   captured_body <- NULL
 
@@ -397,7 +385,7 @@ test_that("gemini_compare_pair_live correctly constructs request body with confi
     .gemini_req_perform = function(...) structure(list(), class = "httr2_response"),
     .gemini_resp_status = function(...) 200L,
     .gemini_resp_body_json = function(...) list(candidates = list()),
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -470,7 +458,6 @@ test_that("gemini_compare_pair_live rejects unsupported service_tier values", {
 
 test_that("gemini_compare_pair_live handles empty/malformed candidates gracefully", {
   skip_if_not_installed("httr2")
-  ns <- asNamespace("pairwiseLLM")
 
   # Scenario 1: candidates list is empty
   empty_candidates <- list(candidates = list())
@@ -491,7 +478,7 @@ test_that("gemini_compare_pair_live handles empty/malformed candidates gracefull
     .gemini_resp_body_json = function(...) empty_candidates,
     .gemini_request = function(...) structure(list(), class = "httr2_request"),
     .gemini_req_body_json = function(req, ...) req,
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   res1 <- gemini_compare_pair_live("A", "a", "B", "b", "m", "t", "d")
@@ -501,7 +488,7 @@ test_that("gemini_compare_pair_live handles empty/malformed candidates gracefull
   # 2. Empty parts (update mock)
   testthat::local_mocked_bindings(
     .gemini_resp_body_json = function(...) empty_parts,
-    .env = ns
+    .package = "pairwiseLLM"
   )
   res2 <- gemini_compare_pair_live("A", "a", "B", "b", "m", "t", "d")
   expect_true(is.na(res2$content))
@@ -509,7 +496,7 @@ test_that("gemini_compare_pair_live handles empty/malformed candidates gracefull
   # 3. One part + include_thoughts=TRUE
   testthat::local_mocked_bindings(
     .gemini_resp_body_json = function(...) one_part,
-    .env = ns
+    .package = "pairwiseLLM"
   )
   res3 <- gemini_compare_pair_live("A", "a", "B", "b", "m", "t", "d", include_thoughts = TRUE)
 
@@ -559,7 +546,6 @@ testthat::test_that("submit_gemini_pairs_live returns list structure for zero ro
 })
 
 testthat::test_that("submit_gemini_pairs_live runs correctly and returns list", {
-  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
   calls <- list()
@@ -586,7 +572,7 @@ testthat::test_that("submit_gemini_pairs_live runs correctly and returns list", 
         better_id = ID1
       )
     },
-    .env = pll_ns
+    .package = "pairwiseLLM"
   )
 
   res <- submit_gemini_pairs_live(
@@ -607,7 +593,6 @@ testthat::test_that("submit_gemini_pairs_live runs correctly and returns list", 
 })
 
 testthat::test_that("submit_gemini_pairs_live separates failed pairs", {
-  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
 
   pairs <- tibble::tibble(
@@ -632,7 +617,7 @@ testthat::test_that("submit_gemini_pairs_live separates failed pairs", {
         better_id = ID1
       )
     },
-    .env = pll_ns,
+    .package = "pairwiseLLM",
     {
       res <- submit_gemini_pairs_live(
         pairs, "gemini", td$name, td$description,
@@ -650,7 +635,7 @@ testthat::test_that("submit_gemini_pairs_live separates failed pairs", {
 
 testthat::test_that("submit_gemini_pairs_live respects save_path (Resume Logic)", {
   testthat::skip_if_not_installed("readr")
-  pll_ns <- asNamespace("pairwiseLLM")
+
   td <- trait_description("overall_quality")
   tmp_csv <- tempfile(fileext = ".csv")
 
@@ -683,7 +668,7 @@ testthat::test_that("submit_gemini_pairs_live respects save_path (Resume Logic)"
         better_id = "S03"
       )
     },
-    .env = pll_ns,
+    .package = "pairwiseLLM",
     {
       res <- submit_gemini_pairs_live(
         pairs = pairs,
@@ -731,7 +716,6 @@ testthat::test_that("submit_gemini_pairs_live validates inputs", {
 
 test_that("submit_gemini_pairs_live creates output directory if missing", {
   skip_if_not_installed("readr")
-  ns <- asNamespace("pairwiseLLM")
 
   # Setup unique temp directory
   temp_dir <- tempfile("gemini_test_dir")
@@ -753,7 +737,7 @@ test_that("submit_gemini_pairs_live creates output directory if missing", {
         better_id = "S1"
       )
     },
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   # Run
@@ -769,7 +753,6 @@ test_that("submit_gemini_pairs_live creates output directory if missing", {
 
 test_that("submit_gemini_pairs_live resume logic skips existing pairs", {
   skip_if_not_installed("readr")
-  ns <- asNamespace("pairwiseLLM")
 
   csv_file <- tempfile(fileext = ".csv")
   on.exit(unlink(csv_file))
@@ -800,7 +783,7 @@ test_that("submit_gemini_pairs_live resume logic skips existing pairs", {
         better_id = ID1
       )
     },
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   res <- submit_gemini_pairs_live(
@@ -826,8 +809,6 @@ test_that("submit_gemini_pairs_live runs parallel logic (coverage test)", {
     text2 = "Y"
   )
 
-  gemini_env <- environment(submit_gemini_pairs_live)
-
   testthat::local_mocked_bindings(
     `future::plan` = function(...) NULL,
     `future.apply::future_lapply` = function(X, FUN, ...) lapply(X, FUN, ...),
@@ -844,7 +825,7 @@ test_that("submit_gemini_pairs_live runs parallel logic (coverage test)", {
         better_id = NA_character_
       )
     },
-    .env = gemini_env
+    .package = "pairwiseLLM"
   )
 
   out_csv <- tempfile(fileext = ".csv")
@@ -864,10 +845,9 @@ test_that("submit_gemini_pairs_live runs parallel logic (coverage test)", {
   expect_true(file.exists(out_csv))
 })
 
-
 test_that("submit_gemini_pairs_live sequential saves and catches errors", {
   skip_if_not_installed("readr")
-  ns <- asNamespace("pairwiseLLM")
+
   csv_file <- tempfile(fileext = ".csv")
   on.exit(unlink(csv_file))
 
@@ -886,7 +866,7 @@ test_that("submit_gemini_pairs_live sequential saves and catches errors", {
         raw_response = if (include_raw) list(list(a = 1)) else NULL
       )
     },
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   res <- submit_gemini_pairs_live(
@@ -917,7 +897,6 @@ test_that("submit_gemini_pairs_live sequential saves and catches errors", {
 
 test_that("submit_gemini_pairs_live warns on CSV write failure", {
   skip_if_not_installed("readr")
-  ns <- asNamespace("pairwiseLLM")
 
   # Provide an invalid path (directory as file) to trigger write failure
   bad_path <- tempdir()
@@ -932,7 +911,7 @@ test_that("submit_gemini_pairs_live warns on CSV write failure", {
         better_id = "S1"
       )
     },
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   # We suppress warnings to mute the "Could not read existing save file" warning
@@ -955,15 +934,15 @@ test_that("submit_gemini_pairs_live handles resume read error and parallel write
   skip_if_not_installed("future.apply")
   skip_if_not_installed("readr")
 
-  ns <- asNamespace("pairwiseLLM")
-
   # Use a directory as the save_path to trigger read/write errors.
   bad_path <- tempdir()
 
   pairs <- tibble::tibble(ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B")
 
-  # Mock internal function
+  # Keep dispatch local: this test exercises CSV errors, not worker startup.
   local_mocked_bindings(
+    `future::plan` = function(...) NULL,
+    `future.apply::future_lapply` = function(X, FUN, ...) lapply(X, FUN, ...),
     gemini_compare_pair_live = function(...) {
       tibble::tibble(
         custom_id = "id", ID1 = "S1", ID2 = "S2", model = "m",
@@ -971,7 +950,7 @@ test_that("submit_gemini_pairs_live handles resume read error and parallel write
         better_id = "S1"
       )
     },
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   # Wrap in suppressWarnings so that system-level warnings (like "Permission denied"
@@ -994,7 +973,6 @@ test_that("submit_gemini_pairs_live handles resume read error and parallel write
 })
 
 test_that("submit_gemini_pairs_live outputs verbose messages", {
-  ns <- asNamespace("pairwiseLLM")
   pairs <- tibble::tibble(ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B")
 
   local_mocked_bindings(
@@ -1005,7 +983,7 @@ test_that("submit_gemini_pairs_live outputs verbose messages", {
         better_id = "S1"
       )
     },
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   # Capture all messages generated during execution
@@ -1074,7 +1052,7 @@ test_that("submit_gemini_pairs_live errors when readr is missing for save_path",
 
 test_that("submit_gemini_pairs_live creates directory with verbose message", {
   skip_if_not_installed("readr")
-  ns <- asNamespace("pairwiseLLM")
+
   temp_dir <- file.path(tempdir(), "gemini_nested_dir")
   if (dir.exists(temp_dir)) unlink(temp_dir, recursive = TRUE)
   on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
@@ -1094,7 +1072,7 @@ test_that("submit_gemini_pairs_live creates directory with verbose message", {
         better_id = "S1"
       )
     },
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   msgs <- capture_messages(
@@ -1114,7 +1092,7 @@ test_that("submit_gemini_pairs_live creates directory with verbose message", {
 
 test_that("submit_gemini_pairs_live uses pair_uid for resume logic", {
   skip_if_not_installed("readr")
-  ns <- asNamespace("pairwiseLLM")
+
   save_path <- tempfile(fileext = ".csv")
   on.exit(unlink(save_path), add = TRUE)
 
@@ -1149,7 +1127,7 @@ test_that("submit_gemini_pairs_live uses pair_uid for resume logic", {
         error_message = NA_character_
       )
     },
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   res <- submit_gemini_pairs_live(
@@ -1167,7 +1145,7 @@ test_that("submit_gemini_pairs_live uses pair_uid for resume logic", {
 
 test_that("submit_gemini_pairs_live handles resume files without custom IDs", {
   skip_if_not_installed("readr")
-  ns <- asNamespace("pairwiseLLM")
+
   save_path <- tempfile(fileext = ".csv")
   on.exit(unlink(save_path), add = TRUE)
 
@@ -1193,7 +1171,7 @@ test_that("submit_gemini_pairs_live handles resume files without custom IDs", {
         better_id = "A"
       )
     },
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   res <- submit_gemini_pairs_live(
@@ -1219,13 +1197,11 @@ test_that("submit_gemini_pairs_live reports parallel worker errors", {
     text2 = "b"
   )
 
-  gemini_env <- environment(submit_gemini_pairs_live)
-
   testthat::local_mocked_bindings(
     `future::plan` = function(...) NULL,
     `future.apply::future_lapply` = function(X, FUN, ...) lapply(X, FUN, ...),
     gemini_compare_pair_live = function(...) stop("parallel fail"),
-    .env = gemini_env
+    .package = "pairwiseLLM"
   )
 
   res <- submit_gemini_pairs_live(

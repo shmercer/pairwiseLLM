@@ -2039,8 +2039,8 @@
   }
   controller <- utils::modifyList(.adaptive_controller_defaults(2L), controller %||% list())
   reliability_val <- as.double(
-    row$reliability_link_global[[1L]] %||%
-      row$reliability_EAP_link[[1L]] %||%
+    row[["reliability_link_global"]][[1L]] %||%
+      row[["reliability_EAP_link"]][[1L]] %||%
       NA_real_
   )
   rel_gate <- is.finite(reliability_val) &&

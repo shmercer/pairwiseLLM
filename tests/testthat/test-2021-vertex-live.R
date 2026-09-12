@@ -55,11 +55,9 @@ testthat::test_that(".vertex_model_resource normalizes short model names and rej
 testthat::test_that("Vertex helper wrappers delegate to retry and response helpers", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
-
   testthat::local_mocked_bindings(
     .retry_httr2_request = function(req) list(ok = TRUE, req = req),
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   testthat::expect_identical(
@@ -126,7 +124,6 @@ testthat::test_that(".vertex_request builds the Vertex express-mode URL and head
 testthat::test_that("vertex_compare_pair_live parses a successful response", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
   fake_resp <- structure(list(), class = "httr2_response")
   fake_body <- list(
     modelVersion = "publishers/google/models/gemini-2.5-flash",
@@ -151,7 +148,7 @@ testthat::test_that("vertex_compare_pair_live parses a successful response", {
     .vertex_req_perform = function(req) fake_resp,
     .vertex_resp_status = function(resp) 200L,
     .vertex_resp_body_json = function(resp, ...) fake_body,
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -185,7 +182,6 @@ testthat::test_that("vertex_compare_pair_live parses a successful response", {
 testthat::test_that("vertex_compare_pair_live captures thoughts when requested", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
   fake_resp <- structure(list(), class = "httr2_response")
   fake_body <- list(
     model = "publishers/google/models/gemini-2.5-pro",
@@ -207,7 +203,7 @@ testthat::test_that("vertex_compare_pair_live captures thoughts when requested",
     .vertex_req_perform = function(req) fake_resp,
     .vertex_resp_status = function(resp) 200L,
     .vertex_resp_body_json = function(resp, ...) fake_body,
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -234,7 +230,6 @@ testthat::test_that("vertex_compare_pair_live captures thoughts when requested",
 testthat::test_that("vertex_compare_pair_live constructs the request body and tier header inputs", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
   captured <- new.env(parent = emptyenv())
   captured$request <- NULL
   captured$body <- NULL
@@ -256,7 +251,7 @@ testthat::test_that("vertex_compare_pair_live constructs the request body and ti
     .vertex_req_perform = function(...) structure(list(), class = "httr2_response"),
     .vertex_resp_status = function(...) 200L,
     .vertex_resp_body_json = function(...) list(candidates = list()),
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -297,7 +292,6 @@ testthat::test_that("vertex_compare_pair_live constructs the request body and ti
 testthat::test_that("vertex_compare_pair_live supports Gemini 3 thinking_level and rejects invalid combinations", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
   captured <- new.env(parent = emptyenv())
   captured$body <- NULL
 
@@ -311,7 +305,7 @@ testthat::test_that("vertex_compare_pair_live supports Gemini 3 thinking_level a
     .vertex_req_perform = function(...) structure(list(), class = "httr2_response"),
     .vertex_resp_status = function(...) 200L,
     .vertex_resp_body_json = function(...) list(candidates = list()),
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -371,14 +365,12 @@ testthat::test_that("vertex_compare_pair_live supports Gemini 3 thinking_level a
 testthat::test_that("vertex_compare_pair_live returns an error row on request failure", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
-
   testthat::local_mocked_bindings(
     .vertex_api_key = function(api_key = NULL) "VERTEX_TEST_KEY",
     .vertex_req_perform = function(req) stop("HTTP 500 Internal Server Error"),
     .vertex_resp_status = function(resp) 500L,
     .vertex_resp_body_json = function(resp, ...) NULL,
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -403,7 +395,6 @@ testthat::test_that("vertex_compare_pair_live returns an error row on request fa
 testthat::test_that("vertex_compare_pair_live keeps raw placeholder and retry failures on error rows", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
   retry_failures <- tibble::tibble(
     error_code = "rate_limit",
     error_detail = "retry me"
@@ -416,7 +407,7 @@ testthat::test_that("vertex_compare_pair_live keeps raw placeholder and retry fa
       attr(err, "retry_failures") <- retry_failures
       stop(err)
     },
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -442,7 +433,6 @@ testthat::test_that("vertex_compare_pair_live keeps raw placeholder and retry fa
 testthat::test_that("vertex_compare_pair_live handles httr2_http errors and extracts body", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
   err_body_text <- "{\"error\": \"Invalid request\"}"
   fake_err_resp <- httr2::response(
     status_code = 400,
@@ -459,7 +449,7 @@ testthat::test_that("vertex_compare_pair_live handles httr2_http errors and extr
     .vertex_request = function(...) structure(list(), class = "httr2_request"),
     .vertex_req_body_json = function(req, body) req,
     .vertex_req_perform = function(...) stop(cnd),
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   td <- trait_description("overall_quality")
@@ -484,7 +474,6 @@ testthat::test_that("vertex_compare_pair_live handles httr2_http errors and extr
 testthat::test_that("vertex_compare_pair_live handles empty and malformed candidates gracefully", {
   skip_if_not_installed("httr2")
 
-  ns <- asNamespace("pairwiseLLM")
   empty_candidates <- list(candidates = list())
   empty_parts <- list(candidates = list(list(content = list(parts = list()))))
   one_part <- list(candidates = list(list(content = list(parts = list(
@@ -498,7 +487,7 @@ testthat::test_that("vertex_compare_pair_live handles empty and malformed candid
     .vertex_req_perform = function(...) structure(list(), class = "httr2_response"),
     .vertex_resp_status = function(...) 200L,
     .vertex_resp_body_json = function(...) empty_candidates,
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   res1 <- vertex_compare_pair_live("A", "a", "B", "b", "gemini-2.5-flash", "t", "d")
@@ -507,14 +496,14 @@ testthat::test_that("vertex_compare_pair_live handles empty and malformed candid
 
   testthat::local_mocked_bindings(
     .vertex_resp_body_json = function(...) empty_parts,
-    .env = ns
+    .package = "pairwiseLLM"
   )
   res2 <- vertex_compare_pair_live("A", "a", "B", "b", "gemini-2.5-flash", "t", "d")
   testthat::expect_true(is.na(res2$content))
 
   testthat::local_mocked_bindings(
     .vertex_resp_body_json = function(...) one_part,
-    .env = ns
+    .package = "pairwiseLLM"
   )
   res3 <- vertex_compare_pair_live(
     "A",
@@ -557,7 +546,6 @@ testthat::test_that("submit_vertex_pairs_live returns list structure for zero ro
 })
 
 testthat::test_that("submit_vertex_pairs_live runs correctly and forwards service_tier", {
-  ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
   calls <- list()
@@ -583,7 +571,7 @@ testthat::test_that("submit_vertex_pairs_live runs correctly and forwards servic
         better_id = ID1
       )
     },
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   res <- submit_vertex_pairs_live(
@@ -603,7 +591,6 @@ testthat::test_that("submit_vertex_pairs_live runs correctly and forwards servic
 })
 
 testthat::test_that("submit_vertex_pairs_live separates failed pairs", {
-  ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
 
   pairs <- tibble::tibble(
@@ -637,7 +624,7 @@ testthat::test_that("submit_vertex_pairs_live separates failed pairs", {
         better_id = ID1
       )
     },
-    .env = ns,
+    .package = "pairwiseLLM",
     {
       res <- submit_vertex_pairs_live(
         pairs,
@@ -659,7 +646,6 @@ testthat::test_that("submit_vertex_pairs_live separates failed pairs", {
 testthat::test_that("submit_vertex_pairs_live respects save_path resume logic", {
   testthat::skip_if_not_installed("readr")
 
-  ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
   tmp_csv <- tempfile(fileext = ".csv")
 
@@ -696,7 +682,7 @@ testthat::test_that("submit_vertex_pairs_live respects save_path resume logic", 
         better_id = "S03"
       )
     },
-    .env = ns,
+    .package = "pairwiseLLM",
     {
       res <- submit_vertex_pairs_live(
         pairs = pairs,
@@ -873,7 +859,6 @@ testthat::test_that("submit_vertex_pairs_live resumes by pair_uid and logs skip 
 testthat::test_that("submit_vertex_pairs_live processes all pairs when resume file has no pair identifiers", {
   testthat::skip_if_not_installed("readr")
 
-  ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
   save_path <- tempfile(fileext = ".csv")
   on.exit(unlink(save_path), add = TRUE)
@@ -902,7 +887,7 @@ testthat::test_that("submit_vertex_pairs_live processes all pairs when resume fi
         better_id = "S03"
       )
     },
-    .env = ns,
+    .package = "pairwiseLLM",
     {
       res <- submit_vertex_pairs_live(
         pairs = pairs,
@@ -957,7 +942,6 @@ testthat::test_that("submit_vertex_pairs_live warns when an existing save path c
 testthat::test_that("submit_vertex_pairs_live sequential path logs status and catches thrown errors", {
   testthat::skip_if_not_installed("readr")
 
-  ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
   save_path <- tempfile(fileext = ".csv")
   write_cols <- list()
@@ -1003,7 +987,7 @@ testthat::test_that("submit_vertex_pairs_live sequential path logs status and ca
               retry_failures = list(tibble::tibble())
             )
           },
-          .env = ns,
+          .package = "pairwiseLLM",
           {
             res <- submit_vertex_pairs_live(
               pairs = pairs,
@@ -1037,7 +1021,6 @@ testthat::test_that("submit_vertex_pairs_live parallel path processes chunks and
   testthat::skip_if_not_installed("future.apply")
   testthat::skip_if_not_installed("readr")
 
-  ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
   save_path <- tempfile(fileext = ".csv")
   plan_calls <- list()
@@ -1106,7 +1089,7 @@ testthat::test_that("submit_vertex_pairs_live parallel path processes chunks and
                                 retry_failures = list(tibble::tibble())
                               )
                             },
-                            .env = ns,
+                            .package = "pairwiseLLM",
                             {
                               res <- submit_vertex_pairs_live(
                                 pairs = pairs,

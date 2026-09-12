@@ -1036,7 +1036,7 @@
     return(FALSE)
   }
   identical(
-    as.character(stored_hashes)[names(evidence_hash_by_set)],
+    as.character(stored_hashes[names(evidence_hash_by_set)]),
     as.character(evidence_hash_by_set)
   )
 }
@@ -1084,7 +1084,7 @@
       evidence_hash_by_set = evidence_hash_by_set
     )),
     required_sets = as.integer(required_sets),
-    evidence_hash_by_set = as.character(evidence_hash_by_set),
+    evidence_hash_by_set = stats::setNames(as.character(evidence_hash_by_set), names(evidence_hash_by_set)),
     has_beta = as.logical(has_beta),
     has_epsilon = as.logical(has_epsilon),
     beta_mean = as.double(beta_mean),

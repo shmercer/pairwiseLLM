@@ -274,7 +274,7 @@ estimate_llm_pairs_cost <- function(
         pool <- by_stratum[[j]]
         if (length(pool) == 0L || alloc[j] == 0L) next
         take <- min(length(pool), alloc[j])
-        idx <- c(idx, sample(pool, size = take, replace = FALSE))
+        idx <- c(idx, pool[sample.int(length(pool), size = take, replace = FALSE)])
       }
 
       # If we didn't get enough (tiny strata), top up randomly from remaining
@@ -283,7 +283,9 @@ estimate_llm_pairs_cost <- function(
         remaining <- setdiff(seq_len(n_total), idx)
         need <- n_test - length(idx)
         if (need > 0 && length(remaining) > 0) {
-          idx <- c(idx, sample(remaining, size = min(need, length(remaining)), replace = FALSE))
+          idx <- c(idx, remaining[sample.int(
+            length(remaining), size = min(need, length(remaining)), replace = FALSE
+          )])
         }
       }
       sort(idx)

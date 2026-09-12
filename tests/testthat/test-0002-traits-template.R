@@ -548,11 +548,11 @@ test_that("Internal helper .pwllm_get_builtin_template behavior", {
 })
 
 test_that("set_prompt_template errors when built-in default is missing", {
-  ns <- asNamespace("pairwiseLLM")
+  original_builtin <- pairwiseLLM:::.pwllm_get_builtin_template
 
   testthat::with_mocked_bindings(
     .pwllm_get_builtin_template = function(...) NULL,
-    .env = ns,
+    .package = "pairwiseLLM",
     {
       expect_error(
         set_prompt_template(),
@@ -560,17 +560,21 @@ test_that("set_prompt_template errors when built-in default is missing", {
       )
     }
   )
+  expect_identical(pairwiseLLM:::.pwllm_get_builtin_template, original_builtin)
 })
 
 test_that("get_prompt_template falls back to set_prompt_template when builtin missing", {
-  ns <- asNamespace("pairwiseLLM")
+  original_builtin <- pairwiseLLM:::.pwllm_get_builtin_template
+  original_template <- pairwiseLLM::set_prompt_template
 
   testthat::with_mocked_bindings(
     .pwllm_get_builtin_template = function(...) NULL,
     set_prompt_template = function(...) "fallback template",
-    .env = ns,
+    .package = "pairwiseLLM",
     {
       expect_identical(get_prompt_template("default"), "fallback template")
     }
   )
+  expect_identical(pairwiseLLM:::.pwllm_get_builtin_template, original_builtin)
+  expect_identical(pairwiseLLM::set_prompt_template, original_template)
 })
