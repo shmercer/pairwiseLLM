@@ -107,3 +107,34 @@ test_that("link review exposes stopped and frozen spokes with audit effort metad
   state$link_stage_log <- tibble::tibble(refit_id = 1L)
   expect_equal(nrow(.adaptive_latest_link_stage_rows(state)), 0L)
 })
+
+test_that("link item summaries preserve ordered hub and accepted-spoke uncertainty", {
+  state <- task10_link_state()
+  ids <- rev(state$item_ids)
+  sets <- state$items$set_id[match(ids, state$item_ids)]
+  means <- unname(state$btl_fit$theta_mean[ids])
+  sds <- unname(state$btl_fit$theta_sd[ids])
+  quantiles <- matrix(0, 5L, length(ids), dimnames = list(NULL, ids))
+  f <- function(s, phase_a = FALSE) {
+    .adaptive_link_item_raw_link_summaries(
+      s, ids, sets, means, sds, quantiles, is_link_phase_a = phase_a)
+  }
+  out <- f(state)
+  expect_identical(colnames(out$theta_link_quantiles), ids)
+  expect_equal(out$theta_link_eap[sets == 1L], means[sets == 1L])
+  expect_identical(out$theta_link_sd[sets == 1L], c(0, 0))
+  for (spoke in 2:3) {
+    accepted <- state$linking$anchored_joint$accepted_state_by_spoke[[as.character(spoke)]]
+    expect_equal(out$theta_link_eap[sets == spoke],
+      unname(accepted$theta_spoke_global_mean[ids[sets == spoke]]))
+    expect_equal(out$theta_link_sd[sets == spoke],
+      unname(accepted$theta_spoke_global_sd[ids[sets == spoke]]))
+  }
+  phase_a <- f(state, TRUE)
+  expect_identical(phase_a$theta_link_eap, rep(NA_real_, length(ids)))
+  expect_identical(phase_a$theta_link_sd, rep(NA_real_, length(ids)))
+  expect_true(all(is.na(phase_a$theta_link_quantiles)))
+  state$controller$run_mode <- "within_set"
+  expect_identical(f(state), list(theta_link_eap = means, theta_link_sd = sds,
+    theta_link_quantiles = quantiles))
+})

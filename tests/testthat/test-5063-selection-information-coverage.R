@@ -89,6 +89,14 @@ test_that("committed anchored information updates preserve other spokes and disc
     state$controller$link_d_opt_it_by_spoke[[other]])
   expect_false("-1::2" %in% names(out$controller$link_d_opt_it_by_spoke))
   expect_identical(out$controller$link_d_opt_it_by_spoke[[key]]$it_n_pairs_accumulated, 1L)
+  diagonal <- state
+  diagonal$controller$link_d_opt_it_by_spoke[[key]] <- list(it_diag = c(2, 3))
+  diagonal_out <- f(diagonal, diagonal, row)
+  expect_equal(diagonal_out$controller$link_d_opt_it_by_spoke[[key]]$it_diag, c(2.25, 3))
+  expect_identical(diagonal_out$controller$link_d_opt_it_by_spoke[[key]]$it_n_pairs_accumulated, 1L)
+  expect_identical(diagonal_out$controller$link_d_opt_it_by_spoke[[other]],
+    state$controller$link_d_opt_it_by_spoke[[other]])
+  expect_false("-1::2" %in% names(diagonal_out$controller$link_d_opt_it_by_spoke))
   row$is_probe_step <- TRUE
   expect_identical(f(state, state, row), state)
   row$is_probe_step <- FALSE

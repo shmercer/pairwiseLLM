@@ -480,11 +480,16 @@ test_that("controller config rejects removed Phase B mode fields for new runs", 
   removed <- c(
     "link_estimation_mode",
     "link_transform_policy",
+    "link_transform_mode",
     "link_refit_mode",
+    "shift_only_theta_treatment",
     "hub_lock_mode",
+    "hub_lock_kappa",
     "probe_acceleration_mode",
+    "probe_sole_blocker_acceleration_enabled",
     "multi_spoke_mode",
     "judge_param_mode",
+    "within_phase_b_within_set_steps_allowed",
     "theta_global_rmse_scope",
     "phase_a_import_failure_policy",
     "phase_a_compatible_model_ids",
@@ -494,6 +499,11 @@ test_that("controller config rejects removed Phase B mode fields for new runs", 
   for (field in removed) {
     cfg <- list(run_mode = "link_one_spoke", hub_id = 1L)
     cfg[[field]] <- "removed"
+    expect_false(field %in% pairwiseLLM:::.adaptive_controller_public_keys())
+    expect_error(
+      pairwiseLLM:::.adaptive_validate_controller_config(cfg, nrow(items), items$set_id),
+      "Unknown `adaptive_config` field(s).", fixed = TRUE
+    )
     expect_error(
       pairwiseLLM:::.adaptive_validate_controller_config(
         adaptive_config = cfg,
@@ -504,6 +514,25 @@ test_that("controller config rejects removed Phase B mode fields for new runs", 
       fixed = TRUE
     )
   }
+})
+
+test_that("state validation retains legacy errors before fixed controller modes", {
+  state <- task10_link_state()
+  state$controller$link_estimation_mode <- "transform"
+  state$controller$link_transform_policy <- "bad-policy"
+  expect_error(validate_state(state), "policy")
+  state$controller$link_transform_policy <- "auto"
+  state$controller$shift_only_theta_treatment <- "bad-treatment"
+  expect_error(validate_state(state), "shift_only_theta_treatment")
+  state$controller$shift_only_theta_treatment <- "normal_prior"
+  state$controller$probe_acceleration_mode <- "bad-probe"
+  expect_error(validate_state(state), "Probe acceleration mode")
+  state$controller$probe_acceleration_mode <- "fixed_per_refit"
+  expect_invisible(validate_state(state))
+  resolved <- .adaptive_controller_resolve(state)
+  expect_identical(resolved$link_estimation_mode, "anchored_joint")
+  expect_identical(resolved$hub_lock_mode, "hard_lock")
+  expect_identical(resolved$multi_spoke_mode, "concurrent")
 })
 
 test_that("controller config exposes only current public Phase B fields", {

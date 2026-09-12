@@ -1814,13 +1814,6 @@ test_that("refit helpers cover probe metrics, stop reconstruction, and concurren
     lag_log_alpha_mean = 0
   )))
 
-  alt <- pairwiseLLM:::.adaptive_link_fit_transform_alt_shift_scale(
-    cross_edges = edges,
-    hub_theta = c(h1 = 0.8, h2 = 0.4),
-    spoke_theta = c(s21 = -0.2, s22 = -0.4)
-  )
-  expect_true(is.list(alt))
-
   targets <- pairwiseLLM:::.adaptive_link_concurrent_targets(
     spoke_stats = list(
       `2` = list(candidate_count = 1L, utility_mass = 0.9),
@@ -2210,13 +2203,6 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
     pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(legacy_mode),
     "missing required columns: link_transform_policy, link_transform_state"
   )
-
-  empty_fit <- pairwiseLLM:::.adaptive_link_fit_transform_alt_shift_scale(
-    cross_edges = tibble::tibble(),
-    hub_theta = c(),
-    spoke_theta = c()
-  )
-  expect_false(empty_fit$converged)
 
   empty_cross <- pairwiseLLM:::.adaptive_link_cross_edges(make_link_probe_state(), spoke_id = 2L)
   expect_identical(nrow(empty_cross), 0L)

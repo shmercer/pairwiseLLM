@@ -295,71 +295,18 @@
     ))
   }
 
-  if (identical(as.character(controller$link_estimation_mode %||% "transform"), "anchored_joint")) {
-    probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)
-    link_eap <- rep_len(NA_real_, length(ids))
-    link_sd <- rep_len(NA_real_, length(ids))
-    names(link_eap) <- ids
-    names(link_sd) <- ids
-    link_quantiles <- matrix(NA_real_, nrow = length(probs), ncol = length(ids))
-    rownames(link_quantiles) <- c("q2.5", "q5", "q50", "q95", "q97.5")
-    colnames(link_quantiles) <- ids
+  probs <- c(0.025, 0.05, 0.5, 0.95, 0.975)
+  link_eap <- rep_len(NA_real_, length(ids))
+  link_sd <- rep_len(NA_real_, length(ids))
+  names(link_eap) <- ids
+  names(link_sd) <- ids
+  link_quantiles <- matrix(NA_real_, nrow = length(probs), ncol = length(ids))
+  rownames(link_quantiles) <- c("q2.5", "q5", "q50", "q95", "q97.5")
+  colnames(link_quantiles) <- ids
 
-    hub_id <- as.integer(controller$hub_id %||% 1L)
-    spoke_ids <- sort(unique(as.integer(set_id[as.integer(set_id) != hub_id])))
-    if (length(spoke_ids) < 1L) {
-      return(list(
-        theta_link_eap = as.double(link_eap),
-        theta_link_sd = as.double(link_sd),
-        theta_link_quantiles = link_quantiles
-      ))
-    }
-
-    hub_state <- .adaptive_link_anchored_joint_resolve_state(
-      state = state,
-      spoke_id = as.integer(spoke_ids[[1L]]),
-      controller = controller
-    )
-    hub_mean <- as.double(hub_state$theta_hub_fixed)
-    names(hub_mean) <- names(hub_state$theta_hub_fixed)
-    hub_ids <- intersect(ids[as.integer(set_id) == hub_id], names(hub_mean))
-    if (length(hub_ids) > 0L) {
-      hub_quantiles <- .adaptive_link_anchored_joint_quantiles(
-        theta_mean = hub_mean,
-        theta_sd = rep(0, length(hub_mean)),
-        probs = probs
-      )
-      hub_match <- match(hub_ids, colnames(hub_quantiles))
-      link_eap[hub_ids] <- hub_mean[hub_ids]
-      link_sd[hub_ids] <- 0
-      link_quantiles[, hub_ids] <- hub_quantiles[, hub_match, drop = FALSE]
-    }
-
-    for (spoke_id in spoke_ids) {
-      accepted_state <- .adaptive_link_anchored_joint_resolve_state(
-        state = state,
-        spoke_id = as.integer(spoke_id),
-        controller = controller
-      )
-      spoke_mean <- as.double(accepted_state$theta_spoke_global_mean)
-      names(spoke_mean) <- names(accepted_state$theta_spoke_global_mean)
-      spoke_sd <- as.double(accepted_state$theta_spoke_global_sd)
-      names(spoke_sd) <- names(accepted_state$theta_spoke_global_sd)
-      spoke_item_ids <- intersect(ids[as.integer(set_id) == as.integer(spoke_id)], names(spoke_mean))
-      if (length(spoke_item_ids) < 1L) {
-        next
-      }
-      spoke_quantiles <- .adaptive_link_anchored_joint_quantiles(
-        theta_mean = spoke_mean,
-        theta_sd = spoke_sd,
-        probs = probs
-      )
-      spoke_match <- match(spoke_item_ids, colnames(spoke_quantiles))
-      link_eap[spoke_item_ids] <- spoke_mean[spoke_item_ids]
-      link_sd[spoke_item_ids] <- spoke_sd[spoke_item_ids]
-      link_quantiles[, spoke_item_ids] <- spoke_quantiles[, spoke_match, drop = FALSE]
-    }
-
+  hub_id <- as.integer(controller$hub_id %||% 1L)
+  spoke_ids <- sort(unique(as.integer(set_id[as.integer(set_id) != hub_id])))
+  if (length(spoke_ids) < 1L) {
     return(list(
       theta_link_eap = as.double(link_eap),
       theta_link_sd = as.double(link_sd),
@@ -367,51 +314,56 @@
     ))
   }
 
-  hub_id <- as.integer(controller$hub_id %||% 1L)
-  link_stats <- controller$link_refit_stats_by_spoke %||% list()
-  spoke_ids <- sort(unique(as.integer(set_id[as.integer(set_id) != hub_id])))
-  for (spoke_id in spoke_ids) {
-    spoke_idx <- which(as.integer(set_id) == as.integer(spoke_id))
-    if (length(spoke_idx) < 1L) {
-      next
-    }
-    stats_row <- link_stats[[as.character(spoke_id)]] %||% list()
-    mode <- as.character(stats_row$link_transform_state %||%
-      .adaptive_link_transform_state_for_spoke(controller, spoke_id))
-    if (!mode %in% c("shift_only", "shift_scale")) {
-      link_eap[spoke_idx] <- NA_real_
-      link_sd[spoke_idx] <- NA_real_
-      link_quantiles[, spoke_idx] <- NA_real_
-      next
-    }
-    delta <- as.double(stats_row$delta_spoke_mean %||% NA_real_)
-    if (!is.finite(delta)) {
-      link_eap[spoke_idx] <- NA_real_
-      link_sd[spoke_idx] <- NA_real_
-      link_quantiles[, spoke_idx] <- NA_real_
-      next
-    }
-    alpha <- 1
-    if (identical(mode, "shift_scale")) {
-      log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% NA_real_)
-      if (!is.finite(log_alpha)) {
-        link_eap[spoke_idx] <- NA_real_
-        link_sd[spoke_idx] <- NA_real_
-        link_quantiles[, spoke_idx] <- NA_real_
-        next
-      }
-      alpha <- exp(log_alpha)
-    }
-    link_eap[spoke_idx] <- as.double(delta + alpha * theta_raw_eap[spoke_idx])
-    link_sd[spoke_idx] <- as.double(abs(alpha) * theta_raw_sd[spoke_idx])
-    link_quantiles[, spoke_idx] <- as.double(delta + alpha * theta_raw_quantiles[, spoke_idx, drop = FALSE])
+  hub_state <- .adaptive_link_anchored_joint_resolve_state(
+    state = state,
+    spoke_id = as.integer(spoke_ids[[1L]]),
+    controller = controller
+  )
+  hub_mean <- as.double(hub_state$theta_hub_fixed)
+  names(hub_mean) <- names(hub_state$theta_hub_fixed)
+  hub_ids <- intersect(ids[as.integer(set_id) == hub_id], names(hub_mean))
+  if (length(hub_ids) > 0L) {
+    hub_quantiles <- .adaptive_link_anchored_joint_quantiles(
+      theta_mean = hub_mean,
+      theta_sd = rep(0, length(hub_mean)),
+      probs = probs
+    )
+    hub_match <- match(hub_ids, colnames(hub_quantiles))
+    link_eap[hub_ids] <- hub_mean[hub_ids]
+    link_sd[hub_ids] <- 0
+    link_quantiles[, hub_ids] <- hub_quantiles[, hub_match, drop = FALSE]
   }
 
-  list(
+  for (spoke_id in spoke_ids) {
+    accepted_state <- .adaptive_link_anchored_joint_resolve_state(
+      state = state,
+      spoke_id = as.integer(spoke_id),
+      controller = controller
+    )
+    spoke_mean <- as.double(accepted_state$theta_spoke_global_mean)
+    names(spoke_mean) <- names(accepted_state$theta_spoke_global_mean)
+    spoke_sd <- as.double(accepted_state$theta_spoke_global_sd)
+    names(spoke_sd) <- names(accepted_state$theta_spoke_global_sd)
+    spoke_item_ids <- intersect(ids[as.integer(set_id) == as.integer(spoke_id)], names(spoke_mean))
+    if (length(spoke_item_ids) < 1L) {
+      next
+    }
+    spoke_quantiles <- .adaptive_link_anchored_joint_quantiles(
+      theta_mean = spoke_mean,
+      theta_sd = spoke_sd,
+      probs = probs
+    )
+    spoke_match <- match(spoke_item_ids, colnames(spoke_quantiles))
+    link_eap[spoke_item_ids] <- spoke_mean[spoke_item_ids]
+    link_sd[spoke_item_ids] <- spoke_sd[spoke_item_ids]
+    link_quantiles[, spoke_item_ids] <- spoke_quantiles[, spoke_match, drop = FALSE]
+  }
+
+  return(list(
     theta_link_eap = as.double(link_eap),
     theta_link_sd = as.double(link_sd),
     theta_link_quantiles = link_quantiles
-  )
+  ))
 }
 
 .adaptive_build_item_log_refit <- function(state, refit_id) {

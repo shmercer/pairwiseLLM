@@ -1,22 +1,3 @@
-test_that("linking diagnostics preserve missing, finite, and nonfinite evidence", {
-  f <- pairwiseLLM:::.adaptive_link_cmdstan_collect_diagnostics
-  fit <- list(diagnostic_summary = function() data.frame(num_divergent = c(0, 2)),
-    summary = function(variables) data.frame(rhat = c(1, 1.02), ess_bulk = c(400, 900)))
-  expect_equal(f(fit, "delta"), list(divergences = 2L, max_rhat = 1.02, min_ess_bulk = 400))
-  fit$diagnostic_summary <- function() data.frame(num_divergent = Inf)
-  fit$summary <- function(variables) data.frame(rhat = NA_real_, ess_bulk = Inf)
-  out <- f(fit, "delta")
-  expect_true(is.na(out$divergences))
-  expect_length(out$notes, 3)
-  fit$summary <- function(variables) data.frame(mean = 1)
-  expect_match(paste(f(fit, "delta")$notes, collapse = " "), "missing rhat.*missing ess_bulk")
-  fit$diagnostic_summary <- function() stop("missing")
-  fit$summary <- function(variables) stop("missing")
-  expect_length(f(fit, "delta")$notes, 2)
-  expect_error(pairwiseLLM:::.adaptive_link_cmdstan_draws_matrix(
-    list(draws = function(...) stop("broken draw file")), "delta"), "broken draw file")
-})
-
 test_that("linking fit contracts distinguish HMC, deterministic, and reused fits", {
   f <- pairwiseLLM:::.adaptive_link_diagnostics_contract
   hmc <- list(diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 500,
@@ -48,39 +29,6 @@ test_that("linking fit contracts distinguish HMC, deterministic, and reused fits
   reused$delta_sd <- -1
   expect_false(f(reused)$link_diagnostics_uncertainty_pass)
   expect_error(f(list()), "undefined")
-})
-
-test_that("linking sampler adapter forwards settings without launching a sampler", {
-  root <- withr::local_tempdir()
-  captured <- new.env(parent = emptyenv())
-  draws <- matrix(c(0, 1), ncol = 1, dimnames = list(NULL, "delta"))
-  model_fn <- function(path, cpp_options) {
-    expect_true(file.exists(path))
-    expect_true(cpp_options$stan_threads)
-    list(sample = function(...) {
-      captured$args <- list(...)
-      list(draws = function(variables, format) {
-        expect_identical(variables, "delta")
-        expect_identical(format, "matrix")
-        draws
-      }, diagnostic_summary = function() data.frame(num_divergent = 0L),
-      summary = function(variables) data.frame(rhat = 1, ess_bulk = 1000))
-    })
-  }
-  config <- list(chains = 2L, parallel_chains = 1L, threads_per_chain = 1L,
-    iter_warmup = 10L, iter_sampling = 20L, output_dir = root)
-  f <- pairwiseLLM:::.adaptive_link_fit_transform_cmdstan
-  out <- f(list(N = 2L), "delta", config, 41L, model_fn)
-  expect_identical(out$draws_matrix, draws)
-  expect_identical(captured$args$seed, 41L)
-  expect_identical(captured$args$data, list(N = 2L))
-  expect_identical(captured$args$iter_warmup, 10L)
-  expect_identical(captured$args$iter_sampling, 20L)
-  expect_identical(captured$args$output_dir, root)
-  expect_match(captured$args$output_basename, "^link_transform_refit-")
-  expect_error(f(list(), "delta", config, 1L, "bad"), "model_fn")
-  config$output_dir <- NA_character_
-  expect_error(f(list(), "delta", config, 1L, model_fn), "output_dir")
 })
 
 test_that("spoke snapshots and merges isolate independent state", {

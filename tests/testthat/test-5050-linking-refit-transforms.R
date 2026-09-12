@@ -519,25 +519,6 @@ make_stable_epoch_stop_state <- function(probe_edges_min_for_stop = 2L,
 
 run_mocked_stop_window_refit <- function(state, theta_rmse = 0.02) {
   testthat::with_mocked_bindings(
-    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
-      list(
-        delta_mean = 0.1,
-        delta_sd = 0.01,
-        log_alpha_mean = if (identical(transform_mode, "shift_scale")) 0.02 else NA_real_,
-        log_alpha_sd = if (identical(transform_mode, "shift_scale")) 0.02 else NA_real_,
-        theta_hub_post = hub_theta,
-        theta_spoke_post = spoke_theta,
-        posterior_draws = list(),
-        diagnostics = list(
-          converged = TRUE,
-          hessian_posdef = TRUE
-        ),
-        fit_contract = list(
-          estimation_method = "map_laplace",
-          uncertainty_approximation = "laplace_hessian"
-        )
-      )
-    },
     .adaptive_link_global_score_stats_active = function(...) {
       list(reliability = 0.95, V_mu = 1.2, V_post = 0.06)
     },
@@ -729,81 +710,6 @@ test_that("soft lock uses artifact uncertainty and kappa strength", {
   )))
 })
 
-test_that("free hub lock skips soft-lock priors in transform joint refit", {
-  state <- make_linking_refit_state(
-    list(link_refit_mode = "joint_refit")
-  )
-  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
-  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
-
-  cross_edges <- pairwiseLLM:::.adaptive_link_cross_edges(
-    state,
-    spoke_id = 2L,
-    last_refit_step = NULL
-  )
-  attr(cross_edges, "judge_params") <- list(
-    mode = "global_shared",
-    scope = "link",
-    beta = 0,
-    epsilon = 0
-  )
-  attr(cross_edges, "within_hub_edges") <- pairwiseLLM:::.adaptive_link_within_edges(
-    state,
-    set_id = 1L
-  )
-  attr(cross_edges, "within_spoke_edges") <- pairwiseLLM:::.adaptive_link_within_edges(
-    state,
-    set_id = 2L
-  )
-
-  captured <- new.env(parent = emptyenv())
-  capture_fit_fn <- function(stan_data, variable_names, cmdstan, seed, model_fn = NULL) {
-    captured$stan_data <- stan_data
-    make_test_link_cmdstan_fit_fn()(stan_data, variable_names, cmdstan, seed, model_fn)
-  }
-  attr(cross_edges, "refit_contract") <- list(
-    link_refit_mode = "joint_refit",
-    hub_lock_mode = "free",
-    hub_lock_kappa = 0.75,
-    link_transform_policy = "auto",
-    shift_only_theta_treatment = "fixed_eap_plugin_var",
-    cmdstan = list(chains = 4L, parallel_chains = 4L, threads_per_chain = 1L),
-    cmdstan_fit_fn = capture_fit_fn
-  )
-
-  hub_theta <- pairwiseLLM:::.adaptive_link_phase_a_theta_map(state, 1L, "theta_raw_mean")
-  attr(hub_theta, "theta_sd") <- pairwiseLLM:::.adaptive_link_phase_a_theta_map(
-    state,
-    1L,
-    "theta_raw_sd"
-  )
-  attr(hub_theta, "theta_prior_center") <- hub_theta
-  attr(hub_theta, "theta_init") <- stats::setNames(c(10, 9, 8), names(hub_theta))
-
-  spoke_theta <- pairwiseLLM:::.adaptive_link_phase_a_theta_map(state, 2L, "theta_raw_mean")
-  attr(spoke_theta, "theta_sd") <- pairwiseLLM:::.adaptive_link_phase_a_theta_map(
-    state,
-    2L,
-    "theta_raw_sd"
-  )
-  attr(spoke_theta, "theta_init") <- spoke_theta
-
-  fit <- pairwiseLLM:::.adaptive_link_fit_transform(
-    cross_edges = cross_edges,
-    hub_theta = hub_theta,
-    spoke_theta = spoke_theta,
-    transform_mode = "shift_only"
-  )
-
-  expect_identical(captured$stan_data$estimate_hub, 1L)
-  expect_identical(captured$stan_data$hub_prior_active, 0L)
-  expect_identical(fit$fit_contract$lock$hub_lock_mode, "free")
-  expect_true(is.na(fit$fit_contract$lock$hub_lock_kappa))
-  expect_identical(
-    fit$fit_contract$joint_refit$n_hub_items_estimated,
-    length(hub_theta)
-  )
-})
 
 test_that("joint_refit fit contract records joint theta estimation", {
   state <- make_linking_refit_state(
@@ -914,30 +820,6 @@ test_that("soft-lock joint refit keeps Phase A prior center and uses current the
 
   captured <- list()
   testthat::with_mocked_bindings(
-    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
-      captured$hub_theta <<- hub_theta
-      captured$spoke_theta <<- spoke_theta
-      list(
-        delta_mean = 0,
-        delta_sd = 1,
-        log_alpha_mean = NA_real_,
-        log_alpha_sd = NA_real_,
-        theta_hub_post = hub_theta,
-        theta_spoke_post = spoke_theta,
-        diagnostics = list(
-          divergences = 0L,
-          max_rhat = 1.0,
-          min_ess_bulk = 500,
-          diagnostics_divergences_pass = TRUE,
-          diagnostics_rhat_pass = TRUE,
-          diagnostics_ess_pass = TRUE
-        ),
-        fit_contract = list(
-          estimation_method = "cmdstan_hmc",
-          uncertainty_approximation = "cmdstan_posterior_draws"
-        )
-      )
-    },
     .adaptive_link_ppc_brier_cross = function(...) 0,
     .package = "pairwiseLLM",
     {
@@ -989,9 +871,6 @@ test_that("auto escalation stays in shift_only before lag and stop eligibility a
         is_probe_step = TRUE
       )
     },
-    .adaptive_link_fit_transform_alt_shift_scale = function(...) {
-      list(converged = TRUE, delta_mean = 0.2, log_alpha_mean = 0.3, log_alpha_sd = 0.02)
-    },
     .adaptive_link_probe_brier_for_fit = function(..., log_alpha_mean = NA_real_) {
       if (is.finite(log_alpha_mean)) 0.10 else 0.12
     },
@@ -1005,30 +884,6 @@ test_that("auto escalation stays in shift_only before lag and stop eligibility a
   expect_false(isTRUE(state1$controller$link_refit_stats_by_spoke[["2"]]$link_stop_eligible))
 })
 
-test_that("temporary shift-scale alternative fit returns finite MAP summaries", {
-  state <- make_linking_refit_state()
-  cross_edges <- tibble::tibble(
-    spoke_item = c("s21", "s22", "s21", "s22", "s23", "s23"),
-    hub_item = c("h1", "h2", "h3", "h1", "h2", "h3"),
-    y_spoke = c(1L, 0L, 1L, 0L, 1L, 0L),
-    step_id = seq_len(6L),
-    spoke_in_A = c(TRUE, TRUE, TRUE, TRUE, TRUE, TRUE),
-    run_mode = "link_one_spoke",
-    is_probe_step = FALSE
-  )
-  attr(cross_edges, "judge_params") <- list(beta = 0, epsilon = 0)
-  fit <- pairwiseLLM:::.adaptive_link_fit_transform_alt_shift_scale(
-    cross_edges = cross_edges,
-    hub_theta = c(h1 = 1.5, h2 = 0.5, h3 = -0.5),
-    spoke_theta = c(s21 = 0.2, s22 = -0.1, s23 = -0.4),
-    delta_init = 0
-  )
-
-  expect_true(isTRUE(fit$converged))
-  expect_true(is.finite(fit$delta_mean))
-  expect_true(is.finite(fit$log_alpha_mean))
-  expect_true(is.finite(fit$log_alpha_sd))
-})
 
 test_that("auto escalation streak resets when eligibility fails", {
   state <- make_linking_refit_state(
@@ -1078,9 +933,6 @@ test_that("freeze transition is one-way and refit reuses frozen transform parame
   state$controller$link_transform_frozen_refit_id_by_spoke <- list(`2` = 9L)
 
   out <- testthat::with_mocked_bindings(
-    .adaptive_link_fit_transform = function(...) {
-      rlang::abort("fit should not run for frozen spoke")
-    },
     .adaptive_link_ppc_brier_cross = function(...) 0.12,
     .package = "pairwiseLLM",
     {
@@ -1288,57 +1140,6 @@ test_that("phase-specific judge mode allows startup fallback but aborts after st
   )
 })
 
-test_that("linking CmdStan transform refit always sets stable output targets", {
-  sample_args_seen <- NULL
-  fake_fit <- new.env(parent = emptyenv())
-  fake_fit$draws <- function(variables, format) {
-    expect_identical(format, "matrix")
-    out <- matrix(0.1, nrow = 2, ncol = length(variables))
-    colnames(out) <- variables
-    out
-  }
-  fake_fit$diagnostic_summary <- function() {
-    tibble::tibble(num_divergent = c(0, 0))
-  }
-  fake_fit$summary <- function(variables) {
-    tibble::tibble(
-      variable = variables,
-      rhat = rep(1, length(variables)),
-      ess_bulk = rep(500, length(variables))
-    )
-  }
-  model_stub <- function(path, cpp_options) {
-    expect_true(file.exists(path))
-    expect_identical(cpp_options, list(stan_threads = TRUE))
-    list(sample = function(...) {
-      sample_args_seen <<- list(...)
-      fake_fit
-    })
-  }
-
-  out_dir <- withr::local_tempdir()
-  fit <- pairwiseLLM:::.adaptive_link_fit_transform_cmdstan(
-    stan_data = list(N = 1L),
-    variable_names = c("delta"),
-    cmdstan = list(
-      chains = 1L,
-      parallel_chains = 1L,
-      threads_per_chain = 1L,
-      iter_warmup = 10L,
-      iter_sampling = 10L,
-      output_dir = out_dir
-    ),
-    seed = 123L,
-    model_fn = model_stub
-  )
-
-  expect_true(is.matrix(fit$draws_matrix))
-  expect_identical(sample_args_seen$output_dir, out_dir)
-  expect_true(dir.exists(sample_args_seen$output_dir))
-  expect_true(is.character(sample_args_seen$output_basename))
-  expect_length(sample_args_seen$output_basename, 1L)
-  expect_match(sample_args_seen$output_basename, "^link_transform_refit-")
-})
 
 test_that("startup-gap helper and edge extractors cover fallback edge paths", {
   state <- make_linking_refit_state()
@@ -1351,129 +1152,7 @@ test_that("startup-gap helper and edge extractors cover fallback edge paths", {
   expect_false(isTRUE(pairwiseLLM:::.adaptive_link_phase_b_startup_gap_for_spoke(state, 2L)))
 })
 
-test_that("joint shift_scale fit rejects unsupported hub lock modes", {
-  edges <- tibble::tibble(
-    spoke_item = c("s1", "s2"),
-    hub_item = c("h1", "h2"),
-    y_spoke = c(1L, 0L),
-    step_id = c(1L, 2L),
-    spoke_in_A = c(TRUE, FALSE)
-  )
-  attr(edges, "judge_params") <- list(beta = 0.1, epsilon = 0.05, mode = "phase_specific", scope = "link")
-  attr(edges, "refit_contract") <- list(
-    link_refit_mode = "joint_refit",
-    hub_lock_mode = "hard_like",
-    hub_lock_kappa = 0.5
-  )
-  attr(edges, "within_hub_edges") <- tibble::tibble(
-    A_item = c("h1", "h2"),
-    B_item = c("h2", "h1"),
-    y_A = c(1L, 0L),
-    step_id = c(3L, 4L)
-  )
-  attr(edges, "within_spoke_edges") <- tibble::tibble(
-    A_item = c("s1", "s2"),
-    B_item = c("s2", "s1"),
-    y_A = c(1L, 0L),
-    step_id = c(5L, 6L)
-  )
 
-  hub_theta <- c(h1 = 0.4, h2 = -0.1)
-  spoke_theta <- c(s1 = -0.3, s2 = 0.2)
-  attr(hub_theta, "theta_sd") <- c(h1 = 0.1, h2 = 0.1)
-  attr(spoke_theta, "theta_sd") <- c(s1 = 0.2, s2 = 0.2)
-
-  expect_error(
-    pairwiseLLM:::.adaptive_link_fit_transform(
-      edges,
-      hub_theta = hub_theta,
-      spoke_theta = spoke_theta,
-      transform_mode = "shift_scale"
-    ),
-    "Unsupported `hub_lock_mode`"
-  )
-})
-
-test_that("link likelihood applies signed beta by original presentation side", {
-  edges_mixed <- tibble::tibble(
-    spoke_item = c("s1", "s1"),
-    hub_item = c("h1", "h1"),
-    y_spoke = c(1L, 0L),
-    step_id = c(1L, 2L),
-    spoke_in_A = c(TRUE, FALSE)
-  )
-  edges_all_a <- edges_mixed
-  edges_all_a$spoke_in_A <- c(TRUE, TRUE)
-  attr(edges_mixed, "judge_params") <- list(beta = 1, epsilon = 0, mode = "phase_specific", scope = "link")
-  attr(edges_all_a, "judge_params") <- list(beta = 1, epsilon = 0, mode = "phase_specific", scope = "link")
-
-  hub_theta <- c(h1 = 0)
-  spoke_theta <- c(s1 = 0)
-
-  fit_mixed <- testthat::with_mocked_bindings(
-    .adaptive_link_fit_transform_cmdstan = function(stan_data,
-                                                    variable_names,
-                                                    cmdstan,
-                                                    seed,
-                                                    model_fn = NULL) {
-      delta_draws <- if (sum(stan_data$beta_signed) == 0) {
-        c(-0.1, 0, 0.1, 0)
-      } else {
-        c(-0.6, -0.5, -0.4, -0.5)
-      }
-      list(
-        draws_matrix = cbind(delta = delta_draws),
-        diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 1000),
-        mcmc_config_used = list(
-          chains = 4L,
-          parallel_chains = 4L,
-          threads_per_chain = 1L,
-          cmdstanr_version = "test"
-        )
-      )
-    },
-    .package = "pairwiseLLM",
-    pairwiseLLM:::.adaptive_link_fit_transform(
-      edges_mixed,
-      hub_theta,
-      spoke_theta,
-      transform_mode = "shift_only"
-    )
-  )
-  fit_all_a <- testthat::with_mocked_bindings(
-    .adaptive_link_fit_transform_cmdstan = function(stan_data,
-                                                    variable_names,
-                                                    cmdstan,
-                                                    seed,
-                                                    model_fn = NULL) {
-      delta_draws <- if (sum(stan_data$beta_signed) == 0) {
-        c(-0.1, 0, 0.1, 0)
-      } else {
-        c(-0.6, -0.5, -0.4, -0.5)
-      }
-      list(
-        draws_matrix = cbind(delta = delta_draws),
-        diagnostics = list(divergences = 0L, max_rhat = 1.0, min_ess_bulk = 1000),
-        mcmc_config_used = list(
-          chains = 4L,
-          parallel_chains = 4L,
-          threads_per_chain = 1L,
-          cmdstanr_version = "test"
-        )
-      )
-    },
-    .package = "pairwiseLLM",
-    pairwiseLLM:::.adaptive_link_fit_transform(
-      edges_all_a,
-      hub_theta,
-      spoke_theta,
-      transform_mode = "shift_only"
-    )
-  )
-
-  expect_true(abs(fit_mixed$delta_mean) < 0.5)
-  expect_true(fit_all_a$delta_mean < (fit_mixed$delta_mean - 0.05))
-})
 
 test_that("shift_only theta treatment records plugin-var default and fixed-eap fallback", {
   fixed <- make_linking_refit_state(
@@ -2906,26 +2585,6 @@ test_that("scale_ready uses current-epoch active edges only", {
 
   run_case <- function(state) {
     testthat::with_mocked_bindings(
-      .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
-        list(
-          delta_mean = 0,
-          delta_sd = 0.1,
-          log_alpha_mean = NA_real_,
-          log_alpha_sd = NA_real_,
-          theta_hub_post = hub_theta,
-          theta_spoke_post = spoke_theta,
-          posterior_draws = list(),
-          diagnostics = list(
-            divergences = 0L,
-            max_rhat = 1,
-            min_ess_bulk = 1000,
-            diagnostics_divergences_pass = TRUE,
-            diagnostics_rhat_pass = TRUE,
-            diagnostics_ess_pass = TRUE
-          ),
-          fit_contract = list()
-        )
-      },
       .adaptive_link_reliability_transformed_active = function(...) 0.95,
       .adaptive_link_ts_btl_rank_spearman_active = function(...) 0.95,
       .adaptive_link_rank_stability_lagged = function(...) {
@@ -2964,26 +2623,6 @@ test_that("scale_ready tolerates missing legacy coverage bin state on resume", {
   state$controller$link_stage_coverage_bins_used <- list(`2` = NA_integer_)
 
   out <- testthat::with_mocked_bindings(
-    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
-      list(
-        delta_mean = 0,
-        delta_sd = 0.1,
-        log_alpha_mean = NA_real_,
-        log_alpha_sd = NA_real_,
-        theta_hub_post = hub_theta,
-        theta_spoke_post = spoke_theta,
-        posterior_draws = list(),
-        diagnostics = list(
-          divergences = 0L,
-          max_rhat = 1,
-          min_ess_bulk = 1000,
-          diagnostics_divergences_pass = TRUE,
-          diagnostics_rhat_pass = TRUE,
-          diagnostics_ess_pass = TRUE
-        ),
-        fit_contract = list()
-      )
-    },
     .adaptive_link_reliability_transformed_active = function(...) 0.95,
     .adaptive_link_ts_btl_rank_spearman_active = function(...) 0.95,
     .adaptive_link_rank_stability_lagged = function(...) {
@@ -3032,26 +2671,6 @@ test_that("epoch resets require regime changes, not ordinary probe-panel churn",
 
   run_reset <- function(state) {
     testthat::with_mocked_bindings(
-      .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
-        list(
-          delta_mean = 0,
-          delta_sd = 0.1,
-          log_alpha_mean = NA_real_,
-          log_alpha_sd = NA_real_,
-          theta_hub_post = hub_theta,
-          theta_spoke_post = spoke_theta,
-          posterior_draws = list(),
-          diagnostics = list(
-            divergences = 0L,
-            max_rhat = 1,
-            min_ess_bulk = 1000,
-            diagnostics_divergences_pass = TRUE,
-            diagnostics_rhat_pass = TRUE,
-            diagnostics_ess_pass = TRUE
-          ),
-          fit_contract = list()
-        )
-      },
       .adaptive_link_reliability_transformed_active = function(...) 0.95,
       .adaptive_link_ts_btl_rank_spearman_active = function(...) 0.95,
       .adaptive_link_rank_stability_lagged = function(...) {
@@ -3872,32 +3491,6 @@ test_that("auto escalation requires diagnostics to pass before any decision open
         is_probe_step = TRUE
       )
     },
-    .adaptive_link_fit_transform_alt_shift_scale = function(...) {
-      list(converged = TRUE, delta_mean = 0.2, log_alpha_mean = 0.3, log_alpha_sd = 0.02)
-    },
-    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
-      list(
-        delta_mean = 0.1,
-        delta_sd = 0.1,
-        log_alpha_mean = NA_real_,
-        log_alpha_sd = NA_real_,
-        theta_hub_post = hub_theta,
-        theta_spoke_post = spoke_theta,
-        posterior_draws = list(delta = c(0.1, 0.1)),
-        diagnostics = list(
-          divergences = 0L,
-          max_rhat = 1.20,
-          min_ess_bulk = 50,
-          diagnostics_divergences_pass = TRUE,
-          diagnostics_rhat_pass = FALSE,
-          diagnostics_ess_pass = FALSE
-        ),
-        fit_contract = list(
-          estimation_method = "cmdstan_hmc",
-          uncertainty_approximation = "cmdstan_posterior_draws"
-        )
-      )
-    },
     .adaptive_link_probe_brier_for_fit = function(..., log_alpha_mean = NA_real_) {
       if (is.finite(log_alpha_mean)) 0.10 else 0.12
     },
@@ -3933,29 +3526,6 @@ test_that("stable Phase B epochs expose finite lagged stop metrics and clear una
         spoke_in_A = c(TRUE, TRUE, TRUE),
         run_mode = c("link_multi_spoke", "link_multi_spoke", "link_multi_spoke"),
         is_probe_step = c(FALSE, FALSE, FALSE)
-      )
-    },
-    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
-      list(
-        delta_mean = 0.14,
-        delta_sd = 0.01,
-        log_alpha_mean = NA_real_,
-        log_alpha_sd = NA_real_,
-        theta_hub_post = hub_theta,
-        theta_spoke_post = spoke_theta,
-        posterior_draws = list(delta = c(0.14, 0.14)),
-        diagnostics = list(
-          divergences = 0L,
-          max_rhat = 1.0,
-          min_ess_bulk = 500,
-          diagnostics_divergences_pass = TRUE,
-          diagnostics_rhat_pass = TRUE,
-          diagnostics_ess_pass = TRUE
-        ),
-        fit_contract = list(
-          estimation_method = "cmdstan_hmc",
-          uncertainty_approximation = "cmdstan_posterior_draws"
-        )
       )
     },
     .adaptive_link_global_score_stats_active = function(...) list(reliability = 0.96),
@@ -4094,29 +3664,6 @@ test_that("stable Phase B epochs can open the stop gate and become stop-eligible
         spoke_in_A = c(TRUE, TRUE, TRUE),
         run_mode = c("link_multi_spoke", "link_multi_spoke", "link_multi_spoke"),
         is_probe_step = c(FALSE, FALSE, FALSE)
-      )
-    },
-    .adaptive_link_fit_transform = function(cross_edges, hub_theta, spoke_theta, transform_mode) {
-      list(
-        delta_mean = 0.14,
-        delta_sd = 0.01,
-        log_alpha_mean = NA_real_,
-        log_alpha_sd = NA_real_,
-        theta_hub_post = hub_theta,
-        theta_spoke_post = spoke_theta,
-        posterior_draws = list(delta = c(0.14, 0.14)),
-        diagnostics = list(
-          divergences = 0L,
-          max_rhat = 1.0,
-          min_ess_bulk = 500,
-          diagnostics_divergences_pass = TRUE,
-          diagnostics_rhat_pass = TRUE,
-          diagnostics_ess_pass = TRUE
-        ),
-        fit_contract = list(
-          estimation_method = "cmdstan_hmc",
-          uncertainty_approximation = "cmdstan_posterior_draws"
-        )
       )
     },
     .adaptive_link_global_score_stats_active = function(...) list(reliability = 0.96),
@@ -5047,102 +4594,8 @@ test_that("adaptive_state validation branches for linking controls are covered",
   expect_true(q[["long_link"]] <= 8L)
 })
 
-test_that("linking CmdStan diagnostics validator enforces canonical HMC fields", {
-  diag_ok <- pairwiseLLM:::.adaptive_link_cmdstan_validate_diagnostics(
-    diagnostics = list(divergences = 0L, max_rhat = 1.005, min_ess_bulk = 900),
-    thresholds = list(divergences_max = 0L, max_rhat = 1.01, min_ess_bulk = 400)
-  )
-  expect_identical(diag_ok$divergences, 0L)
-  expect_true(isTRUE(diag_ok$diagnostics_divergences_pass))
-  expect_true(isTRUE(diag_ok$diagnostics_rhat_pass))
-  expect_true(isTRUE(diag_ok$diagnostics_ess_pass))
 
-  expect_error(
-    pairwiseLLM:::.adaptive_link_cmdstan_validate_diagnostics(
-      diagnostics = list(divergences = NA_integer_, max_rhat = 1.01, min_ess_bulk = 500),
-      thresholds = list(divergences_max = 0L, max_rhat = 1.01, min_ess_bulk = 400)
-    ),
-    "missing or malformed"
-  )
-})
 
-test_that("linking CmdStan schedule and refit seed are stable under fixed inputs", {
-  sched1 <- pairwiseLLM:::.adaptive_link_cmdstan_schedule(1L, n_param = 1L, joint_used = FALSE)
-  sched2 <- pairwiseLLM:::.adaptive_link_cmdstan_schedule(2L, n_param = 3L, joint_used = TRUE)
-  expect_true(sched2$iter_sampling > sched1$iter_sampling)
-  expect_true(sched2$iter_warmup > sched1$iter_warmup)
-  edges <- tibble::tibble(step_id = c(NA_integer_, 2L), y_spoke = c(2L, 1L))
-  seed1 <- pairwiseLLM:::.adaptive_link_refit_seed(edges, "shift_only", "shift_only")
-  seed2 <- pairwiseLLM:::.adaptive_link_refit_seed(edges, "shift_only", "shift_only")
-  expect_true(seed1 >= 1L)
-  expect_identical(seed1, seed2)
-
-  edges_large <- tibble::tibble(
-    step_id = c(1e12, 1e15, 3e15 + 9),
-    y_spoke = c(0L, 1L, 1L)
-  )
-  seed_large_a <- pairwiseLLM:::.adaptive_link_refit_seed(edges_large, "shift_scale", "joint_refit")
-  seed_large_b <- pairwiseLLM:::.adaptive_link_refit_seed(edges_large, "shift_scale", "joint_refit")
-  expect_true(is.finite(seed_large_a))
-  expect_false(is.na(seed_large_a))
-  expect_true(seed_large_a >= 1L)
-  expect_identical(seed_large_a, seed_large_b)
-})
-
-test_that("linking refit retries CmdStan effort until diagnostics pass", {
-  state <- make_linking_refit_state(list(link_refit_mode = "shift_only"))
-  state$config$btl_config$cmdstan_fit_fn <- NULL
-  state <- append_cross_step(state, 1L, "s21", "h1", 1L, spoke_id = 2L)
-  state <- append_cross_step(state, 2L, "h2", "s22", 0L, spoke_id = 2L)
-
-  sampled <- list()
-  fit_calls <- 0L
-  out <- testthat::with_mocked_bindings(
-    .adaptive_link_fit_transform_cmdstan = function(stan_data,
-                                                    variable_names,
-                                                    cmdstan,
-                                                    seed,
-                                                    model_fn = NULL) {
-      fit_calls <<- fit_calls + 1L
-      sampled[[length(sampled) + 1L]] <<- list(
-        chains = as.integer(cmdstan$chains),
-        iter_warmup = as.integer(cmdstan$iter_warmup),
-        iter_sampling = as.integer(cmdstan$iter_sampling)
-      )
-      diagnostics <- if (fit_calls < 3L) {
-        list(divergences = 0L, max_rhat = 1.02, min_ess_bulk = 80)
-      } else {
-        list(divergences = 0L, max_rhat = 1.004, min_ess_bulk = 480)
-      }
-      list(
-        draws_matrix = cbind(delta = c(0, 0, 0, 0)),
-        diagnostics = diagnostics,
-        mcmc_config_used = list(
-          chains = as.integer(cmdstan$chains),
-          parallel_chains = as.integer(cmdstan$chains),
-          threads_per_chain = 1L,
-          cmdstanr_version = "test"
-        )
-      )
-    },
-    .package = "pairwiseLLM",
-    {
-      pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
-    }
-  )
-
-  stats <- out$controller$link_refit_stats_by_spoke[["2"]]
-  expect_length(sampled, 3L)
-  expect_true(sampled[[2L]]$iter_sampling > sampled[[1L]]$iter_sampling)
-  expect_true(sampled[[3L]]$iter_sampling > sampled[[2L]]$iter_sampling)
-  expect_identical(stats$link_diagnostics_divergences, 0L)
-  expect_true(isTRUE(stats$link_diagnostics_divergences_pass))
-  expect_true(isTRUE(stats$link_diagnostics_rhat_pass))
-  expect_true(isTRUE(stats$link_diagnostics_ess_pass))
-  expect_identical(stats$fit_contract$mcmc$repair_attempts, 3L)
-  expect_identical(stats$link_fit_method, "cmdstan_hmc")
-  expect_identical(stats$link_uncertainty_approximation, "cmdstan_posterior_draws")
-})
 
 test_that("committed result orientation remains Y=1 => A wins in refit inputs", {
   state <- make_linking_refit_state()

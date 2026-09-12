@@ -973,40 +973,6 @@
     out$pairing_strategy <- .adaptive_pairing_strategy(out)
   }
   out$hub_id <- read_integer("hub_id", 1L, Inf)
-  out$link_estimation_mode <- read_choice(
-    "link_estimation_mode",
-    .adaptive_link_estimation_mode_levels()
-  )
-  policy_value <- out$link_transform_policy %||% out$link_transform_mode %||% NULL
-  if (!is.null(policy_value)) {
-    out$link_transform_policy <- .adaptive_normalize_link_transform_policy(policy = policy_value)
-  }
-  out$link_transform_mode <- NULL
-  out$link_refit_mode <- read_choice("link_refit_mode", c("shift_only", "joint_refit"))
-  if (!is.null(out$shift_only_theta_treatment)) {
-    if (!is.character(out$shift_only_theta_treatment) ||
-      length(out$shift_only_theta_treatment) != 1L ||
-      is.na(out$shift_only_theta_treatment) ||
-      out$shift_only_theta_treatment == "") {
-      rlang::abort("`adaptive_config$shift_only_theta_treatment` must be a single string value.")
-    }
-    if (identical(out$shift_only_theta_treatment, "normal_prior")) {
-      out$shift_only_theta_treatment <- "fixed_eap_plugin_var"
-    }
-    if (!out$shift_only_theta_treatment %in% .adaptive_shift_only_theta_treatment_levels()) {
-      rlang::abort(paste0(
-        "`adaptive_config$shift_only_theta_treatment` must be one of: ",
-        paste(.adaptive_shift_only_theta_treatment_levels(), collapse = ", "),
-        "."
-      ))
-    }
-  }
-  out$judge_param_mode <- read_choice("judge_param_mode", c("global_shared", "phase_specific"))
-  out$within_phase_b_within_set_steps_allowed <- read_logical(
-    "within_phase_b_within_set_steps_allowed"
-  )
-  out$hub_lock_mode <- read_choice("hub_lock_mode", .adaptive_hub_lock_mode_levels())
-  out$hub_lock_kappa <- read_double("hub_lock_kappa", 0, 1)
   out$anchored_joint_spoke_prior_scale <- read_double("anchored_joint_spoke_prior_scale", 0, Inf)
   out$anchored_joint_sd_floor <- read_double("anchored_joint_sd_floor", 0, Inf)
   out$anchored_joint_spoke_prior_fallback_sd <- read_double(
@@ -1053,14 +1019,7 @@
     0,
     Inf
   )
-  out$probe_acceleration_mode <- read_choice(
-    "probe_acceleration_mode",
-    .adaptive_probe_acceleration_mode_levels()
-  )
   out$probe_active_floor_enabled <- read_logical("probe_active_floor_enabled")
-  out$probe_sole_blocker_acceleration_enabled <- read_logical(
-    "probe_sole_blocker_acceleration_enabled"
-  )
   out$probe_pairs_per_refit_per_spoke_bootstrap_max <- read_integer(
     "probe_pairs_per_refit_per_spoke_bootstrap_max",
     0L,
@@ -1150,7 +1109,6 @@
     Inf
   )
   out$allow_spoke_spoke_cross_set <- read_logical("allow_spoke_spoke_cross_set")
-  out$multi_spoke_mode <- read_choice("multi_spoke_mode", c("independent", "concurrent"))
   out$multi_spoke_budget_rule <- read_choice("multi_spoke_budget_rule", c("utility_mass_topk"))
   out$multi_spoke_budget_top_k <- read_integer("multi_spoke_budget_top_k", 1L, Inf)
   out$min_cross_set_pairs_per_spoke_per_refit <- read_integer(

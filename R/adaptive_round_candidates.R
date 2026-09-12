@@ -284,126 +284,78 @@
 
   # In multi-spoke mode, route deterministically across spokes.
   spoke_ids <- as.integer(sort(spoke_ids))
-  concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
-  if (!isTRUE(concurrent_mode)) {
-    refit_id <- .adaptive_link_refit_window_id(state)
-    refit_context <- list(last_refit_step = as.integer(state$refit_meta$last_refit_step %||% 0L))
-    counts <- stats::setNames(vapply(
-      spoke_ids,
-      function(spoke_id) {
-        summary <- .adaptive_link_refit_summary_current(
-          state = state,
-          refit_id = refit_id,
-          spoke_id = as.integer(spoke_id),
-          refit_context = refit_context
-        )
-        as.integer(summary$n_cross_edges_active_since_last_refit %||% 0L)
-      },
-      integer(1L)
-    ), as.character(spoke_ids))
-    cached_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
-    current_refit_id <- as.integer(.adaptive_link_refit_window_id(state))
-    cached_map <- controller$link_budget_map %||% list()
-    if (!is.na(cached_refit_id) && identical(cached_refit_id, current_refit_id) && length(cached_map) > 0L) {
-      cached_active <- names(cached_map)[vapply(
-        cached_map,
-        function(entry) as.integer(entry$B_spoke_refit_budget %||% 0L) > 0L,
-        logical(1L)
-      )]
-      cached_active <- as.integer(cached_active)
-      cached_active <- cached_active[cached_active %in% spoke_ids]
-      if (length(cached_active) > 0L) {
-        tail_ids <- as.integer(sort(setdiff(spoke_ids, cached_active[[1L]])))
-        return(as.integer(c(cached_active[[1L]], tail_ids)))
-      }
-    }
-    if (any(counts > 0L)) {
-      ord_counts <- order(as.integer(counts), as.integer(names(counts)))
-      return(as.integer(names(counts)[ord_counts]))
-    }
-  }
-
-  if (isTRUE(concurrent_mode)) {
-    blocker_totals <- vapply(
-      spoke_ids,
-      function(spoke_id) {
-        sum(.adaptive_link_blocker_weights_for_spoke(controller, spoke_id = as.integer(spoke_id)))
-      },
-      numeric(1L)
-    )
-    names(blocker_totals) <- as.character(spoke_ids)
-    refit_id <- .adaptive_link_refit_window_id(state)
-    refit_context <- list(last_refit_step = as.integer(state$refit_meta$last_refit_step %||% 0L))
-    counts <- stats::setNames(vapply(
-      spoke_ids,
-      function(spoke_id) {
-        summary <- .adaptive_link_refit_summary_current(
-          state = state,
-          refit_id = refit_id,
-          spoke_id = as.integer(spoke_id),
-          refit_context = refit_context
-        )
-        as.integer(summary$n_cross_edges_active_since_last_refit %||% 0L)
-      },
-      integer(1L)
-    ), as.character(spoke_ids))
-
-    budget_map <- .adaptive_link_budget_map_for_refit(
-      state = state,
-      controller = controller,
-      eligible_spoke_ids = spoke_ids
-    )
-    utility_mass <- vapply(
-      as.character(spoke_ids),
-      function(key) as.double(budget_map[[key]]$concurrent_utility_mass %||% 0),
-      numeric(1L)
-    )
-    floor_pairs <- vapply(
-      as.character(spoke_ids),
-      function(key) as.integer(budget_map[[key]]$concurrent_floor_pairs %||% 0L),
-      integer(1L)
-    )
-    target_pairs <- vapply(
-      as.character(spoke_ids),
-      function(key) as.integer(budget_map[[key]]$B_spoke_refit_budget %||% 0L),
-      integer(1L)
-    )
-    floor_deficit <- pmax(0L, floor_pairs - counts)
-    if (any(floor_deficit > 0L)) {
-      eligible_counts <- counts[floor_deficit > 0L]
-      ord_floor <- order(
-        -floor_deficit[names(eligible_counts)],
-        -blocker_totals[names(eligible_counts)],
-        -utility_mass[names(eligible_counts)],
-        eligible_counts,
-        as.integer(names(eligible_counts))
+  blocker_totals <- vapply(
+    spoke_ids,
+    function(spoke_id) {
+      sum(.adaptive_link_blocker_weights_for_spoke(controller, spoke_id = as.integer(spoke_id)))
+    },
+    numeric(1L)
+  )
+  names(blocker_totals) <- as.character(spoke_ids)
+  refit_id <- .adaptive_link_refit_window_id(state)
+  refit_context <- list(last_refit_step = as.integer(state$refit_meta$last_refit_step %||% 0L))
+  counts <- stats::setNames(vapply(
+    spoke_ids,
+    function(spoke_id) {
+      summary <- .adaptive_link_refit_summary_current(
+        state = state,
+        refit_id = refit_id,
+        spoke_id = as.integer(spoke_id),
+        refit_context = refit_context
       )
-      return(as.integer(names(eligible_counts)[ord_floor]))
-    }
+      as.integer(summary$n_cross_edges_active_since_last_refit %||% 0L)
+    },
+    integer(1L)
+  ), as.character(spoke_ids))
 
-    target_deficit <- as.integer(target_pairs[names(counts)] - counts)
-    target_deficit[!is.finite(target_deficit)] <- 0L
-    if (any(target_deficit > 0L)) {
-      eligible_counts <- counts[target_deficit > 0L]
-      ord_deficit <- order(
-        -target_deficit[names(eligible_counts)],
-        -blocker_totals[names(eligible_counts)],
-        -utility_mass[names(eligible_counts)],
-        eligible_counts,
-        as.integer(names(eligible_counts))
-      )
-      return(as.integer(names(eligible_counts)[ord_deficit]))
-    }
-
-    return(integer())
+  budget_map <- .adaptive_link_budget_map_for_refit(
+    state = state,
+    controller = controller,
+    eligible_spoke_ids = spoke_ids
+  )
+  utility_mass <- vapply(
+    as.character(spoke_ids),
+    function(key) as.double(budget_map[[key]]$concurrent_utility_mass %||% 0),
+    numeric(1L)
+  )
+  floor_pairs <- vapply(
+    as.character(spoke_ids),
+    function(key) as.integer(budget_map[[key]]$concurrent_floor_pairs %||% 0L),
+    integer(1L)
+  )
+  target_pairs <- vapply(
+    as.character(spoke_ids),
+    function(key) as.integer(budget_map[[key]]$B_spoke_refit_budget %||% 0L),
+    integer(1L)
+  )
+  floor_deficit <- pmax(0L, floor_pairs - counts)
+  if (any(floor_deficit > 0L)) {
+    eligible_counts <- counts[floor_deficit > 0L]
+    ord_floor <- order(
+      -floor_deficit[names(eligible_counts)],
+      -blocker_totals[names(eligible_counts)],
+      -utility_mass[names(eligible_counts)],
+      eligible_counts,
+      as.integer(names(eligible_counts))
+    )
+    return(as.integer(names(eligible_counts)[ord_floor]))
   }
 
-  current <- as.integer(controller$current_link_spoke_id %||% NA_integer_)
-  if (!is.na(current) && current %in% spoke_ids) {
-    tail_ids <- as.integer(sort(setdiff(spoke_ids, current)))
-    return(as.integer(c(current, tail_ids)))
+  target_deficit <- as.integer(target_pairs[names(counts)] - counts)
+  target_deficit[!is.finite(target_deficit)] <- 0L
+  if (any(target_deficit > 0L)) {
+    eligible_counts <- counts[target_deficit > 0L]
+    ord_deficit <- order(
+      -target_deficit[names(eligible_counts)],
+      -blocker_totals[names(eligible_counts)],
+      -utility_mass[names(eligible_counts)],
+      eligible_counts,
+      as.integer(names(eligible_counts))
+    )
+    return(as.integer(names(eligible_counts)[ord_deficit]))
   }
-  as.integer(sort(spoke_ids))
+
+  integer()
 }
 
 .adaptive_link_active_spoke <- function(state, controller, eligible_spoke_ids = NULL) {
