@@ -8,6 +8,10 @@ organized and execution order predictable.
 New major subsystems should reserve a contiguous numeric block before tests
 are added.
 
+Rubric calibration reserves 0200–0299 for core/statistical-contract tests and
+9200–9299 for workflow/integration tests. These blocks were verified unused
+before Task 01 of the v1.5.0 series; do not renumber unrelated tests.
+
 - 0000–0999: Core utilities, helpers, and pure functions
 - 2000–2999: Live / interactive backends (e.g., human, API-based)
 - 3000–3999: Batch workflows, resume logic, persistence
