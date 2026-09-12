@@ -1,8 +1,37 @@
 # Resolve predictions only at assessment creation, never while resuming/refitting.
+.warm_start_mode <- function(mode, has_predictive) {
+  if (is.null(mode)) return(if (has_predictive) "btl_only" else "cold")
+  if (!is.character(mode) || length(mode) != 1L || is.na(mode) ||
+      !is.null(dim(mode)) || !mode %in% c("cold", "btl_only", "trueskill_only", "both")) {
+    rlang::abort("`warm_start_mode` must be NULL or one of cold, btl_only, trueskill_only, both.")
+  }
+  mode <- unname(mode)
+  if (identical(mode, "cold") && has_predictive) {
+    rlang::abort("`warm_start_mode = cold` cannot be combined with predictive input.")
+  }
+  if (!identical(mode, "cold") && !has_predictive) {
+    rlang::abort("Non-cold `warm_start_mode` requires `warm_start_model` or `warm_start_prior`.")
+  }
+  unname(mode)
+}
+
+.warm_start_uses_btl <- function(mode) mode %in% c("btl_only", "both")
+.warm_start_uses_trueskill <- function(mode) mode %in% c("trueskill_only", "both")
+
+.warm_start_btl_prior_for_state <- function(state) {
+  # Legacy states retain historical BTL-only semantics; never reinitialize TrueSkill.
+  mode <- .warm_start_mode(state$meta$warm_start_mode, !is.null(state$predictive_prior))
+  if (.warm_start_uses_btl(mode)) state$predictive_prior else NULL
+}
+
 .warm_start_adaptive_init <- function(state, model = NULL, prior = NULL, features = NULL,
-                                      python = NULL, prior_sd = NULL) {
+                                      python = NULL, prior_sd = NULL, mode = NULL) {
   if (!is.null(model) && !is.null(prior)) {
     rlang::abort("Supply only one of `warm_start_model` and `warm_start_prior`.")
+  }
+  mode <- .warm_start_mode(mode, !is.null(model) || !is.null(prior))
+  if (identical(mode, "trueskill_only") && !is.null(prior_sd)) {
+    rlang::abort("`warm_start_prior_sd` controls BTL priors and cannot be used with trueskill_only.")
   }
   if (is.null(model) && any(!vapply(list(features, python, prior_sd), is.null, logical(1)))) {
     rlang::abort("Warm-start features, Python, and prior SD arguments require `warm_start_model`.")
@@ -25,6 +54,19 @@
   prior <- .warm_start_prior_scope(prior, state$item_ids, exact = TRUE)
   state$predictive_prior <- prior
   state$meta$predictive_prior_digest <- if (is.null(prior)) NULL else prior$digest
+  state$meta$warm_start_mode <- mode
+  state$meta$trueskill_initialized_from_predictive <- .warm_start_uses_trueskill(mode)
+  if (.warm_start_uses_trueskill(mode)) {
+    ts <- validate_trueskill_state(state$trueskill_state)
+    .validate_warm_start_prior(prior, ts$items$item_id)
+    defaults <- .trueskill_defaults()
+    ts$items$mu <- defaults$mu0 + defaults$sigma0 *
+      prior$prior_mean[match(ts$items$item_id, prior$item_id)]
+    state$trueskill_state <- validate_trueskill_state(ts)
+    state$meta$trueskill_warm_scale <- 1.0
+    state$meta$trueskill_mu0_used <- defaults$mu0
+    state$meta$trueskill_sigma0_used <- defaults$sigma0
+  }
   state
 }
 
@@ -76,7 +118,7 @@
 .warm_start_resume_inputs <- function(...) {
   if (any(!vapply(list(...), is.null, logical(1)))) {
     rlang::abort(paste0("Resume uses saved predictive priors. Omit all warm-start model, prior, ",
-      "feature, Python, and SD arguments; start a new session to change them."))
+      "feature, Python, SD, and mode arguments; start a new session to change them."))
   }
   invisible(NULL)
 }

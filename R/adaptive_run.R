@@ -194,7 +194,7 @@
 .adaptive_round_activate_if_ready <- function(state) {
   out <- state
   out$controller <- .adaptive_controller_with_phase_scope(out, controller = .adaptive_controller_resolve(out))
-  if (is.null(out$round) || !is.list(out$round)) {
+  if (is.null(out[["round"]]) || !is.list(out[["round"]])) {
     out$round <- .adaptive_new_round_state(
       out$item_ids,
       round_id = 1L,
@@ -203,6 +203,9 @@
     )
   }
   if (isTRUE(out$warm_start_done)) {
+    if (.adaptive_pairing_strategy(out) != "hybrid" && !isTRUE(out$round$staged_active)) {
+      out$round$round_committed <- 0L
+    }
     out$round$staged_active <- TRUE
     if ((out$round$round_committed %||% 0L) >= (out$round$round_pairs_target %||% 0L)) {
       out <- .adaptive_round_start_next(out)
@@ -2575,41 +2578,6 @@
   if (length(spoke_ids) < 1L) {
     return(NA_integer_)
   }
-  run_mode <- as.character(controller$run_mode %||% "within_set")
-  concurrent_mode <- identical(as.character(controller$multi_spoke_mode %||% "independent"), "concurrent")
-  if (identical(run_mode, "link_multi_spoke") && !isTRUE(concurrent_mode)) {
-    refit_id <- as.integer(.adaptive_link_refit_window_id(state))
-    cached_refit_id <- as.integer(controller$link_budget_refit_id %||% NA_integer_)
-    cached_budget_map <- controller$link_budget_map %||% list()
-    budget_map <- if (identical(cached_refit_id, refit_id) && length(cached_budget_map) > 0L) {
-      cached_budget_map
-    } else {
-      .adaptive_link_budget_map_for_refit(
-        state = state,
-        controller = controller,
-        eligible_spoke_ids = spoke_ids
-      )
-    }
-    budgeted_spokes <- as.integer(spoke_ids[vapply(as.character(spoke_ids), function(key) {
-      as.integer(budget_map[[key]]$B_spoke_refit_budget %||% 0L) > 0L
-    }, logical(1L))])
-    budgeted_spokes <- sort(unique(budgeted_spokes[!is.na(budgeted_spokes)]))
-    if (length(budgeted_spokes) > 1L) {
-      rlang::abort(
-        paste0(
-          "Independent multi-spoke probe routing invariant failed: expected at most one budgeted ",
-          "spoke in the current refit window, found spoke_id: ",
-          paste(budgeted_spokes, collapse = ", "),
-          "."
-        )
-      )
-    }
-    if (length(budgeted_spokes) < 1L) {
-      return(NA_integer_)
-    }
-    spoke_ids <- as.integer(budgeted_spokes)
-  }
-
   realized_min <- as.integer(controller$probe_edges_min_for_stop %||% 80L)
   probe_cap <- max(0L, as.integer(controller$probe_pairs_per_refit_per_spoke %||% 4L))
   fairness_guard <- .adaptive_link_probe_active_progress_guard(
@@ -3629,6 +3597,9 @@
 #' @keywords internal
 #' @noRd
 .adaptive_round_active_stage <- function(state) {
+  if (inherits(state, "adaptive_state") && .adaptive_pairing_strategy(state) != "hybrid") {
+    return(if (.adaptive_warm_start_active(state)) "warm_start" else "direct_pairing")
+  }
   if (!inherits(state, "adaptive_state")) {
     round <- state$round %||% NULL
     if (is.null(round) || !isTRUE(round$staged_active)) {
@@ -3765,6 +3736,16 @@
   }
 
   stage <- as.character(step_row$round_stage[[1L]] %||% NA_character_)
+  if (identical(stage, "direct_pairing") && isTRUE(is_adaptive) &&
+    .adaptive_pairing_strategy(out) != "hybrid") {
+    round$committed_total <- as.integer(round$committed_total + 1L)
+    round$round_committed <- as.integer(round$round_committed + 1L)
+    out$round <- round
+    if (round$round_committed >= round$round_pairs_target) {
+      out <- .adaptive_round_start_next(out)
+    }
+    return(out)
+  }
   if (is.na(stage) || !stage %in% round$stage_order) {
     return(out)
   }
@@ -3849,6 +3830,9 @@
 #' @noRd
 .adaptive_round_starvation <- function(state, step_row) {
   out <- state
+  if (identical(step_row$round_stage[[1L]], "direct_pairing")) {
+    return(list(state = out, exhausted = TRUE))
+  }
   round <- out$round %||% NULL
   if (is.null(round) || !isTRUE(round$staged_active)) {
     return(list(state = out, exhausted = TRUE))
@@ -3997,12 +3981,13 @@
 #'
 #' @details
 #' This function creates the stepwise controller state and seeds all canonical
-#' logs used in the adaptive pairing workflow. Warm start pair construction
-#' follows the shuffled chain design, which guarantees a connected comparison
+#' logs used in the adaptive pairing workflow. Connected bootstrap pair construction
+#' follows the same seeded shuffled chain in every mode, giving a connected comparison
 #' graph after \eqn{N - 1} committed comparisons.
 #'
 #' Pair selection in this framework is stepwise and uncertainty-aware.
-#' Within-set routing uses TrueSkill base utility
+#' Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling anchors,
+#' pair probabilities, and base utility
 #' \deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
 #' win probability for pair \eqn{\{i, j\}}. In linking Phase B, anchor/strata
 #' routing uses a linking-global score derived from Phase A raw summaries and
@@ -4015,9 +4000,12 @@
 #' Phase B uses pooled within-set Phase A judge-parameter estimates, using the
 #' configured BTL model variant, as the accepted shared source for fixed
 #' \code{beta}/\code{epsilon} constants.
-#' Bayesian BTL posterior draws are not used as general pair-selection
-#' objectives; within-set pairing remains TrueSkill-routed, with accepted
-#' posterior refits contributing only to the long-link probability gate.
+#' The within-set/Phase-A hybrid long-link gate uses TrueSkill throughout.
+#' Bayesian BTL supplies item estimates, posterior uncertainty, EAP reliability,
+#' diagnostics, stopping, and the existing `global_identified` signal. This signal
+#' can affect later hybrid tapering and routing; selection is not wholly independent
+#' of BTL. Direct within-set strategies use their documented partner targets after
+#' the common bootstrap. Phase B selection and prior rules are unchanged.
 #' Linking Phase B refits use Bayesian posterior estimation and posterior
 #' summaries/diagnostics are logged per spoke at each linking refit.
 #'
@@ -4035,9 +4023,12 @@
 #'   include integer `set_id` values and globally unique `global_item_id`
 #'   values. Item IDs may be character; internal logs use integer indices
 #'   derived from these IDs.
-#' @param seed Integer seed used for deterministic warm-start shuffling and
+#' @param seed Integer seed used for deterministic connected-bootstrap shuffling and
 #'   selection randomness. Default is `1L`.
 #' @param adaptive_config Optional named list of adaptive controller overrides.
+#'   `pairing_strategy` defaults to `hybrid`; `random`, `trueskill_p50`, and
+#'   `trueskill_pollitt` select direct pairs after the common connected shuffled
+#'   bootstrap and currently require `run_mode = "within_set"`.
 #'   Unknown fields and invalid values abort with an actionable error. See
 #'   [adaptive_rank()] for the full list of supported keys, detailed semantics,
 #'   and defaults.
@@ -4052,7 +4043,7 @@
 #'
 #' @return An adaptive state object containing `step_log`, `round_log`, and
 #'   `item_log`. The object includes class \code{"adaptive_state"}, item ID
-#'   mappings, TrueSkill state, warm-start queue, refit metadata, and runtime
+#'   mappings, TrueSkill state, connected bootstrap queue, refit metadata, and runtime
 #'   configuration.
 #'
 #' @examples
@@ -4073,12 +4064,32 @@
 #' @param warm_start_python Explicit Python interpreter for text extraction only.
 #' @param warm_start_prior_sd Optional model-derived raw theta prior SD override;
 #'   scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
+#'   Not accepted with `trueskill_only`; never controls TrueSkill sigma.
+#' @param warm_start_mode Predictive destination: `cold` (neither model), `btl_only`
+#'   (BTL prior), `trueskill_only` (TrueSkill locations), or `both` (both models).
+#'   Omitted/NULL mode defaults to `btl_only` with predictive input, otherwise `cold`.
+#'   Request `both` explicitly to initialize both models. In TrueSkill-warm modes,
+#'   exact item-ID alignment precedes `mu = mu0 + sigma0 * prior_mean`, with
+#'   `mu0 = 25`, `sigma0 = 25/3`, fixed multiplier 1, and unchanged sigma.
+#'   Explicit `cold` with predictive input, or a non-cold mode without it, errors.
 #' @details
-#' Predictive priors affect ordinary/within-set BTL estimation. Transform,
-#' anchored-joint, and pooled judge refits keep their existing prior rules; predictive
-#' evidence is not injected again. Initial pairing queues and selection rules retain
-#' their existing meaning. Custom fit functions must consume `state$predictive_prior`
-#' explicitly. Resume uses saved predictions; omit all warm-start arguments on resume.
+#' Predictive initialization is separate from observed connectivity: every mode
+#' retains the same seeded connected shuffled bootstrap of N - 1 valid comparisons,
+#' with common presentation balancing and invalid-result retries. Predictive
+#' locations can affect later TrueSkill-based selection; they do not replace the
+#' initial observed spanning path. BTL prior SD and ensemble diagnostics never
+#' determine TrueSkill sigma. No historical training-score units are restored.
+#'
+#' Predictive BTL priors apply only in `btl_only` and `both`, including run-required
+#' linking Phase A. TrueSkill initialization applies in `trueskill_only` and `both`.
+#' Imported Phase-A artifacts retain their own generation identity and are not
+#' rerun because predictive input exists. Transform, anchored-joint, and pooled
+#' judge refits keep their existing prior rules; predictive evidence is not
+#' injected into Phase B priors, D-optimal selection, or probes.
+#' Custom BTL fit functions should consume `state$predictive_prior` only when
+#' `state$meta$warm_start_mode` is `btl_only` or `both`; its presence alone does
+#' not imply BTL warming. Resume preserves saved predictions, current TrueSkill
+#' state, mode, strategy, and bootstrap progress; omit all warm-start arguments.
 #' @export
 adaptive_rank_start <- function(items,
                                 seed = 1L,
@@ -4091,7 +4102,8 @@ adaptive_rank_start <- function(items,
                                 warm_start_prior = NULL,
                                 warm_start_features = NULL,
                                 warm_start_python = NULL,
-                                warm_start_prior_sd = NULL) {
+                                warm_start_prior_sd = NULL,
+                                warm_start_mode = NULL) {
   dots <- list(...)
   if (length(dots) > 0L) {
     dot_names <- names(dots)
@@ -4120,7 +4132,7 @@ adaptive_rank_start <- function(items,
   now_fn <- dots$now_fn %||% function() Sys.time()
   state <- new_adaptive_state(items, now_fn = now_fn)
   state <- .warm_start_adaptive_init(state, warm_start_model, warm_start_prior,
-    warm_start_features, warm_start_python, warm_start_prior_sd)
+    warm_start_features, warm_start_python, warm_start_prior_sd, warm_start_mode)
   state$meta$seed <- seed
   state$warm_start_pairs <- .adaptive_build_warm_start_pairs(state$item_ids, seed)
   state$warm_start_idx <- 1L
@@ -4158,11 +4170,12 @@ adaptive_rank_start <- function(items,
 #' Invalid responses produce a logged step with
 #' \code{pair_id = NA} and must not update committed-comparison state.
 #'
-#' Within-set routing is TrueSkill-based with utility
+#' Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling anchors,
+#' pair probabilities, and utility
 #' \deqn{U_0 = p_{ij}(1 - p_{ij})}.
-#' After an accepted posterior refit is available, the long-link gate uses the
-#' BTL posterior win probability for candidate eligibility; before that it
-#' falls back deterministically to TrueSkill.
+#' The long-link probability gate uses TrueSkill throughout within-set/Phase-A
+#' hybrid selection. Direct strategies apply their partner targets after the same
+#' connected shuffled bootstrap and currently require ordinary within-set mode.
 #' In linking Phase B, anchor/strata routing uses linking-global scores built
 #' from Phase A summaries and the accepted anchored-joint state. Linking Phase B
 #' routing ranks eligible
@@ -4175,7 +4188,7 @@ adaptive_rank_start <- function(items,
 #' Exploration/exploitation routing and fallback handling are recorded in
 #' \code{step_log}.
 #'
-#' Round scheduling uses stage-specific admissibility:
+#' Hybrid round scheduling uses stage-specific admissibility:
 #' \itemize{
 #'   \item rolling-anchor links compare one anchor and one non-anchor endpoint;
 #'   \item long/mid links exclude anchor endpoints and enforce stratum-distance
@@ -4184,7 +4197,7 @@ adaptive_rank_start <- function(items,
 #'   pairs within local stage bounds.
 #' }
 #'
-#' Exposure and repeat handling are soft, stage-local constraints:
+#' Hybrid exposure and repeat handling are soft, stage-local constraints:
 #' under-represented exploration uses degree set `deg <= D_min + 1`, while
 #' repeat-pressure gating uses bottom-quantile `recent_deg` (default quantile
 #' `0.25`) and per-endpoint repeat-slot accounting against
@@ -4194,13 +4207,15 @@ adaptive_rank_start <- function(items,
 #' `top_band_pct = 0.10` and `top_band_bins = 5`, with top-band size
 #' `ceiling(top_band_pct * N)`.
 #'
-#' Bayesian BTL refits are triggered on step-based cadence and evaluated with
+#' Bayesian BTL refits are triggered by committed comparisons and evaluated with
 #' diagnostics gates (including ESS thresholds), reliability, and lagged
 #' stability criteria. Refit-level outcomes are
 #' appended to \code{round_log}; per-item posterior summaries are appended to
 #' \code{item_log}. Controller behavior can change after refits via
 #' identifiability-gated settings in \code{adaptive_config}; those controls
-#' affect pair routing and quotas, while BTL remains inference-only.
+#' affect hybrid pair routing and quotas through the existing `global_identified`
+#' signal. BTL supplies item estimates, posterior uncertainty, EAP reliability,
+#' diagnostics, and stopping. Phase B selection and prior rules are unchanged.
 #' If \code{adaptive_config$max_pairs_after_stop > 0}, the run records a stop
 #' boundary at the first refit with \code{stop_decision = TRUE} and allows at
 #' most that many additional committed comparisons before deterministic
@@ -4219,10 +4234,14 @@ adaptive_rank_start <- function(items,
 #'   to `default_btl_fit_fn()` when a refit is due.
 #' @param adaptive_config Optional named list overriding adaptive controller
 #'   behavior. Unknown fields and invalid values abort with an actionable error.
+#'   A resumed session retains its saved pairing strategy: omit `pairing_strategy`
+#'   or supply the same value. Other supported controller overrides remain available.
 #'   See [adaptive_rank()] for the full list of supported keys, detailed
 #'   semantics, and defaults.
 #' @param btl_config Optional named list overriding BTL refit cadence, stopping
-#'   thresholds, and selected round-log diagnostics. Supported fields:
+#'   thresholds, and selected round-log diagnostics. Within-set continuation and
+#'   resume reuse the saved configuration when this argument is omitted; an
+#'   explicit list resolves against the defaults. Supported fields:
 #'   \describe{
 #'   \item{`refit_pairs_target`}{Minimum new committed comparisons required
 #'   before the next BTL refit. Default is `ceiling(N / 2)` clamped to
@@ -4527,6 +4546,19 @@ adaptive_rank_run_live <- function(state,
   resumed_from_session <- .adaptive_is_resumed_session(state)
   state$config$resumed_from_session <- isTRUE(resumed_from_session)
   state$meta$resumed_from_session <- isTRUE(resumed_from_session)
+  if (isTRUE(resumed_from_session) && is.list(adaptive_config) &&
+    "pairing_strategy" %in% names(adaptive_config)) {
+    requested_strategy <- .adaptive_pairing_strategy(adaptive_config)
+    saved_strategy <- .adaptive_pairing_strategy(state)
+    if (!identical(requested_strategy, saved_strategy)) {
+      rlang::abort(paste0(
+        "Cannot change `adaptive_config$pairing_strategy` on resume (saved: `",
+        saved_strategy, "`, requested: `", requested_strategy,
+        "`). Omit the override or initialize a new session."
+      ))
+    }
+    adaptive_config$pairing_strategy <- NULL
+  }
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   if (isTRUE(resumed_from_session)) {
     state <- .adaptive_validate_probe_state_for_resume(state)
@@ -4546,6 +4578,10 @@ adaptive_rank_run_live <- function(state,
     progress_show_events = progress_show_events,
     progress_errors = progress_errors
   )
+  if (is.null(btl_config) &&
+    identical(as.character(state$controller$run_mode %||% "within_set"), "within_set")) {
+    btl_config <- state$config$btl_config %||% NULL
+  }
   btl_cfg <- .adaptive_btl_resolve_config(state, btl_config)
   btl_cfg$refit_pairs_target <- .adaptive_refit_pairs_target(state, btl_cfg)
   state$config$btl_config <- btl_cfg
@@ -4883,7 +4919,9 @@ adaptive_rank_run_live <- function(state,
 #' This is a thin wrapper around [load_adaptive_session()] and performs schema
 #' and log-shape checks during load. Returned state preserves canonical
 #' \code{step_log}, \code{round_log}, and \code{item_log} contents used for
-#' adaptive auditability.
+#' adaptive auditability. The saved predictive mode, prior, pairing strategy,
+#' current TrueSkill state, and connected shuffled bootstrap queue are authoritative.
+#' Resume does not reload a predictive model or regenerate its predictions.
 #'
 #' @param session_dir Directory containing session artifacts.
 #' @param ... Reserved; must be empty. Resume uses persisted predictive priors.

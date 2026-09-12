@@ -185,6 +185,8 @@ reference:
     contents:
       - adaptive_rank
       - make_adaptive_judge_llm
+      - make_adaptive_judge_replay
+      - validate_adaptive_replay
       - adaptive_rank_start
       - adaptive_rank_run_live
       - adaptive_rank_resume

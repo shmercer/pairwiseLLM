@@ -16,7 +16,8 @@ adaptive_rank_start(
   warm_start_prior = NULL,
   warm_start_features = NULL,
   warm_start_python = NULL,
-  warm_start_prior_sd = NULL
+  warm_start_prior_sd = NULL,
+  warm_start_mode = NULL
 )
 }
 \arguments{
@@ -26,7 +27,7 @@ include integer \code{set_id} values and globally unique \code{global_item_id}
 values. Item IDs may be character; internal logs use integer indices
 derived from these IDs.}
 
-\item{seed}{Integer seed used for deterministic warm-start shuffling and
+\item{seed}{Integer seed used for deterministic connected-bootstrap shuffling and
 selection randomness. Default is \code{1L}.}
 
 \item{session_dir}{Optional directory for saving session artifacts.
@@ -39,6 +40,9 @@ Default is \code{FALSE}.}
 for timestamps.}
 
 \item{adaptive_config}{Optional named list of adaptive controller overrides.
+\code{pairing_strategy} defaults to \code{hybrid}; \code{random}, \code{trueskill_p50}, and
+\code{trueskill_pollitt} select direct pairs after the common connected shuffled
+bootstrap and currently require \code{run_mode = "within_set"}.
 Unknown fields and invalid values abort with an actionable error. See
 \code{\link[=adaptive_rank]{adaptive_rank()}} for the full list of supported keys, detailed semantics,
 and defaults.}
@@ -59,12 +63,21 @@ otherwise use item texts. Precomputed prediction needs neither Python nor glmnet
 \item{warm_start_python}{Explicit Python interpreter for text extraction only.}
 
 \item{warm_start_prior_sd}{Optional model-derived raw theta prior SD override;
-scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.}
+scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
+Not accepted with \code{trueskill_only}; never controls TrueSkill sigma.}
+
+\item{warm_start_mode}{Predictive destination: \code{cold} (neither model), \code{btl_only}
+(BTL prior), \code{trueskill_only} (TrueSkill locations), or \code{both} (both models).
+Omitted/NULL mode defaults to \code{btl_only} with predictive input, otherwise \code{cold}.
+Request \code{both} explicitly to initialize both models. In TrueSkill-warm modes,
+exact item-ID alignment precedes \code{mu = mu0 + sigma0 * prior_mean}, with
+\code{mu0 = 25}, \code{sigma0 = 25/3}, fixed multiplier 1, and unchanged sigma.
+Explicit \code{cold} with predictive input, or a non-cold mode without it, errors.}
 }
 \value{
 An adaptive state object containing \code{step_log}, \code{round_log}, and
 \code{item_log}. The object includes class \code{"adaptive_state"}, item ID
-mappings, TrueSkill state, warm-start queue, refit metadata, and runtime
+mappings, TrueSkill state, connected bootstrap queue, refit metadata, and runtime
 configuration.
 }
 \description{
@@ -72,12 +85,13 @@ Initialize an adaptive ranking session and canonical state object.
 }
 \details{
 This function creates the stepwise controller state and seeds all canonical
-logs used in the adaptive pairing workflow. Warm start pair construction
-follows the shuffled chain design, which guarantees a connected comparison
+logs used in the adaptive pairing workflow. Connected bootstrap pair construction
+follows the same seeded shuffled chain in every mode, giving a connected comparison
 graph after \eqn{N - 1} committed comparisons.
 
 Pair selection in this framework is stepwise and uncertainty-aware.
-Within-set routing uses TrueSkill base utility
+Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling anchors,
+pair probabilities, and base utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
 win probability for pair \eqn{\{i, j\}}. In linking Phase B, anchor/strata
 routing uses a linking-global score derived from Phase A raw summaries and
@@ -90,9 +104,12 @@ used for inference/diagnostics/stopping, not as direct selection objectives.
 Phase B uses pooled within-set Phase A judge-parameter estimates, using the
 configured BTL model variant, as the accepted shared source for fixed
 \code{beta}/\code{epsilon} constants.
-Bayesian BTL posterior draws are not used as general pair-selection
-objectives; within-set pairing remains TrueSkill-routed, with accepted
-posterior refits contributing only to the long-link probability gate.
+The within-set/Phase-A hybrid long-link gate uses TrueSkill throughout.
+Bayesian BTL supplies item estimates, posterior uncertainty, EAP reliability,
+diagnostics, stopping, and the existing \code{global_identified} signal. This signal
+can affect later hybrid tapering and routing; selection is not wholly independent
+of BTL. Direct within-set strategies use their documented partner targets after
+the common bootstrap. Phase B selection and prior rules are unchanged.
 Linking Phase B refits use Bayesian posterior estimation and posterior
 summaries/diagnostics are logged per spoke at each linking refit.
 
@@ -105,11 +122,23 @@ The returned state contains canonical logs:
 If \code{session_dir} is supplied, the initialized state is persisted
 immediately using \code{\link[=save_adaptive_session]{save_adaptive_session()}}.
 
-Predictive priors affect ordinary/within-set BTL estimation. Transform,
-anchored-joint, and pooled judge refits keep their existing prior rules; predictive
-evidence is not injected again. Initial pairing queues and selection rules retain
-their existing meaning. Custom fit functions must consume \code{state$predictive_prior}
-explicitly. Resume uses saved predictions; omit all warm-start arguments on resume.
+Predictive initialization is separate from observed connectivity: every mode
+retains the same seeded connected shuffled bootstrap of N - 1 valid comparisons,
+with common presentation balancing and invalid-result retries. Predictive
+locations can affect later TrueSkill-based selection; they do not replace the
+initial observed spanning path. BTL prior SD and ensemble diagnostics never
+determine TrueSkill sigma. No historical training-score units are restored.
+
+Predictive BTL priors apply only in \code{btl_only} and \code{both}, including run-required
+linking Phase A. TrueSkill initialization applies in \code{trueskill_only} and \code{both}.
+Imported Phase-A artifacts retain their own generation identity and are not
+rerun because predictive input exists. Transform, anchored-joint, and pooled
+judge refits keep their existing prior rules; predictive evidence is not
+injected into Phase B priors, D-optimal selection, or probes.
+Custom BTL fit functions should consume \code{state$predictive_prior} only when
+\code{state$meta$warm_start_mode} is \code{btl_only} or \code{both}; its presence alone does
+not imply BTL warming. Resume preserves saved predictions, current TrueSkill
+state, mode, strategy, and bootstrap progress; omit all warm-start arguments.
 }
 \examples{
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 11)
@@ -125,6 +154,8 @@ Other adaptive ranking:
 \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},
 \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
 \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}},
-\code{\link[=summarize_adaptive]{summarize_adaptive()}}
+\code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}},
+\code{\link[=summarize_adaptive]{summarize_adaptive()}},
+\code{\link[=validate_adaptive_replay]{validate_adaptive_replay()}}
 }
 \concept{adaptive ranking}

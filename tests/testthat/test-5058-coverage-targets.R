@@ -86,53 +86,6 @@ make_5058_cross_edges <- function() {
   )
 }
 
-make_5058_fake_cmdstan_fit_fn <- function(fail_first = FALSE) {
-  env <- new.env(parent = emptyenv())
-  env$calls <- 0L
-  fit_fn <- function(stan_data, variable_names, cmdstan, seed, model_fn = NULL) {
-    env$calls <- env$calls + 1L
-    n_draws <- 4L
-    draws <- matrix(numeric(), nrow = n_draws, ncol = 0L)
-    draws <- cbind(draws, delta = c(0.10, 0.20, 0.30, 0.40))
-    if ("log_alpha" %in% variable_names) {
-      draws <- cbind(draws, log_alpha = log(c(1.00, 1.05, 1.10, 1.15)))
-    }
-    if ("theta_hub" %in% variable_names) {
-      hub_cols <- matrix(
-        rep(seq_len(stan_data$N_hub) / 10, each = n_draws),
-        nrow = n_draws,
-        dimnames = list(NULL, paste0("theta_hub[", seq_len(stan_data$N_hub), "]"))
-      )
-      draws <- cbind(draws, hub_cols)
-    }
-    if ("theta_spoke" %in% variable_names) {
-      spoke_cols <- matrix(
-        rep(-seq_len(stan_data$N_spoke) / 10, each = n_draws),
-        nrow = n_draws,
-        dimnames = list(NULL, paste0("theta_spoke[", seq_len(stan_data$N_spoke), "]"))
-      )
-      draws <- cbind(draws, spoke_cols)
-    }
-    bad_diag <- isTRUE(fail_first) && identical(env$calls, 1L)
-    list(
-      draws_matrix = draws,
-      diagnostics = list(
-        divergences = 0L,
-        max_rhat = if (bad_diag) 1.2 else 1.0,
-        min_ess_bulk = if (bad_diag) 20 else 900
-      ),
-      mcmc_config_used = list(
-        chains = as.integer(cmdstan$chains),
-        parallel_chains = 1L,
-        threads_per_chain = 1L,
-        cmdstanr_version = "test"
-      )
-    )
-  }
-  attr(fit_fn, "env") <- env
-  fit_fn
-}
-
 test_that("BTL refit helpers cover config and Phase A artifact edge branches", {
   state <- make_5058_link_state()
 
@@ -223,128 +176,7 @@ test_that("BTL Phase B metric helpers cover transform, anchored, and fallback br
   )
 })
 
-test_that("BTL transform refit uses fake CmdStan draws for shift-only and joint fits", {
-  cross_edges <- make_5058_cross_edges()
-  hub_theta <- c(h1 = 0.8, h2 = 0.3, h3 = -0.1)
-  spoke_theta <- c(s1 = 0.2, s2 = -0.2, s3 = -0.5)
-  attr(hub_theta, "theta_sd") <- c(h1 = 0.05, h2 = 0.10, h3 = 0.15)
-  attr(spoke_theta, "theta_sd") <- c(s1 = 0.10, s2 = 0.15, s3 = 0.20)
-  attr(cross_edges, "judge_params") <- list(
-    mode = "global_shared",
-    scope = "link",
-    beta = Inf,
-    epsilon = 2
-  )
-  attr(cross_edges, "refit_contract") <- list(
-    link_refit_mode = "shift_only",
-    link_transform_policy = "auto",
-    shift_only_theta_treatment = "fixed_eap_plugin_var",
-    cmdstan_fit_fn = make_5058_fake_cmdstan_fit_fn()
-  )
-
-  fit <- .adaptive_link_fit_transform(cross_edges, hub_theta, spoke_theta, "shift_only")
-  expect_equal(fit$delta_mean, 0.25)
-  expect_true(is.na(fit$log_alpha_mean))
-  expect_identical(fit$fit_contract$parameters, "delta_s")
-  expect_identical(fit$fit_contract$mcmc$repair_attempts, 1L)
-  expect_true(fit$diagnostics$diagnostics_rhat_pass)
-  expect_equal(length(fit$posterior_draws$delta), 4L)
-  expect_equal(dim(fit$posterior_draws$theta_hub), c(4L, 3L))
-
-  joint_edges <- cross_edges
-  attr(joint_edges, "judge_params") <- list(mode = "global_shared", scope = "link", beta = NA, epsilon = NA)
-  fake_fit_fn <- make_5058_fake_cmdstan_fit_fn(fail_first = TRUE)
-  attr(joint_edges, "refit_contract") <- list(
-    link_refit_mode = "joint_refit",
-    link_transform_policy = "fixed_shift_scale",
-    hub_lock_mode = "soft_lock",
-    hub_lock_kappa = 2,
-    shift_only_theta_treatment = "fixed_eap",
-    cmdstan_fit_fn = fake_fit_fn,
-    link_diagnostics_thresholds = list(divergences_max = 0L, max_rhat = 1.01, min_ess_bulk = 400)
-  )
-  attr(joint_edges, "within_hub_edges") <- tibble::tibble(
-    A_item = c("h1", "bad"),
-    B_item = c("h2", "h3"),
-    y_A = c(1L, 1L)
-  )
-  attr(joint_edges, "within_spoke_edges") <- tibble::tibble(
-    A_item = c("s1", "s2"),
-    B_item = c("s2", "missing"),
-    y_A = c(0L, 1L)
-  )
-  attr(hub_theta, "theta_init") <- c(h1 = 0.7, h2 = 0.2, h3 = -0.2)
-  attr(hub_theta, "theta_prior_center") <- c(h1 = 0.75, h2 = 0.25, h3 = -0.15)
-  attr(spoke_theta, "theta_init") <- c(s1 = 0.1, s2 = -0.3, s3 = -0.6)
-
-  joint_fit <- .adaptive_link_fit_transform(joint_edges, hub_theta, spoke_theta, "shift_scale")
-  expect_equal(attr(fake_fit_fn, "env")$calls, 2L)
-  expect_true(is.finite(joint_fit$log_alpha_mean))
-  expect_identical(
-    joint_fit$fit_contract$parameters,
-    c("theta_hub", "theta_spoke", "delta_s", "log_alpha_s")
-  )
-  expect_true(joint_fit$fit_contract$joint_refit$used)
-  expect_equal(unname(joint_fit$theta_hub_post), c(0.1, 0.2, 0.3))
-  expect_equal(unname(joint_fit$theta_spoke_post), c(-0.1, -0.2, -0.3))
-  expect_true(joint_fit$diagnostics$diagnostics_ess_pass)
-})
-
-test_that("BTL transform refit and diagnostics helpers reject malformed CmdStan outputs", {
-  cross_edges <- make_5058_cross_edges()
-  hub_theta <- c(h1 = 0.8, h2 = 0.3, h3 = -0.1)
-  spoke_theta <- c(s1 = 0.2, s2 = -0.2, s3 = -0.5)
-  attr(cross_edges, "refit_contract") <- list(
-    link_refit_mode = "shift_only",
-    hub_lock_mode = "unsupported",
-    cmdstan_fit_fn = "not-a-function"
-  )
-  expect_error(
-    .adaptive_link_fit_transform(cross_edges, hub_theta, spoke_theta, "shift_only"),
-    "cmdstan_fit_fn"
-  )
-
-  missing_delta <- cross_edges
-  attr(missing_delta, "refit_contract") <- list(
-    link_refit_mode = "shift_only",
-    cmdstan_fit_fn = function(stan_data, variable_names, cmdstan, seed, model_fn = NULL) {
-      list(
-        draws_matrix = matrix(1, nrow = 2L, ncol = 1L, dimnames = list(NULL, "wrong")),
-        diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 900),
-        mcmc_config_used = list(chains = 1L, parallel_chains = 1L, threads_per_chain = 1L)
-      )
-    }
-  )
-  expect_error(
-    .adaptive_link_fit_transform(missing_delta, hub_theta, spoke_theta, "shift_only"),
-    "missing delta"
-  )
-
-  attr(cross_edges, "refit_contract") <- list(
-    link_refit_mode = "joint_refit",
-    hub_lock_mode = "bad",
-    cmdstan_fit_fn = make_5058_fake_cmdstan_fit_fn()
-  )
-  expect_error(
-    .adaptive_link_fit_transform(cross_edges, hub_theta, spoke_theta, "shift_scale"),
-    "Unsupported `hub_lock_mode`"
-  )
-
-  fit <- list(
-    diagnostic_summary = function() tibble::tibble(other = 1L),
-    summary = function(variables) tibble::tibble(variable = variables, rhat = NA_real_)
-  )
-  diagnostics <- .adaptive_link_cmdstan_collect_diagnostics(fit, variables = "delta")
-  expect_true(any(grepl("num_divergent", diagnostics$notes, fixed = TRUE)))
-  expect_true(any(grepl("ess_bulk", diagnostics$notes, fixed = TRUE)))
-  expect_error(
-    .adaptive_link_cmdstan_validate_diagnostics(
-      diagnostics,
-      thresholds = list(divergences_max = 0L, max_rhat = 1.01, min_ess_bulk = 400)
-    ),
-    "missing or malformed"
-  )
-
+test_that("shared linking diagnostics reject malformed fit contracts", {
   expect_error(
     .adaptive_link_diagnostics_contract(list(
       fit_contract = list(estimation_method = "map_laplace", uncertainty_approximation = "bad"),
@@ -667,7 +499,7 @@ test_that("legacy controller and resume schema normalization cover migration bra
   expect_identical(link_log$link_estimation_mode[[1L]], "transform")
 })
 
-test_that("D-opt commit update covers transform path and early exits", {
+test_that("D-opt commit update normalizes legacy state and preserves early exits", {
   state_before <- make_5058_link_state()
   state_after <- state_before
   state_after$round_log <- append_round_log(

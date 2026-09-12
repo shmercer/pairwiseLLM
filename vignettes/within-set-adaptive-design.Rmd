@@ -15,8 +15,10 @@ knitr::opts_chunk$set(
 ```
 
 This article describes the algorithm currently implemented by `pairwiseLLM` for adaptively
-ranking one set of items. The same procedure produces the canonical within-set artifacts used by
-linking Phase A; cross-set linking in Phase B is outside this article's scope. For an operational
+ranking one set of items. The default hybrid procedure also produces canonical within-set artifacts
+inside linking Phase A. Direct strategies currently require ordinary within-set runs; compatible
+artifacts from those runs can be imported. Phase B selection and priors are unchanged by 1.4.0
+and are outside this article's scope. For an operational
 tutorial, begin with
 [Guide: Adaptive Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html).
 The public entry points are `adaptive_rank()`, `adaptive_rank_start()`,
@@ -31,12 +33,13 @@ or close distinctions as the ranking develops instead of fixing every pair in ad
 
 The design combines two models with different, complementary jobs:
 
-1. **TrueSkill** is updated after every valid comparison and supplies the fast ranking proxy and
-   pair-selection probabilities. It lets the selector react immediately without running an
-   expensive joint model after every judgment.
+1. **TrueSkill** is updated after every valid comparison and supplies live ranks, strata,
+   rolling anchors, pair probabilities, base utility, and the long-link gate for ordinary
+   within-set/Phase-A hybrid selection. Direct target strategies also use its probabilities.
 2. **Bayesian Bradley--Terry--Luce (BTL)** models are refit intermittently. Their posterior draws
    supply item estimates, uncertainty summaries, Markov chain Monte Carlo (MCMC) diagnostics,
-   stopping metrics, rolling anchors, and one eligibility gate for long-range pairs.
+   EAP reliability, stopping metrics, and the existing `global_identified` signal. That signal
+   can alter later hybrid tapering and routing, so selection is not wholly independent of BTL.
 
 In Bayesian estimation, the likelihood supplied by the observed choices is combined with prior
 distributions that regularize the model. The result is a posterior distribution: a range of
@@ -57,8 +60,8 @@ draws.
 | state | The complete mutable session record: items, model states, histories, logs, and controls. |
 | attempted step | One attempt to select and judge at most one pair. Invalid judgments still consume a step. |
 | committed comparison | A step with a valid binary outcome. Only these update models and counts. |
-| round | A scheduling unit that allocates committed comparisons across four within-set stages. |
-| stage | One of `anchor_link`, `long_link`, `mid_link`, or `local_link`. |
+| round | A committed-comparison budget; hybrid divides it among four stages, direct strategies do not. |
+| stage | A hybrid domain: `anchor_link`, `long_link`, `mid_link`, or `local_link`. Direct steps use `direct_pairing`. |
 | phase | A linking unit: Phase A creates within-set results and Phase B links sets. It is not a stage. |
 | candidate | An unordered pair eligible for consideration before all filters are applied. |
 | anchor | An item selected from the current top, middle, or bottom of the ranking proxy. |
@@ -76,7 +79,7 @@ the item, while the unit of MCMC diagnostics is the fitted parameter set or samp
 For \(N\geq2\) items, the live runner repeats the following sequence:
 
 ```text
-initialize state and shuffled-chain warm start
+initialize predictive destinations and the connected shuffled bootstrap
   -> select one ordered pair
   -> request one binary judgment
   -> if valid: commit counts/history and update TrueSkill
@@ -92,11 +95,11 @@ Selection and model updates are transactional. A valid result has \(Y_k=1\) when
 the first-presented item \(A_k\), and \(Y_k=0\) when it selects \(B_k\). A missing, malformed,
 ambiguous, tied, refused, or otherwise invalid response is logged but does not update the
 comparison history, degrees, presentation counts, TrueSkill state, round quotas, or BTL-refit
-cadence. During the warm start, the same pair is retried until a valid result is committed.
+cadence. During the connected bootstrap, the same pair is retried until a valid result is committed.
 
-## Initialization and connected warm start
+## Predictive initialization and connected bootstrap
 
-All items begin with the default TrueSkill parameters
+Without predictive TrueSkill initialization, items begin with the default parameters
 
 \[
   \mu_i=25,\qquad \sigma_i=25/3,\qquad \beta_{\mathrm{TS}}=25/6,
@@ -106,8 +109,31 @@ unless item-level `mu` or `sigma` values are supplied to the internal state cons
 \(\beta_{\mathrm{TS}}\) is the TrueSkill performance-scale parameter and is distinct from the BTL
 position-effect parameter introduced below.
 
+Predictive input is routed by `warm_start_mode`:
+
+| Mode | BTL predictive prior | TrueSkill predictive `mu` | Connected bootstrap |
+| --- | --- | --- | --- |
+| `cold` | no | no | seeded shuffled chain |
+| `btl_only` | yes | no | same seeded shuffled chain |
+| `trueskill_only` | no | yes | same seeded shuffled chain |
+| `both` | yes | yes | same seeded shuffled chain |
+
+Omitted/`NULL` mode resolves to `cold` without predictive input and `btl_only` with it,
+preserving historical callers. Request `both` explicitly to initialize both models.
+For `trueskill_only` and `both`, exact ID alignment precedes the mapping
+
+\[
+ \mu_i=\mu_0+\sigma_0\,\text{prior_mean}_i,
+ \qquad \mu_0=25,\quad \sigma_0=25/3.
+\]
+
+The fixed scale multiplier is 1. The centered predictive location comes from the saved prior;
+no training-task raw score scale is restored. TrueSkill sigma is unchanged by initialization.
+Neither BTL prior SD nor ensemble disagreement, calibration error, or RMSE determines that sigma.
+BTL retains cold priors in `trueskill_only`, even though the predictive record remains in state.
+
 Given a deterministic run seed, the item IDs are shuffled to produce
-\((s_1,\ldots,s_N)\). The warm-start queue is
+\((s_1,\ldots,s_N)\). Every mode uses the same connected bootstrap queue
 
 \[
   \{s_1,s_2\},\{s_2,s_3\},\ldots,\{s_{N-1},s_N\}.
@@ -117,10 +143,16 @@ After all \(N-1\) pairs have valid committed outcomes, these edges form a spanni
 comparison graph is therefore connected, so all item locations can be related through observed
 paths. Connectivity is necessary for a common within-set scale, but it does not by itself imply
 precise estimates or strong MCMC diagnostics. Invalid attempts do not advance the path.
+Predictive initialization does not replace this observed connectivity. With a fixed judge,
+matched items and seeds give identical initial outcomes across modes, even though the resulting
+TrueSkill states may differ because their initial locations differ.
 
 Presentation order is assigned separately from unordered-pair construction. The controller favors
 the orientation that improves each endpoint's first/second-position balance. A repeated pair is
 presented in the reverse of its last recorded order.
+
+Historical state fields such as `warm_start_pairs` and the step-log label `warm_start`
+refer to this observed connected bootstrap, not to predictive initialization.
 
 ## Online TrueSkill update and selection utility
 
@@ -169,9 +201,32 @@ updated in that step. These sequential approximate updates treat committed outco
 evidence stream; they are not a substitute for the joint Bayesian BTL posterior used for final
 item summaries.
 
-## Rounds, anchors, and rank strata
+## Post-bootstrap pairing strategies
 
-After the warm start, each round schedules
+`adaptive_config$pairing_strategy` accepts `hybrid` (default), `random`, `trueskill_p50`,
+and `trueskill_pollitt`. Every strategy begins after the common connected bootstrap.
+The three direct strategies currently support ordinary within-set runs only.
+
+Direct selection chooses a focal item uniformly among sorted IDs with the minimum current
+committed degree. Seeds depend on the run seed and committed count, so invalid attempts retry
+the same policy draw without changing the caller's RNG state. Legal partners exclude self-pairs,
+pairs already observed twice, and repeats with missing prior orientation. Partner selection is:
+
+| Strategy | Criterion over legal partners \(j\) for focal item \(i\) |
+| --- | --- |
+| `random` | Uniform seeded choice. |
+| `trueskill_p50` | Minimize \(\lvert p^{\mathrm{TS}}_{ij}-0.50\rvert\). |
+| `trueskill_pollitt` | Minimize \(\min\{\lvert p^{\mathrm{TS}}_{ij}-1/3\rvert,\lvert p^{\mathrm{TS}}_{ij}-2/3\rvert\}\). |
+
+Target ties break by partner ID. Pollitt is **Pollitt-inspired**: the probabilities are
+TrueSkill-based, whereas the earlier article's .33/.67 implementation used BTL probabilities.
+Normal presentation balancing and repeat reversal remain active. Direct strategies have no
+anchor/long/mid/local quotas, coverage overrides, or hybrid fallbacks. They stop when the selected
+focal item has no legal partner; other pairs may still exist. BTL refits and stopping remain active.
+
+## Hybrid rounds, anchors, and rank strata
+
+After the connected bootstrap, each hybrid round schedules
 
 \[
  B_{\mathrm{round}}=\left\lceil B_{\mathrm{refit}}/2\right\rceil
@@ -185,9 +240,9 @@ would exceed the round total. If a stage cannot supply a pair after every fallba
 is recorded and the controller advances; exhaustion of the full within-set round terminates with
 `candidate_starvation`.
 
-The ranking proxy is decreasing TrueSkill \(\mu_i\), with item ID breaking ties. Rolling anchors
-are refreshed after a new BTL refit; before a refit they use TrueSkill, and afterward they use BTL
-EAP estimates when a complete finite vector is available. The target number is
+The ranking proxy is decreasing TrueSkill \(\mu_i\), with item ID breaking ties. Whenever
+rolling anchors are refreshed, identities use current TrueSkill ranks throughout, including
+after BTL refits; they do not switch to BTL EAP ranks. The target number is
 
 \[
  A=\begin{cases}
@@ -226,7 +281,7 @@ must still survive the filters and controls below.
 For large pools, at most `C_max = 20000` legal pairs are sampled deterministically from a stage's
 candidate domain using the run and step seeds.
 
-## Candidate filters, coverage, and fallback
+## Hybrid candidate filters, coverage, and fallback
 
 Each stage attempt constructs candidates, removes self-pairs, scores them with TrueSkill, verifies
 that repeats have a recorded prior orientation, and applies any active long-link gate. It then
@@ -243,8 +298,9 @@ exploitation candidate if no higher-priority rule intervenes. The selected unord
 assigned a presentation order, sent to the judge, and logged. A valid choice is committed and the
 two endpoints' TrueSkill states are updated immediately. Once the number of newly committed
 comparisons reaches the refit target, a joint BTL refit updates all item posterior summaries and
-diagnostics. Those new summaries can change later anchors, long-link eligibility, routing state,
-and stopping decisions. The numbers in this example are illustrative; the actual choice also
+diagnostics. The BTL-informed `global_identified` signal can change later routing and activate
+the long-link gate, while gate probabilities and refreshed anchors still come from TrueSkill.
+Refits also determine stopping. The numbers in this example are illustrative; the actual choice also
 depends on the current stage, exploration draw, fallback level, and all active constraints.
 
 ### Coverage and exploration
@@ -281,6 +337,10 @@ The base duplicate limit is two committed observations per unordered pair. In th
 - \(|p^{\mathrm{TS}}_{ij}-0.5|\leq0.05\); and
 - \(U_{0,ij}\) is at or above the current candidate pool's 0.90 quantile.
 
+This is the historical `adaptive_config$dup_max_obs_relaxed = 3L` default. Setting it to `2L`
+disables third observations for frozen directed replay. Direct strategies always cap at two;
+the study setting does not change the general hybrid default.
+
 Recent degree is counted over the most recent
 \(W_{\mathrm{cap}}=\max\{200,\min(2000,B_{\mathrm{refit}})\}\) committed comparisons. A candidate is
 normally rejected if either endpoint has recent degree greater than
@@ -300,7 +360,7 @@ If no candidate survives, the selector tries the following deterministic sequenc
 1. `base`: normal stage bounds and duplicate policy;
 2. `expand_locality`: widen mid/local bounds while retaining long-link semantics;
 3. `uncertainty_pool`: retain base bounds and double the exploration rate;
-4. `dup_relax`: permit the conditional third observation described above; and
+4. `dup_relax`: permit the conditional third observation when the configured ceiling is three; and
 5. `global_safe`: consider the broadest stage-compatible domain.
 
 `global_safe` does not discard stage identity: long pairs must still be long, anchor pairs must
@@ -308,7 +368,7 @@ still contain exactly one anchor, and the other hard constraints remain. If the 
 the failed step records `candidate_starved = TRUE`. The round controller may advance past a
 starved stage; exhaustion of all stages stops a within-set run.
 
-## Global identification and long-link tapering
+## Global identification and hybrid long-link tapering
 
 After each refit, the controller calculates EAP reliability \(R_{\mathrm{EAP}}\) and the Spearman
 correlation between TrueSkill ranks and BTL posterior-mean ranks. It sets `global_identified` when
@@ -329,29 +389,15 @@ When active, the long-stage fraction is
 The removed integer quota is reallocated 20% to the mid stage and 80% to the local stage, subject
 to integer rounding. Exploration is also tapered as described above.
 
-After global identification, a long pair is retained only when its choice probability lies in
-\([0.10,0.90]\). If the availability check finds no diagnostic-passing refit in the current
-within-set scope, the gate uses
-\(p^{\mathrm{TS}}_{ij}\). When a qualifying Bayesian fit is available, the current implementation
-uses the orientation-specific posterior predictive probability. This is the predicted probability
-of choosing the first item, averaged over retained draws so that current uncertainty about item,
-lapse, and position parameters contributes to the prediction:
+After global identification, a long pair is retained only when its TrueSkill win probability
+lies in the inclusive interval \([0.10,0.90]\). The ordinary within-set/Phase-A gate uses
+\(p^{\mathrm{TS}}_{ij}\) throughout, including after Bayesian refits; there is no posterior
+availability switch. Candidate orientation is assigned its final presentation order later;
+the symmetric bounds treat the two orientations identically. Logs identify
+`trueskill_inside_gate` or `trueskill_extreme` when the gate is applied.
 
-\[
- \bar p_{ij}=\frac{1}{S}\sum_{s=1}^S
- \left[(1-\epsilon^{(s)})
- \operatorname{logit}^{-1}\!\left(
- \theta_i^{(s)}-\theta_j^{(s)}+b^{(s)}
- \right)+\frac{\epsilon^{(s)}}{2}\right].
-\]
-
-Here the stored candidate orientation treats \(i\) as first position for the gate; final display
-order is assigned later. Thus \(\bar p_{ij}\) is not the position-neutral posterior probability
-\(\Pr(\theta_i>\theta_j\mid Y)\). This gate removes long comparisons predicted to be nearly
-deterministic under the implemented observation model. The availability check asks whether any
-logged refit in scope passed diagnostics, whereas the probability is calculated from the fit
-currently stored in state. If a later refit fails after an earlier pass, inspect the latest
-`round_log` diagnostics when auditing subsequent long-link decisions.
+The BTL-informed `global_identified` signal is unchanged. Its control over gate activation,
+quotas, and exploration means that even `btl_only` can influence later hybrid selections.
 
 ## Bayesian BTL refits
 
@@ -394,11 +440,13 @@ with only wins or only losses can still have finite posterior summaries; this is
 regularization under separation, not evidence that sparse or one-sided comparison data are
 adequate.
 
-Optional predictive warm-start priors replace the raw-theta Normal locations and SDs
-in all four active variants. The default predictive SD is 0.5; it is not the
+In `btl_only` and `both`, predictive warm-start priors replace the raw-theta Normal
+locations and SDs in all four active variants. The default predictive SD is 0.5; it is not the
 marginal SD after centering. Each refit subsets saved predictions to its fitted
-items and centers within that scope. This does not alter the initial pairing
-schedule or pair-selection algorithm. See
+items and centers within that scope. `cold` and `trueskill_only` use cold BTL priors.
+Custom BTL fit functions must gate consumption of `state$predictive_prior` on
+`state$meta$warm_start_mode`; presence alone is insufficient. Standalone BTL retains
+its existing `warm_start_prior` interface without the adaptive mode argument. See
 [Guide: Adaptive Warm Start](adaptive-warm-start.html) for model development,
 prior conversion, and artifact-independent resume.
 
@@ -411,7 +459,7 @@ Refit eligibility depends on committed comparisons only. With \(M_t\) the commit
 \]
 
 For within-set work inside linking Phase A, \(N\) is the active set size and cadence is tracked
-separately for each set. Warm-start comparisons count. Invalid attempts do not. The default Stan
+separately for each set. Connected-bootstrap comparisons count. Invalid attempts do not. The default Stan
 run uses 1,000 warmup and 1,000 retained iterations per chain, up to eight chains based on detected
 cores, and a default parallel-chain budget of 80% of detected cores. Actual settings are stored in
 the refit log.
@@ -584,12 +632,24 @@ The canonical logs expose different units:
   state, thresholds, and stop decision.
 - `item_log` stores item-level posterior summaries for each refit.
 
+Direct steps use `round_stage = pair_type = "direct_pairing"`. Their `pairing_strategy`
+identifies the rule, `i_id` identifies the focal item, and `p_ij` records the pre-judgment
+TrueSkill probability for presented A over B. `target_distance` is symmetric under reversal
+and missing for random pairing. Inapplicable hybrid stage diagnostics are missing.
+
 Use `adaptive_step_log()`, `adaptive_round_log()`, `adaptive_item_log()`,
 `adaptive_results_history()`, and the summary helpers to inspect these records. Supplying
 `session_dir` persists initialized state and completed refits; ordinary progress is checkpointed at
 the configured step cadence. `adaptive_rank_resume()` restores the session after schema and state
 validation. Persisting the item log writes separate per-refit files; it does not replace the
 canonical in-memory history.
+
+Saved state and session metadata identify effective `warm_start_mode` and `pairing_strategy`.
+The prior/provenance, current TrueSkill values, committed history, bootstrap queue/index, and
+round state remain authoritative on resume, with no model lookup or new prediction. Legacy
+sessions with missing mode become `cold` without a prior and `btl_only` with a prior; missing
+strategy becomes `hybrid`. Migration never initializes TrueSkill again. Omit warm-start inputs
+on resume and omit strategy or acknowledge the saved strategy without changing it.
 
 Audit the comparison graph, invalid-response rate, stage shortfalls, fallback and starvation rates,
 degree concentration, posterior diagnostics, and stop gates together. A high final

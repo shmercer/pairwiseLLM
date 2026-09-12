@@ -828,7 +828,6 @@ testthat::test_that("submit_anthropic_pairs_live returns list structure for zero
 })
 
 testthat::test_that("submit_anthropic_pairs_live runs correctly and returns list", {
-  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -853,7 +852,7 @@ testthat::test_that("submit_anthropic_pairs_live runs correctly and returns list
         better_id = ID1
       )
     },
-    .env = pll_ns
+    .package = "pairwiseLLM"
   )
 
   res <- submit_anthropic_pairs_live(
@@ -871,7 +870,6 @@ testthat::test_that("submit_anthropic_pairs_live runs correctly and returns list
 })
 
 testthat::test_that("submit_anthropic_pairs_live separates failed pairs", {
-  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
 
   pairs <- tibble::tibble(
@@ -898,7 +896,7 @@ testthat::test_that("submit_anthropic_pairs_live separates failed pairs", {
         better_id = ID1
       )
     },
-    .env = pll_ns,
+    .package = "pairwiseLLM",
     {
       res <- submit_anthropic_pairs_live(
         pairs, "claude", td$name, td$description,
@@ -918,7 +916,7 @@ testthat::test_that("submit_anthropic_pairs_live separates failed pairs", {
 
 testthat::test_that("submit_anthropic_pairs_live respects save_path (Resume Logic)", {
   testthat::skip_if_not_installed("readr")
-  pll_ns <- asNamespace("pairwiseLLM")
+
   td <- trait_description("overall_quality")
   tmp_csv <- tempfile(fileext = ".csv")
 
@@ -952,7 +950,7 @@ testthat::test_that("submit_anthropic_pairs_live respects save_path (Resume Logi
         better_id = "S03"
       )
     },
-    .env = pll_ns,
+    .package = "pairwiseLLM",
     {
       res <- submit_anthropic_pairs_live(
         pairs = pairs,
@@ -997,14 +995,13 @@ testthat::test_that("submit_anthropic_pairs_live validates inputs", {
 })
 
 testthat::test_that("submit_anthropic_pairs_live: Sequential error handling (catch block)", {
-  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
 
   # Force error in internal function to hit lines 931-940
   testthat::with_mocked_bindings(
     anthropic_compare_pair_live = function(...) stop("Sequential Error"),
-    .env = pll_ns,
+    .package = "pairwiseLLM",
     {
       res <- submit_anthropic_pairs_live(
         pairs, "model", td$name, td$description,
@@ -1019,10 +1016,9 @@ testthat::test_that("submit_anthropic_pairs_live: Sequential error handling (cat
   )
 })
 
-
 testthat::test_that("submit_anthropic_pairs_live: Directory creation & Raw response cleanup", {
   testthat::skip_if_not_installed("readr")
-  pll_ns <- asNamespace("pairwiseLLM")
+
   td <- trait_description("overall_quality")
 
   # Use a path in a new subdirectory to test dir.create (Lines 750-751)
@@ -1041,7 +1037,7 @@ testthat::test_that("submit_anthropic_pairs_live: Directory creation & Raw respo
       res$raw_response <- list(list(foo = "bar"))
       res
     },
-    .env = pll_ns,
+    .package = "pairwiseLLM",
     {
       out <- capture.output(
         {
@@ -1118,7 +1114,6 @@ testthat::test_that("submit_anthropic_pairs_live: Parallel Save Failure", {
   testthat::skip_if_not_installed("future")
   testthat::skip_if_not_installed("readr")
 
-  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
   tmp_file <- tempfile(fileext = ".csv")
@@ -1144,7 +1139,7 @@ testthat::test_that("submit_anthropic_pairs_live: Parallel Save Failure", {
 
 testthat::test_that("submit_anthropic_pairs_live: Resume logic (Read Error Handling)", {
   testthat::skip_if_not_installed("readr")
-  pll_ns <- asNamespace("pairwiseLLM")
+
   td <- trait_description("overall_quality")
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
   tmp <- tempfile(fileext = ".csv")
@@ -1165,7 +1160,7 @@ testthat::test_that("submit_anthropic_pairs_live: Resume logic (Read Error Handl
             model = "m", status_code = 200, error_message = NA
           )
         },
-        .env = pll_ns,
+        .package = "pairwiseLLM",
         {
           testthat::expect_warning(
             submit_anthropic_pairs_live(
@@ -1183,7 +1178,7 @@ testthat::test_that("submit_anthropic_pairs_live: Resume logic (Read Error Handl
 
 testthat::test_that("submit_anthropic_pairs_live: Sequential Save Error Handling", {
   testthat::skip_if_not_installed("readr")
-  pll_ns <- asNamespace("pairwiseLLM")
+
   td <- trait_description("overall_quality")
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
   tmp_file <- tempfile(fileext = ".csv")
@@ -1200,7 +1195,7 @@ testthat::test_that("submit_anthropic_pairs_live: Sequential Save Error Handling
             model = "m", status_code = 200, error_message = NA
           )
         },
-        .env = pll_ns,
+        .package = "pairwiseLLM",
         {
           testthat::expect_warning(
             submit_anthropic_pairs_live(

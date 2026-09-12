@@ -670,125 +670,46 @@ validate_judge_result <- function(result, A_id, B_id) {
   if (is.na(hub_item) || is.na(spoke_item)) {
     return(state_after)
   }
-  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
-  if (identical(link_estimation_mode, "anchored_joint")) {
-    accepted_state <- .adaptive_link_anchored_joint_resolve_state(
-      state = state_before,
-      spoke_id = as.integer(spoke_id),
-      controller = controller
-    )
-    spoke_items <- as.character(names(accepted_state$theta_spoke_global_mean))
-    spoke_idx <- as.integer(match(spoke_item, spoke_items))
-    theta_h <- as.double(accepted_state$theta_hub_fixed[[as.character(hub_item)]] %||% NA_real_)
-    theta_x <- as.double(accepted_state$theta_spoke_global_mean[[as.character(spoke_item)]] %||% NA_real_)
-    if (!is.finite(theta_h) || !is.finite(theta_x) || is.na(spoke_idx)) {
-      return(state_after)
-    }
-    judge_params <- .adaptive_link_anchored_joint_judge_params(
-      state = state_before,
-      spoke_id = as.integer(spoke_id),
-      controller = controller,
-      accepted_state = accepted_state
-    )
-    pbar <- .adaptive_link_model_d_pbar(
-      theta_h = theta_h,
-      theta_x = theta_x,
-      beta = as.double(judge_params$beta %||% 0),
-      epsilon = as.double(judge_params$epsilon %||% 0)
-    )
-    if (!is.finite(pbar)) {
-      return(state_after)
-    }
-    info_scale <- as.double(pbar * (1 - pbar))
-    refit_id <- .adaptive_link_refit_window_id(state_after)
-    d_opt_state <- .adaptive_link_d_opt_state_get(
-      controller = controller,
-      refit_id = refit_id,
-      spoke_id = as.integer(spoke_id),
-      transform_mode = NA_character_,
-      link_estimation_mode = "anchored_joint",
-      free_block_dim = length(spoke_items)
-    )
-    uses_diag <- !is.null(d_opt_state$it_diag)
-    if (!isTRUE(uses_diag) &&
-      (!is.matrix(d_opt_state$it) || any(dim(d_opt_state$it) != c(length(spoke_items), length(spoke_items))))) {
-      return(state_after)
-    }
-    d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
-    current_prefix <- paste0(as.integer(refit_id), "::")
-    map_names <- names(d_opt_map)
-    if (is.null(map_names)) {
-      d_opt_map <- list()
-    } else {
-      keep <- startsWith(as.character(map_names), current_prefix)
-      d_opt_map <- d_opt_map[keep]
-    }
-    if (isTRUE(uses_diag)) {
-      d_opt_state$it_diag[[spoke_idx]] <- as.double(d_opt_state$it_diag[[spoke_idx]] + info_scale)
-    } else {
-      d_opt_state$it[spoke_idx, spoke_idx] <- as.double(d_opt_state$it[spoke_idx, spoke_idx] + info_scale)
-      d_opt_state$it <- as.matrix((d_opt_state$it + t(d_opt_state$it)) / 2)
-    }
-    d_opt_state$it_n_pairs_accumulated <- as.integer(d_opt_state$it_n_pairs_accumulated + 1L)
-    d_opt_map[[d_opt_state$key]] <- d_opt_state
-    controller$link_d_opt_it_by_spoke <- d_opt_map
-    state_after$controller <- controller
+  accepted_state <- .adaptive_link_anchored_joint_resolve_state(
+    state = state_before,
+    spoke_id = as.integer(spoke_id),
+    controller = controller
+  )
+  spoke_items <- as.character(names(accepted_state$theta_spoke_global_mean))
+  spoke_idx <- as.integer(match(spoke_item, spoke_items))
+  theta_h <- as.double(accepted_state$theta_hub_fixed[[as.character(hub_item)]] %||% NA_real_)
+  theta_x <- as.double(accepted_state$theta_spoke_global_mean[[as.character(spoke_item)]] %||% NA_real_)
+  if (!is.finite(theta_h) || !is.finite(theta_x) || is.na(spoke_idx)) {
     return(state_after)
   }
-  transform_state <- .adaptive_link_transform_state_for_spoke(controller, as.integer(spoke_id))
-  stats_row <- (controller$link_refit_stats_by_spoke %||% list())[[as.character(spoke_id)]] %||% list()
-  delta <- as.double(row$delta_spoke_estimate_pre[[1L]] %||% stats_row$delta_spoke_mean %||% 0)
-  if (!is.finite(delta)) {
-    delta <- 0
-  }
-  log_alpha <- as.double(row$log_alpha_spoke_estimate_pre[[1L]] %||% stats_row$log_alpha_spoke_mean %||% NA_real_)
-  alpha <- if (identical(transform_state, "shift_scale") && is.finite(log_alpha)) exp(log_alpha) else 1
-  theta_hub_map <- .adaptive_link_safe_theta_map(
+  judge_params <- .adaptive_link_anchored_joint_judge_params(
     state = state_before,
-    set_id = hub_id,
-    prefer_current = identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
-  )
-  theta_spoke_raw_map <- .adaptive_link_safe_theta_map(
-    state = state_before,
-    set_id = as.integer(spoke_id),
-    prefer_current = identical(as.character(controller$link_refit_mode %||% "shift_only"), "joint_refit")
-  )
-  theta_h <- as.double(theta_hub_map[as.character(hub_item)] %||% NA_real_)
-  theta_raw_x <- as.double(theta_spoke_raw_map[as.character(spoke_item)] %||% NA_real_)
-  if (!is.finite(theta_h) || !is.finite(theta_raw_x)) {
-    return(state_after)
-  }
-  startup_gap <- .adaptive_link_phase_b_startup_gap_for_spoke(state_before, spoke_id = as.integer(spoke_id))
-  judge_params <- .adaptive_link_judge_params(
-    state_before,
-    controller,
-    scope = "link",
-    allow_cold_start_fallback = isTRUE(startup_gap),
-    expected_link_params = !isTRUE(startup_gap)
+    spoke_id = as.integer(spoke_id),
+    controller = controller,
+    accepted_state = accepted_state
   )
   pbar <- .adaptive_link_model_d_pbar(
     theta_h = theta_h,
-    theta_x = as.double(delta + alpha * theta_raw_x),
+    theta_x = theta_x,
     beta = as.double(judge_params$beta %||% 0),
     epsilon = as.double(judge_params$epsilon %||% 0)
   )
   if (!is.finite(pbar)) {
     return(state_after)
   }
-  g <- .adaptive_link_info_gradient(
-    transform_mode = transform_state,
-    alpha = alpha,
-    theta_raw_x = theta_raw_x
-  )
-  ipair <- as.matrix(as.double(pbar * (1 - pbar)) * (g %*% t(g)))
+  info_scale <- as.double(pbar * (1 - pbar))
   refit_id <- .adaptive_link_refit_window_id(state_after)
   d_opt_state <- .adaptive_link_d_opt_state_get(
     controller = controller,
     refit_id = refit_id,
     spoke_id = as.integer(spoke_id),
-    transform_mode = transform_state
+    transform_mode = NA_character_,
+    link_estimation_mode = "anchored_joint",
+    free_block_dim = length(spoke_items)
   )
-  if (!is.matrix(d_opt_state$it) || any(dim(d_opt_state$it) != dim(ipair))) {
+  uses_diag <- !is.null(d_opt_state$it_diag)
+  if (!isTRUE(uses_diag) &&
+    (!is.matrix(d_opt_state$it) || any(dim(d_opt_state$it) != c(length(spoke_items), length(spoke_items))))) {
     return(state_after)
   }
   d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
@@ -800,7 +721,12 @@ validate_judge_result <- function(result, A_id, B_id) {
     keep <- startsWith(as.character(map_names), current_prefix)
     d_opt_map <- d_opt_map[keep]
   }
-  d_opt_state$it <- as.matrix((d_opt_state$it + ipair + t(d_opt_state$it + ipair)) / 2)
+  if (isTRUE(uses_diag)) {
+    d_opt_state$it_diag[[spoke_idx]] <- as.double(d_opt_state$it_diag[[spoke_idx]] + info_scale)
+  } else {
+    d_opt_state$it[spoke_idx, spoke_idx] <- as.double(d_opt_state$it[spoke_idx, spoke_idx] + info_scale)
+    d_opt_state$it <- as.matrix((d_opt_state$it + t(d_opt_state$it)) / 2)
+  }
   d_opt_state$it_n_pairs_accumulated <- as.integer(d_opt_state$it_n_pairs_accumulated + 1L)
   d_opt_map[[d_opt_state$key]] <- d_opt_state
   controller$link_d_opt_it_by_spoke <- d_opt_map
@@ -1110,7 +1036,9 @@ run_one_step <- function(state, judge, ...) {
       selection
     }
 
-    state <- .adaptive_refresh_round_anchors(state)
+    if (.adaptive_pairing_strategy(state) == "hybrid") {
+      state <- .adaptive_refresh_round_anchors(state)
+    }
     selection <- select_next_pair(state, step_id = step_id)
     if (.adaptive_link_mode_active(controller) &&
       identical(phase_ctx$phase, "phase_b")) {
@@ -1440,6 +1368,8 @@ run_one_step <- function(state, judge, ...) {
     round_id = selection$round_id,
     round_stage = selection$round_stage,
     pair_type = selection$pair_type,
+    pairing_strategy = .adaptive_pairing_strategy(state),
+    target_distance = as.double(selection$target_distance %||% NA_real_),
     used_in_round_i = selection$used_in_round_i,
     used_in_round_j = selection$used_in_round_j,
     is_anchor_i = selection$is_anchor_i,

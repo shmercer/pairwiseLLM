@@ -10,6 +10,8 @@ test_that("select_next_pair does not leak explore metadata across fallback stage
   candidates <- tibble::tibble(i = "1", j = "2")
   draws <- c(TRUE, FALSE, FALSE)
   draw_idx <- 0L
+  original_with_seed <- pairwiseLLM:::.adaptive_with_seed
+  original_underrep_set <- pairwiseLLM:::.adaptive_underrep_set
 
   out <- testthat::with_mocked_bindings(
     .adaptive_with_seed = function(seed, expr) {
@@ -17,15 +19,17 @@ test_that("select_next_pair does not leak explore metadata across fallback stage
       if (draw_idx <= length(draws)) {
         return(draws[[draw_idx]])
       }
-      eval.parent(substitute(expr))
+      withr::with_seed(seed, eval.parent(substitute(expr)))
     },
     .adaptive_underrep_set = function(deg) {
       "3"
     },
     pairwiseLLM:::select_next_pair(state, step_id = 1L, candidates = candidates),
-    .env = asNamespace("pairwiseLLM")
+    .package = "pairwiseLLM"
   )
 
+  expect_identical(pairwiseLLM:::.adaptive_with_seed, original_with_seed)
+  expect_identical(pairwiseLLM:::.adaptive_underrep_set, original_underrep_set)
   expect_equal(out$fallback_used, "expand_locality")
   if (isTRUE(out$is_explore_step)) {
     expect_true(out$explore_reason %in% c("probabilistic", "coverage_quota_override"))

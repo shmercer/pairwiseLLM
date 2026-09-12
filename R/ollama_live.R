@@ -536,7 +536,7 @@ submit_ollama_pairs_live <- function(
     tryCatch(
       {
         existing_results <- readr::read_csv(save_path, show_col_types = FALSE)
-        if ("custom_id" %in% names(existing_results)) {
+        if (any(c("custom_id", "pair_uid") %in% names(existing_results))) {
           existing_ids <- if ("custom_id" %in% names(existing_results)) {
             existing_results$custom_id
           } else if ("pair_uid" %in% names(existing_results)) {

@@ -275,9 +275,19 @@
 
 #' @keywords internal
 #' @noRd
+.adaptive_relaxed_duplicate_limit <- function(value) {
+  if (is.null(value)) return(3L)
+  if (!is.numeric(value) || length(value) != 1L || !is.null(dim(value)) ||
+    is.na(value) || !value %in% c(2, 3)) {
+    rlang::abort("`adaptive_config$dup_max_obs_relaxed` must be a single integer: 2 or 3.")
+  }
+  as.integer(value)
+}
+
 .adaptive_controller_normalize_legacy_fields <- function(controller, n_items) {
   out <- controller %||% list()
   defaults <- .adaptive_controller_defaults(n_items)
+  out$dup_max_obs_relaxed <- .adaptive_relaxed_duplicate_limit(out$dup_max_obs_relaxed)
   out$link_estimation_mode <- .adaptive_normalize_link_estimation_mode(
     out$link_estimation_mode %||% defaults$link_estimation_mode
   )
@@ -519,6 +529,8 @@
   defaults <- adaptive_defaults(n_items)
   list(
     global_identified = FALSE,
+    pairing_strategy = "hybrid",
+    dup_max_obs_relaxed = defaults$dup_max_obs_relaxed,
     global_identified_reliability_min = as.double(defaults$global_identified_reliability_min),
     global_identified_rank_corr_min = as.double(defaults$global_identified_rank_corr_min),
     p_long_low = as.double(defaults$p_long_low),
@@ -672,6 +684,8 @@
 #' @noRd
 .adaptive_controller_public_keys <- function() {
   c(
+    "pairing_strategy",
+    "dup_max_obs_relaxed",
     "global_identified_reliability_min",
     "global_identified_rank_corr_min",
     "p_long_low",
@@ -939,6 +953,9 @@
   }
 
   out$global_identified_reliability_min <- read_double("global_identified_reliability_min", 0, 1)
+  if (!is.null(out$dup_max_obs_relaxed)) {
+    out$dup_max_obs_relaxed <- .adaptive_relaxed_duplicate_limit(out$dup_max_obs_relaxed)
+  }
   out$global_identified_rank_corr_min <- read_double("global_identified_rank_corr_min", 0, 1)
   out$p_long_low <- read_double("p_long_low", 0, 1)
   out$p_long_high <- read_double("p_long_high", 0, 1)
@@ -952,41 +969,10 @@
   out$p_star_override_margin <- read_double("p_star_override_margin", 0, 0.5)
   out$star_override_budget_per_round <- read_integer("star_override_budget_per_round", 0L, Inf)
   out$run_mode <- read_choice("run_mode", c("within_set", "link_one_spoke", "link_multi_spoke"))
+  if ("pairing_strategy" %in% names(out)) {
+    out$pairing_strategy <- .adaptive_pairing_strategy(out)
+  }
   out$hub_id <- read_integer("hub_id", 1L, Inf)
-  out$link_estimation_mode <- read_choice(
-    "link_estimation_mode",
-    .adaptive_link_estimation_mode_levels()
-  )
-  policy_value <- out$link_transform_policy %||% out$link_transform_mode %||% NULL
-  if (!is.null(policy_value)) {
-    out$link_transform_policy <- .adaptive_normalize_link_transform_policy(policy = policy_value)
-  }
-  out$link_transform_mode <- NULL
-  out$link_refit_mode <- read_choice("link_refit_mode", c("shift_only", "joint_refit"))
-  if (!is.null(out$shift_only_theta_treatment)) {
-    if (!is.character(out$shift_only_theta_treatment) ||
-      length(out$shift_only_theta_treatment) != 1L ||
-      is.na(out$shift_only_theta_treatment) ||
-      out$shift_only_theta_treatment == "") {
-      rlang::abort("`adaptive_config$shift_only_theta_treatment` must be a single string value.")
-    }
-    if (identical(out$shift_only_theta_treatment, "normal_prior")) {
-      out$shift_only_theta_treatment <- "fixed_eap_plugin_var"
-    }
-    if (!out$shift_only_theta_treatment %in% .adaptive_shift_only_theta_treatment_levels()) {
-      rlang::abort(paste0(
-        "`adaptive_config$shift_only_theta_treatment` must be one of: ",
-        paste(.adaptive_shift_only_theta_treatment_levels(), collapse = ", "),
-        "."
-      ))
-    }
-  }
-  out$judge_param_mode <- read_choice("judge_param_mode", c("global_shared", "phase_specific"))
-  out$within_phase_b_within_set_steps_allowed <- read_logical(
-    "within_phase_b_within_set_steps_allowed"
-  )
-  out$hub_lock_mode <- read_choice("hub_lock_mode", .adaptive_hub_lock_mode_levels())
-  out$hub_lock_kappa <- read_double("hub_lock_kappa", 0, 1)
   out$anchored_joint_spoke_prior_scale <- read_double("anchored_joint_spoke_prior_scale", 0, Inf)
   out$anchored_joint_sd_floor <- read_double("anchored_joint_sd_floor", 0, Inf)
   out$anchored_joint_spoke_prior_fallback_sd <- read_double(
@@ -1033,14 +1019,7 @@
     0,
     Inf
   )
-  out$probe_acceleration_mode <- read_choice(
-    "probe_acceleration_mode",
-    .adaptive_probe_acceleration_mode_levels()
-  )
   out$probe_active_floor_enabled <- read_logical("probe_active_floor_enabled")
-  out$probe_sole_blocker_acceleration_enabled <- read_logical(
-    "probe_sole_blocker_acceleration_enabled"
-  )
   out$probe_pairs_per_refit_per_spoke_bootstrap_max <- read_integer(
     "probe_pairs_per_refit_per_spoke_bootstrap_max",
     0L,
@@ -1130,7 +1109,6 @@
     Inf
   )
   out$allow_spoke_spoke_cross_set <- read_logical("allow_spoke_spoke_cross_set")
-  out$multi_spoke_mode <- read_choice("multi_spoke_mode", c("independent", "concurrent"))
   out$multi_spoke_budget_rule <- read_choice("multi_spoke_budget_rule", c("utility_mass_topk"))
   out$multi_spoke_budget_top_k <- read_integer("multi_spoke_budget_top_k", 1L, Inf)
   out$min_cross_set_pairs_per_spoke_per_refit <- read_integer(
@@ -1323,6 +1301,19 @@
   }
   controller <- .adaptive_controller_resolve(out)
   phase_ctx <- .adaptive_link_phase_context(out, controller = controller)
+  if (.adaptive_pairing_strategy(controller) != "hybrid") {
+    round$stage_order <- character()
+    round$stage_quotas <- round$stage_committed <- round$stage_shortfalls <- integer()
+    out$round <- round
+    return(out)
+  }
+  if (identical(round$stage_order, character())) {
+    out$round <- .adaptive_new_round_state(out$item_ids,
+      round_id = as.integer(round$round_id + 1L),
+      staged_active = isTRUE(round$staged_active), controller = controller)
+    out$round$committed_total <- round$committed_total
+    return(out)
+  }
   controller_for_quota <- controller
   controller_for_quota$link_phase <- as.character(phase_ctx$phase %||% "phase_a")
   round$star_override_budget_per_round <- as.integer(controller$star_override_budget_per_round)
@@ -1925,12 +1916,13 @@
     }
   }
   defaults <- adaptive_defaults(effective_n)
-  stage_order <- .adaptive_stage_order()
+  direct <- .adaptive_pairing_strategy(controller) != "hybrid"
+  stage_order <- if (direct) character() else .adaptive_stage_order()
   quota_controller <- controller
   if (mode %in% c("link_one_spoke", "link_multi_spoke") && !identical(phase, "phase_b")) {
     quota_controller$run_mode <- "within_set"
   }
-  stage_quotas <- .adaptive_round_compute_quotas(
+  stage_quotas <- if (direct) integer() else .adaptive_round_compute_quotas(
     round_id = round_id,
     n_items = effective_n,
     controller = quota_controller

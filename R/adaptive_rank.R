@@ -832,8 +832,10 @@ make_adaptive_judge_llm <- function(
 #' `adaptive_config$phase_a_artifacts`.
 #'
 #' Selection semantics:
-#' pair selection is TrueSkill-driven in one-pair transactional steps.
-#' Rolling anchors are refreshed from current score proxies and anchor-link
+#' selection uses one-pair transactional steps after the connected shuffled bootstrap.
+#' In the default hybrid strategy, TrueSkill supplies live ranks, strata, pair
+#' probabilities, base utility, and rolling anchors throughout within-set and
+#' Phase-A work. Rolling anchors use current TrueSkill ranks, and anchor-link
 #' routing compares exactly one anchor endpoint with one non-anchor endpoint.
 #' Long/mid-link routing excludes anchor-anchor and anchor-non-anchor pairs,
 #' while local-link routing admits same-stratum pairs and anchor-involving
@@ -843,16 +845,18 @@ make_adaptive_judge_llm <- function(
 #' (`top_band_pct = 0.10`, `top_band_bins = 5`) with top-band size computed as
 #' `ceiling(top_band_pct * N)`.
 #'
-#' Exposure and repeat routing:
+#' Hybrid exposure and repeat routing:
 #' under-represented routing is degree-based (`deg <= D_min + 1`), while
 #' repeat-pressure gating is based on recent exposure (bottom-quantile
 #' `recent_deg` with quantile default `0.25`) and per-endpoint repeat slot
 #' accounting.
 #'
 #' Inference separation:
-#' BTL refits are used for posterior inference, diagnostics, stop logic, and
-#' the long-link posterior gate after an accepted refit is available.
-#' They are not used to choose the next pair.
+#' BTL refits supply item estimates, posterior uncertainty, EAP reliability,
+#' diagnostics, stopping, and the existing `global_identified` signal. That signal
+#' can change later hybrid tapering and routing, so selection is not wholly
+#' independent of BTL. The within-set/Phase-A long-link gate uses TrueSkill
+#' probabilities throughout. Phase B selection and prior rules are unchanged.
 #'
 #' Resume behavior:
 #' when `resume = TRUE` and `session_dir` already contains adaptive artifacts,
@@ -898,20 +902,42 @@ make_adaptive_judge_llm <- function(
 #'
 #'   Supported keys (with defaults) include:
 #'   \describe{
+#'   \item{`pairing_strategy`}{Post-bootstrap strategy: `hybrid` (default), `random`,
+#'     `trueskill_p50`, or `trueskill_pollitt`. Direct strategies currently require
+#'     `run_mode = "within_set"`. All strategies retain the same connected shuffled
+#'     bootstrap. Direct strategies choose a focal item uniformly from sorted IDs
+#'     at minimum committed degree, using the run seed and committed count; invalid
+#'     judgments retry the same draw. Among legal partners, `random` chooses uniformly,
+#'     `trueskill_p50` minimizes distance to TrueSkill probability 0.50, and
+#'     `trueskill_pollitt` minimizes distance to 1/3 or 2/3, with item-ID tie breaking.
+#'     This is a Pollitt-inspired strategy using TrueSkill probabilities;
+#'     the earlier article used BTL probabilities, so this is not an exact replication.
+#'     Direct strategies allow at most two observations per unordered pair, with
+#'     canonical presentation balancing and reversal on repeat. They stop on focal
+#'     partner exhaustion and do not use hybrid stage quotas or coverage overrides.
+#'     Step logs identify `direct_pairing`, `pairing_strategy`, and `target_distance`;
+#'     `i_id` is the focal item and `p_ij` is the pre-judgment TrueSkill probability
+#'     for presented A over B. Target distance is symmetric under reversal and is
+#'     NA for random pairing. BTL estimation, refit cadence, and stopping remain
+#'     unchanged. On resume, omit this field or supply the saved strategy; changing
+#'     strategy requires a new session.}
+#'   \item{`dup_max_obs_relaxed`}{Hybrid's maximum observations per unordered pair
+#'     under the relaxed near-tie fallback: `3L` (historical default) or `2L`.
+#'     Use `2L` with [make_adaptive_judge_replay()] to cap study evidence at the
+#'     two collected orientations. The ordinary ceiling remains two; direct
+#'     strategies already cap at two. Phase B retains its existing ceiling.
+#'     This setting persists with the controller and defaults to three for legacy sessions.}
 #'   \item{`global_identified_reliability_min`}{Global EAP reliability threshold
 #'     used to mark the run as globally identified after a refit. Default is
 #'     `0.80`.}
 #'   \item{`global_identified_rank_corr_min`}{Minimum Spearman correlation
 #'     between the TrueSkill rank proxy and the BTL posterior mean ranks used
 #'     to mark the run as globally identified after a refit. Default is `0.90`.}
-#'   \item{`p_long_low`}{Lower bound for long-link posterior win probability
-#'     gating after global identifiability when an accepted posterior refit is
-#'     available. Before posterior availability, the gate falls back
-#'     deterministically to TrueSkill. Default is `0.10`.}
-#'   \item{`p_long_high`}{Upper bound for long-link posterior win probability
-#'     gating after global identifiability when an accepted posterior refit is
-#'     available. Before posterior availability, the gate falls back
-#'     deterministically to TrueSkill. Default is `0.90`.}
+#'   \item{`p_long_low`}{Lower bound for long-link win probability gating after
+#'     global identification. Within-set/Phase-A hybrid uses TrueSkill throughout.
+#'     Phase B retains its posterior gate with TrueSkill fallback. Default is `0.10`.}
+#'   \item{`p_long_high`}{Upper bound for the same long-link probability gate.
+#'     Default is `0.90`; bounds are inclusive.}
 #'   \item{`long_taper_mult`}{Multiplier controlling long-link quota tapering
 #'     after global identifiability. Default is `0.25`.}
 #'   \item{`long_frac_floor`}{Floor fraction for long-link quota after tapering.
@@ -1045,7 +1071,8 @@ make_adaptive_judge_llm <- function(
 #'   and aborts early for incompatible `run_mode`/set structure combinations.
 #' @param btl_config Optional named list passed to [adaptive_rank_run_live()]
 #'   to control BTL refit cadence, stopping diagnostics, and selected
-#'   round-log diagnostics. Supported fields:
+#'   round-log diagnostics. Within-set resume reuses the saved configuration when
+#'   omitted; an explicit list resolves against the defaults. Supported fields:
 #'   \describe{
 #'   \item{`refit_pairs_target`}{Minimum new committed comparisons required
 #'     before the next BTL refit. Default is `ceiling(N / 2)` clamped to
@@ -1090,6 +1117,10 @@ make_adaptive_judge_llm <- function(
 #'   reuse the persisted cadence unless overridden.
 #' @param resume Logical; when `TRUE` and `session_dir` contains a valid session,
 #'   resume from disk; otherwise initialize a new state.
+#'   Saved predictive mode, prior, TrueSkill state, bootstrap queue, and pairing
+#'   strategy are retained without loading a model or regenerating predictions.
+#'   Omit all predictive initialization arguments on resume. Other supported
+#'   controller overrides remain available.
 #'   Default is `TRUE`.
 #' @param seed Integer seed used when creating a new adaptive state. Default is
 #'   `1L`.
@@ -1254,12 +1285,32 @@ make_adaptive_judge_llm <- function(
 #' @param warm_start_python Explicit Python interpreter for text extraction only.
 #' @param warm_start_prior_sd Optional model-derived raw theta prior SD override;
 #'   scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
+#'   Not accepted with `trueskill_only`; never controls TrueSkill sigma.
+#' @param warm_start_mode Predictive destination: `cold` (neither model), `btl_only`
+#'   (BTL prior), `trueskill_only` (TrueSkill locations), or `both` (both models).
+#'   Omitted/NULL mode defaults to `btl_only` with predictive input, otherwise `cold`.
+#'   Request `both` explicitly to initialize both models. In TrueSkill-warm modes,
+#'   exact item-ID alignment precedes `mu = mu0 + sigma0 * prior_mean`, with
+#'   `mu0 = 25`, `sigma0 = 25/3`, fixed multiplier 1, and unchanged sigma.
+#'   Explicit `cold` with predictive input, or a non-cold mode without it, errors.
 #' @details
-#' Predictive priors affect ordinary/within-set BTL estimation. Transform,
-#' anchored-joint, and pooled judge refits keep their existing prior rules; predictive
-#' evidence is not injected again. Initial pairing queues and selection rules retain
-#' their existing meaning. Custom fit functions must consume `state$predictive_prior`
-#' explicitly. Resume uses saved predictions; omit all warm-start arguments on resume.
+#' Predictive initialization is separate from observed connectivity: every mode
+#' retains the same seeded connected shuffled bootstrap of N - 1 valid comparisons,
+#' with common presentation balancing and invalid-result retries. Predictive
+#' locations can affect later TrueSkill-based selection; they do not replace the
+#' initial observed spanning path. BTL prior SD and ensemble diagnostics never
+#' determine TrueSkill sigma. No historical training-score units are restored.
+#'
+#' Predictive BTL priors apply only in `btl_only` and `both`, including run-required
+#' linking Phase A. TrueSkill initialization applies in `trueskill_only` and `both`.
+#' Imported Phase-A artifacts retain their own generation identity and are not
+#' rerun because predictive input exists. Transform, anchored-joint, and pooled
+#' judge refits keep their existing prior rules; predictive evidence is not
+#' injected into Phase B priors, D-optimal selection, or probes.
+#' Custom BTL fit functions should consume `state$predictive_prior` only when
+#' `state$meta$warm_start_mode` is `btl_only` or `both`; its presence alone does
+#' not imply BTL warming. Resume preserves saved predictions, current TrueSkill
+#' state, mode, strategy, and bootstrap progress; omit all warm-start arguments.
 #' @export
 adaptive_rank <- function(
     data,
@@ -1296,7 +1347,8 @@ adaptive_rank <- function(
     warm_start_prior = NULL,
     warm_start_features = NULL,
     warm_start_python = NULL,
-    warm_start_prior_sd = NULL
+    warm_start_prior_sd = NULL,
+    warm_start_mode = NULL
 ) {
   backend <- match.arg(backend)
   if (identical(backend, "openai")) {
@@ -1385,11 +1437,12 @@ adaptive_rank <- function(
       warm_start_prior = warm_start_prior,
       warm_start_features = warm_start_features,
       warm_start_python = warm_start_python,
-      warm_start_prior_sd = warm_start_prior_sd
+      warm_start_prior_sd = warm_start_prior_sd,
+      warm_start_mode = warm_start_mode
     )
   } else {
     .warm_start_resume_inputs(warm_start_model, warm_start_prior, warm_start_features,
-      warm_start_python, warm_start_prior_sd)
+      warm_start_python, warm_start_prior_sd, warm_start_mode)
     loaded_ids <- as.character(state$item_ids)
     input_ids <- as.character(items$item_id)
     if (!identical(loaded_ids, input_ids)) {

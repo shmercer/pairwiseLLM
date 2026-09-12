@@ -22,6 +22,18 @@ as schema version, required state fields, and index ranges in
 into \code{state$item_log} and persistence is marked as enabled. Resume uses
 strict schema validation for canonical logs; incompatible saved schemas abort
 with explicit errors.
+
+Legacy sessions without a saved predictive mode migrate to \code{cold} when
+no predictive prior exists, and \code{btl_only} otherwise. An absent pairing
+strategy migrates to \code{hybrid}. Saved TrueSkill values, the connected
+shuffled bootstrap queue and its index, and round progress remain authoritative;
+loading never recomputes predictions or initializes TrueSkill again.
+
+\code{metadata.rds} records effective \code{warm_start_mode} and
+\code{pairing_strategy} for session-level audit. Direct step logs already record
+\code{pairing_strategy}, the presented A-over-B TrueSkill probability
+\code{p_ij}, and \code{target_distance} (missing for random pairing). Predictive
+vectors and provenance are retained once in \code{state$predictive_prior}.
 }
 \examples{
 dir <- tempfile("pwllm-session-")

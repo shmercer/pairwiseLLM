@@ -103,6 +103,20 @@ with one item from exactly one spoke. Spoke--spoke comparisons are not part of t
 
 ## Phase A artifacts and validation
 
+Run-required Phase A uses the within-set hybrid selector. TrueSkill supplies live
+ranks, strata, rolling anchors, pair probabilities, and the long-link gate throughout.
+BTL supplies EAP estimates, uncertainty, reliability, diagnostics, stopping, and the
+existing `global_identified` signal that may change later hybrid tapering and routing.
+
+Predictive destination modes are `cold`, `btl_only`, `trueskill_only`, and `both`.
+Omitted mode resolves to `cold` without predictive input and historical `btl_only`
+with it; `both` must be requested explicitly to initialize both models. TrueSkill-warm
+modes map ID-aligned centered locations to `25 + (25/3) * prior_mean`, preserving sigma.
+Every mode retains the same per-set seeded connected shuffled bootstrap. Direct
+strategies currently require ordinary within-set mode; linking runs require `hybrid`.
+Phase B selection and prior rules are unchanged: predictive evidence is not injected
+into its transform, anchored-joint or pooled-judge priors, D-optimal selection, or probes.
+
 Phase A produces the within-set evidence needed before any cross-set comparison is scheduled. A
 canonical artifact stores:
 
@@ -124,6 +138,12 @@ Bayesian fitting settings. A `btl` artifact is therefore not silently converted 
 an artifact produced under an incompatible configuration is rejected. This protects the likelihood
 and prior assumptions used by the linking fit; it is stricter than checking that an `.rds` file can
 be read.
+
+Run-generated artifact identity additionally records predictive mode, prior digest,
+pairing strategy, and a nondefault duplicate ceiling. Cache reuse respects those
+generation settings. Explicit imports preserve their actual generation identity;
+they are not rerun because predictive input is present. Compatible artifacts from
+direct ordinary within-set runs can be imported without enabling direct Phase-A selection.
 
 ### Run, import, and mixed behavior
 
@@ -586,6 +606,14 @@ also rebuilds derived evidence indices and checks probe state. `resume = TRUE` t
 An incompatible or corrupt session aborts with the violated invariant. The runner does not silently
 discard saved work, create a new probe panel, or restart Phase A. Use `resume = FALSE` with a new or
 empty directory only when intentionally starting a new study.
+
+Session metadata identifies effective predictive mode and pairing strategy. Legacy
+sessions with no mode become `cold` without a saved prior and `btl_only` with one;
+missing strategy becomes `hybrid`. Saved TrueSkill state, bootstrap queue/index,
+committed evidence, and round state remain authoritative. Migration never initializes
+TrueSkill again. Omit warm-start inputs on resume. Linking continuation with custom
+BTL settings should continue supplying those settings explicitly; saved-setting
+reuse on omission applies to ordinary within-set continuation.
 
 Compatibility loaders can backfill fields needed to read older sessions and can normalize legacy
 log names. Historical transform estimators, soft hub locks, free hub locks, alternative probe

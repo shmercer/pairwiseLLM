@@ -21,7 +21,9 @@ Resume a previously persisted adaptive pairing session.
 This is a thin wrapper around \code{\link[=load_adaptive_session]{load_adaptive_session()}} and performs schema
 and log-shape checks during load. Returned state preserves canonical
 \code{step_log}, \code{round_log}, and \code{item_log} contents used for
-adaptive auditability.
+adaptive auditability. The saved predictive mode, prior, pairing strategy,
+current TrueSkill state, and connected shuffled bootstrap queue are authoritative.
+Resume does not reload a predictive model or regenerate its predictions.
 }
 \examples{
 dir <- tempfile("pwllm-session-")
@@ -40,6 +42,8 @@ Other adaptive ranking:
 \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
 \code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
 \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}},
-\code{\link[=summarize_adaptive]{summarize_adaptive()}}
+\code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}},
+\code{\link[=summarize_adaptive]{summarize_adaptive()}},
+\code{\link[=validate_adaptive_replay]{validate_adaptive_replay()}}
 }
 \concept{adaptive ranking}

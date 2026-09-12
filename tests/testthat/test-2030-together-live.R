@@ -11,7 +11,6 @@ submit_together_pairs_live <- pairwiseLLM::submit_together_pairs_live
 testthat::test_that(
   "together_compare_pair_live parses a successful response without thoughts and respects explicit temperature",
   {
-    pll_ns <- asNamespace("pairwiseLLM")
 
     fake_body <- list(
       id = "chatcmpl-123",
@@ -45,7 +44,7 @@ testthat::test_that(
       .together_req_perform = function(req) "FAKE_RESP",
       .together_resp_status = function(resp) 200L,
       .together_resp_body_json = function(resp, simplifyVector = FALSE) fake_body,
-      .env = pll_ns
+      .package = "pairwiseLLM"
     )
 
     td <- trait_description("overall_quality")
@@ -112,7 +111,6 @@ testthat::test_that(
 testthat::test_that(
   "together_compare_pair_live uses model-default sampling when omitted or NULL",
   {
-    pll_ns <- asNamespace("pairwiseLLM")
 
     fake_body <- list(
       id = "chatcmpl-any",
@@ -141,7 +139,7 @@ testthat::test_that(
       .together_req_perform = function(req) "FAKE_RESP",
       .together_resp_status = function(resp) 200L,
       .together_resp_body_json = function(resp, simplifyVector = FALSE) fake_body,
-      .env = pll_ns
+      .package = "pairwiseLLM"
     )
 
     td <- trait_description("overall_quality")
@@ -193,7 +191,6 @@ testthat::test_that(
 testthat::test_that(
   "together_compare_pair_live parses DeepSeek-R1 <think> thoughts correctly",
   {
-    pll_ns <- asNamespace("pairwiseLLM")
 
     raw_content <- paste0(
       "<think>This is internal chain-of-thought.</think>\n",
@@ -227,7 +224,7 @@ testthat::test_that(
       .together_req_perform = function(req) "FAKE_RESP",
       .together_resp_status = function(resp) 200L,
       .together_resp_body_json = function(resp, simplifyVector = FALSE) fake_body,
-      .env = pll_ns
+      .package = "pairwiseLLM"
     )
 
     td <- trait_description("overall_quality")
@@ -278,7 +275,6 @@ testthat::test_that(
 testthat::test_that(
   "together_compare_pair_live handles responses without <BETTER_SAMPLE> tag",
   {
-    pll_ns <- asNamespace("pairwiseLLM")
 
     fake_body <- list(
       id = "chatcmpl-789",
@@ -302,7 +298,7 @@ testthat::test_that(
       .together_req_perform = function(req) "FAKE_RESP",
       .together_resp_status = function(resp) 200L,
       .together_resp_body_json = function(resp, simplifyVector = FALSE) fake_body,
-      .env = pll_ns
+      .package = "pairwiseLLM"
     )
 
     td <- trait_description("overall_quality")
@@ -329,7 +325,6 @@ testthat::test_that(
 testthat::test_that(
   "together_compare_pair_live returns an error row when JSON parse fails",
   {
-    pll_ns <- asNamespace("pairwiseLLM")
 
     testthat::local_mocked_bindings(
       .together_api_key = function(api_key = NULL) "TEST_TOGETHER_KEY",
@@ -339,7 +334,7 @@ testthat::test_that(
       .together_resp_body_json = function(resp, simplifyVector = FALSE) {
         stop("boom")
       },
-      .env = pll_ns
+      .package = "pairwiseLLM"
     )
 
     td <- trait_description("overall_quality")
@@ -417,7 +412,6 @@ testthat::test_that("together_compare_pair_live validates input types", {
 })
 
 testthat::test_that("together_compare_pair_live handles network/HTTP errors gracefully", {
-  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
 
   # Mock internals to simulate a connection error
@@ -427,7 +421,7 @@ testthat::test_that("together_compare_pair_live handles network/HTTP errors grac
     .together_req_perform = function(...) {
       stop("Simulated connection timeout")
     },
-    .env = pll_ns,
+    .package = "pairwiseLLM",
     {
       res <- together_compare_pair_live(
         ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B",
@@ -452,7 +446,6 @@ testthat::test_that("together_compare_pair_live handles network/HTTP errors grac
 })
 
 testthat::test_that("together_compare_pair_live handles API-level errors (valid JSON, bad status)", {
-  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
 
   fake_error_body <- list(
@@ -468,7 +461,7 @@ testthat::test_that("together_compare_pair_live handles API-level errors (valid 
     .together_req_perform = function(...) "RESP",
     .together_resp_status = function(...) 429L,
     .together_resp_body_json = function(...) fake_error_body,
-    .env = pll_ns,
+    .package = "pairwiseLLM",
     {
       res <- together_compare_pair_live(
         ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B",
@@ -483,7 +476,6 @@ testthat::test_that("together_compare_pair_live handles API-level errors (valid 
 })
 
 testthat::test_that("together_compare_pair_live handles incomplete <think> tags", {
-  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
 
   # Case: <think> is started but never closed (e.g. max tokens reached)
@@ -499,7 +491,7 @@ testthat::test_that("together_compare_pair_live handles incomplete <think> tags"
     .together_req_perform = function(...) "RESP",
     .together_resp_status = function(...) 200L,
     .together_resp_body_json = function(...) fake_body,
-    .env = pll_ns,
+    .package = "pairwiseLLM",
     {
       res <- together_compare_pair_live(
         ID1 = "S1", text1 = "A", ID2 = "S2", text2 = "B",
@@ -554,7 +546,6 @@ testthat::test_that("submit_together_pairs_live returns list structure for zero 
 })
 
 testthat::test_that("submit_together_pairs_live runs correctly and returns list", {
-  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
   tmpl <- set_prompt_template()
 
@@ -579,7 +570,7 @@ testthat::test_that("submit_together_pairs_live runs correctly and returns list"
         better_id = ID1
       )
     },
-    .env = pll_ns
+    .package = "pairwiseLLM"
   )
 
   res <- submit_together_pairs_live(
@@ -597,7 +588,6 @@ testthat::test_that("submit_together_pairs_live runs correctly and returns list"
 })
 
 testthat::test_that("submit_together_pairs_live separates failed pairs", {
-  pll_ns <- asNamespace("pairwiseLLM")
   td <- trait_description("overall_quality")
 
   pairs <- tibble::tibble(
@@ -624,7 +614,7 @@ testthat::test_that("submit_together_pairs_live separates failed pairs", {
         better_id = ID1
       )
     },
-    .env = pll_ns,
+    .package = "pairwiseLLM",
     {
       res <- submit_together_pairs_live(
         pairs, "model", td$name, td$description,
@@ -644,7 +634,7 @@ testthat::test_that("submit_together_pairs_live separates failed pairs", {
 
 testthat::test_that("submit_together_pairs_live respects save_path (Resume Logic)", {
   testthat::skip_if_not_installed("readr")
-  pll_ns <- asNamespace("pairwiseLLM")
+
   td <- trait_description("overall_quality")
   tmp_csv <- tempfile(fileext = ".csv")
 
@@ -678,7 +668,7 @@ testthat::test_that("submit_together_pairs_live respects save_path (Resume Logic
         better_id = "S03"
       )
     },
-    .env = pll_ns,
+    .package = "pairwiseLLM",
     {
       res <- submit_together_pairs_live(
         pairs = pairs,
@@ -724,7 +714,7 @@ testthat::test_that("submit_together_pairs_live validates inputs", {
 
 testthat::test_that("submit_together_pairs_live: Directory creation & Raw response cleanup", {
   testthat::skip_if_not_installed("readr")
-  pll_ns <- asNamespace("pairwiseLLM")
+
   td <- trait_description("overall_quality")
 
   tmp_dir <- tempfile()
@@ -744,7 +734,7 @@ testthat::test_that("submit_together_pairs_live: Directory creation & Raw respon
       res$raw_response <- list(list(foo = "bar"))
       res
     },
-    .env = pll_ns,
+    .package = "pairwiseLLM",
     {
       out <- capture.output(
         {
@@ -770,7 +760,7 @@ testthat::test_that("submit_together_pairs_live: Directory creation & Raw respon
 
 testthat::test_that("submit_together_pairs_live: Resume logic (Read Error Handling)", {
   testthat::skip_if_not_installed("readr")
-  pll_ns <- asNamespace("pairwiseLLM")
+
   td <- trait_description("overall_quality")
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
   tmp <- tempfile(fileext = ".csv")
@@ -788,7 +778,7 @@ testthat::test_that("submit_together_pairs_live: Resume logic (Read Error Handli
             model = "m", status_code = 200, error_message = NA
           )
         },
-        .env = pll_ns,
+        .package = "pairwiseLLM",
         {
           testthat::expect_warning(
             submit_together_pairs_live(
@@ -806,7 +796,7 @@ testthat::test_that("submit_together_pairs_live: Resume logic (Read Error Handli
 
 testthat::test_that("submit_together_pairs_live: Sequential Save Error Handling", {
   testthat::skip_if_not_installed("readr")
-  pll_ns <- asNamespace("pairwiseLLM")
+
   td <- trait_description("overall_quality")
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
   tmp_file <- tempfile(fileext = ".csv")
@@ -823,7 +813,7 @@ testthat::test_that("submit_together_pairs_live: Sequential Save Error Handling"
             model = "m", status_code = 200, error_message = NA
           )
         },
-        .env = pll_ns,
+        .package = "pairwiseLLM",
         {
           testthat::expect_warning(
             submit_together_pairs_live(
@@ -878,13 +868,13 @@ testthat::test_that("submit_together_pairs_live: Parallel Execution & Save Error
 
 testthat::test_that("submit_together_pairs_live: Sequential Internal Error Handling", {
   # Covers lines 706-715 (tryCatch error handler in sequential loop)
-  pll_ns <- asNamespace("pairwiseLLM")
+
   td <- trait_description("overall_quality")
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
 
   testthat::with_mocked_bindings(
     together_compare_pair_live = function(...) stop("Sequential Internal Crash"),
-    .env = pll_ns,
+    .package = "pairwiseLLM",
     {
       res <- submit_together_pairs_live(
         pairs, "model", td$name, td$description,

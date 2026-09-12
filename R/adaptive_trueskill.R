@@ -2,12 +2,14 @@
 # Adaptive TrueSkill state helpers.
 # -------------------------------------------------------------------------
 
+.trueskill_defaults <- function() list(mu0 = 25, sigma0 = 25 / 3, beta = 25 / 6)
+
 #' @keywords internal
 #' @noRd
 new_trueskill_state <- function(items,
-                                mu0 = 25,
-                                sigma0 = 25 / 3,
-                                beta = 25 / 6) {
+                                mu0 = .trueskill_defaults()$mu0,
+                                sigma0 = .trueskill_defaults()$sigma0,
+                                beta = .trueskill_defaults()$beta) {
   items <- .adaptive_state_normalize_items(items)
   mu0 <- .validate_trueskill_scalar(mu0, "mu0", allow_nonpositive = TRUE)
   sigma0 <- .validate_trueskill_scalar(sigma0, "sigma0", allow_nonpositive = FALSE)

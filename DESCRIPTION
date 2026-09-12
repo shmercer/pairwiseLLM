@@ -1,6 +1,6 @@
 Package: pairwiseLLM
 Title: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
-Version: 1.3.2
+Version: 1.4.0
 Authors@R: 
     person("Sterett H.", "Mercer", , "sterett.mercer@ubc.ca", role = c("aut", "cre", "cph"),
            comment = c(ORCID = "0000-0002-7940-4221"))
@@ -76,9 +76,11 @@ Collate:
     'adaptive_linking_calibration.R'
     'adaptive_linking_phase_a.R'
     'adaptive_logs.R'
+    'adaptive_pairing_strategy.R'
     'adaptive_persist.R'
     'adaptive_print.R'
     'adaptive_rank.R'
+    'adaptive_replay.R'
     'adaptive_round_candidates.R'
     'adaptive_run.R'
     'adaptive_schemas.R'

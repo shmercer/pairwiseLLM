@@ -242,7 +242,7 @@ test_that("all R Markdown chunks parse, including unevaluated examples", {
   }
 })
 
-test_that("Task 09 release documentation keeps navigation and citation contracts", {
+test_that("release documentation keeps navigation and citation contracts", {
   root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
   skip_if(
     !file.exists(file.path(root, "README.Rmd")),
@@ -259,7 +259,16 @@ test_that("Task 09 release documentation keeps navigation and citation contracts
     paste(readLines(path, warn = FALSE), collapse = "\n")
   })
 
-  expect_identical(unname(description[1L, "Version"]), "1.3.2")
+  version <- unname(description[1L, "Version"])
+  expect_identical(version, "1.4.0")
+  citation <- paste(readLines(file.path(root, "inst", "CITATION")), collapse = "\n")
+  codemeta <- jsonlite::fromJSON(file.path(root, "codemeta.json"))
+  news <- readLines(file.path(root, "NEWS.md"))
+  expect_match(citation, paste("R package version", version), fixed = TRUE)
+  expect_match(readme, paste0("(Version ", version, ")"), fixed = TRUE)
+  expect_identical(codemeta$version, version)
+  expect_identical(codemeta$citation$description, paste("R package version", version))
+  expect_identical(news[[1L]], paste("# pairwiseLLM", version))
   expect_true(grepl("badge/dynamic/regex", readme, fixed = TRUE))
   expect_true(grepl("raw.githubusercontent.com", readme, fixed = TRUE))
   expect_true(grepl("## Research Studies Using pairwiseLLM", readme, fixed = TRUE))
