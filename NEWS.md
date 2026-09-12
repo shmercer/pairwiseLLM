@@ -31,6 +31,18 @@
   round recovery uses the exact saved round field.
 * Updated adaptive help, guides, design documentation, and replay examples to
   distinguish predictive initialization, connected bootstrap, and pairing strategy.
+* Strengthened adaptive-session validation and resume handling, including preservation
+  of named Phase-A evidence hashes, legacy pair-resume behavior, and improved detection
+  of Ollama results.
+* Made stratified cost estimation robust to singleton strata and expanded boundary
+  validation for adaptive state, warm-start models, provider responses, batch payloads,
+  optional dependencies, and sampler interfaces.
+* Simplified linking internals around the anchored-joint refit path by removing obsolete
+  transform-refit Stan support and unreachable legacy Phase-B branches, while preserving
+  legacy state normalization, audit fields, persistence compatibility, and current
+  linking behavior.
+* Added regression coverage for fresh-process resume, refit diagnostics, selection and
+  information updates, state reporting, schema validation, and runtime boundary behavior.
 
 # pairwiseLLM 1.3.2
 
