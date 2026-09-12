@@ -27,6 +27,19 @@ into `state$item_log` and persistence is marked as enabled. Resume uses
 strict schema validation for canonical logs; incompatible saved schemas
 abort with explicit errors.
 
+Legacy sessions without a saved predictive mode migrate to `cold` when
+no predictive prior exists, and `btl_only` otherwise. An absent pairing
+strategy migrates to `hybrid`. Saved TrueSkill values, the connected
+shuffled bootstrap queue and its index, and round progress remain
+authoritative; loading never recomputes predictions or initializes
+TrueSkill again.
+
+`metadata.rds` records effective `warm_start_mode` and
+`pairing_strategy` for session-level audit. Direct step logs already
+record `pairing_strategy`, the presented A-over-B TrueSkill probability
+`p_ij`, and `target_distance` (missing for random pairing). Predictive
+vectors and provenance are retained once in `state$predictive_prior`.
+
 ## See also
 
 [`save_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_adaptive_session.md),

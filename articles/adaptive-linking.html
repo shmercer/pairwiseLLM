@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -280,6 +280,24 @@ defaults unless a study design justifies changing them.</p>
 <div class="section level2">
 <h2 id="phase-a-from-raw-samples">Phase A from raw samples<a class="anchor" aria-label="anchor" href="#phase-a-from-raw-samples"></a>
 </h2>
+<p>Run-required Phase A supports <code>warm_start_mode = "cold"</code>,
+<code>"btl_only"</code>, <code>"trueskill_only"</code>, or
+<code>"both"</code>. Omitted mode defaults to <code>cold</code> without
+predictive input and <code>btl_only</code> with it. Request
+<code>both</code> explicitly to initialize both models. TrueSkill-warm
+modes use ID-aligned <code>25 + (25/3) * prior_mean</code> with
+unchanged sigma; BTL consumes the prior only in <code>btl_only</code>
+and <code>both</code>. Every mode retains the same per-set seeded
+connected shuffled bootstrap.</p>
+<p>In-run Phase A requires <code>pairing_strategy = "hybrid"</code>: the
+direct strategies are currently limited to ordinary within-set runs.
+Phase-A live ranks, strata, rolling anchors, pair probabilities, and the
+long-link gate use TrueSkill throughout. BTL supplies estimates,
+reliability, diagnostics, stopping, and <code>global_identified</code>,
+which may change later hybrid tapering and routing. Phase B selection
+and priors are unchanged; predictive evidence is not injected into its
+transforms, anchored-joint or pooled-judge priors, D-optimal selection,
+or probes.</p>
 <p>A practical workflow often ranks the hub and each spoke in separate
 jobs. Each call below starts from raw samples and writes a reusable
 canonical artifact under its session directory.</p>
@@ -469,6 +487,12 @@ For example, an artifact created with <code>model_variant = "btl"</code>
 cannot be imported into a <code>"btl_e_b"</code> run. Reuse it with the
 matching variant or rerun Phase A; there is no cross-variant
 conversion.</p>
+<p>Run-generated artifact/cache identity distinguishes predictive mode,
+prior, pairing strategy, and nondefault duplicate ceiling. Explicit
+imports retain their own generation identity and are not rerun merely
+because predictive input exists. Compatible artifacts produced by direct
+ordinary within-set runs may be imported; this does not enable direct
+selection inside a linking run.</p>
 <p>Mixed mode imports the sets you supply and runs Phase A for every
 remaining set. Here the hub is imported and spoke 3 is run locally:</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">

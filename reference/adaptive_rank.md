@@ -43,7 +43,8 @@ adaptive_rank(
   warm_start_prior = NULL,
   warm_start_features = NULL,
   warm_start_python = NULL,
-  warm_start_prior_sd = NULL
+  warm_start_prior_sd = NULL,
+  warm_start_mode = NULL
 )
 ```
 
@@ -150,6 +151,42 @@ adaptive_rank(
 
   Supported keys (with defaults) include:
 
+  `pairing_strategy`
+
+  :   Post-bootstrap strategy: `hybrid` (default), `random`,
+      `trueskill_p50`, or `trueskill_pollitt`. Direct strategies
+      currently require `run_mode = "within_set"`. All strategies retain
+      the same connected shuffled bootstrap. Direct strategies choose a
+      focal item uniformly from sorted IDs at minimum committed degree,
+      using the run seed and committed count; invalid judgments retry
+      the same draw. Among legal partners, `random` chooses uniformly,
+      `trueskill_p50` minimizes distance to TrueSkill probability 0.50,
+      and `trueskill_pollitt` minimizes distance to 1/3 or 2/3, with
+      item-ID tie breaking. This is a Pollitt-inspired strategy using
+      TrueSkill probabilities; the earlier article used BTL
+      probabilities, so this is not an exact replication. Direct
+      strategies allow at most two observations per unordered pair, with
+      canonical presentation balancing and reversal on repeat. They stop
+      on focal partner exhaustion and do not use hybrid stage quotas or
+      coverage overrides. Step logs identify `direct_pairing`,
+      `pairing_strategy`, and `target_distance`; `i_id` is the focal
+      item and `p_ij` is the pre-judgment TrueSkill probability for
+      presented A over B. Target distance is symmetric under reversal
+      and is NA for random pairing. BTL estimation, refit cadence, and
+      stopping remain unchanged. On resume, omit this field or supply
+      the saved strategy; changing strategy requires a new session.
+
+  `dup_max_obs_relaxed`
+
+  :   Hybrid's maximum observations per unordered pair under the relaxed
+      near-tie fallback: `3L` (historical default) or `2L`. Use `2L`
+      with
+      [`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md)
+      to cap study evidence at the two collected orientations. The
+      ordinary ceiling remains two; direct strategies already cap at
+      two. Phase B retains its existing ceiling. This setting persists
+      with the controller and defaults to three for legacy sessions.
+
   `global_identified_reliability_min`
 
   :   Global EAP reliability threshold used to mark the run as globally
@@ -163,17 +200,15 @@ adaptive_rank(
 
   `p_long_low`
 
-  :   Lower bound for long-link posterior win probability gating after
-      global identifiability when an accepted posterior refit is
-      available. Before posterior availability, the gate falls back
-      deterministically to TrueSkill. Default is `0.10`.
+  :   Lower bound for long-link win probability gating after global
+      identification. Within-set/Phase-A hybrid uses TrueSkill
+      throughout. Phase B retains its posterior gate with TrueSkill
+      fallback. Default is `0.10`.
 
   `p_long_high`
 
-  :   Upper bound for long-link posterior win probability gating after
-      global identifiability when an accepted posterior refit is
-      available. Before posterior availability, the gate falls back
-      deterministically to TrueSkill. Default is `0.90`.
+  :   Upper bound for the same long-link probability gate. Default is
+      `0.90`; bounds are inclusive.
 
   `long_taper_mult`
 
@@ -417,7 +452,9 @@ adaptive_rank(
   Optional named list passed to
   [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md)
   to control BTL refit cadence, stopping diagnostics, and selected
-  round-log diagnostics. Supported fields:
+  round-log diagnostics. Within-set resume reuses the saved
+  configuration when omitted; an explicit list resolves against the
+  defaults. Supported fields:
 
   `refit_pairs_target`
 
@@ -507,7 +544,11 @@ adaptive_rank(
 - resume:
 
   Logical; when `TRUE` and `session_dir` contains a valid session,
-  resume from disk; otherwise initialize a new state. Default is `TRUE`.
+  resume from disk; otherwise initialize a new state. Saved predictive
+  mode, prior, TrueSkill state, bootstrap queue, and pairing strategy
+  are retained without loading a model or regenerating predictions. Omit
+  all predictive initialization arguments on resume. Other supported
+  controller overrides remain available. Default is `TRUE`.
 
 - seed:
 
@@ -575,7 +616,19 @@ adaptive_rank(
 - warm_start_prior_sd:
 
   Optional model-derived raw theta prior SD override; scalar or per-item
-  vector, default 0.5. Supplied prior objects retain their SDs.
+  vector, default 0.5. Supplied prior objects retain their SDs. Not
+  accepted with `trueskill_only`; never controls TrueSkill sigma.
+
+- warm_start_mode:
+
+  Predictive destination: `cold` (neither model), `btl_only` (BTL
+  prior), `trueskill_only` (TrueSkill locations), or `both` (both
+  models). Omitted/NULL mode defaults to `btl_only` with predictive
+  input, otherwise `cold`. Request `both` explicitly to initialize both
+  models. In TrueSkill-warm modes, exact item-ID alignment precedes
+  `mu = mu0 + sigma0 * prior_mean`, with `mu0 = 25`, `sigma0 = 25/3`,
+  fixed multiplier 1, and unchanged sigma. Explicit `cold` with
+  predictive input, or a non-cold mode without it, errors.
 
 ## Value
 
@@ -665,37 +718,55 @@ Every wrapper call returns canonical `phase_a` outputs that can be fed
 back into a later linking run through
 `adaptive_config$phase_a_artifacts`.
 
-Selection semantics: pair selection is TrueSkill-driven in one-pair
-transactional steps. Rolling anchors are refreshed from current score
-proxies and anchor-link routing compares exactly one anchor endpoint
-with one non-anchor endpoint. Long/mid-link routing excludes
-anchor-anchor and anchor-non-anchor pairs, while local-link routing
-admits same-stratum pairs and anchor-involving pairs according to stage
-bounds.
+Selection semantics: selection uses one-pair transactional steps after
+the connected shuffled bootstrap. In the default hybrid strategy,
+TrueSkill supplies live ranks, strata, pair probabilities, base utility,
+and rolling anchors throughout within-set and Phase-A work. Rolling
+anchors use current TrueSkill ranks, and anchor-link routing compares
+exactly one anchor endpoint with one non-anchor endpoint. Long/mid-link
+routing excludes anchor-anchor and anchor-non-anchor pairs, while
+local-link routing admits same-stratum pairs and anchor-involving pairs
+according to stage bounds.
 
 Wrapper-visible defaults include top-band refinement
 (`top_band_pct = 0.10`, `top_band_bins = 5`) with top-band size computed
 as `ceiling(top_band_pct * N)`.
 
-Exposure and repeat routing: under-represented routing is degree-based
-(`deg <= D_min + 1`), while repeat-pressure gating is based on recent
-exposure (bottom-quantile `recent_deg` with quantile default `0.25`) and
-per-endpoint repeat slot accounting.
+Hybrid exposure and repeat routing: under-represented routing is
+degree-based (`deg <= D_min + 1`), while repeat-pressure gating is based
+on recent exposure (bottom-quantile `recent_deg` with quantile default
+`0.25`) and per-endpoint repeat slot accounting.
 
-Inference separation: BTL refits are used for posterior inference,
-diagnostics, stop logic, and the long-link posterior gate after an
-accepted refit is available. They are not used to choose the next pair.
+Inference separation: BTL refits supply item estimates, posterior
+uncertainty, EAP reliability, diagnostics, stopping, and the existing
+`global_identified` signal. That signal can change later hybrid tapering
+and routing, so selection is not wholly independent of BTL. The
+within-set/Phase-A long-link gate uses TrueSkill probabilities
+throughout. Phase B selection and prior rules are unchanged.
 
 Resume behavior: when `resume = TRUE` and `session_dir` already contains
 adaptive artifacts, failed session loads abort with an actionable error
 instead of starting a fresh run silently.
 
-Predictive priors affect ordinary/within-set BTL estimation. Transform,
-anchored-joint, and pooled judge refits keep their existing prior rules;
-predictive evidence is not injected again. Initial pairing queues and
-selection rules retain their existing meaning. Custom fit functions must
-consume `state$predictive_prior` explicitly. Resume uses saved
-predictions; omit all warm-start arguments on resume.
+Predictive initialization is separate from observed connectivity: every
+mode retains the same seeded connected shuffled bootstrap of N - 1 valid
+comparisons, with common presentation balancing and invalid-result
+retries. Predictive locations can affect later TrueSkill-based
+selection; they do not replace the initial observed spanning path. BTL
+prior SD and ensemble diagnostics never determine TrueSkill sigma. No
+historical training-score units are restored.
+
+Predictive BTL priors apply only in `btl_only` and `both`, including
+run-required linking Phase A. TrueSkill initialization applies in
+`trueskill_only` and `both`. Imported Phase-A artifacts retain their own
+generation identity and are not rerun because predictive input exists.
+Transform, anchored-joint, and pooled judge refits keep their existing
+prior rules; predictive evidence is not injected into Phase B priors,
+D-optimal selection, or probes. Custom BTL fit functions should consume
+`state$predictive_prior` only when `state$meta$warm_start_mode` is
+`btl_only` or `both`; its presence alone does not imply BTL warming.
+Resume preserves saved predictions, current TrueSkill state, mode,
+strategy, and bootstrap progress; omit all warm-start arguments.
 
 ## See also
 
@@ -713,7 +784,9 @@ Other adaptive ranking:
 [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md),
 [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md),
 [`make_adaptive_judge_llm()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_llm.md),
-[`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md)
+[`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md),
+[`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md),
+[`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)
 
 ## Examples
 
@@ -740,20 +813,20 @@ out$summary
 #> 1       8               4               4        0 FALSE             
 #> # ℹ 1 more variable: last_stop_reason <chr>
 head(out$logs$step_log)
-#> # A tibble: 4 × 97
+#> # A tibble: 4 × 99
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-09-10 18:18:07       1     1     4 S01   S04       4     1 S04  
-#> 2       2 2026-09-10 18:18:07       2     4     8 S04   S08       8     4 S08  
-#> 3       3 2026-09-10 18:18:08       3     8     2 S08   S02       2     8 S02  
-#> 4       4 2026-09-10 18:18:08       4     2     6 S02   S06       6     2 S06  
-#> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
+#> 1       1 2026-09-12 03:04:21       1     1     4 S01   S04       4     1 S04  
+#> 2       2 2026-09-12 03:04:21       2     4     8 S04   S08       8     4 S08  
+#> 3       3 2026-09-12 03:04:21       3     8     2 S08   S02       2     8 S02  
+#> 4       4 2026-09-12 03:04:21       4     2     6 S02   S06       6     2 S06  
+#> # ℹ 89 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,
 #> #   llm_status_code <int>, llm_error_message <chr>, llm_custom_id <chr>,
 #> #   prompt_tokens <dbl>, completion_tokens <dbl>, total_tokens <dbl>,
 #> #   raw_response_json <chr>, round_id <int>, round_stage <chr>,
-#> #   pair_type <chr>, used_in_round_i <int>, used_in_round_j <int>, …
+#> #   pair_type <chr>, pairing_strategy <chr>, target_distance <dbl>, …
 
 if (FALSE) { # \dontrun{
 # Live run with OpenAI gpt-5.1 + lower-cost Flex processing.

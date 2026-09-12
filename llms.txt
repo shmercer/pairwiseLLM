@@ -258,7 +258,8 @@ design article for your task.
   — run, inspect, save, and resume an adaptive within-set ranking.
 - [Guide: Adaptive Warm
   Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html)
-  — train, store, ensemble, and use predictive BTL priors.
+  — train, store, ensemble, and choose predictive BTL/TrueSkill
+  initialization.
 - [Design: Adaptive
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html)
   — understand the within-set selection, refitting, and stopping design.
@@ -286,9 +287,27 @@ design article for your task.
 ## Adaptive pairing & ranking (overview)
 
 `pairwiseLLM` includes an adaptive pairing workflow for ranking writing
-samples using pairwise comparisons. Instead of allocating comparisons
-uniformly at random, the within-set controller uses current rank,
-uncertainty, coverage, and degree information to choose each next pair.
+samples using pairwise comparisons. After a connected shuffled
+bootstrap, `adaptive_config$pairing_strategy` chooses `hybrid`
+(default), `random`, `trueskill_p50`, or `trueskill_pollitt`. Direct
+strategies currently require ordinary within-set runs. The
+Pollitt-inspired strategy targets TrueSkill win probabilities near 1/3
+or 2/3.
+
+Predictive initialization supports `cold`, `btl_only`, `trueskill_only`,
+and `both`. Omitted mode defaults to `cold` without predictive input and
+`btl_only` with it, preserving historical callers. Request
+`warm_start_mode = "both"` explicitly to initialize both models.
+TrueSkill locations use `25 + (25/3) * prior_mean` with unchanged sigma.
+Every mode retains the same seeded `N - 1` connected bootstrap. Saved
+mode, strategy, and current model state remain authoritative on resume.
+
+For offline directed-outcome replay, use
+[`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)
+and
+[`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md)
+with `adaptive_config$dup_max_obs_relaxed = 2L`. Replay returns the
+exact stored orientation and rejects reuse by default.
 
 To get started, see:
 
@@ -877,14 +896,19 @@ When using adaptive pairing
 ([`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)),
 the same Bayesian BTL models are fit intermittently during the run:
 
-- Pair selection is guided by the fast TrueSkill model.
+- Within-set/Phase-A hybrid ranks, strata, rolling anchors, pair
+  probabilities, and the long-link gate use TrueSkill throughout.
+  Ordinary within-set runs also offer direct `random`, `trueskill_p50`,
+  and `trueskill_pollitt` strategies.
 
 - Bayesian BTL refits provide:
 
   - uncertainty estimates,
   - diagnostics,
   - stopping decisions,
-  - and late-stage adaptation signals.
+  - EAP reliability and the existing `global_identified` signal, which
+    can change later hybrid tapering and routing. Phase B linking is
+    unchanged.
 
 You can therefore:
 
@@ -982,7 +1006,7 @@ MIT License. See `LICENSE`.
 ## Citation
 
 > Mercer, S. H. (2026). *pairwiseLLM: Pairwise writing quality
-> comparisons with large language models* (Version 1.3.2) \[R package;
+> comparisons with large language models* (Version 1.4.0) \[R package;
 > Computer software\]. <https://github.com/shmercer/pairwiseLLM>
 
 # Package index
@@ -1206,6 +1230,10 @@ MIT License. See `LICENSE`.
   : Run adaptive ranking end-to-end from data and model settings
 - [`make_adaptive_judge_llm()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_llm.md)
   : Build an LLM judge function for adaptive ranking
+- [`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md)
+  : Create an offline judge from frozen directed outcomes
+- [`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)
+  : Validate frozen directed judgments for an adaptive panel
 - [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md)
   : Adaptive ranking
 - [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md)

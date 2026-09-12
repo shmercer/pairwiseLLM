@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -97,7 +97,9 @@ list-column.</p>
 <code>prompt_tokens</code>, <code>completion_tokens</code>, <code>total_tokens</code>,
 <code>raw_response_json</code>.</p></li>
 <li><p>Routing/scheduling: <code>round_id</code>, <code>round_stage</code>,
-<code>pair_type</code>, <code>stage_committed_so_far</code>, <code>stage_quota</code>.</p></li>
+<code>pair_type</code>, <code>pairing_strategy</code>, <code>stage_committed_so_far</code>,
+<code>stage_quota</code>. Direct strategies use <code>direct_pairing</code> rather than
+hybrid stages; hybrid-only diagnostics are missing where inapplicable.</p></li>
 <li><p>Exposure/strata: <code>used_in_round_i</code>, <code>used_in_round_j</code>,
 <code>is_anchor_i</code>, <code>is_anchor_j</code>, <code>stratum_i</code>,
 <code>stratum_j</code>, <code>dist_stratum</code>.</p></li>
@@ -112,7 +114,10 @@ list-column.</p>
 <code>n_candidates_after_star_caps</code>, <code>n_candidates_scored</code>.</p></li>
 <li><p>Endpoint diagnostics: <code>deg_i</code>, <code>deg_j</code>,
 <code>recent_deg_i</code>, <code>recent_deg_j</code>, <code>mu_i</code>, <code>mu_j</code>,
-<code>sigma_i</code>, <code>sigma_j</code>, <code>p_ij</code>, <code>U0_ij</code>.</p></li>
+<code>sigma_i</code>, <code>sigma_j</code>, <code>p_ij</code>, <code>U0_ij</code>, <code>target_distance</code>.
+For direct strategies, <code>i_id</code> is the focal item and <code>p_ij</code> is
+the pre-judgment TrueSkill probability for presented A over B.
+<code>target_distance</code> is missing for random selection.</p></li>
 <li><p>Star-cap diagnostics: <code>star_cap_rejects</code>,
 <code>star_cap_reject_items</code>.</p></li>
 </ul></div>
@@ -132,8 +137,8 @@ list-column.</p>
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="adaptive_rank_start.html">adaptive_rank_start</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span>, <span class="st">"c"</span><span class="op">)</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">adaptive_step_log</span><span class="op">(</span><span class="va">state</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 0 × 97</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 97 variables: step_id &lt;int&gt;, timestamp &lt;dttm&gt;, pair_id &lt;int&gt;, i &lt;int&gt;,</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 0 × 99</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 99 variables: step_id &lt;int&gt;, timestamp &lt;dttm&gt;, pair_id &lt;int&gt;, i &lt;int&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   j &lt;int&gt;, i_id &lt;chr&gt;, j_id &lt;chr&gt;, A &lt;int&gt;, B &lt;int&gt;, A_id &lt;chr&gt;, B_id &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;, Y &lt;int&gt;, status &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   judge_backend &lt;chr&gt;, judge_model &lt;chr&gt;, judge_endpoint &lt;chr&gt;,</span></span>

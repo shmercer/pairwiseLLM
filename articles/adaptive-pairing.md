@@ -12,7 +12,7 @@ during ordinary package builds. Set
 `PAIRWISELLM_RUN_CMDSTAN_VIGNETTES=true` to opt in when rendering this
 source locally.
 
-## Choose a pairing strategy
+## Choose a comparison workflow
 
 Use exhaustive pairing when the set is small enough to evaluate every
 one of the `choose(N, 2)` unordered pairs and complete coverage is
@@ -30,12 +30,14 @@ studies should be planned around provider cost, refit time, and storage.
 
 Within-set ranking has three phases.
 
-1.  **Phase 1: warm start.** A seeded shuffled chain schedules `N - 1`
-    valid comparisons, producing a connected comparison graph.
-2.  **Phase 2: normal adaptation.** TrueSkill is updated after every
-    committed comparison and guides the next pair. The controller
-    balances coverage, long-, mid-, and local-range comparisons,
-    repeated-pair limits, and fallbacks.
+1.  **Connected shuffled bootstrap.** Every predictive mode uses the
+    same seeded chain of `N - 1` valid comparisons to connect the
+    observed graph. Predictive initialization occurs before these
+    observations and does not change their schedule.
+2.  **Post-bootstrap pairing.** TrueSkill updates after every valid
+    comparison. The selected pairing strategy chooses subsequent pairs;
+    the default hybrid balances anchor, long, mid, and local
+    comparisons, exposure, repeated-pair limits, and fallbacks.
 3.  **Phase 3: near stop.** After a Bayesian refit passes diagnostics
     and its EAP reliability is within 0.05 of the stopping threshold,
     later refits use the stricter near-stop ESS requirement.
@@ -45,22 +47,58 @@ Within-set ranking has three phases.
 TrueSkill is the fast, step-by-step selection model. Bayesian
 Bradley–Terry–Luce (BTL) refits are slower and intermittent. They
 provide posterior item estimates and uncertainty, convergence
-diagnostics, stability checks, and stopping decisions. Once an accepted
-posterior exists, its win probabilities also gate eligibility for
-long-range comparisons; BTL is therefore not exclusively a final
-reporting model.
+diagnostics, EAP reliability, stability checks, and stopping decisions.
+Hybrid live ranks, strata, rolling anchors, pair probabilities, base
+utility, and the long-link gate use TrueSkill throughout. BTL still
+contributes to `global_identified`, which can change later hybrid
+tapering and routing; selection is not wholly independent of BTL.
 
 ``` text
-items -> warm start -> select one pair -> judge -> TrueSkill update
-                              ^                    |
-                              |                    v
-                              +---- continue <- periodic BTL refit -> stop check
+items -> predictive initialization -> connected shuffled bootstrap
+  -> select one pair -> judge -> commit valid outcome and update TrueSkill
+           ^                          |
+           |                          v
+           +-- continue <- periodic BTL refit -> stop check
 ```
 
 Adaptive selection is intended to direct effort toward useful
 comparisons, but it does not guarantee a particular ranking,
 reliability, cost reduction, or improvement over random pairing. Those
 outcomes depend on the items, judge, budget, and model assumptions.
+
+## Choose a post-bootstrap pairing strategy
+
+Set `adaptive_config = list(pairing_strategy = "trueskill_p50")`, for
+example. The four choices apply after the common bootstrap:
+
+| Strategy | Partner rule |
+|----|----|
+| `hybrid` (default) | Staged anchor/long/mid/local selection with TrueSkill ambiguity utility. |
+| `random` | Uniform seeded choice among legal partners. |
+| `trueskill_p50` | Minimize `abs(p_ts(i > j) - 0.50)`. |
+| `trueskill_pollitt` | Minimize `min(abs(p_ts(i > j) - 1/3), abs(p_ts(i > j) - 2/3))`. |
+
+Each direct strategy first chooses a focal item uniformly from sorted
+IDs at the minimum current committed degree, using the run seed and
+committed count. It then selects a legal partner by the rule above;
+target-distance ties break by partner ID. Pollitt is
+**Pollitt-inspired**: it uses TrueSkill probabilities, whereas the
+earlier article used BTL probabilities.
+
+Direct strategies use no hybrid stage quotas, coverage overrides, or
+star-cap fallbacks. They allow at most two observations per unordered
+pair, preserve normal presentation balancing and reversal on repeat, and
+retry the same policy draw after invalid results. They stop if the
+chosen focal item has no legal partner, even if other pairs remain.
+These strategies currently support **ordinary within-set runs only**;
+linking runs require `hybrid`. Phase B linking remains unchanged.
+
+In direct step logs, `round_stage` and `pair_type` are `direct_pairing`,
+`pairing_strategy` identifies the policy, and `i_id` identifies the
+focal item. `p_ij` is the pre-judgment TrueSkill probability for
+presented A over B; `target_distance` is symmetric under reversal and is
+missing for random pairing. BTL refit cadence and stopping still apply
+to every strategy.
 
 ## Install and check CmdStan
 
@@ -131,8 +169,9 @@ The minimum useful wrapper call supplies data, its ID and text columns,
 a judge, and a step budget. We also choose a session directory so
 progress is persisted. With 20 items, the implemented default
 `refit_pairs_target` is 20 committed comparisons: `ceiling(N / 2)`
-clamped to `[20, 5000]`. A budget of 22 attempted steps leaves room for
-the warm start and produces one refit under this deterministic fixture.
+clamped to `[20, 5000]`. A budget of 22 attempted steps covers the
+connected bootstrap and produces one refit under this deterministic
+fixture.
 
 ``` r
 
@@ -279,6 +318,60 @@ It is a lower-level alternative to supplying backend/model arguments to
 and its calls are live, billable, and subject to the selected provider’s
 failure and privacy behavior.
 
+### Replay frozen directed judgments
+
+[`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)
+checks a table with character `A_id`, character `B_id`, and binary `Y`
+(1 means presented A wins). By default it requires every one of the
+`N * (N - 1)` ordered pairs for the panel. Self-pairs, foreign or
+missing IDs, duplicate ordered keys, malformed outcomes, and missing
+orientations error.
+[`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md)
+returns the stored result for the exact ordered key; it never infers a
+reverse result from a forward judgment and never makes network calls.
+
+This synthetic example runs both bootstrap and direct steps without a
+Bayesian refit:
+
+``` r
+
+replay_ids <- c("a", "b", "c", "d")
+frozen <- expand.grid(A_id = replay_ids, B_id = replay_ids, stringsAsFactors = FALSE)
+frozen <- frozen[frozen$A_id != frozen$B_id, ]
+# Fabricated ordered outcomes, used only to demonstrate the interface.
+frozen$Y <- as.integer(frozen$A_id < frozen$B_id)
+frozen <- validate_adaptive_replay(frozen, item_ids = replay_ids)
+replay_judge <- make_adaptive_judge_replay(frozen, item_ids = replay_ids)
+replay_state <- adaptive_rank_start(replay_ids, seed = 17L,
+  adaptive_config = list(pairing_strategy = "trueskill_p50", dup_max_obs_relaxed = 2L))
+replay_state <- adaptive_rank_run_live(replay_state, replay_judge,
+  n_steps = 5L, progress = "none")
+adaptive_step_log(replay_state)[, c("A_id", "B_id", "Y", "pairing_strategy")]
+#> # A tibble: 5 × 4
+#>   A_id  B_id      Y pairing_strategy
+#>   <chr> <chr> <int> <chr>           
+#> 1 a     b         1 trueskill_p50   
+#> 2 d     a         0 trueskill_p50   
+#> 3 c     d         1 trueskill_p50   
+#> 4 b     d         1 trueskill_p50   
+#> 5 a     c         1 trueskill_p50
+```
+
+Keep `strict_use = TRUE` and `complete = TRUE` for independent-evidence
+replay. Set `adaptive_config$dup_max_obs_relaxed = 2L` so hybrid cannot
+request a third observation from the two available orientations. Its
+general default remains 3; direct strategies already cap at two.
+Presentation balancing and repeat reversal remain active.
+
+Create a fresh judge for each independent replicate. Strict use tracks
+successful lookups in the judge closure and checks the supplied state’s
+committed history. The judge closure and matrix are not saved in the
+session: retain the matrix and provenance separately. To resume,
+recreate a judge from the identical matrix and pass the loaded state to
+[`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md).
+Missing or reused directed judgments raise errors instead of supplying
+new evidence.
+
 ## Persistence, interruption, and resume
 
 Supplying `session_dir` makes the wrapper persist the initial state,
@@ -294,7 +387,8 @@ assuming the in-memory state was written.
 ``` r
 
 session_metadata <- validate_session_dir(session_dir)
-session_metadata[c("schema_version", "package_version", "n_items")]
+session_metadata[c("schema_version", "package_version", "n_items",
+  "warm_start_mode", "pairing_strategy")]
 
 loaded_state <- load_adaptive_session(session_dir)
 summarize_adaptive(loaded_state)
@@ -324,6 +418,14 @@ aborts instead of silently creating a new run. The input IDs and their
 order must exactly match the saved session. Set `resume = FALSE` only
 when you deliberately want a new state, and choose a new or empty
 session directory to avoid mixing studies.
+
+Resume preserves mode, strategy, predictive prior/provenance, current
+TrueSkill state, committed history, bootstrap progress, and round state.
+Omit all predictive warm-start arguments; omit strategy or supply the
+saved strategy. A legacy session without mode becomes `cold` if no prior
+is saved and `btl_only` if one is saved; missing strategy becomes
+`hybrid`. Migration never warms TrueSkill retroactively. Within-set
+continuation also reuses saved `btl_config` when it is omitted.
 
 The wrapper handles ordinary saving. For an explicit snapshot outside a
 wrapper call, use the lower-level persistence helpers:
@@ -577,12 +679,15 @@ requires the same IDs in the same order as the saved state.
 `llm_status_code`, and `llm_error_message` in
 [`adaptive_step_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_step_log.md).
 
-**The run reports candidate starvation.** The selector applies its
-implemented within-stage fallbacks before declaring a stage starved. A
-terminal `"candidate_starvation"` means no eligible pair remained after
-those fallbacks. This can occur with very small or heavily repeated
-designs; inspect `fallback_path`, `starvation_reason`, and committed
-pair counts rather than treating it as Bayesian convergence.
+**The run reports candidate starvation.** The hybrid selector applies
+its implemented within-stage fallbacks before declaring a stage starved.
+A terminal `"candidate_starvation"` means no eligible pair remained
+after those fallbacks. This can occur with very small or heavily
+repeated designs; inspect `fallback_path`, `starvation_reason`, and
+committed pair counts rather than treating it as Bayesian convergence.
+Direct strategies instead stop when the chosen minimum-degree focal item
+has no legal partner; they do not search other focal items or invoke
+hybrid fallbacks.
 
 **There is no item summary yet.** `out$items` is empty until the first
 successful BTL refit. Under the default cadence, at least 20 new
@@ -607,9 +712,16 @@ model input, precomputed `warm_start_features` avoids Python; otherwise
 `warm_start_python` selects an existing extraction environment.
 Prediction runs once and the session stores numeric priors. On resume,
 omit all warm-start arguments: the saved prior remains usable after the
-original model is removed. Predictive priors affect Bayesian estimation,
-while the initial pairing schedule and selection algorithm retain their
-existing behavior. See [Guide: Adaptive Warm
+original model is removed. `warm_start_mode` selects `cold`, `btl_only`,
+`trueskill_only`, or `both`. Omitted/`NULL` mode defaults to `cold`
+without predictive input and `btl_only` with it. Request `both`
+explicitly to initialize both models. TrueSkill-warm modes use
+`mu_i = 25 + (25/3) * prior_mean_i`, aligned by item ID with fixed
+multiplier 1 and unchanged sigma. BTL prior SD and ensemble diagnostics
+do not control sigma. Explicit `cold` with predictive input, or a
+non-cold mode without input, errors. All modes retain the same seeded
+connected shuffled bootstrap; subsequent TrueSkill-based selections can
+differ. See [Guide: Adaptive Warm
 Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.md)
 for training and prior conversion.
 

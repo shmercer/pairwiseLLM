@@ -22,7 +22,7 @@
 
     <a class="navbar-brand me-2" href="index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -282,7 +282,7 @@ pairwiseLLM banner
 <li>
 <a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html">Guide: Adaptive Pairing</a> — run, inspect, save, and resume an adaptive within-set ranking.</li>
 <li>
-<a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a> — train, store, ensemble, and use predictive BTL priors.</li>
+<a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a> — train, store, ensemble, and choose predictive BTL/TrueSkill initialization.</li>
 <li>
 <a href="https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a> — understand the within-set selection, refitting, and stopping design.</li>
 <li>
@@ -306,7 +306,9 @@ pairwiseLLM banner
 <div class="section level2">
 <h2 id="adaptive-pairing--ranking-overview">Adaptive pairing &amp; ranking (overview)<a class="anchor" aria-label="anchor" href="#adaptive-pairing--ranking-overview"></a>
 </h2>
-<p><code>pairwiseLLM</code> includes an adaptive pairing workflow for ranking writing samples using pairwise comparisons. Instead of allocating comparisons uniformly at random, the within-set controller uses current rank, uncertainty, coverage, and degree information to choose each next pair.</p>
+<p><code>pairwiseLLM</code> includes an adaptive pairing workflow for ranking writing samples using pairwise comparisons. After a connected shuffled bootstrap, <code>adaptive_config$pairing_strategy</code> chooses <code>hybrid</code> (default), <code>random</code>, <code>trueskill_p50</code>, or <code>trueskill_pollitt</code>. Direct strategies currently require ordinary within-set runs. The Pollitt-inspired strategy targets TrueSkill win probabilities near 1/3 or 2/3.</p>
+<p>Predictive initialization supports <code>cold</code>, <code>btl_only</code>, <code>trueskill_only</code>, and <code>both</code>. Omitted mode defaults to <code>cold</code> without predictive input and <code>btl_only</code> with it, preserving historical callers. Request <code>warm_start_mode = "both"</code> explicitly to initialize both models. TrueSkill locations use <code>25 + (25/3) * prior_mean</code> with unchanged sigma. Every mode retains the same seeded <code>N - 1</code> connected bootstrap. Saved mode, strategy, and current model state remain authoritative on resume.</p>
+<p>For offline directed-outcome replay, use <code><a href="reference/validate_adaptive_replay.html">validate_adaptive_replay()</a></code> and <code><a href="reference/make_adaptive_judge_replay.html">make_adaptive_judge_replay()</a></code> with <code>adaptive_config$dup_max_obs_relaxed = 2L</code>. Replay returns the exact stored orientation and rejects reuse by default.</p>
 <p>To get started, see:</p>
 <ul>
 <li><a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
@@ -849,14 +851,14 @@ pairwiseLLM banner
 </h3>
 <p>When using adaptive pairing (<code><a href="reference/adaptive_rank.html">adaptive_rank()</a></code>), the same Bayesian BTL models are fit intermittently during the run:</p>
 <ul>
-<li><p>Pair selection is guided by the fast TrueSkill model.</p></li>
+<li><p>Within-set/Phase-A hybrid ranks, strata, rolling anchors, pair probabilities, and the long-link gate use TrueSkill throughout. Ordinary within-set runs also offer direct <code>random</code>, <code>trueskill_p50</code>, and <code>trueskill_pollitt</code> strategies.</p></li>
 <li>
 <p>Bayesian BTL refits provide:</p>
 <ul>
 <li>uncertainty estimates,</li>
 <li>diagnostics,</li>
 <li>stopping decisions,</li>
-<li>and late-stage adaptation signals.</li>
+<li>EAP reliability and the existing <code>global_identified</code> signal, which can change later hybrid tapering and routing. Phase B linking is unchanged.</li>
 </ul>
 </li>
 </ul>
@@ -981,7 +983,7 @@ Google Scholar: <a href="https://scholar.google.ca/citations?user=YJg4svsAAAAJ&a
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
-<p>Mercer, S. H. (2026). <em>pairwiseLLM: Pairwise writing quality comparisons with large language models</em> (Version 1.3.2) [R package; Computer software]. <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
+<p>Mercer, S. H. (2026). <em>pairwiseLLM: Pairwise writing quality comparisons with large language models</em> (Version 1.4.0) [R package; Computer software]. <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
 </blockquote>
 </div>
 </div>

@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -79,7 +79,9 @@
     <p>This is a thin wrapper around <code><a href="load_adaptive_session.html">load_adaptive_session()</a></code> and performs schema
 and log-shape checks during load. Returned state preserves canonical
 <code>step_log</code>, <code>round_log</code>, and <code>item_log</code> contents used for
-adaptive auditability.</p>
+adaptive auditability. The saved predictive mode, prior, pairing strategy,
+current TrueSkill state, and connected shuffled bootstrap queue are authoritative.
+Resume does not reload a predictive model or regenerate its predictions.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -90,7 +92,9 @@ adaptive auditability.</p>
 <code><a href="adaptive_rank_run_live.html">adaptive_rank_run_live()</a></code>,
 <code><a href="adaptive_rank_start.html">adaptive_rank_start()</a></code>,
 <code><a href="make_adaptive_judge_llm.html">make_adaptive_judge_llm()</a></code>,
-<code><a href="summarize_adaptive.html">summarize_adaptive()</a></code></p></div>
+<code><a href="make_adaptive_judge_replay.html">make_adaptive_judge_replay()</a></code>,
+<code><a href="summarize_adaptive.html">summarize_adaptive()</a></code>,
+<code><a href="validate_adaptive_replay.html">validate_adaptive_replay()</a></code></p></div>
     </div>
 
     <div class="section level2">

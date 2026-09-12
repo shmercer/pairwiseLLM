@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -102,13 +102,17 @@ to <code>default_btl_fit_fn()</code> when a refit is due.</p></dd>
 <dt id="arg-adaptive-config">adaptive_config<a class="anchor" aria-label="anchor" href="#arg-adaptive-config"></a></dt>
 <dd><p>Optional named list overriding adaptive controller
 behavior. Unknown fields and invalid values abort with an actionable error.
+A resumed session retains its saved pairing strategy: omit <code>pairing_strategy</code>
+or supply the same value. Other supported controller overrides remain available.
 See <code><a href="adaptive_rank.html">adaptive_rank()</a></code> for the full list of supported keys, detailed
 semantics, and defaults.</p></dd>
 
 
 <dt id="arg-btl-config">btl_config<a class="anchor" aria-label="anchor" href="#arg-btl-config"></a></dt>
 <dd><p>Optional named list overriding BTL refit cadence, stopping
-thresholds, and selected round-log diagnostics. Supported fields:</p><dl><dt><code>refit_pairs_target</code></dt>
+thresholds, and selected round-log diagnostics. Within-set continuation and
+resume reuse the saved configuration when this argument is omitted; an
+explicit list resolves against the defaults. Supported fields:</p><dl><dt><code>refit_pairs_target</code></dt>
 <dd><p>Minimum new committed comparisons required
 before the next BTL refit. Default is <code>ceiling(N / 2)</code> clamped to
 <code>[20L, 5000L]</code> (Phase A linking uses the active set size).</p></dd>
@@ -227,11 +231,12 @@ appended <code>round_log</code> and <code>item_log</code> entries.</p>
 applies transactional updates if and only if the judge response is valid.
 Invalid responses produce a logged step with
 <code>pair_id = NA</code> and must not update committed-comparison state.</p>
-<p>Within-set routing is TrueSkill-based with utility
+<p>Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling anchors,
+pair probabilities, and utility
 $$U_0 = p_{ij}(1 - p_{ij})$$.
-After an accepted posterior refit is available, the long-link gate uses the
-BTL posterior win probability for candidate eligibility; before that it
-falls back deterministically to TrueSkill.
+The long-link probability gate uses TrueSkill throughout within-set/Phase-A
+hybrid selection. Direct strategies apply their partner targets after the same
+connected shuffled bootstrap and currently require ordinary within-set mode.
 In linking Phase B, anchor/strata routing uses linking-global scores built
 from Phase A summaries and the accepted anchored-joint state. Linking Phase B
 routing ranks eligible
@@ -243,12 +248,12 @@ Phase B uses a hard-lock hub-fixed fit and a deterministic accepted state
 before the first linking refit.
 Exploration/exploitation routing and fallback handling are recorded in
 <code>step_log</code>.</p>
-<p>Round scheduling uses stage-specific admissibility:</p><ul><li><p>rolling-anchor links compare one anchor and one non-anchor endpoint;</p></li>
+<p>Hybrid round scheduling uses stage-specific admissibility:</p><ul><li><p>rolling-anchor links compare one anchor and one non-anchor endpoint;</p></li>
 <li><p>long/mid links exclude anchor endpoints and enforce stratum-distance
 bounds;</p></li>
 <li><p>local-link routing admits same-stratum pairs and anchor-involving
 pairs within local stage bounds.</p></li>
-</ul><p>Exposure and repeat handling are soft, stage-local constraints:
+</ul><p>Hybrid exposure and repeat handling are soft, stage-local constraints:
 under-represented exploration uses degree set <code>deg &lt;= D_min + 1</code>, while
 repeat-pressure gating uses bottom-quantile <code>recent_deg</code> (default quantile
 <code>0.25</code>) and per-endpoint repeat-slot accounting against
@@ -256,13 +261,15 @@ repeat-pressure gating uses bottom-quantile <code>recent_deg</code> (default qua
 <p>Top-band defaults for stratum construction are
 <code>top_band_pct = 0.10</code> and <code>top_band_bins = 5</code>, with top-band size
 <code>ceiling(top_band_pct * N)</code>.</p>
-<p>Bayesian BTL refits are triggered on step-based cadence and evaluated with
+<p>Bayesian BTL refits are triggered by committed comparisons and evaluated with
 diagnostics gates (including ESS thresholds), reliability, and lagged
 stability criteria. Refit-level outcomes are
 appended to <code>round_log</code>; per-item posterior summaries are appended to
 <code>item_log</code>. Controller behavior can change after refits via
 identifiability-gated settings in <code>adaptive_config</code>; those controls
-affect pair routing and quotas, while BTL remains inference-only.
+affect hybrid pair routing and quotas through the existing <code>global_identified</code>
+signal. BTL supplies item estimates, posterior uncertainty, EAP reliability,
+diagnostics, and stopping. Phase B selection and prior rules are unchanged.
 If <code>adaptive_config$max_pairs_after_stop &gt; 0</code>, the run records a stop
 boundary at the first refit with <code>stop_decision = TRUE</code> and allows at
 most that many additional committed comparisons before deterministic
@@ -278,7 +285,9 @@ termination. Round logs record
 <code><a href="adaptive_rank_resume.html">adaptive_rank_resume()</a></code>,
 <code><a href="adaptive_rank_start.html">adaptive_rank_start()</a></code>,
 <code><a href="make_adaptive_judge_llm.html">make_adaptive_judge_llm()</a></code>,
-<code><a href="summarize_adaptive.html">summarize_adaptive()</a></code></p></div>
+<code><a href="make_adaptive_judge_replay.html">make_adaptive_judge_replay()</a></code>,
+<code><a href="summarize_adaptive.html">summarize_adaptive()</a></code>,
+<code><a href="validate_adaptive_replay.html">validate_adaptive_replay()</a></code></p></div>
     </div>
 
     <div class="section level2">
@@ -360,22 +369,22 @@ termination. Round logs record
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       8               6               6        0 FALSE             </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 1 more variable: last_stop_reason &lt;chr&gt;</span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">step_view</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 6 × 97</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 6 × 99</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-10 <span style="color: #949494;">18:18:09</span>       1     1     5 S01   S05       5     1 S05  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-10 <span style="color: #949494;">18:18:09</span>       2     5     8 S05   S08       8     5 S08  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-10 <span style="color: #949494;">18:18:09</span>       3     8     6 S08   S06       6     8 S06  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-10 <span style="color: #949494;">18:18:09</span>       4     6     2 S06   S02       2     6 S02  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">5</span>       5 2026-09-10 <span style="color: #949494;">18:18:09</span>       5     2     4 S02   S04       4     2 S04  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">6</span>       6 2026-09-10 <span style="color: #949494;">18:18:09</span>       6     4     3 S04   S03       3     4 S03  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 87 more variables: B_id &lt;chr&gt;, unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;,</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-12 <span style="color: #949494;">03:04:22</span>       1     1     5 S01   S05       5     1 S05  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-12 <span style="color: #949494;">03:04:22</span>       2     5     8 S05   S08       8     5 S08  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-12 <span style="color: #949494;">03:04:22</span>       3     8     6 S08   S06       6     8 S06  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-12 <span style="color: #949494;">03:04:22</span>       4     6     2 S06   S02       2     6 S02  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">5</span>       5 2026-09-12 <span style="color: #949494;">03:04:22</span>       5     2     4 S02   S04       4     2 S04  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">6</span>       6 2026-09-12 <span style="color: #949494;">03:04:22</span>       6     4     3 S04   S03       3     4 S03  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 89 more variables: B_id &lt;chr&gt;, unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   Y &lt;int&gt;, status &lt;chr&gt;, judge_backend &lt;chr&gt;, judge_model &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   judge_endpoint &lt;chr&gt;, judge_valid &lt;lgl&gt;, judge_invalid_reason &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   llm_status_code &lt;int&gt;, llm_error_message &lt;chr&gt;, llm_custom_id &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   prompt_tokens &lt;dbl&gt;, completion_tokens &lt;dbl&gt;, total_tokens &lt;dbl&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   raw_response_json &lt;chr&gt;, round_id &lt;int&gt;, round_stage &lt;chr&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   pair_type &lt;chr&gt;, used_in_round_i &lt;int&gt;, used_in_round_j &lt;int&gt;, …</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   pair_type &lt;chr&gt;, pairing_strategy &lt;chr&gt;, target_distance &lt;dbl&gt;, …</span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">logs</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "step_log"       "round_log"      "item_log"       "link_stage_log"</span>
 <span class="r-in"><span></span></span>

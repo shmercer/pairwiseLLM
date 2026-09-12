@@ -11,7 +11,7 @@ returns state plus summary outputs."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -96,7 +96,8 @@ returns state plus summary outputs.</p>
 <span>  warm_start_prior <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  warm_start_features <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  warm_start_python <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  warm_start_prior_sd <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  warm_start_prior_sd <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  warm_start_mode <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -189,7 +190,36 @@ criteria. Attempted invalid steps also count toward this limit.</p></dd>
 <dt id="arg-adaptive-config">adaptive_config<a class="anchor" aria-label="anchor" href="#arg-adaptive-config"></a></dt>
 <dd><p>Optional named list of adaptive controller overrides.
 Unknown fields and invalid values abort with actionable errors.</p>
-<p>Supported keys (with defaults) include:</p><dl><dt><code>global_identified_reliability_min</code></dt>
+<p>Supported keys (with defaults) include:</p><dl><dt><code>pairing_strategy</code></dt>
+<dd><p>Post-bootstrap strategy: <code>hybrid</code> (default), <code>random</code>,
+<code>trueskill_p50</code>, or <code>trueskill_pollitt</code>. Direct strategies currently require
+<code>run_mode = "within_set"</code>. All strategies retain the same connected shuffled
+bootstrap. Direct strategies choose a focal item uniformly from sorted IDs
+at minimum committed degree, using the run seed and committed count; invalid
+judgments retry the same draw. Among legal partners, <code>random</code> chooses uniformly,
+<code>trueskill_p50</code> minimizes distance to TrueSkill probability 0.50, and
+<code>trueskill_pollitt</code> minimizes distance to 1/3 or 2/3, with item-ID tie breaking.
+This is a Pollitt-inspired strategy using TrueSkill probabilities;
+the earlier article used BTL probabilities, so this is not an exact replication.
+Direct strategies allow at most two observations per unordered pair, with
+canonical presentation balancing and reversal on repeat. They stop on focal
+partner exhaustion and do not use hybrid stage quotas or coverage overrides.
+Step logs identify <code>direct_pairing</code>, <code>pairing_strategy</code>, and <code>target_distance</code>;
+<code>i_id</code> is the focal item and <code>p_ij</code> is the pre-judgment TrueSkill probability
+for presented A over B. Target distance is symmetric under reversal and is
+NA for random pairing. BTL estimation, refit cadence, and stopping remain
+unchanged. On resume, omit this field or supply the saved strategy; changing
+strategy requires a new session.</p></dd>
+
+<dt><code>dup_max_obs_relaxed</code></dt>
+<dd><p>Hybrid's maximum observations per unordered pair
+under the relaxed near-tie fallback: <code>3L</code> (historical default) or <code>2L</code>.
+Use <code>2L</code> with <code><a href="make_adaptive_judge_replay.html">make_adaptive_judge_replay()</a></code> to cap study evidence at the
+two collected orientations. The ordinary ceiling remains two; direct
+strategies already cap at two. Phase B retains its existing ceiling.
+This setting persists with the controller and defaults to three for legacy sessions.</p></dd>
+
+<dt><code>global_identified_reliability_min</code></dt>
 <dd><p>Global EAP reliability threshold
 used to mark the run as globally identified after a refit. Default is
 <code>0.80</code>.</p></dd>
@@ -200,16 +230,13 @@ between the TrueSkill rank proxy and the BTL posterior mean ranks used
 to mark the run as globally identified after a refit. Default is <code>0.90</code>.</p></dd>
 
 <dt><code>p_long_low</code></dt>
-<dd><p>Lower bound for long-link posterior win probability
-gating after global identifiability when an accepted posterior refit is
-available. Before posterior availability, the gate falls back
-deterministically to TrueSkill. Default is <code>0.10</code>.</p></dd>
+<dd><p>Lower bound for long-link win probability gating after
+global identification. Within-set/Phase-A hybrid uses TrueSkill throughout.
+Phase B retains its posterior gate with TrueSkill fallback. Default is <code>0.10</code>.</p></dd>
 
 <dt><code>p_long_high</code></dt>
-<dd><p>Upper bound for long-link posterior win probability
-gating after global identifiability when an accepted posterior refit is
-available. Before posterior availability, the gate falls back
-deterministically to TrueSkill. Default is <code>0.90</code>.</p></dd>
+<dd><p>Upper bound for the same long-link probability gate.
+Default is <code>0.90</code>; bounds are inclusive.</p></dd>
 
 <dt><code>long_taper_mult</code></dt>
 <dd><p>Multiplier controlling long-link quota tapering
@@ -424,7 +451,8 @@ and aborts early for incompatible <code>run_mode</code>/set structure combinatio
 <dt id="arg-btl-config">btl_config<a class="anchor" aria-label="anchor" href="#arg-btl-config"></a></dt>
 <dd><p>Optional named list passed to <code><a href="adaptive_rank_run_live.html">adaptive_rank_run_live()</a></code>
 to control BTL refit cadence, stopping diagnostics, and selected
-round-log diagnostics. Supported fields:</p><dl><dt><code>refit_pairs_target</code></dt>
+round-log diagnostics. Within-set resume reuses the saved configuration when
+omitted; an explicit list resolves against the defaults. Supported fields:</p><dl><dt><code>refit_pairs_target</code></dt>
 <dd><p>Minimum new committed comparisons required
 before the next BTL refit. Default is <code>ceiling(N / 2)</code> clamped to
 <code>[20L, 5000L]</code>. In linking Phase A, <code>N</code> is the active Phase A set size.
@@ -505,6 +533,10 @@ reuse the persisted cadence unless overridden.</p></dd>
 <dt id="arg-resume">resume<a class="anchor" aria-label="anchor" href="#arg-resume"></a></dt>
 <dd><p>Logical; when <code>TRUE</code> and <code>session_dir</code> contains a valid session,
 resume from disk; otherwise initialize a new state.
+Saved predictive mode, prior, TrueSkill state, bootstrap queue, and pairing
+strategy are retained without loading a model or regenerating predictions.
+Omit all predictive initialization arguments on resume. Other supported
+controller overrides remain available.
 Default is <code>TRUE</code>.</p></dd>
 
 
@@ -570,7 +602,18 @@ otherwise use item texts. Precomputed prediction needs neither Python nor glmnet
 
 <dt id="arg-warm-start-prior-sd">warm_start_prior_sd<a class="anchor" aria-label="anchor" href="#arg-warm-start-prior-sd"></a></dt>
 <dd><p>Optional model-derived raw theta prior SD override;
-scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.</p></dd>
+scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
+Not accepted with <code>trueskill_only</code>; never controls TrueSkill sigma.</p></dd>
+
+
+<dt id="arg-warm-start-mode">warm_start_mode<a class="anchor" aria-label="anchor" href="#arg-warm-start-mode"></a></dt>
+<dd><p>Predictive destination: <code>cold</code> (neither model), <code>btl_only</code>
+(BTL prior), <code>trueskill_only</code> (TrueSkill locations), or <code>both</code> (both models).
+Omitted/NULL mode defaults to <code>btl_only</code> with predictive input, otherwise <code>cold</code>.
+Request <code>both</code> explicitly to initialize both models. In TrueSkill-warm modes,
+exact item-ID alignment precedes <code>mu = mu0 + sigma0 * prior_mean</code>, with
+<code>mu0 = 25</code>, <code>sigma0 = 25/3</code>, fixed multiplier 1, and unchanged sigma.
+Explicit <code>cold</code> with predictive input, or a non-cold mode without it, errors.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -638,8 +681,10 @@ hub and global-shared judge parameters. Every wrapper call returns canonical
 <code>phase_a</code> outputs that can be fed back into a later linking run through
 <code>adaptive_config$phase_a_artifacts</code>.</p>
 <p>Selection semantics:
-pair selection is TrueSkill-driven in one-pair transactional steps.
-Rolling anchors are refreshed from current score proxies and anchor-link
+selection uses one-pair transactional steps after the connected shuffled bootstrap.
+In the default hybrid strategy, TrueSkill supplies live ranks, strata, pair
+probabilities, base utility, and rolling anchors throughout within-set and
+Phase-A work. Rolling anchors use current TrueSkill ranks, and anchor-link
 routing compares exactly one anchor endpoint with one non-anchor endpoint.
 Long/mid-link routing excludes anchor-anchor and anchor-non-anchor pairs,
 while local-link routing admits same-stratum pairs and anchor-involving
@@ -647,24 +692,37 @@ pairs according to stage bounds.</p>
 <p>Wrapper-visible defaults include top-band refinement
 (<code>top_band_pct = 0.10</code>, <code>top_band_bins = 5</code>) with top-band size computed as
 <code>ceiling(top_band_pct * N)</code>.</p>
-<p>Exposure and repeat routing:
+<p>Hybrid exposure and repeat routing:
 under-represented routing is degree-based (<code>deg &lt;= D_min + 1</code>), while
 repeat-pressure gating is based on recent exposure (bottom-quantile
 <code>recent_deg</code> with quantile default <code>0.25</code>) and per-endpoint repeat slot
 accounting.</p>
 <p>Inference separation:
-BTL refits are used for posterior inference, diagnostics, stop logic, and
-the long-link posterior gate after an accepted refit is available.
-They are not used to choose the next pair.</p>
+BTL refits supply item estimates, posterior uncertainty, EAP reliability,
+diagnostics, stopping, and the existing <code>global_identified</code> signal. That signal
+can change later hybrid tapering and routing, so selection is not wholly
+independent of BTL. The within-set/Phase-A long-link gate uses TrueSkill
+probabilities throughout. Phase B selection and prior rules are unchanged.</p>
 <p>Resume behavior:
 when <code>resume = TRUE</code> and <code>session_dir</code> already contains adaptive artifacts,
 failed session loads abort with an actionable error instead of starting a
 fresh run silently.</p>
-<p>Predictive priors affect ordinary/within-set BTL estimation. Transform,
-anchored-joint, and pooled judge refits keep their existing prior rules; predictive
-evidence is not injected again. Initial pairing queues and selection rules retain
-their existing meaning. Custom fit functions must consume <code>state$predictive_prior</code>
-explicitly. Resume uses saved predictions; omit all warm-start arguments on resume.</p>
+<p>Predictive initialization is separate from observed connectivity: every mode
+retains the same seeded connected shuffled bootstrap of N - 1 valid comparisons,
+with common presentation balancing and invalid-result retries. Predictive
+locations can affect later TrueSkill-based selection; they do not replace the
+initial observed spanning path. BTL prior SD and ensemble diagnostics never
+determine TrueSkill sigma. No historical training-score units are restored.</p>
+<p>Predictive BTL priors apply only in <code>btl_only</code> and <code>both</code>, including run-required
+linking Phase A. TrueSkill initialization applies in <code>trueskill_only</code> and <code>both</code>.
+Imported Phase-A artifacts retain their own generation identity and are not
+rerun because predictive input exists. Transform, anchored-joint, and pooled
+judge refits keep their existing prior rules; predictive evidence is not
+injected into Phase B priors, D-optimal selection, or probes.
+Custom BTL fit functions should consume <code>state$predictive_prior</code> only when
+<code>state$meta$warm_start_mode</code> is <code>btl_only</code> or <code>both</code>; its presence alone does
+not imply BTL warming. Resume preserves saved predictions, current TrueSkill
+state, mode, strategy, and bootstrap progress; omit all warm-start arguments.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -676,7 +734,9 @@ explicitly. Resume uses saved predictions; omit all warm-start arguments on resu
 <code><a href="adaptive_rank_run_live.html">adaptive_rank_run_live()</a></code>,
 <code><a href="adaptive_rank_start.html">adaptive_rank_start()</a></code>,
 <code><a href="make_adaptive_judge_llm.html">make_adaptive_judge_llm()</a></code>,
-<code><a href="summarize_adaptive.html">summarize_adaptive()</a></code></p></div>
+<code><a href="make_adaptive_judge_replay.html">make_adaptive_judge_replay()</a></code>,
+<code><a href="summarize_adaptive.html">summarize_adaptive()</a></code>,
+<code><a href="validate_adaptive_replay.html">validate_adaptive_replay()</a></code></p></div>
     </div>
 
     <div class="section level2">
@@ -703,20 +763,20 @@ explicitly. Resume uses saved predictions; omit all warm-start arguments on resu
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       8               4               4        0 FALSE             </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 1 more variable: last_stop_reason &lt;chr&gt;</span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">out</span><span class="op">$</span><span class="va">logs</span><span class="op">$</span><span class="va">step_log</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 4 × 97</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 4 × 99</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-10 <span style="color: #949494;">18:18:07</span>       1     1     4 S01   S04       4     1 S04  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-10 <span style="color: #949494;">18:18:07</span>       2     4     8 S04   S08       8     4 S08  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-10 <span style="color: #949494;">18:18:08</span>       3     8     2 S08   S02       2     8 S02  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-10 <span style="color: #949494;">18:18:08</span>       4     2     6 S02   S06       6     2 S06  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 87 more variables: B_id &lt;chr&gt;, unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;,</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-12 <span style="color: #949494;">03:04:21</span>       1     1     4 S01   S04       4     1 S04  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-12 <span style="color: #949494;">03:04:21</span>       2     4     8 S04   S08       8     4 S08  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-12 <span style="color: #949494;">03:04:21</span>       3     8     2 S08   S02       2     8 S02  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-12 <span style="color: #949494;">03:04:21</span>       4     2     6 S02   S06       6     2 S06  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 89 more variables: B_id &lt;chr&gt;, unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   Y &lt;int&gt;, status &lt;chr&gt;, judge_backend &lt;chr&gt;, judge_model &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   judge_endpoint &lt;chr&gt;, judge_valid &lt;lgl&gt;, judge_invalid_reason &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   llm_status_code &lt;int&gt;, llm_error_message &lt;chr&gt;, llm_custom_id &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   prompt_tokens &lt;dbl&gt;, completion_tokens &lt;dbl&gt;, total_tokens &lt;dbl&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   raw_response_json &lt;chr&gt;, round_id &lt;int&gt;, round_stage &lt;chr&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   pair_type &lt;chr&gt;, used_in_round_i &lt;int&gt;, used_in_round_j &lt;int&gt;, …</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   pair_type &lt;chr&gt;, pairing_strategy &lt;chr&gt;, target_distance &lt;dbl&gt;, …</span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
 <span class="r-in"><span><span class="co"># Live run with OpenAI gpt-5.1 + lower-cost Flex processing.</span></span></span>

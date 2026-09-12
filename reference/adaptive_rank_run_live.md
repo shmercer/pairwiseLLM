@@ -51,14 +51,19 @@ adaptive_rank_run_live(
 - adaptive_config:
 
   Optional named list overriding adaptive controller behavior. Unknown
-  fields and invalid values abort with an actionable error. See
+  fields and invalid values abort with an actionable error. A resumed
+  session retains its saved pairing strategy: omit `pairing_strategy` or
+  supply the same value. Other supported controller overrides remain
+  available. See
   [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
   for the full list of supported keys, detailed semantics, and defaults.
 
 - btl_config:
 
   Optional named list overriding BTL refit cadence, stopping thresholds,
-  and selected round-log diagnostics. Supported fields:
+  and selected round-log diagnostics. Within-set continuation and resume
+  reuse the saved configuration when this argument is omitted; an
+  explicit list resolves against the defaults. Supported fields:
 
   `refit_pairs_target`
 
@@ -184,22 +189,24 @@ then applies transactional updates if and only if the judge response is
 valid. Invalid responses produce a logged step with `pair_id = NA` and
 must not update committed-comparison state.
 
-Within-set routing is TrueSkill-based with utility \$\$U_0 = p\_{ij}(1 -
-p\_{ij})\$\$. After an accepted posterior refit is available, the
-long-link gate uses the BTL posterior win probability for candidate
-eligibility; before that it falls back deterministically to TrueSkill.
-In linking Phase B, anchor/strata routing uses linking-global scores
-built from Phase A summaries and the accepted anchored-joint state.
-Linking Phase B routing ranks eligible cross-set candidates by
-ridge-stabilized D-optimal log-det information gain on the active
-linking parameter block using order-averaged Model D probabilities.
-Linking inference parameters remain inference-only (diagnostics and
-stopping) and are not direct pair-selection objectives. Phase B uses a
-hard-lock hub-fixed fit and a deterministic accepted state before the
-first linking refit. Exploration/exploitation routing and fallback
-handling are recorded in `step_log`.
+Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling
+anchors, pair probabilities, and utility \$\$U_0 = p\_{ij}(1 -
+p\_{ij})\$\$. The long-link probability gate uses TrueSkill throughout
+within-set/Phase-A hybrid selection. Direct strategies apply their
+partner targets after the same connected shuffled bootstrap and
+currently require ordinary within-set mode. In linking Phase B,
+anchor/strata routing uses linking-global scores built from Phase A
+summaries and the accepted anchored-joint state. Linking Phase B routing
+ranks eligible cross-set candidates by ridge-stabilized D-optimal
+log-det information gain on the active linking parameter block using
+order-averaged Model D probabilities. Linking inference parameters
+remain inference-only (diagnostics and stopping) and are not direct
+pair-selection objectives. Phase B uses a hard-lock hub-fixed fit and a
+deterministic accepted state before the first linking refit.
+Exploration/exploitation routing and fallback handling are recorded in
+`step_log`.
 
-Round scheduling uses stage-specific admissibility:
+Hybrid round scheduling uses stage-specific admissibility:
 
 - rolling-anchor links compare one anchor and one non-anchor endpoint;
 
@@ -209,7 +216,7 @@ Round scheduling uses stage-specific admissibility:
 - local-link routing admits same-stratum pairs and anchor-involving
   pairs within local stage bounds.
 
-Exposure and repeat handling are soft, stage-local constraints:
+Hybrid exposure and repeat handling are soft, stage-local constraints:
 under-represented exploration uses degree set `deg <= D_min + 1`, while
 repeat-pressure gating uses bottom-quantile `recent_deg` (default
 quantile `0.25`) and per-endpoint repeat-slot accounting against
@@ -218,13 +225,15 @@ quantile `0.25`) and per-endpoint repeat-slot accounting against
 Top-band defaults for stratum construction are `top_band_pct = 0.10` and
 `top_band_bins = 5`, with top-band size `ceiling(top_band_pct * N)`.
 
-Bayesian BTL refits are triggered on step-based cadence and evaluated
+Bayesian BTL refits are triggered by committed comparisons and evaluated
 with diagnostics gates (including ESS thresholds), reliability, and
 lagged stability criteria. Refit-level outcomes are appended to
 `round_log`; per-item posterior summaries are appended to `item_log`.
 Controller behavior can change after refits via identifiability-gated
-settings in `adaptive_config`; those controls affect pair routing and
-quotas, while BTL remains inference-only. If
+settings in `adaptive_config`; those controls affect hybrid pair routing
+and quotas through the existing `global_identified` signal. BTL supplies
+item estimates, posterior uncertainty, EAP reliability, diagnostics, and
+stopping. Phase B selection and prior rules are unchanged. If
 `adaptive_config$max_pairs_after_stop > 0`, the run records a stop
 boundary at the first refit with `stop_decision = TRUE` and allows at
 most that many additional committed comparisons before deterministic
@@ -245,7 +254,9 @@ Other adaptive ranking:
 [`adaptive_rank_resume()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_resume.md),
 [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md),
 [`make_adaptive_judge_llm()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_llm.md),
-[`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md)
+[`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md),
+[`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md),
+[`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)
 
 ## Examples
 
@@ -327,22 +338,22 @@ run_summary
 #> 1       8               6               6        0 FALSE             
 #> # ℹ 1 more variable: last_stop_reason <chr>
 head(step_view)
-#> # A tibble: 6 × 97
+#> # A tibble: 6 × 99
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-09-10 18:18:09       1     1     5 S01   S05       5     1 S05  
-#> 2       2 2026-09-10 18:18:09       2     5     8 S05   S08       8     5 S08  
-#> 3       3 2026-09-10 18:18:09       3     8     6 S08   S06       6     8 S06  
-#> 4       4 2026-09-10 18:18:09       4     6     2 S06   S02       2     6 S02  
-#> 5       5 2026-09-10 18:18:09       5     2     4 S02   S04       4     2 S04  
-#> 6       6 2026-09-10 18:18:09       6     4     3 S04   S03       3     4 S03  
-#> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
+#> 1       1 2026-09-12 03:04:22       1     1     5 S01   S05       5     1 S05  
+#> 2       2 2026-09-12 03:04:22       2     5     8 S05   S08       8     5 S08  
+#> 3       3 2026-09-12 03:04:22       3     8     6 S08   S06       6     8 S06  
+#> 4       4 2026-09-12 03:04:22       4     6     2 S06   S02       2     6 S02  
+#> 5       5 2026-09-12 03:04:22       5     2     4 S02   S04       4     2 S04  
+#> 6       6 2026-09-12 03:04:22       6     4     3 S04   S03       3     4 S03  
+#> # ℹ 89 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,
 #> #   llm_status_code <int>, llm_error_message <chr>, llm_custom_id <chr>,
 #> #   prompt_tokens <dbl>, completion_tokens <dbl>, total_tokens <dbl>,
 #> #   raw_response_json <chr>, round_id <int>, round_stage <chr>,
-#> #   pair_type <chr>, used_in_round_i <int>, used_in_round_j <int>, …
+#> #   pair_type <chr>, pairing_strategy <chr>, target_distance <dbl>, …
 names(logs)
 #> [1] "step_log"       "round_log"      "item_log"       "link_stage_log"
 

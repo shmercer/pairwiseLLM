@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -69,7 +69,8 @@
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A metadata list containing at least <code>schema_version</code>,
-<code>package_version</code>, and <code>n_items</code>.</p>
+<code>package_version</code>, <code>n_items</code>, <code>warm_start_mode</code>, and
+<code>pairing_strategy</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
@@ -77,8 +78,9 @@
 canonical schemas for <code>step_log</code> and <code>round_log</code>. This check is
 intended as a preflight for <code><a href="load_adaptive_session.html">load_adaptive_session()</a></code> and enforces the
 canonical adaptive session metadata shape. Validation is strict:
-added/removed/reordered columns in persisted logs are treated as schema
-incompatibilities and abort resume.</p>
+known legacy fields are backfilled before checking canonical columns and types.
+Other added/removed/reordered columns abort validation. Saved mode/strategy
+metadata must agree with the authoritative state.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -98,13 +100,19 @@ incompatibilities and abort resume.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "adaptive-session"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $package_version</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "1.3.2"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "1.4.0"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $n_items</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 3</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $predictive_prior_digest</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> NULL</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $warm_start_mode</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "cold"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $pairing_strategy</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "hybrid"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-in"><span></span></span>
 </code></pre></div>

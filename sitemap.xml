@@ -75,6 +75,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/load_adaptive_session.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_llm.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/make_pairs.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.html</loc></url>
@@ -123,6 +124,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_predictions.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/trait_description.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/validate_session_dir.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/warm_start_coefficients.html</loc></url>

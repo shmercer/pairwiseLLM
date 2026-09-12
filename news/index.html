@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -48,6 +48,27 @@
       <small>Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.4.0" id="pairwisellm-140">pairwiseLLM 1.4.0<a class="anchor" aria-label="anchor" href="#pairwisellm-140"></a></h2>
+<div class="section level3">
+<h3 id="adaptive-ranking-1-4-0">Adaptive ranking<a class="anchor" aria-label="anchor" href="#adaptive-ranking-1-4-0"></a></h3>
+<ul><li>Added predictive warm-start modes <code>cold</code>, <code>btl_only</code>, <code>trueskill_only</code>, and <code>both</code>. Omitted mode preserves historical behavior: <code>cold</code> without predictive input and <code>btl_only</code> with it. Request <code>both</code> explicitly to initialize both models.</li>
+<li>TrueSkill-warm modes initialize item locations as <code>25 + (25/3) * prior_mean</code>, with fixed scale 1 and unchanged sigma. Every mode retains the same seeded shuffled connected bootstrap of <code>N - 1</code> valid comparisons.</li>
+<li>Added post-bootstrap <code>random</code>, <code>trueskill_p50</code>, and <code>trueskill_pollitt</code> strategies through <code>adaptive_config$pairing_strategy</code>; <code>hybrid</code> remains the default. Direct strategies use a minimum-degree focal item and currently support only within-set runs. Pollitt-inspired targets use TrueSkill probabilities.</li>
+<li>Within-set and Phase-A hybrid rolling anchors and the long-link probability gate now use TrueSkill throughout. Bayesian BTL still supplies item estimates, uncertainty, reliability, diagnostics, stopping, and the <code>global_identified</code> signal that can affect later hybrid routing. Phase B linking is unchanged.</li>
+<li>Sessions persist effective mode, strategy, predictive provenance, and current TrueSkill state. Legacy sessions migrate to <code>cold</code> or historical <code>btl_only</code> and <code>hybrid</code>, preserving saved bootstrap and round progress. Phase-A artifact identity distinguishes generation settings while preserving explicit imports.</li>
+<li>Added <code><a href="../reference/validate_adaptive_replay.html">validate_adaptive_replay()</a></code> and <code><a href="../reference/make_adaptive_judge_replay.html">make_adaptive_judge_replay()</a></code> for offline replay of exact directed judgments, with strict reuse protection. Replay users can set <code>adaptive_config$dup_max_obs_relaxed = 2L</code>; the general hybrid default retains its conditional third observation.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="fixes-and-documentation-1-4-0">Fixes and documentation<a class="anchor" aria-label="anchor" href="#fixes-and-documentation-1-4-0"></a></h3>
+<ul><li>Within-set continuation retains saved BTL settings when no override is supplied; round recovery uses the exact saved round field.</li>
+<li>Updated adaptive help, guides, design documentation, and replay examples to distinguish predictive initialization, connected bootstrap, and pairing strategy.</li>
+<li>Strengthened adaptive-session validation and resume handling, including preservation of named Phase-A evidence hashes, legacy pair-resume behavior, and improved detection of Ollama results.</li>
+<li>Made stratified cost estimation robust to singleton strata and expanded boundary validation for adaptive state, warm-start models, provider responses, batch payloads, optional dependencies, and sampler interfaces.</li>
+<li>Simplified linking internals around the anchored-joint refit path by removing obsolete transform-refit Stan support and unreachable legacy Phase-B branches, while preserving legacy state normalization, audit fields, persistence compatibility, and current linking behavior.</li>
+<li>Added regression coverage for fresh-process resume, refit diagnostics, selection and information updates, state reporting, schema validation, and runtime boundary behavior.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.3.2" id="pairwisellm-132">pairwiseLLM 1.3.2<a class="anchor" aria-label="anchor" href="#pairwisellm-132"></a></h2>
 <div class="section level3">

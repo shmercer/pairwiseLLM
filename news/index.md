@@ -1,5 +1,64 @@
 # Changelog
 
+## pairwiseLLM 1.4.0
+
+### Adaptive ranking
+
+- Added predictive warm-start modes `cold`, `btl_only`,
+  `trueskill_only`, and `both`. Omitted mode preserves historical
+  behavior: `cold` without predictive input and `btl_only` with it.
+  Request `both` explicitly to initialize both models.
+- TrueSkill-warm modes initialize item locations as
+  `25 + (25/3) * prior_mean`, with fixed scale 1 and unchanged sigma.
+  Every mode retains the same seeded shuffled connected bootstrap of
+  `N - 1` valid comparisons.
+- Added post-bootstrap `random`, `trueskill_p50`, and
+  `trueskill_pollitt` strategies through
+  `adaptive_config$pairing_strategy`; `hybrid` remains the default.
+  Direct strategies use a minimum-degree focal item and currently
+  support only within-set runs. Pollitt-inspired targets use TrueSkill
+  probabilities.
+- Within-set and Phase-A hybrid rolling anchors and the long-link
+  probability gate now use TrueSkill throughout. Bayesian BTL still
+  supplies item estimates, uncertainty, reliability, diagnostics,
+  stopping, and the `global_identified` signal that can affect later
+  hybrid routing. Phase B linking is unchanged.
+- Sessions persist effective mode, strategy, predictive provenance, and
+  current TrueSkill state. Legacy sessions migrate to `cold` or
+  historical `btl_only` and `hybrid`, preserving saved bootstrap and
+  round progress. Phase-A artifact identity distinguishes generation
+  settings while preserving explicit imports.
+- Added
+  [`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)
+  and
+  [`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md)
+  for offline replay of exact directed judgments, with strict reuse
+  protection. Replay users can set
+  `adaptive_config$dup_max_obs_relaxed = 2L`; the general hybrid default
+  retains its conditional third observation.
+
+### Fixes and documentation
+
+- Within-set continuation retains saved BTL settings when no override is
+  supplied; round recovery uses the exact saved round field.
+- Updated adaptive help, guides, design documentation, and replay
+  examples to distinguish predictive initialization, connected
+  bootstrap, and pairing strategy.
+- Strengthened adaptive-session validation and resume handling,
+  including preservation of named Phase-A evidence hashes, legacy
+  pair-resume behavior, and improved detection of Ollama results.
+- Made stratified cost estimation robust to singleton strata and
+  expanded boundary validation for adaptive state, warm-start models,
+  provider responses, batch payloads, optional dependencies, and sampler
+  interfaces.
+- Simplified linking internals around the anchored-joint refit path by
+  removing obsolete transform-refit Stan support and unreachable legacy
+  Phase-B branches, while preserving legacy state normalization, audit
+  fields, persistence compatibility, and current linking behavior.
+- Added regression coverage for fresh-process resume, refit diagnostics,
+  selection and information updates, state reporting, schema validation,
+  and runtime boundary behavior.
+
 ## pairwiseLLM 1.3.2
 
 ### New Features

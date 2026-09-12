@@ -17,7 +17,8 @@ adaptive_rank_start(
   warm_start_prior = NULL,
   warm_start_features = NULL,
   warm_start_python = NULL,
-  warm_start_prior_sd = NULL
+  warm_start_prior_sd = NULL,
+  warm_start_mode = NULL
 )
 ```
 
@@ -33,8 +34,8 @@ adaptive_rank_start(
 
 - seed:
 
-  Integer seed used for deterministic warm-start shuffling and selection
-  randomness. Default is `1L`.
+  Integer seed used for deterministic connected-bootstrap shuffling and
+  selection randomness. Default is `1L`.
 
 - session_dir:
 
@@ -52,8 +53,11 @@ adaptive_rank_start(
 
 - adaptive_config:
 
-  Optional named list of adaptive controller overrides. Unknown fields
-  and invalid values abort with an actionable error. See
+  Optional named list of adaptive controller overrides.
+  `pairing_strategy` defaults to `hybrid`; `random`, `trueskill_p50`,
+  and `trueskill_pollitt` select direct pairs after the common connected
+  shuffled bootstrap and currently require `run_mode = "within_set"`.
+  Unknown fields and invalid values abort with an actionable error. See
   [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
   for the full list of supported keys, detailed semantics, and defaults.
 
@@ -88,24 +92,38 @@ adaptive_rank_start(
 - warm_start_prior_sd:
 
   Optional model-derived raw theta prior SD override; scalar or per-item
-  vector, default 0.5. Supplied prior objects retain their SDs.
+  vector, default 0.5. Supplied prior objects retain their SDs. Not
+  accepted with `trueskill_only`; never controls TrueSkill sigma.
+
+- warm_start_mode:
+
+  Predictive destination: `cold` (neither model), `btl_only` (BTL
+  prior), `trueskill_only` (TrueSkill locations), or `both` (both
+  models). Omitted/NULL mode defaults to `btl_only` with predictive
+  input, otherwise `cold`. Request `both` explicitly to initialize both
+  models. In TrueSkill-warm modes, exact item-ID alignment precedes
+  `mu = mu0 + sigma0 * prior_mean`, with `mu0 = 25`, `sigma0 = 25/3`,
+  fixed multiplier 1, and unchanged sigma. Explicit `cold` with
+  predictive input, or a non-cold mode without it, errors.
 
 ## Value
 
 An adaptive state object containing `step_log`, `round_log`, and
 `item_log`. The object includes class `"adaptive_state"`, item ID
-mappings, TrueSkill state, warm-start queue, refit metadata, and runtime
-configuration.
+mappings, TrueSkill state, connected bootstrap queue, refit metadata,
+and runtime configuration.
 
 ## Details
 
 This function creates the stepwise controller state and seeds all
-canonical logs used in the adaptive pairing workflow. Warm start pair
-construction follows the shuffled chain design, which guarantees a
-connected comparison graph after \\N - 1\\ committed comparisons.
+canonical logs used in the adaptive pairing workflow. Connected
+bootstrap pair construction follows the same seeded shuffled chain in
+every mode, giving a connected comparison graph after \\N - 1\\
+committed comparisons.
 
 Pair selection in this framework is stepwise and uncertainty-aware.
-Within-set routing uses TrueSkill base utility \$\$U_0 = p\_{ij}(1 -
+Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling
+anchors, pair probabilities, and base utility \$\$U_0 = p\_{ij}(1 -
 p\_{ij})\$\$ where \\p\_{ij}\\ is the current TrueSkill win probability
 for pair \\\\i, j\\\\. In linking Phase B, anchor/strata routing uses a
 linking-global score derived from Phase A raw summaries and the accepted
@@ -116,12 +134,16 @@ probabilities. In the spoke free block with the hub fixed. Linking
 inference parameters are used for inference/diagnostics/stopping, not as
 direct selection objectives. Phase B uses pooled within-set Phase A
 judge-parameter estimates, using the configured BTL model variant, as
-the accepted shared source for fixed `beta`/`epsilon` constants.
-Bayesian BTL posterior draws are not used as general pair-selection
-objectives; within-set pairing remains TrueSkill-routed, with accepted
-posterior refits contributing only to the long-link probability gate.
-Linking Phase B refits use Bayesian posterior estimation and posterior
-summaries/diagnostics are logged per spoke at each linking refit.
+the accepted shared source for fixed `beta`/`epsilon` constants. The
+within-set/Phase-A hybrid long-link gate uses TrueSkill throughout.
+Bayesian BTL supplies item estimates, posterior uncertainty, EAP
+reliability, diagnostics, stopping, and the existing `global_identified`
+signal. This signal can affect later hybrid tapering and routing;
+selection is not wholly independent of BTL. Direct within-set strategies
+use their documented partner targets after the common bootstrap. Phase B
+selection and prior rules are unchanged. Linking Phase B refits use
+Bayesian posterior estimation and posterior summaries/diagnostics are
+logged per spoke at each linking refit.
 
 The returned state contains canonical logs:
 
@@ -135,12 +157,25 @@ If `session_dir` is supplied, the initialized state is persisted
 immediately using
 [`save_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_adaptive_session.md).
 
-Predictive priors affect ordinary/within-set BTL estimation. Transform,
-anchored-joint, and pooled judge refits keep their existing prior rules;
-predictive evidence is not injected again. Initial pairing queues and
-selection rules retain their existing meaning. Custom fit functions must
-consume `state$predictive_prior` explicitly. Resume uses saved
-predictions; omit all warm-start arguments on resume.
+Predictive initialization is separate from observed connectivity: every
+mode retains the same seeded connected shuffled bootstrap of N - 1 valid
+comparisons, with common presentation balancing and invalid-result
+retries. Predictive locations can affect later TrueSkill-based
+selection; they do not replace the initial observed spanning path. BTL
+prior SD and ensemble diagnostics never determine TrueSkill sigma. No
+historical training-score units are restored.
+
+Predictive BTL priors apply only in `btl_only` and `both`, including
+run-required linking Phase A. TrueSkill initialization applies in
+`trueskill_only` and `both`. Imported Phase-A artifacts retain their own
+generation identity and are not rerun because predictive input exists.
+Transform, anchored-joint, and pooled judge refits keep their existing
+prior rules; predictive evidence is not injected into Phase B priors,
+D-optimal selection, or probes. Custom BTL fit functions should consume
+`state$predictive_prior` only when `state$meta$warm_start_mode` is
+`btl_only` or `both`; its presence alone does not imply BTL warming.
+Resume preserves saved predictions, current TrueSkill state, mode,
+strategy, and bootstrap progress; omit all warm-start arguments.
 
 ## See also
 
@@ -156,7 +191,9 @@ Other adaptive ranking:
 [`adaptive_rank_resume()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_resume.md),
 [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md),
 [`make_adaptive_judge_llm()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_llm.md),
-[`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md)
+[`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md),
+[`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md),
+[`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)
 
 ## Examples
 

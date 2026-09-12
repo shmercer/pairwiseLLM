@@ -9,8 +9,8 @@ An **ensemble** averages calibrated predictions from two or more
 separately trained task models. **Prior calibration** uses out-of-fold
 (OOF) predictions to map model output to standardized quality;
 [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md)
-then centers those values for Bayesian BTL estimation. The prior SD is a
-separate, explicitly chosen quantity, defaulting to 0.5.
+then centers those values for predictive initialization. The prior SD is
+a separate, explicitly chosen quantity, defaulting to 0.5.
 
 Each sub-model standardizes its own outcome using its training mean and
 sample SD. Independent BT/BTL scales do not need linking: raw unlinked
@@ -18,11 +18,89 @@ scores are never pooled. Model compatibility cannot establish that
 training assessments are independent or that predictions are valid in a
 new population. Validate the intended domain.
 
-Predictive priors do not change the adaptive pair-selection algorithm or
-its initial pairing schedule. Without a predictive prior, existing
-cold-start behavior is preserved. **No default predictive model is
-bundled in version 1.3.2.** Real bundled models remain deferred; the
-examples below use synthetic user models.
+Predictive information can initialize Bayesian BTL priors, TrueSkill
+locations, or both. It does not change the initial observed pair
+schedule. Without predictive input, existing cold-start behavior is
+preserved. **No default predictive model is bundled.** Real bundled
+models remain deferred; the examples below use synthetic user models.
+
+## Choose the predictive destination
+
+`warm_start_mode` chooses which model receives the predictive
+information:
+
+| Mode | BTL predictive prior | TrueSkill predictive `mu` | Connected bootstrap |
+|----|----|----|----|
+| `cold` | no | no | seeded shuffled chain |
+| `btl_only` | yes | no | same seeded shuffled chain |
+| `trueskill_only` | no | yes | same seeded shuffled chain |
+| `both` | yes | yes | same seeded shuffled chain |
+
+With omitted/`NULL` mode, **no predictive input defaults to `cold`** and
+**predictive input defaults to `btl_only`**. This preserves existing
+callers. Request `warm_start_mode = "both"` explicitly to initialize
+both models; `trueskill_only` initializes TrueSkill while retaining cold
+BTL priors.
+
+The following example uses numeric locations only, without Python,
+glmnet, model training, or CmdStan. The names establish exact item-ID
+alignment.
+
+``` r
+
+locations <- c(a = -1, b = -0.25, c = 0.25, d = 1)
+numeric_prior <- make_warm_start_prior(locations)
+historical <- adaptive_rank_start(names(locations), seed = 17L,
+  warm_start_prior = numeric_prior)
+warmed <- adaptive_rank_start(names(locations), seed = 17L,
+  warm_start_prior = numeric_prior, warm_start_mode = "both")
+historical$meta$warm_start_mode
+#> [1] "btl_only"
+warmed$trueskill_state$items[, c("item_id", "mu", "sigma")]
+#> # A tibble: 4 × 3
+#>   item_id    mu sigma
+#>   <chr>   <dbl> <dbl>
+#> 1 a        16.7  8.33
+#> 2 b        22.9  8.33
+#> 3 c        27.1  8.33
+#> 4 d        33.3  8.33
+```
+
+In `trueskill_only` and `both`, the mapping is
+
+``` text
+mu_i = mu0 + sigma0 * centered_predictive_location_i
+mu0 = 25; sigma0 = 25/3; fixed scale multiplier = 1
+```
+
+The centered location is `prior$prior_mean`, aligned by item ID before
+any location changes. TrueSkill sigma is unchanged by predictive
+initialization; its ordinary default is `25/3`. This does not prevent
+sigma from evolving after observed judgments. BTL `prior_sd` controls
+the Normal prior for raw theta. Ensemble disagreement, calibration
+error, and RMSE are predictive diagnostics; none determines TrueSkill
+sigma. The mapping never restores a training task’s raw score units.
+
+Explicit `cold` with predictive input errors, as does a non-cold mode
+without input. `warm_start_model` and `warm_start_prior` are mutually
+exclusive. The model-only `warm_start_prior_sd` override is a BTL
+control and is rejected in `trueskill_only`; an already resolved prior
+retains its stored SDs.
+
+Every mode keeps the same **connected shuffled bootstrap**: a seeded
+spanning path of `N - 1` valid committed comparisons. Predictive
+initialization does not replace observed connectivity or choose the
+first pair. With the same items and seed, the initial unordered pairs,
+presentation balancing, and invalid-result retries are common; a fixed
+judge yields the same initial outcomes. TrueSkill can evolve differently
+from those outcomes because its initial locations differ.
+
+After the bootstrap, `adaptive_config$pairing_strategy` selects `hybrid`
+(default), `random`, `trueskill_p50`, or `trueskill_pollitt`. The direct
+strategies currently require ordinary within-set mode. See [Guide:
+Adaptive
+Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md)
+for their exact targets and restrictions.
 
 ## Optional extraction environment and frozen features
 
@@ -493,7 +571,8 @@ occurs.
 | `component_<name>` | Calibrated output from that ensemble component |
 | `ensemble_mean` | Equal-weight mean of calibrated component outputs |
 | `ensemble_sd` | Between-model sample SD, denominator k - 1; diagnostic only |
-| `prior_sd` | Chosen Normal SD for raw BTL theta, default 0.5 |
+| `prior_mean` | Centered predictive location used by the selected destination mode |
+| `prior_sd` | Chosen Normal SD for raw BTL theta, default 0.5; not TrueSkill sigma |
 
 Complete component prediction tables remain in attributes, including raw
 predictions. Their attributes do not automatically subset with tibble
@@ -521,7 +600,7 @@ verifies manifest inventory, containment, size, checksum and metadata
 agreement. An MD5 checksum detects changed bytes; it does not
 authenticate a publisher.
 
-## Convert predictions to BTL priors and resume
+## Convert predictions and resume
 
 ``` r
 
@@ -546,12 +625,13 @@ or missing items error.
 
 The SD is for `theta_raw`. Stan centers raw theta, inducing dependence
 and changing centered-theta marginal SDs. All four active variants
-(`btl`, `btl_e`, `btl_b`, `btl_e_b`) use supplied priors. Cold starts
-retain raw means zero and SDs one. Default adaptive refits subset saved
-scores to the active fitted IDs before centering, including fitted items
-without comparisons. Downstream transform, anchored-joint and pooled
-judge refits retain their existing priors; evidence is not injected
-twice.
+(`btl`, `btl_e`, `btl_b`, `btl_e_b`) support supplied priors. Adaptive
+BTL consumes them only in `btl_only` and `both`; `cold` and
+`trueskill_only` retain raw means zero and SDs one. Default BTL-warm
+adaptive refits subset saved scores to the active fitted IDs before
+centering, including fitted items without comparisons. Downstream
+transform, anchored-joint and pooled judge refits retain their existing
+priors; evidence is not injected twice.
 
 Standalone sampling requires your installed CmdStan toolchain and is not
 run here:
@@ -568,8 +648,13 @@ Model objects, paths and explicit loader reference lists are accepted.
 Without precomputed features, supply assessment texts and select
 `warm_start_python`. Prediction runs once; initialization and resume
 never train. Model-specific feature/Python/SD arguments cannot accompany
-an already resolved prior. Custom fit functions must consume
-`state$predictive_prior`; their signatures are unchanged.
+an already resolved prior. Custom BTL fit functions must check
+`state$meta$warm_start_mode` and consume `state$predictive_prior` only
+in `btl_only` or `both`. The saved prior also exists in
+`trueskill_only`, so presence alone does not mean BTL is warm.
+Custom-fit signatures and the standalone
+`fit_bayes_btl_mcmc(warm_start_prior = ...)` interface are unchanged;
+standalone BTL has no adaptive four-mode argument.
 
 ``` r
 
@@ -591,8 +676,21 @@ components or nested-CV audits. Resume uses these saved values even if
 the original artifact is removed or replaced, with no Python/glmnet
 requirement. On resumed
 [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
-calls, omit **all** warm-start arguments. Older sessions retain cold
-starts. See [Guide: Adaptive
+calls, omit **all** warm-start arguments, including mode. Saved mode,
+pairing strategy, current TrueSkill values, bootstrap progress, and
+round state remain authoritative. Older sessions with no mode migrate to
+`cold` without a prior and `btl_only` with one; missing strategy becomes
+`hybrid`. Migration never warms TrueSkill retroactively. Omit strategy
+on resume or supply its saved value; changing it requires a new session.
+
+Run-required linking Phase A supports predictive initialization and the
+common per-set bootstrap. Imported artifacts retain their generation
+identity and are not rerun merely because predictive input is supplied.
+Direct strategies cannot run inside linking Phase A, although compatible
+artifacts from direct within-set runs can be imported. Phase B selection
+and prior rules are unchanged: predictive evidence is not injected into
+transforms, anchored-joint or pooled-judge priors, D-optimal selection,
+or probes. See [Guide: Adaptive
 Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md)
 for judging and continued runs, and [Standalone Bayesian BTL with
 CmdStan](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.md)

@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -91,7 +91,7 @@ during ordinary package builds. Set
 rendering this source locally.</p>
 </div>
 <div class="section level2">
-<h2 id="choose-a-pairing-strategy">Choose a pairing strategy<a class="anchor" aria-label="anchor" href="#choose-a-pairing-strategy"></a>
+<h2 id="choose-a-comparison-workflow">Choose a comparison workflow<a class="anchor" aria-label="anchor" href="#choose-a-comparison-workflow"></a>
 </h2>
 <p>Use exhaustive pairing when the set is small enough to evaluate every
 one of the <code>choose(N, 2)</code> unordered pairs and complete
@@ -111,14 +111,15 @@ and storage.</p>
 <p>Within-set ranking has three phases.</p>
 <ol style="list-style-type: decimal">
 <li>
-<strong>Phase 1: warm start.</strong> A seeded shuffled chain
-schedules <code>N - 1</code> valid comparisons, producing a connected
-comparison graph.</li>
+<strong>Connected shuffled bootstrap.</strong> Every predictive mode
+uses the same seeded chain of <code>N - 1</code> valid comparisons to
+connect the observed graph. Predictive initialization occurs before
+these observations and does not change their schedule.</li>
 <li>
-<strong>Phase 2: normal adaptation.</strong> TrueSkill is updated
-after every committed comparison and guides the next pair. The
-controller balances coverage, long-, mid-, and local-range comparisons,
-repeated-pair limits, and fallbacks.</li>
+<strong>Post-bootstrap pairing.</strong> TrueSkill updates after
+every valid comparison. The selected pairing strategy chooses subsequent
+pairs; the default hybrid balances anchor, long, mid, and local
+comparisons, exposure, repeated-pair limits, and fallbacks.</li>
 <li>
 <strong>Phase 3: near stop.</strong> After a Bayesian refit passes
 diagnostics and its EAP reliability is within 0.05 of the stopping
@@ -129,18 +130,81 @@ was entered.</li>
 <p>TrueSkill is the fast, step-by-step selection model. Bayesian
 Bradley–Terry–Luce (BTL) refits are slower and intermittent. They
 provide posterior item estimates and uncertainty, convergence
-diagnostics, stability checks, and stopping decisions. Once an accepted
-posterior exists, its win probabilities also gate eligibility for
-long-range comparisons; BTL is therefore not exclusively a final
-reporting model.</p>
-<pre class="text"><code>items -&gt; warm start -&gt; select one pair -&gt; judge -&gt; TrueSkill update
-                              ^                    |
-                              |                    v
-                              +---- continue &lt;- periodic BTL refit -&gt; stop check</code></pre>
+diagnostics, EAP reliability, stability checks, and stopping decisions.
+Hybrid live ranks, strata, rolling anchors, pair probabilities, base
+utility, and the long-link gate use TrueSkill throughout. BTL still
+contributes to <code>global_identified</code>, which can change later
+hybrid tapering and routing; selection is not wholly independent of
+BTL.</p>
+<pre class="text"><code>items -&gt; predictive initialization -&gt; connected shuffled bootstrap
+  -&gt; select one pair -&gt; judge -&gt; commit valid outcome and update TrueSkill
+           ^                          |
+           |                          v
+           +-- continue &lt;- periodic BTL refit -&gt; stop check</code></pre>
 <p>Adaptive selection is intended to direct effort toward useful
 comparisons, but it does not guarantee a particular ranking,
 reliability, cost reduction, or improvement over random pairing. Those
 outcomes depend on the items, judge, budget, and model assumptions.</p>
+</div>
+<div class="section level2">
+<h2 id="choose-a-post-bootstrap-pairing-strategy">Choose a post-bootstrap pairing strategy<a class="anchor" aria-label="anchor" href="#choose-a-post-bootstrap-pairing-strategy"></a>
+</h2>
+<p>Set
+<code>adaptive_config = list(pairing_strategy = "trueskill_p50")</code>,
+for example. The four choices apply after the common bootstrap:</p>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th>Strategy</th>
+<th>Partner rule</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>
+<code>hybrid</code> (default)</td>
+<td>Staged anchor/long/mid/local selection with TrueSkill ambiguity
+utility.</td>
+</tr>
+<tr class="even">
+<td><code>random</code></td>
+<td>Uniform seeded choice among legal partners.</td>
+</tr>
+<tr class="odd">
+<td><code>trueskill_p50</code></td>
+<td>Minimize <code>abs(p_ts(i &gt; j) - 0.50)</code>.</td>
+</tr>
+<tr class="even">
+<td><code>trueskill_pollitt</code></td>
+<td>Minimize
+<code>min(abs(p_ts(i &gt; j) - 1/3), abs(p_ts(i &gt; j) - 2/3))</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Each direct strategy first chooses a focal item uniformly from sorted
+IDs at the minimum current committed degree, using the run seed and
+committed count. It then selects a legal partner by the rule above;
+target-distance ties break by partner ID. Pollitt is
+<strong>Pollitt-inspired</strong>: it uses TrueSkill probabilities,
+whereas the earlier article used BTL probabilities.</p>
+<p>Direct strategies use no hybrid stage quotas, coverage overrides, or
+star-cap fallbacks. They allow at most two observations per unordered
+pair, preserve normal presentation balancing and reversal on repeat, and
+retry the same policy draw after invalid results. They stop if the
+chosen focal item has no legal partner, even if other pairs remain.
+These strategies currently support <strong>ordinary within-set runs
+only</strong>; linking runs require <code>hybrid</code>. Phase B linking
+remains unchanged.</p>
+<p>In direct step logs, <code>round_stage</code> and
+<code>pair_type</code> are <code>direct_pairing</code>,
+<code>pairing_strategy</code> identifies the policy, and
+<code>i_id</code> identifies the focal item. <code>p_ij</code> is the
+pre-judgment TrueSkill probability for presented A over B;
+<code>target_distance</code> is symmetric under reversal and is missing
+for random pairing. BTL refit cadence and stopping still apply to every
+strategy.</p>
 </div>
 <div class="section level2">
 <h2 id="install-and-check-cmdstan">Install and check CmdStan<a class="anchor" aria-label="anchor" href="#install-and-check-cmdstan"></a>
@@ -202,7 +266,7 @@ columns, a judge, and a step budget. We also choose a session directory
 so progress is persisted. With 20 items, the implemented default
 <code>refit_pairs_target</code> is 20 committed comparisons:
 <code>ceiling(N / 2)</code> clamped to <code>[20, 5000]</code>. A budget
-of 22 attempted steps leaves room for the warm start and produces one
+of 22 attempted steps covers the connected bootstrap and produces one
 refit under this deterministic fixture.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">session_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="st">"pairwisellm-adaptive-"</span><span class="op">)</span></span>
@@ -328,6 +392,55 @@ interface around <code><a href="../reference/llm_compare_pair.html">llm_compare_
 alternative to supplying backend/model arguments to
 <code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code>, and its calls are live, billable, and
 subject to the selected provider’s failure and privacy behavior.</p>
+<div class="section level3">
+<h3 id="replay-frozen-directed-judgments">Replay frozen directed judgments<a class="anchor" aria-label="anchor" href="#replay-frozen-directed-judgments"></a>
+</h3>
+<p><code><a href="../reference/validate_adaptive_replay.html">validate_adaptive_replay()</a></code> checks a table with character
+<code>A_id</code>, character <code>B_id</code>, and binary
+<code>Y</code> (1 means presented A wins). By default it requires every
+one of the <code>N * (N - 1)</code> ordered pairs for the panel.
+Self-pairs, foreign or missing IDs, duplicate ordered keys, malformed
+outcomes, and missing orientations error.
+<code><a href="../reference/make_adaptive_judge_replay.html">make_adaptive_judge_replay()</a></code> returns the stored result for
+the exact ordered key; it never infers a reverse result from a forward
+judgment and never makes network calls.</p>
+<p>This synthetic example runs both bootstrap and direct steps without a
+Bayesian refit:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">replay_ids</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span>, <span class="st">"c"</span>, <span class="st">"d"</span><span class="op">)</span></span>
+<span><span class="va">frozen</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/expand.grid.html" class="external-link">expand.grid</a></span><span class="op">(</span>A_id <span class="op">=</span> <span class="va">replay_ids</span>, B_id <span class="op">=</span> <span class="va">replay_ids</span>, stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="va">frozen</span> <span class="op">&lt;-</span> <span class="va">frozen</span><span class="op">[</span><span class="va">frozen</span><span class="op">$</span><span class="va">A_id</span> <span class="op">!=</span> <span class="va">frozen</span><span class="op">$</span><span class="va">B_id</span>, <span class="op">]</span></span>
+<span><span class="co"># Fabricated ordered outcomes, used only to demonstrate the interface.</span></span>
+<span><span class="va">frozen</span><span class="op">$</span><span class="va">Y</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="va">frozen</span><span class="op">$</span><span class="va">A_id</span> <span class="op">&lt;</span> <span class="va">frozen</span><span class="op">$</span><span class="va">B_id</span><span class="op">)</span></span>
+<span><span class="va">frozen</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/validate_adaptive_replay.html">validate_adaptive_replay</a></span><span class="op">(</span><span class="va">frozen</span>, item_ids <span class="op">=</span> <span class="va">replay_ids</span><span class="op">)</span></span>
+<span><span class="va">replay_judge</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_adaptive_judge_replay.html">make_adaptive_judge_replay</a></span><span class="op">(</span><span class="va">frozen</span>, item_ids <span class="op">=</span> <span class="va">replay_ids</span><span class="op">)</span></span>
+<span><span class="va">replay_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_start.html">adaptive_rank_start</a></span><span class="op">(</span><span class="va">replay_ids</span>, seed <span class="op">=</span> <span class="fl">17L</span>,</span>
+<span>  adaptive_config <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>pairing_strategy <span class="op">=</span> <span class="st">"trueskill_p50"</span>, dup_max_obs_relaxed <span class="op">=</span> <span class="fl">2L</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">replay_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_run_live.html">adaptive_rank_run_live</a></span><span class="op">(</span><span class="va">replay_state</span>, <span class="va">replay_judge</span>,</span>
+<span>  n_steps <span class="op">=</span> <span class="fl">5L</span>, progress <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/adaptive_step_log.html">adaptive_step_log</a></span><span class="op">(</span><span class="va">replay_state</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"A_id"</span>, <span class="st">"B_id"</span>, <span class="st">"Y"</span>, <span class="st">"pairing_strategy"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 5 × 4</span></span></span>
+<span><span class="co">#&gt;   A_id  B_id      Y pairing_strategy</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>           </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> a     b         1 trueskill_p50   </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> d     a         0 trueskill_p50   </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> c     d         1 trueskill_p50   </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> b     d         1 trueskill_p50   </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> a     c         1 trueskill_p50</span></span></code></pre></div>
+<p>Keep <code>strict_use = TRUE</code> and <code>complete = TRUE</code>
+for independent-evidence replay. Set
+<code>adaptive_config$dup_max_obs_relaxed = 2L</code> so hybrid cannot
+request a third observation from the two available orientations. Its
+general default remains 3; direct strategies already cap at two.
+Presentation balancing and repeat reversal remain active.</p>
+<p>Create a fresh judge for each independent replicate. Strict use
+tracks successful lookups in the judge closure and checks the supplied
+state’s committed history. The judge closure and matrix are not saved in
+the session: retain the matrix and provenance separately. To resume,
+recreate a judge from the identical matrix and pass the loaded state to
+<code><a href="../reference/adaptive_rank_run_live.html">adaptive_rank_run_live()</a></code>. Missing or reused directed
+judgments raise errors instead of supplying new evidence.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="persistence-interruption-and-resume">Persistence, interruption, and resume<a class="anchor" aria-label="anchor" href="#persistence-interruption-and-resume"></a>
@@ -341,9 +454,10 @@ costly. Frequent checkpoints increase disk I/O.</p>
 <p>An abrupt process termination can lose attempts since the most recent
 completed save. After an interrupt, validate what is on disk rather than
 assuming the in-memory state was written.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">session_metadata</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/validate_session_dir.html">validate_session_dir</a></span><span class="op">(</span><span class="va">session_dir</span><span class="op">)</span></span>
-<span><span class="va">session_metadata</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"schema_version"</span>, <span class="st">"package_version"</span>, <span class="st">"n_items"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="va">session_metadata</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"schema_version"</span>, <span class="st">"package_version"</span>, <span class="st">"n_items"</span>,</span>
+<span>  <span class="st">"warm_start_mode"</span>, <span class="st">"pairing_strategy"</span><span class="op">)</span><span class="op">]</span></span>
 <span></span>
 <span><span class="va">loaded_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_adaptive_session.html">load_adaptive_session</a></span><span class="op">(</span><span class="va">session_dir</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/summarize_adaptive.html">summarize_adaptive</a></span><span class="op">(</span><span class="va">loaded_state</span><span class="op">)</span></span>
@@ -370,9 +484,17 @@ creating a new run. The input IDs and their order must exactly match the
 saved session. Set <code>resume = FALSE</code> only when you
 deliberately want a new state, and choose a new or empty session
 directory to avoid mixing studies.</p>
+<p>Resume preserves mode, strategy, predictive prior/provenance, current
+TrueSkill state, committed history, bootstrap progress, and round state.
+Omit all predictive warm-start arguments; omit strategy or supply the
+saved strategy. A legacy session without mode becomes <code>cold</code>
+if no prior is saved and <code>btl_only</code> if one is saved; missing
+strategy becomes <code>hybrid</code>. Migration never warms TrueSkill
+retroactively. Within-set continuation also reuses saved
+<code>btl_config</code> when it is omitted.</p>
 <p>The wrapper handles ordinary saving. For an explicit snapshot outside
 a wrapper call, use the lower-level persistence helpers:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">snapshot_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="st">"pairwisellm-snapshot-"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/save_adaptive_session.html">save_adaptive_session</a></span><span class="op">(</span><span class="va">resumed</span><span class="op">$</span><span class="va">state</span>, <span class="va">snapshot_dir</span>, overwrite <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/validate_session_dir.html">validate_session_dir</a></span><span class="op">(</span><span class="va">snapshot_dir</span><span class="op">)</span></span>
@@ -394,7 +516,7 @@ invalid results and preserves available status, error, token, and raw
 response fields in the step log.</p>
 <p>This small example deliberately rejects its first attempt, then
 accepts the next one:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">invalid_once_judge</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">A</span>, <span class="va">B</span>, <span class="va">state</span>, <span class="va">...</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">state</span><span class="op">$</span><span class="va">step_log</span><span class="op">)</span> <span class="op">==</span> <span class="fl">0L</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
@@ -445,7 +567,7 @@ long run.</p>
 <code>real_samples</code> with a data frame or file containing one row
 per item, a unique ID, and the text to compare. Preserve that input in
 its exact row order for resume.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/shmercer/pairwiseLLM" class="external-link">pairwiseLLM</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nzchar</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"OPENAI_API_KEY"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
@@ -498,7 +620,7 @@ into a real study merely to make it finish sooner.</p>
 </h3>
 <p>Inspect the ranking, diagnostics, and stopping state before reporting
 results:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">live</span><span class="op">$</span><span class="va">summary</span></span>
 <span></span>
 <span><span class="va">live</span><span class="op">$</span><span class="va">items</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
@@ -517,7 +639,7 @@ convergence. Read the latest refit diagnostics and stop reason
 together.</p>
 <p>The step log records each attempted provider call, including
 provenance, validity, errors, and available token counts:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">live_steps</span> <span class="op">&lt;-</span> <span class="va">live</span><span class="op">$</span><span class="va">logs</span><span class="op">$</span><span class="va">step_log</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
 <span>  <span class="st">"step_id"</span>, <span class="st">"pair_id"</span>, <span class="st">"A_id"</span>, <span class="st">"B_id"</span>, <span class="st">"Y"</span>, <span class="st">"status"</span>,</span>
 <span>  <span class="st">"judge_backend"</span>, <span class="st">"judge_model"</span>, <span class="st">"judge_endpoint"</span>, <span class="st">"judge_invalid_reason"</span>,</span>
@@ -547,7 +669,7 @@ appropriate retention policy.</p>
 settings, and session directory. Only <code>n_steps</code>, progress
 display, and checkpoint cadence should normally change between
 calls.</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">live</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank.html">adaptive_rank</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">real_samples</span>,</span>
 <span>  id_col <span class="op">=</span> <span class="st">"ID"</span>,</span>
@@ -599,13 +721,15 @@ return <code>is_valid</code>, <code>Y</code>, and preferably
 exactly <code>0</code> or <code>1</code>. Review
 <code>judge_invalid_reason</code>, <code>llm_status_code</code>, and
 <code>llm_error_message</code> in <code><a href="../reference/adaptive_step_log.html">adaptive_step_log()</a></code>.</p>
-<p><strong>The run reports candidate starvation.</strong> The selector
-applies its implemented within-stage fallbacks before declaring a stage
-starved. A terminal <code>"candidate_starvation"</code> means no
+<p><strong>The run reports candidate starvation.</strong> The hybrid
+selector applies its implemented within-stage fallbacks before declaring
+a stage starved. A terminal <code>"candidate_starvation"</code> means no
 eligible pair remained after those fallbacks. This can occur with very
 small or heavily repeated designs; inspect <code>fallback_path</code>,
 <code>starvation_reason</code>, and committed pair counts rather than
-treating it as Bayesian convergence.</p>
+treating it as Bayesian convergence. Direct strategies instead stop when
+the chosen minimum-degree focal item has no legal partner; they do not
+search other focal items or invoke hybrid fallbacks.</p>
 <p><strong>There is no item summary yet.</strong> <code>out$items</code>
 is empty until the first successful BTL refit. Under the default
 cadence, at least 20 new committed comparisons are needed. Invalid and
@@ -630,9 +754,18 @@ Adaptive Pairing</a>.</p>
 <code>warm_start_python</code> selects an existing extraction
 environment. Prediction runs once and the session stores numeric priors.
 On resume, omit all warm-start arguments: the saved prior remains usable
-after the original model is removed. Predictive priors affect Bayesian
-estimation, while the initial pairing schedule and selection algorithm
-retain their existing behavior. See <a href="adaptive-warm-start.html">Guide: Adaptive Warm Start</a> for
+after the original model is removed. <code>warm_start_mode</code>
+selects <code>cold</code>, <code>btl_only</code>,
+<code>trueskill_only</code>, or <code>both</code>.
+Omitted/<code>NULL</code> mode defaults to <code>cold</code> without
+predictive input and <code>btl_only</code> with it. Request
+<code>both</code> explicitly to initialize both models. TrueSkill-warm
+modes use <code>mu_i = 25 + (25/3) * prior_mean_i</code>, aligned by
+item ID with fixed multiplier 1 and unchanged sigma. BTL prior SD and
+ensemble diagnostics do not control sigma. Explicit <code>cold</code>
+with predictive input, or a non-cold mode without input, errors. All
+modes retain the same seeded connected shuffled bootstrap; subsequent
+TrueSkill-based selections can differ. See <a href="adaptive-warm-start.html">Guide: Adaptive Warm Start</a> for
 training and prior conversion.</p>
 </div>
 <div class="section level2">

@@ -46,7 +46,9 @@ Core columns:
   `completion_tokens`, `total_tokens`, `raw_response_json`.
 
 - Routing/scheduling: `round_id`, `round_stage`, `pair_type`,
-  `stage_committed_so_far`, `stage_quota`.
+  `pairing_strategy`, `stage_committed_so_far`, `stage_quota`. Direct
+  strategies use `direct_pairing` rather than hybrid stages; hybrid-only
+  diagnostics are missing where inapplicable.
 
 - Exposure/strata: `used_in_round_i`, `used_in_round_j`, `is_anchor_i`,
   `is_anchor_j`, `stratum_i`, `stratum_j`, `dist_stratum`.
@@ -62,7 +64,10 @@ Core columns:
   `n_candidates_after_star_caps`, `n_candidates_scored`.
 
 - Endpoint diagnostics: `deg_i`, `deg_j`, `recent_deg_i`,
-  `recent_deg_j`, `mu_i`, `mu_j`, `sigma_i`, `sigma_j`, `p_ij`, `U0_ij`.
+  `recent_deg_j`, `mu_i`, `mu_j`, `sigma_i`, `sigma_j`, `p_ij`, `U0_ij`,
+  `target_distance`. For direct strategies, `i_id` is the focal item and
+  `p_ij` is the pre-judgment TrueSkill probability for presented A
+  over B. `target_distance` is missing for random selection.
 
 - Star-cap diagnostics: `star_cap_rejects`, `star_cap_reject_items`.
 
@@ -85,8 +90,8 @@ Other adaptive logs:
 ``` r
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
 adaptive_step_log(state)
-#> # A tibble: 0 × 97
-#> # ℹ 97 variables: step_id <int>, timestamp <dttm>, pair_id <int>, i <int>,
+#> # A tibble: 0 × 99
+#> # ℹ 99 variables: step_id <int>, timestamp <dttm>, pair_id <int>, i <int>,
 #> #   j <int>, i_id <chr>, j_id <chr>, A <int>, B <int>, A_id <chr>, B_id <chr>,
 #> #   unordered_key <chr>, ordered_key <chr>, Y <int>, status <chr>,
 #> #   judge_backend <chr>, judge_model <chr>, judge_endpoint <chr>,

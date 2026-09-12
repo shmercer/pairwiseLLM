@@ -219,6 +219,10 @@
   : Run adaptive ranking end-to-end from data and model settings
 - [`make_adaptive_judge_llm()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_llm.md)
   : Build an LLM judge function for adaptive ranking
+- [`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md)
+  : Create an offline judge from frozen directed outcomes
+- [`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)
+  : Validate frozen directed judgments for an adaptive panel
 - [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md)
   : Adaptive ranking
 - [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md)

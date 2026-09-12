@@ -28,7 +28,10 @@ This is a thin wrapper around
 [`load_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/load_adaptive_session.md)
 and performs schema and log-shape checks during load. Returned state
 preserves canonical `step_log`, `round_log`, and `item_log` contents
-used for adaptive auditability.
+used for adaptive auditability. The saved predictive mode, prior,
+pairing strategy, current TrueSkill state, and connected shuffled
+bootstrap queue are authoritative. Resume does not reload a predictive
+model or regenerate its predictions.
 
 ## See also
 
@@ -43,7 +46,9 @@ Other adaptive ranking:
 [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md),
 [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md),
 [`make_adaptive_judge_llm()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_llm.md),
-[`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md)
+[`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md),
+[`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md),
+[`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)
 
 ## Examples
 

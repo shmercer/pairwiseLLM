@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -78,6 +78,16 @@ as schema version, required state fields, and index ranges in
 into <code>state$item_log</code> and persistence is marked as enabled. Resume uses
 strict schema validation for canonical logs; incompatible saved schemas abort
 with explicit errors.</p>
+<p>Legacy sessions without a saved predictive mode migrate to <code>cold</code> when
+no predictive prior exists, and <code>btl_only</code> otherwise. An absent pairing
+strategy migrates to <code>hybrid</code>. Saved TrueSkill values, the connected
+shuffled bootstrap queue and its index, and round progress remain authoritative;
+loading never recomputes predictions or initializes TrueSkill again.</p>
+<p><code>metadata.rds</code> records effective <code>warm_start_mode</code> and
+<code>pairing_strategy</code> for session-level audit. Direct step logs already record
+<code>pairing_strategy</code>, the presented A-over-B TrueSkill probability
+<code>p_ij</code>, and <code>target_distance</code> (missing for random pairing). Predictive
+vectors and provenance are retained once in <code>state$predictive_prior</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

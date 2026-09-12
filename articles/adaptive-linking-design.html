@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.3.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -240,6 +240,25 @@ public design.</p>
 <div class="section level2">
 <h2 id="phase-a-artifacts-and-validation">Phase A artifacts and validation<a class="anchor" aria-label="anchor" href="#phase-a-artifacts-and-validation"></a>
 </h2>
+<p>Run-required Phase A uses the within-set hybrid selector. TrueSkill
+supplies live ranks, strata, rolling anchors, pair probabilities, and
+the long-link gate throughout. BTL supplies EAP estimates, uncertainty,
+reliability, diagnostics, stopping, and the existing
+<code>global_identified</code> signal that may change later hybrid
+tapering and routing.</p>
+<p>Predictive destination modes are <code>cold</code>,
+<code>btl_only</code>, <code>trueskill_only</code>, and
+<code>both</code>. Omitted mode resolves to <code>cold</code> without
+predictive input and historical <code>btl_only</code> with it;
+<code>both</code> must be requested explicitly to initialize both
+models. TrueSkill-warm modes map ID-aligned centered locations to
+<code>25 + (25/3) * prior_mean</code>, preserving sigma. Every mode
+retains the same per-set seeded connected shuffled bootstrap. Direct
+strategies currently require ordinary within-set mode; linking runs
+require <code>hybrid</code>. Phase B selection and prior rules are
+unchanged: predictive evidence is not injected into its transform,
+anchored-joint or pooled-judge priors, D-optimal selection, or
+probes.</p>
 <p>Phase A produces the within-set evidence needed before any cross-set
 comparison is scheduled. A canonical artifact stores:</p>
 <ul>
@@ -269,6 +288,13 @@ converted to <code>btl_e_b</code>, and an artifact produced under an
 incompatible configuration is rejected. This protects the likelihood and
 prior assumptions used by the linking fit; it is stricter than checking
 that an <code>.rds</code> file can be read.</p>
+<p>Run-generated artifact identity additionally records predictive mode,
+prior digest, pairing strategy, and a nondefault duplicate ceiling.
+Cache reuse respects those generation settings. Explicit imports
+preserve their actual generation identity; they are not rerun because
+predictive input is present. Compatible artifacts from direct ordinary
+within-set runs can be imported without enabling direct Phase-A
+selection.</p>
 <div class="section level3">
 <h3 id="run-import-and-mixed-behavior">Run, import, and mixed behavior<a class="anchor" aria-label="anchor" href="#run-import-and-mixed-behavior"></a>
 </h3>
@@ -1003,6 +1029,15 @@ probe panels, and realized probe indices; and</li>
 invariant. The runner does not silently discard saved work, create a new
 probe panel, or restart Phase A. Use <code>resume = FALSE</code> with a
 new or empty directory only when intentionally starting a new study.</p>
+<p>Session metadata identifies effective predictive mode and pairing
+strategy. Legacy sessions with no mode become <code>cold</code> without
+a saved prior and <code>btl_only</code> with one; missing strategy
+becomes <code>hybrid</code>. Saved TrueSkill state, bootstrap
+queue/index, committed evidence, and round state remain authoritative.
+Migration never initializes TrueSkill again. Omit warm-start inputs on
+resume. Linking continuation with custom BTL settings should continue
+supplying those settings explicitly; saved-setting reuse on omission
+applies to ordinary within-set continuation.</p>
 <p>Compatibility loaders can backfill fields needed to read older
 sessions and can normalize legacy log names. Historical transform
 estimators, soft hub locks, free hub locks, alternative probe

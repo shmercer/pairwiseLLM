@@ -17,7 +17,7 @@ validate_session_dir(session_dir)
 ## Value
 
 A metadata list containing at least `schema_version`, `package_version`,
-and `n_items`.
+`n_items`, `warm_start_mode`, and `pairing_strategy`.
 
 ## Details
 
@@ -26,8 +26,10 @@ match canonical schemas for `step_log` and `round_log`. This check is
 intended as a preflight for
 [`load_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/load_adaptive_session.md)
 and enforces the canonical adaptive session metadata shape. Validation
-is strict: added/removed/reordered columns in persisted logs are treated
-as schema incompatibilities and abort resume.
+is strict: known legacy fields are backfilled before checking canonical
+columns and types. Other added/removed/reordered columns abort
+validation. Saved mode/strategy metadata must agree with the
+authoritative state.
 
 ## See also
 
@@ -49,12 +51,18 @@ validate_session_dir(dir)
 #> [1] "adaptive-session"
 #> 
 #> $package_version
-#> [1] "1.3.2"
+#> [1] "1.4.0"
 #> 
 #> $n_items
 #> [1] 3
 #> 
 #> $predictive_prior_digest
 #> NULL
+#> 
+#> $warm_start_mode
+#> [1] "cold"
+#> 
+#> $pairing_strategy
+#> [1] "hybrid"
 #> 
 ```
