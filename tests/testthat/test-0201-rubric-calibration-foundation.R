@@ -96,7 +96,7 @@ test_that("public API dispatch reports unimplemented backends without fabricated
   fit <- pairwiseLLM::fit_rubric_calibration
   fixed <- rubric_test_fixed()
   rubric <- tibble::tibble(item_id = letters[1:3], rubric_score = 1:3)
-  for (method in c("ordinal_linear", "ordinal_monotone")) {
+  for (method in "ordinal_monotone") {
     expect_error(fit(fixed, rubric, method = method, trait = "trait"),
       class = "pairwiseLLM_rubric_backend_unavailable")
   }

@@ -10,15 +10,18 @@
 \item{object}{A \code{pairwiseLLM_rubric_calibration} object.}
 
 \item{newdata}{Completed CJ result to predict, or \code{NULL} for the original
-items. Percentile scoring accepts the original completed result with unchanged
+items. Same-set scoring accepts the original completed result with unchanged
 item IDs, exact accepted scores and uncertainty, and matching fit/reference
 evidence. Item reordering is allowed; collection provenance does not affect
 scoring. Raw tables, independent cohorts, refits, and Phase B targets are not
-supported for percentile prediction. Future ordinal linked prediction requires
+supported for same-set prediction. Future ordinal linked prediction requires
 accepted Phase B scores on the stored reference scale.}
 
 \item{hard_score}{Ordinal hard-score rule: \code{"median"} (default) or \code{"mode"}.
-Ordinal output will also retain all category probabilities and expected level.
+The median is the lowest category whose cumulative probability is at least
+0.5; equality at a median cutpoint therefore selects the lower category.
+Modal ties select the lowest category. Ordinal output always retains all
+category probabilities, both decision rules, and expected level.
 Both choices give the same deterministic category for percentile scoring.}
 
 \item{...}{Reserved arguments; currently must be empty.}
@@ -29,7 +32,16 @@ integer \code{category} in \code{1:K}, original-label \code{rubric_score}, and \
 (outside the fitted CJ range). Under the original-result restriction,
 extrapolation flags are always false. Stored cutpoints are reused unchanged.
 No category probabilities or probabilistic summaries are returned.
-Unfitted objects fail clearly; ordinal prediction backends remain unavailable.
+Linear ordinal predictions include the same five columns, plus
+\code{probabilities}, a list-column of numeric K-vectors named by the original
+ordered labels; integer \code{median_category} and \code{modal_category}; and
+\code{expected_level = sum(k * P(Y = k))} for internal indices \code{k} in \code{1:K},
+regardless of the original labels' numerical spacing. This expected rubric
+level is a continuous summary, not a replacement for the ordinal result.
+\code{category} and \code{rubric_score} use the requested \code{hard_score} rule.
+Ordinal \code{extrapolated} flags use the labeled calibration range, so unlabeled
+source items can be extrapolated; endpoints are included in the range.
+Stored standardization is reused. Unfitted objects fail clearly.
 }
 \description{
 Predict rubric scores from a calibration

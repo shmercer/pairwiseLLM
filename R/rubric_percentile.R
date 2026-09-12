@@ -36,39 +36,8 @@
   invisible(object)
 }
 
-.rubric_percentile_fit_evidence <- function(cj) {
-  contract <- cj$fit_contract
-  # A completed fit may be supplied with its item axis reordered.
-  for (field in grep("^theta_", names(contract), value = TRUE)) {
-    value <- contract[[field]]
-    if (is.numeric(value) && is.null(dim(value)) && !is.null(names(value))) {
-      contract[[field]] <- value[order(names(value))]
-    }
-  }
-  list(model_variant = cj$model_variant, estimation_mode = cj$estimation_mode,
-    orientation = cj$orientation, fit_contract = contract, fit_contract_hash = cj$fit_contract_hash,
-    reference = cj$reference, provenance = cj$provenance[setdiff(names(cj$provenance), "collection")])
-}
-
-.rubric_percentile_prediction_items <- function(object, newdata) {
-  if (is.null(newdata)) return(object$cj$items)
-  cj <- .rubric_normalize_cj(newdata, object$trait, scale_status = object$cj$scale_status,
-    include_draws = FALSE)
-  source <- object$cj$items
-  items <- cj$items
-  # Configuration hashes alone do not identify a CJ metric. Require the same
-  # item domain, exact accepted locations/uncertainty, and original fit evidence.
-  if (!setequal(items$item_id, source$item_id) ||
-    !identical(items[order(items$item_id), ], source[order(source$item_id), ]) ||
-    !identical(.rubric_percentile_fit_evidence(cj), .rubric_percentile_fit_evidence(object$cj))) {
-    rlang::abort(paste0("Percentile `newdata` must reuse the original completed CJ result with unchanged ",
-      "items, accepted scores, and fit evidence. Independent cohorts and refits are not supported."))
-  }
-  items
-}
-
 .rubric_predict_percentile <- function(object, newdata) {
-  items <- .rubric_percentile_prediction_items(object, newdata)
+  items <- .rubric_same_set_prediction_items(object, newdata)
   category <- findInterval(items$theta, object$backend$cutpoints) + 1L
   tibble::tibble(item_id = items$item_id, theta = items$theta, category = category,
     rubric_score = object$levels[category],

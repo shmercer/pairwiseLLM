@@ -32,7 +32,8 @@ them; otherwise use the original fixed-fit IDs. Omit for percentile scoring.}
 
 \item{calibration_design}{\code{"same_set"} for one completed CJ scale, or
 \code{"linked_anchors"} for a reusable Phase A rubric reference artifact.
-Percentile scoring supports only \code{"same_set"}.}
+Percentile and linear ordinal scoring currently support only \code{"same_set"}.
+Linked calibration and the monotone backend are not yet implemented.}
 
 \item{trait}{Single trait identifier. Required when absent from CJ metadata.
 Each analytic trait requires its own CJ analysis and calibration.}
@@ -63,17 +64,50 @@ Category summaries include every requested level, including empty levels.
 \code{target_distribution} retains the requested proportions (or equal defaults).
 \code{calibration_data} and \code{category_counts} remain \code{NULL} because no human labels
 are fitted. \code{diagnostics$category_probabilities_available} is \code{FALSE}.
-Valid ordinal fitting calls still raise \code{pairwiseLLM_rubric_backend_unavailable}.
+For linear ordinal calibration, the same class retains ID-aligned
+\code{calibration_data} (including unlabeled items), \code{category_counts}, and the
+labeled \code{calibration_range}. \code{transformation$center} and \verb{$scale} store
+\code{mu_cal} and \code{sigma_cal}. The \code{backend} contains \code{name}, \code{version}, \code{link},
+\code{threshold}, the fitted \code{model}, \code{thresholds}, \code{slope}, \code{vcov},
+\code{standard_errors}, and \code{convergence}. With positive slope, \code{cutpoints_z}
+stores \code{tau / beta} and \code{cutpoints_theta} maps these to the original scale.
+Otherwise cutpoints are omitted. Unavailable coefficient uncertainty is
+represented by \code{NA}, with a warning. \code{diagnostics$ordinal} reports numerical
+convergence, gradient, Hessian condition, covariance availability,
+nonpositive slope, singleton categories, and conditioning on CJ locations.
+\code{warnings} retains ordinal diagnostic messages and
+\code{diagnostics$category_probabilities_available} is \code{TRUE}.
+Deferred methods/designs raise \code{pairwiseLLM_rubric_backend_unavailable}.
 }
 \description{
 Establish a trait-specific rubric conversion from completed Bayesian BTL
 results. Percentile scoring assigns deterministic, distribution-matched
-performance levels. The ordinal method backends are not yet implemented.
+performance levels. Linear ordinal calibration fits human rubric labels
+with a proportional-odds cumulative-logit model.
 }
 \details{
 Higher CJ locations and higher ordered rubric levels must mean better
 performance; no orientation is silently reversed. All requested categories
 must be observed for ordinal calibration.
+
+Fitting \code{ordinal_linear} requires the optional package \pkg{ordinal}.
+Install it with \code{install.packages("ordinal")}. Percentile scoring and
+prediction from an already fitted linear calibration do not require it.
+
+For linear ordinal calibration, labeled and unlabeled items must belong to
+one completed trait-specific CJ fit. Only labeled rows estimate the calibration:
+\code{z = (theta - mu_cal) / sigma_cal}, where \code{mu_cal} is their mean and
+\code{sigma_cal} their sample standard deviation. Both are stored and reused.
+\code{\link[ordinal:clm]{ordinal::clm()}} fits \verb{logit P(Y <= k | z) = tau_k - beta * z} with flexible
+ordered thresholds. Zero or negative slopes produce a diagnostic warning;
+coding is never reversed. Missing categories or degenerate calibration scores
+fail. Singleton categories and numerical convergence/identification problems
+produce warnings; no universal minimum calibration sample size is enforced.
+Finite ordered estimates can be retained with warnings even when convergence
+or uncertainty is unreliable. Such warnings require review before use.
+Standard errors condition on estimated CJ point locations; CJ measurement
+uncertainty is not propagated. Formal proportional-odds diagnostics and
+validation utilities are not yet available.
 
 Percentile scoring uses \code{\link[stats:quantile]{stats::quantile()}} with type 8 at cumulative target
 proportions. This quantile type is fixed. A score equal to a cutpoint enters
@@ -91,7 +125,8 @@ with rubric raters. Recomputing cutpoints on another cohort changes the referenc
 distribution. Stored percentile cutpoints support reuse of the original completed
 result only; independent cohorts and linked target prediction are not supported.
 Scoring conditions on accepted point locations, even when CJ posterior draws
-are available. Category probabilities and uncertainty propagation are unavailable.
+are available. Percentile category probabilities and uncertainty propagation
+are unavailable.
 
 Phase A artifacts are checked using existing import-readiness rules, including
 the existing explicit quality-gate override. Import readiness does not assert
@@ -102,7 +137,7 @@ Historical prediction must consume accepted Phase B common-scale scores and
 reuse the stored reference transformation. Phase B's \code{theta_link_eap} field
 represents its accepted MAP location with Laplace/Hessian uncertainty.
 Rubric scoring is downstream of CJ estimation and does not run comparisons
-or change Phase B estimation. Ordinal calibration will condition on accepted
+or change Phase B estimation. Ordinal calibration conditions on accepted
 CJ locations; joint CJ/rubric likelihood estimation is outside this API.
 }
 \examples{
@@ -114,6 +149,14 @@ fit <- fit_rubric_calibration(completed_cj, method = "percentile",
 predict(fit)
 fit$backend$achieved_proportions
 fit$backend$cutpoint_tie_counts
+# Human labels cover a subset of this same completed CJ result.
+if (requireNamespace("ordinal", quietly = TRUE)) {
+  ordinal_fit <- fit_rubric_calibration(completed_cj, rubric = rubric_labels,
+    trait = "organization", levels = c("developing", "proficient", "advanced"))
+  predictions <- predict(ordinal_fit)
+  predictions$probabilities
+  predictions$expected_level
+}
 }
 }
 \seealso{

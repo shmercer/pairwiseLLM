@@ -140,7 +140,39 @@
     rlang::abort("An unfitted calibration cannot contain statistical results.")
   }
   if (object$status == "fitted" && object$method == "percentile") .rubric_validate_percentile(object)
+  if (object$status == "fitted" && object$method == "ordinal_linear") .rubric_validate_ordinal_linear(object)
   invisible(object)
+}
+
+.rubric_same_set_fit_evidence <- function(cj) {
+  contract <- cj$fit_contract
+  # A completed fit may be supplied with its item axis reordered.
+  for (field in grep("^theta_", names(contract), value = TRUE)) {
+    value <- contract[[field]]
+    if (is.numeric(value) && is.null(dim(value)) && !is.null(names(value))) {
+      contract[[field]] <- value[order(names(value))]
+    }
+  }
+  list(model_variant = cj$model_variant, estimation_mode = cj$estimation_mode,
+    orientation = cj$orientation, fit_contract = contract, fit_contract_hash = cj$fit_contract_hash,
+    reference = cj$reference, provenance = cj$provenance[setdiff(names(cj$provenance), "collection")])
+}
+
+.rubric_same_set_prediction_items <- function(object, newdata) {
+  if (is.null(newdata)) return(object$cj$items)
+  cj <- .rubric_normalize_cj(newdata, object$trait, scale_status = object$cj$scale_status,
+    include_draws = FALSE)
+  source <- object$cj$items
+  items <- cj$items
+  # Configuration hashes alone do not identify a CJ metric. Require the same
+  # item domain, exact accepted locations/uncertainty, and original fit evidence.
+  if (!setequal(items$item_id, source$item_id) ||
+    !identical(items[order(items$item_id), ], source[order(source$item_id), ]) ||
+    !identical(.rubric_same_set_fit_evidence(cj), .rubric_same_set_fit_evidence(object$cj))) {
+    rlang::abort(paste0("Same-set `newdata` must reuse the original completed CJ result with unchanged ",
+      "items, accepted scores, and fit evidence. Independent cohorts and refits are not supported."))
+  }
+  items
 }
 
 #' Fit a rubric calibration to completed comparative judgments
@@ -148,7 +180,8 @@
 #' @description
 #' Establish a trait-specific rubric conversion from completed Bayesian BTL
 #' results. Percentile scoring assigns deterministic, distribution-matched
-#' performance levels. The ordinal method backends are not yet implemented.
+#' performance levels. Linear ordinal calibration fits human rubric labels
+#' with a proportional-odds cumulative-logit model.
 #'
 #' @param cj A completed [fit_bayes_btl_mcmc()] result, a completed within-set
 #'   [adaptive_rank()] result (or its `adaptive_state`), or an import-ready Phase A
@@ -162,7 +195,8 @@
 #'   `"percentile"`. Percentile scoring is norm-referenced/distribution-matched.
 #' @param calibration_design `"same_set"` for one completed CJ scale, or
 #'   `"linked_anchors"` for a reusable Phase A rubric reference artifact.
-#'   Percentile scoring supports only `"same_set"`.
+#'   Percentile and linear ordinal scoring currently support only `"same_set"`.
+#'   Linked calibration and the monotone backend are not yet implemented.
 #' @param trait Single trait identifier. Required when absent from CJ metadata.
 #'   Each analytic trait requires its own CJ analysis and calibration.
 #' @param levels Ordered original rubric labels, from lowest to highest quality.
@@ -182,6 +216,25 @@
 #' performance; no orientation is silently reversed. All requested categories
 #' must be observed for ordinal calibration.
 #'
+#' Fitting `ordinal_linear` requires the optional package \pkg{ordinal}.
+#' Install it with `install.packages("ordinal")`. Percentile scoring and
+#' prediction from an already fitted linear calibration do not require it.
+#'
+#' For linear ordinal calibration, labeled and unlabeled items must belong to
+#' one completed trait-specific CJ fit. Only labeled rows estimate the calibration:
+#' `z = (theta - mu_cal) / sigma_cal`, where `mu_cal` is their mean and
+#' `sigma_cal` their sample standard deviation. Both are stored and reused.
+#' [ordinal::clm()] fits `logit P(Y <= k | z) = tau_k - beta * z` with flexible
+#' ordered thresholds. Zero or negative slopes produce a diagnostic warning;
+#' coding is never reversed. Missing categories or degenerate calibration scores
+#' fail. Singleton categories and numerical convergence/identification problems
+#' produce warnings; no universal minimum calibration sample size is enforced.
+#' Finite ordered estimates can be retained with warnings even when convergence
+#' or uncertainty is unreliable. Such warnings require review before use.
+#' Standard errors condition on estimated CJ point locations; CJ measurement
+#' uncertainty is not propagated. Formal proportional-odds diagnostics and
+#' validation utilities are not yet available.
+#'
 #' Percentile scoring uses [stats::quantile()] with type 8 at cumulative target
 #' proportions. This quantile type is fixed. A score equal to a cutpoint enters
 #' the higher category: category is one plus the number of cutpoints less than
@@ -198,7 +251,8 @@
 #' distribution. Stored percentile cutpoints support reuse of the original completed
 #' result only; independent cohorts and linked target prediction are not supported.
 #' Scoring conditions on accepted point locations, even when CJ posterior draws
-#' are available. Category probabilities and uncertainty propagation are unavailable.
+#' are available. Percentile category probabilities and uncertainty propagation
+#' are unavailable.
 #'
 #' Phase A artifacts are checked using existing import-readiness rules, including
 #' the existing explicit quality-gate override. Import readiness does not assert
@@ -209,7 +263,7 @@
 #' reuse the stored reference transformation. Phase B's `theta_link_eap` field
 #' represents its accepted MAP location with Laplace/Hessian uncertainty.
 #' Rubric scoring is downstream of CJ estimation and does not run comparisons
-#' or change Phase B estimation. Ordinal calibration will condition on accepted
+#' or change Phase B estimation. Ordinal calibration conditions on accepted
 #' CJ locations; joint CJ/rubric likelihood estimation is outside this API.
 #'
 #' @return For percentile scoring, a fitted `pairwiseLLM_rubric_calibration`
@@ -222,7 +276,20 @@
 #'   `target_distribution` retains the requested proportions (or equal defaults).
 #'   `calibration_data` and `category_counts` remain `NULL` because no human labels
 #'   are fitted. `diagnostics$category_probabilities_available` is `FALSE`.
-#'   Valid ordinal fitting calls still raise `pairwiseLLM_rubric_backend_unavailable`.
+#'   For linear ordinal calibration, the same class retains ID-aligned
+#'   `calibration_data` (including unlabeled items), `category_counts`, and the
+#'   labeled `calibration_range`. `transformation$center` and `$scale` store
+#'   `mu_cal` and `sigma_cal`. The `backend` contains `name`, `version`, `link`,
+#'   `threshold`, the fitted `model`, `thresholds`, `slope`, `vcov`,
+#'   `standard_errors`, and `convergence`. With positive slope, `cutpoints_z`
+#'   stores `tau / beta` and `cutpoints_theta` maps these to the original scale.
+#'   Otherwise cutpoints are omitted. Unavailable coefficient uncertainty is
+#'   represented by `NA`, with a warning. `diagnostics$ordinal` reports numerical
+#'   convergence, gradient, Hessian condition, covariance availability,
+#'   nonpositive slope, singleton categories, and conditioning on CJ locations.
+#'   `warnings` retains ordinal diagnostic messages and
+#'   `diagnostics$category_probabilities_available` is `TRUE`.
+#'   Deferred methods/designs raise `pairwiseLLM_rubric_backend_unavailable`.
 #' @seealso [predict.pairwiseLLM_rubric_calibration()]
 #' @examples
 #' \dontrun{
@@ -233,6 +300,14 @@
 #' predict(fit)
 #' fit$backend$achieved_proportions
 #' fit$backend$cutpoint_tie_counts
+#' # Human labels cover a subset of this same completed CJ result.
+#' if (requireNamespace("ordinal", quietly = TRUE)) {
+#'   ordinal_fit <- fit_rubric_calibration(completed_cj, rubric = rubric_labels,
+#'     trait = "organization", levels = c("developing", "proficient", "advanced"))
+#'   predictions <- predict(ordinal_fit)
+#'   predictions$probabilities
+#'   predictions$expected_level
+#' }
 #' }
 #' @export
 fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
@@ -242,7 +317,10 @@ fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
   object <- .rubric_prepare_calibration(cj, rubric, method, calibration_design, trait, levels, K,
     target_distribution)
   if (method == "percentile") return(.rubric_fit_percentile(object))
-  rlang::abort(paste0("The `", method, "` rubric backend is not implemented yet."),
+  if (method == "ordinal_linear" && calibration_design == "same_set") {
+    return(.rubric_fit_ordinal_linear(object))
+  }
+  rlang::abort(paste0("The `", method, "` rubric backend is not implemented yet for `", calibration_design, "`."),
     class = "pairwiseLLM_rubric_backend_unavailable")
 }
 
@@ -250,14 +328,17 @@ fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
 #'
 #' @param object A `pairwiseLLM_rubric_calibration` object.
 #' @param newdata Completed CJ result to predict, or `NULL` for the original
-#'   items. Percentile scoring accepts the original completed result with unchanged
+#'   items. Same-set scoring accepts the original completed result with unchanged
 #'   item IDs, exact accepted scores and uncertainty, and matching fit/reference
 #'   evidence. Item reordering is allowed; collection provenance does not affect
 #'   scoring. Raw tables, independent cohorts, refits, and Phase B targets are not
-#'   supported for percentile prediction. Future ordinal linked prediction requires
+#'   supported for same-set prediction. Future ordinal linked prediction requires
 #'   accepted Phase B scores on the stored reference scale.
 #' @param hard_score Ordinal hard-score rule: `"median"` (default) or `"mode"`.
-#'   Ordinal output will also retain all category probabilities and expected level.
+#'   The median is the lowest category whose cumulative probability is at least
+#'   0.5; equality at a median cutpoint therefore selects the lower category.
+#'   Modal ties select the lowest category. Ordinal output always retains all
+#'   category probabilities, both decision rules, and expected level.
 #'   Both choices give the same deterministic category for percentile scoring.
 #' @param ... Reserved arguments; currently must be empty.
 #' @return For percentile scoring, a tibble with `item_id`, accepted source `theta`,
@@ -265,7 +346,16 @@ fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
 #'   (outside the fitted CJ range). Under the original-result restriction,
 #'   extrapolation flags are always false. Stored cutpoints are reused unchanged.
 #'   No category probabilities or probabilistic summaries are returned.
-#'   Unfitted objects fail clearly; ordinal prediction backends remain unavailable.
+#'   Linear ordinal predictions include the same five columns, plus
+#'   `probabilities`, a list-column of numeric K-vectors named by the original
+#'   ordered labels; integer `median_category` and `modal_category`; and
+#'   `expected_level = sum(k * P(Y = k))` for internal indices `k` in `1:K`,
+#'   regardless of the original labels' numerical spacing. This expected rubric
+#'   level is a continuous summary, not a replacement for the ordinal result.
+#'   `category` and `rubric_score` use the requested `hard_score` rule.
+#'   Ordinal `extrapolated` flags use the labeled calibration range, so unlabeled
+#'   source items can be extrapolated; endpoints are included in the range.
+#'   Stored standardization is reused. Unfitted objects fail clearly.
 #' @seealso [fit_rubric_calibration()]
 #' @export
 predict.pairwiseLLM_rubric_calibration <- function(object, newdata = NULL,
@@ -276,6 +366,7 @@ predict.pairwiseLLM_rubric_calibration <- function(object, newdata = NULL,
   .rubric_choice(hard_score, c("median", "mode"), "hard_score")
   if (object$status != "fitted") rlang::abort("Cannot predict from an unfitted rubric calibration.")
   if (object$method == "percentile") return(.rubric_predict_percentile(object, newdata))
+  if (object$method == "ordinal_linear") return(.rubric_predict_ordinal_linear(object, newdata, hard_score))
   rlang::abort("Rubric prediction backends are not implemented yet.",
     class = "pairwiseLLM_rubric_backend_unavailable")
 }

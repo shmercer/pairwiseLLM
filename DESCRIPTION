@@ -45,6 +45,7 @@ Suggests:
     glmnet,
     knitr,
     mockery,
+    ordinal,
     pkgload,
     purrr,
     readr,
@@ -133,6 +134,7 @@ Collate:
     'rubric_calibration.R'
     'rubric_cj_contract.R'
     'rubric_cj_linked.R'
+    'rubric_ordinal_linear.R'
     'rubric_percentile.R'
     'seed_helpers.R'
     'together_live.R'
