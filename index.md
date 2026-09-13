@@ -21,6 +21,8 @@ It includes:
   positional bias
 - Positional-bias diagnostics (forward vs reverse design)
 - Bradley–Terry (BT), Bayesian BT, and Elo modeling
+- Rubric calibration of completed Bayesian CJ scores, with
+  distribution-matched levels or linear/monotone ordinal models
 - Consistent data structures for all providers
 
 ------------------------------------------------------------------------
@@ -76,6 +78,8 @@ Provider-required constraints, such as Anthropic extended thinking’s
 ------------------------------------------------------------------------
 
 ## Installation
+
+Version 1.5.0 requires **R \>= 4.4**.
 
 `pairwiseLLM` is available on CRAN, install with:
 
@@ -274,6 +278,10 @@ design article for your task.
 
 ### Modeling and bias
 
+- [Guide: Rubric
+  Calibration](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.html)
+  — convert completed CJ results to distribution-matched levels or human
+  rubric categories.
 - [Standalone Bayesian BTL with
   CmdStan](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.html)
   — fit and diagnose Bayesian Bradley–Terry–Luce models outside the
@@ -928,6 +936,43 @@ adaptive algorithms, see:
 
 ------------------------------------------------------------------------
 
+## Rubric calibration
+
+[`fit_rubric_calibration()`](https://shmercer.github.io/pairwiseLLM/reference/fit_rubric_calibration.md)
+converts completed Bayesian BTL results from any of `btl`, `btl_e`,
+`btl_b`, or `btl_e_b`. Use the default `ordinal_linear` method with
+human labels from a subset of the same CJ fit (`same_set`), or
+explicitly choose `ordinal_monotone`. Reusing a historical rubric
+reference requires `linked_anchors` and completed Phase B linking before
+target prediction. Without human labels, `percentile` produces
+norm-referenced, distribution-matched levels and reports requested
+versus achieved proportions while preserving ties.
+
+``` r
+
+# completed_cj is an already completed trait-specific Bayesian CJ result.
+# training_labels contains item_id and rubric_score for its labeled subset.
+if (requireNamespace("ordinal", quietly = TRUE)) {
+  calibration <- fit_rubric_calibration(
+    completed_cj, training_labels, trait = "organization",
+    levels = c("developing", "proficient", "advanced")
+  )
+  scores <- predict(calibration)
+  scores[, c("item_id", "rubric_score", "probabilities", "extrapolated")]
+}
+```
+
+Ordinal outputs retain every category probability and use the median
+category as the default hard score. Each analytic trait needs its own CJ
+fit and calibration. Predictions condition on accepted CJ point
+locations; retained CJ uncertainty is not propagated. Linear fitting
+requires optional `ordinal`; monotone fitting requires optional
+`mgcv >= 1.9-4` and `withr`, and saved monotone prediction requires
+`mgcv`. Install these packages explicitly when needed. See [Guide:
+Rubric
+Calibration](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.html)
+for validation, diagnostics, and the reference-to-target workflow.
+
 ## Live vs Batch Summary
 
 | Workflow | Use Case | Functions |
@@ -1006,5 +1051,5 @@ MIT License. See `LICENSE`.
 ## Citation
 
 > Mercer, S. H. (2026). *pairwiseLLM: Pairwise writing quality
-> comparisons with large language models* (Version 1.4.0) \[R package;
+> comparisons with large language models* (Version 1.5.0) \[R package;
 > Computer software\]. <https://github.com/shmercer/pairwiseLLM>

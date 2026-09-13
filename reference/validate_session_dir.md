@@ -51,7 +51,7 @@ validate_session_dir(dir)
 #> [1] "adaptive-session"
 #> 
 #> $package_version
-#> [1] "1.4.0"
+#> [1] "1.5.0"
 #> 
 #> $n_items
 #> [1] 3

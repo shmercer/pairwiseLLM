@@ -169,6 +169,12 @@ automatic prior SD. See [Guide: Adaptive Warm
 Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.md)
 for the offline workflow.
 
+For downstream performance levels or calibration to human rubric scores,
+see [Guide: Rubric
+Calibration](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.md).
+It consumes the completed fit directly and supports all four Bayesian
+BTL variants.
+
 ## Citation
 
 > Mercer, S. H. (2026). *Standalone Bayesian BTL with CmdStan* \[R

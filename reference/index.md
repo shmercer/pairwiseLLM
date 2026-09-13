@@ -213,6 +213,15 @@
 - [`warm_start_python_status()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_python_status.md)
   : Check the optional warm-start feature environment
 
+## Rubric calibration
+
+- [`fit_rubric_calibration()`](https://shmercer.github.io/pairwiseLLM/reference/fit_rubric_calibration.md)
+  : Fit a rubric calibration to completed comparative judgments
+- [`predict(`*`<pairwiseLLM_rubric_calibration>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_rubric_calibration.md)
+  : Predict rubric scores from a calibration
+- [`evaluate_rubric_predictions()`](https://shmercer.github.io/pairwiseLLM/reference/evaluate_rubric_predictions.md)
+  : Evaluate rubric predictions on observed ordered labels
+
 ## Adaptive lifecycle
 
 - [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)

@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -29,6 +29,7 @@
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
+    <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
     <li><a class="dropdown-item" href="../articles/prompt-template-bias.html">Prompt Template Positional Bias Testing</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
@@ -48,6 +49,24 @@
       <small>Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.5.0" id="pairwisellm-150">pairwiseLLM 1.5.0<a class="anchor" aria-label="anchor" href="#pairwisellm-150"></a></h2>
+<div class="section level3">
+<h3 id="rubric-calibration-1-5-0">Rubric calibration<a class="anchor" aria-label="anchor" href="#rubric-calibration-1-5-0"></a></h3>
+<ul><li>Added <code><a href="../reference/fit_rubric_calibration.html">fit_rubric_calibration()</a></code>, S3 <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>, and <code><a href="../reference/evaluate_rubric_predictions.html">evaluate_rubric_predictions()</a></code> for completed Bayesian comparative judgments. All four variants (<code>btl</code>, <code>btl_e</code>, <code>btl_b</code>, <code>btl_e_b</code>) and completed fixed or adaptive results share the downstream interface. Fixed live/batch collection remains provenance only.</li>
+<li>Added <code>percentile</code> scoring with type-8 quantiles, preserved ties, and requested versus achieved proportions. These are norm-referenced, distribution-matched performance levels; human rubric labels are not fitted.</li>
+<li>Added default <code>ordinal_linear</code> proportional-odds calibration and explicit <code>ordinal_monotone</code> calibration with a nondecreasing penalized spline. Ordinal predictions retain full probabilities, median-category scores by default, optional modal scores, expected internal level, and extrapolation flags.</li>
+<li>Both ordinal methods support a labeled subset within one CJ fit (<code>same_set</code>) and a reusable Phase A rubric reference (<code>linked_anchors</code>). Linked target prediction requires completed existing Phase B outputs and reuses the stored reference transformation after identity and fit-contract checks. Phase B estimation, selection, probes, and stopping are unchanged.</li>
+<li>Added normalized ranked probability score, log loss, cumulative calibration summaries, hard-score metrics, and optional training-model diagnostics. Internal label-only cross-validation retains completed CJ evidence and fits scaling and calibration from training labels alone. No automatic method selection is provided.</li>
+<li>Each analytic trait requires its own CJ analysis and calibration. Missing intended calibration categories fail explicitly; orientation is never silently reversed. All methods condition on accepted CJ point locations: CJ uncertainty is retained where available but is not propagated. Joint CJ/rubric likelihood estimation is not implemented.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="requirements-and-documentation-1-5-0">Requirements and documentation<a class="anchor" aria-label="anchor" href="#requirements-and-documentation-1-5-0"></a></h3>
+<ul><li>Raised the minimum supported R version to 4.4.</li>
+<li>Linear fitting uses optional <code>ordinal</code>; monotone fitting and prediction use optional <code>mgcv (&gt;= 1.9-4)</code>, with optional <code>withr</code> for reproducible fitting. Missing backends give installation guidance without substituting methods.</li>
+<li>Added a practical rubric-calibration guide and integrated reference help, README, and website navigation, including same-set validation and historical reference reuse through Phase B.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.4.0" id="pairwisellm-140">pairwiseLLM 1.4.0<a class="anchor" aria-label="anchor" href="#pairwisellm-140"></a></h2>
 <div class="section level3">

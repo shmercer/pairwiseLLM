@@ -11,8 +11,8 @@
 <script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation">
-<meta name="description" content="Provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (OpenAI, Anthropic, Google Gemini, Together AI, and locally-hosted Ollama models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. The package additionally supports adaptive pairing workflows that iteratively select comparisons based on model uncertainty to improve ranking efficiency. Results can be modeled using frequentist or Bayesian Bradley–Terry–Luce models (Bradley &amp; Terry, 1952 &lt;doi:10.2307/2334029&gt;; see also Caron &amp; Doucet, 2012 &lt;doi:10.1080/10618600.2012.638220&gt;) or Elo rating methods (see Clark et al., 2018 &lt;doi:10.1371/journal.pone.0190393&gt;) to derive writing quality scores. For information on pairwise comparisons and comparative judgement, see Thurstone (1927) &lt;doi:10.1037/h0070288&gt; and Heldsinger &amp; Humphry (2010) &lt;doi:10.1007/BF03216919&gt;.">
-<meta property="og:description" content="Provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (OpenAI, Anthropic, Google Gemini, Together AI, and locally-hosted Ollama models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. The package additionally supports adaptive pairing workflows that iteratively select comparisons based on model uncertainty to improve ranking efficiency. Results can be modeled using frequentist or Bayesian Bradley–Terry–Luce models (Bradley &amp; Terry, 1952 &lt;doi:10.2307/2334029&gt;; see also Caron &amp; Doucet, 2012 &lt;doi:10.1080/10618600.2012.638220&gt;) or Elo rating methods (see Clark et al., 2018 &lt;doi:10.1371/journal.pone.0190393&gt;) to derive writing quality scores. For information on pairwise comparisons and comparative judgement, see Thurstone (1927) &lt;doi:10.1037/h0070288&gt; and Heldsinger &amp; Humphry (2010) &lt;doi:10.1007/BF03216919&gt;.">
+<meta name="description" content="Provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (OpenAI, Anthropic, Google Gemini, Together AI, and locally-hosted Ollama models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. The package additionally supports adaptive pairing workflows that iteratively select comparisons based on model uncertainty to improve ranking efficiency. Results can be modeled using frequentist or Bayesian Bradley–Terry–Luce models (Bradley &amp; Terry, 1952 &lt;doi:10.2307/2334029&gt;; see also Caron &amp; Doucet, 2012 &lt;doi:10.1080/10618600.2012.638220&gt;) or Elo rating methods (see Clark et al., 2018 &lt;doi:10.1371/journal.pone.0190393&gt;) to derive writing quality scores. The Bayesian writing quality scores can be converted to distribution-matched performance levels or calibrated to ordered rubric scores using linear or monotone ordinal models. For information on pairwise comparisons and comparative judgement, see Thurstone (1927) &lt;doi:10.1037/h0070288&gt; and Heldsinger &amp; Humphry (2010) &lt;doi:10.1007/BF03216919&gt;.">
+<meta property="og:description" content="Provides a unified framework for generating, submitting, and analyzing pairwise comparisons of writing quality using large language models (LLMs). The package supports live and/or batch evaluation workflows across multiple providers (OpenAI, Anthropic, Google Gemini, Together AI, and locally-hosted Ollama models), includes bias-tested prompt templates and a flexible template registry, and offers tools for constructing forward and reversed comparison sets to analyze consistency and positional bias. The package additionally supports adaptive pairing workflows that iteratively select comparisons based on model uncertainty to improve ranking efficiency. Results can be modeled using frequentist or Bayesian Bradley–Terry–Luce models (Bradley &amp; Terry, 1952 &lt;doi:10.2307/2334029&gt;; see also Caron &amp; Doucet, 2012 &lt;doi:10.1080/10618600.2012.638220&gt;) or Elo rating methods (see Clark et al., 2018 &lt;doi:10.1371/journal.pone.0190393&gt;) to derive writing quality scores. The Bayesian writing quality scores can be converted to distribution-matched performance levels or calibrated to ordered rubric scores using linear or monotone ordinal models. For information on pairwise comparisons and comparative judgement, see Thurstone (1927) &lt;doi:10.1037/h0070288&gt; and Heldsinger &amp; Humphry (2010) &lt;doi:10.1007/BF03216919&gt;.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -22,7 +22,7 @@
 
     <a class="navbar-brand me-2" href="index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -46,6 +46,7 @@
     <li><a class="dropdown-item" href="articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
+    <li><a class="dropdown-item" href="articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
     <li><a class="dropdown-item" href="articles/prompt-template-bias.html">Prompt Template Positional Bias Testing</a></li>
   </ul>
 </li>
@@ -80,6 +81,7 @@ pairwiseLLM banner
 <li>A prompt template registry with tested templates designed to reduce positional bias</li>
 <li>Positional-bias diagnostics (forward vs reverse design)</li>
 <li>Bradley–Terry (BT), Bayesian BT, and Elo modeling</li>
+<li>Rubric calibration of completed Bayesian CJ scores, with distribution-matched levels or linear/monotone ordinal models</li>
 <li>Consistent data structures for all providers</li>
 </ul>
 <hr>
@@ -157,6 +159,7 @@ pairwiseLLM banner
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
+<p>Version 1.5.0 requires <strong>R &gt;= 4.4</strong>.</p>
 <p><code>pairwiseLLM</code> is available on CRAN, install with:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"pairwiseLLM"</span><span class="op">)</span></span></code></pre></div>
@@ -295,6 +298,8 @@ pairwiseLLM banner
 <h3 id="modeling-and-bias">Modeling and bias<a class="anchor" aria-label="anchor" href="#modeling-and-bias"></a>
 </h3>
 <ul>
+<li>
+<a href="https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.html">Guide: Rubric Calibration</a> — convert completed CJ results to distribution-matched levels or human rubric categories.</li>
 <li>
 <a href="https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a> — fit and diagnose Bayesian Bradley–Terry–Luce models outside the adaptive workflow.</li>
 <li>
@@ -879,6 +884,23 @@ pairwiseLLM banner
 </div>
 </div>
 <div class="section level2">
+<h2 id="rubric-calibration">Rubric calibration<a class="anchor" aria-label="anchor" href="#rubric-calibration"></a>
+</h2>
+<p><code><a href="reference/fit_rubric_calibration.html">fit_rubric_calibration()</a></code> converts completed Bayesian BTL results from any of <code>btl</code>, <code>btl_e</code>, <code>btl_b</code>, or <code>btl_e_b</code>. Use the default <code>ordinal_linear</code> method with human labels from a subset of the same CJ fit (<code>same_set</code>), or explicitly choose <code>ordinal_monotone</code>. Reusing a historical rubric reference requires <code>linked_anchors</code> and completed Phase B linking before target prediction. Without human labels, <code>percentile</code> produces norm-referenced, distribution-matched levels and reports requested versus achieved proportions while preserving ties.</p>
+<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># completed_cj is an already completed trait-specific Bayesian CJ result.</span></span>
+<span><span class="co"># training_labels contains item_id and rubric_score for its labeled subset.</span></span>
+<span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">calibration</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit_rubric_calibration.html">fit_rubric_calibration</a></span><span class="op">(</span></span>
+<span>    <span class="va">completed_cj</span>, <span class="va">training_labels</span>, trait <span class="op">=</span> <span class="st">"organization"</span>,</span>
+<span>    levels <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"developing"</span>, <span class="st">"proficient"</span>, <span class="st">"advanced"</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span>  <span class="va">scores</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">calibration</span><span class="op">)</span></span>
+<span>  <span class="va">scores</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"item_id"</span>, <span class="st">"rubric_score"</span>, <span class="st">"probabilities"</span>, <span class="st">"extrapolated"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="op">}</span></span></code></pre></div>
+<p>Ordinal outputs retain every category probability and use the median category as the default hard score. Each analytic trait needs its own CJ fit and calibration. Predictions condition on accepted CJ point locations; retained CJ uncertainty is not propagated. Linear fitting requires optional <code>ordinal</code>; monotone fitting requires optional <code>mgcv &gt;= 1.9-4</code> and <code>withr</code>, and saved monotone prediction requires <code>mgcv</code>. Install these packages explicitly when needed. See <a href="https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.html">Guide: Rubric Calibration</a> for validation, diagnostics, and the reference-to-target workflow.</p>
+</div>
+<div class="section level2">
 <h2 id="live-vs-batch-summary">Live vs Batch Summary<a class="anchor" aria-label="anchor" href="#live-vs-batch-summary"></a>
 </h2>
 <table class="table">
@@ -944,7 +966,7 @@ pairwiseLLM banner
 <ol style="list-style-type: decimal">
 <li>
 <p>Run:</p>
-<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">session_info</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </li>
 <li>
@@ -983,7 +1005,7 @@ Google Scholar: <a href="https://scholar.google.ca/citations?user=YJg4svsAAAAJ&a
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
-<p>Mercer, S. H. (2026). <em>pairwiseLLM: Pairwise writing quality comparisons with large language models</em> (Version 1.4.0) [R package; Computer software]. <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
+<p>Mercer, S. H. (2026). <em>pairwiseLLM: Pairwise writing quality comparisons with large language models</em> (Version 1.5.0) [R package; Computer software]. <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
 </blockquote>
 </div>
 </div>

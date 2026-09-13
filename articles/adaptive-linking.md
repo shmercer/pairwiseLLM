@@ -21,6 +21,13 @@ Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design
 
 ## Public contract at a glance
 
+To reuse human rubric scores on a historical reference set, see [Guide:
+Rubric
+Calibration](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.md).
+Its `linked_anchors` design uses this Phase B workflow with the
+reference as hub, then applies the stored calibration to accepted
+common-scale target locations.
+
 | User task | [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md) input or output | Current behavior |
 |----|----|----|
 | Identify sets | `data$set_id` | Positive integer-like values; `hub_id` must name one observed set. |

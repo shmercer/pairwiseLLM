@@ -14,6 +14,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/authors.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/index.html</loc></url>
@@ -50,6 +51,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/ensure_only_ollama_model_loaded.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/estimate_llm_pairs_cost.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/evaluate_rubric_predictions.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/example_openai_batch_output.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/example_writing_pairs.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/example_writing_results.html</loc></url>
@@ -59,6 +61,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/fit_bayes_btl_mcmc.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/fit_rubric_calibration.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/gemini_create_batch.html</loc></url>
@@ -90,6 +93,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/parse_anthropic_batch_output.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/parse_gemini_batch_output.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/parse_openai_batch_output.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_rubric_calibration.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_ensemble.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_model.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/prepare_warm_start_model.html</loc></url>

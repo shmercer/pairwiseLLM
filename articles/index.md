@@ -33,5 +33,7 @@
 
 - [Standalone Bayesian BTL with
   CmdStan](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.md):
+- [Guide: Rubric
+  Calibration](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.md):
 - [Prompt Template Positional Bias
   Testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.md):

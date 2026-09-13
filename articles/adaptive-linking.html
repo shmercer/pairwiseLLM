@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -44,6 +44,7 @@
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
+    <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
     <li><a class="dropdown-item" href="../articles/prompt-template-bias.html">Prompt Template Positional Bias Testing</a></li>
   </ul>
 </li>
@@ -98,6 +99,10 @@ Adaptive Linking</a>.</p>
 <div class="section level2">
 <h2 id="public-contract-at-a-glance">Public contract at a glance<a class="anchor" aria-label="anchor" href="#public-contract-at-a-glance"></a>
 </h2>
+<p>To reuse human rubric scores on a historical reference set, see <a href="rubric-calibration.html">Guide: Rubric Calibration</a>. Its
+<code>linked_anchors</code> design uses this Phase B workflow with the
+reference as hub, then applies the stored calibration to accepted
+common-scale target locations.</p>
 <table class="table">
 <colgroup>
 <col width="33%">
