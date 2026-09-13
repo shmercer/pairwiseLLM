@@ -134,6 +134,10 @@
 .rubric_predict_ordinal_linear <- function(object, newdata, hard_score) {
   items <- .rubric_same_set_prediction_items(object, newdata)
   probabilities <- .rubric_ordinal_probabilities(items$theta, object)
+  .rubric_ordinal_prediction_table(object, items, probabilities, hard_score)
+}
+
+.rubric_ordinal_prediction_table <- function(object, items, probabilities, hard_score) {
   decisions <- .rubric_ordinal_decisions(probabilities)
   category <- decisions[[hard_score]]
   tibble::tibble(item_id = items$item_id, theta = items$theta, category = category,

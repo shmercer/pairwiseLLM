@@ -32,8 +32,8 @@ them; otherwise use the original fixed-fit IDs. Omit for percentile scoring.}
 
 \item{calibration_design}{\code{"same_set"} for one completed CJ scale, or
 \code{"linked_anchors"} for a reusable Phase A rubric reference artifact.
-Percentile and linear ordinal scoring currently support only \code{"same_set"}.
-Linked calibration and the monotone backend are not yet implemented.}
+All three scoring methods currently support only \code{"same_set"}.
+Linked calibration is not yet implemented.}
 
 \item{trait}{Single trait identifier. Required when absent from CJ metadata.
 Each analytic trait requires its own CJ analysis and calibration.}
@@ -51,7 +51,12 @@ The absolute sum tolerance is \code{1e-8}; accepted proportions are normalized
 to sum to one for computation, while the requested values are retained.
 Named proportions must match the labels in their specified order.}
 
-\item{...}{Reserved for future method arguments; currently must be empty.}
+\item{...}{For \code{ordinal_monotone} only, uniquely named \code{k} and \code{sp} controls.
+\code{k} is the cubic basis dimension (default 6, integer >= 5). It is reduced
+with a warning to the number of unique labeled CJ scores if necessary;
+fewer than five unique scores fail. \code{sp = NULL} (default) estimates smoothing
+by extended Fellner-Schall (EFS); a finite positive scalar fixes the penalty
+parameter. Other methods require empty dots. Unknown controls fail.}
 }
 \value{
 For percentile scoring, a fitted \code{pairwiseLLM_rubric_calibration}
@@ -77,13 +82,24 @@ convergence, gradient, Hessian condition, covariance availability,
 nonpositive slope, singleton categories, and conditioning on CJ locations.
 \code{warnings} retains ordinal diagnostic messages and
 \code{diagnostics$category_probabilities_available} is \code{TRUE}.
+Monotone ordinal calibration uses the same class, data, transformation,
+and probability availability flag. Its \code{backend} stores \code{name}, \code{version},
+cumulative \code{link}, \code{latent_link}, fitted \code{model}, \code{thresholds}, \code{intercept},
+\code{basis} (requested/effective dimension, constraint, order, knots),
+\code{smoothing} (method, requested/fitted penalty parameters, penalty matrices),
+total \code{edf}, \code{smooth_edf}, \code{convergence}, \code{threshold_standard_errors},
+\code{cutpoints_z}, \code{cutpoints_theta}, and \code{cutpoint_status} (\code{"unique"},
+\code{"outside_range"}, or \code{"flat_or_unresolved"}). \code{diagnostics$ordinal} stores
+convergence, singleton categories, conditioning on CJ, unavailable threshold
+uncertainty, and numerical \code{monotonicity} results.
 Deferred methods/designs raise \code{pairwiseLLM_rubric_backend_unavailable}.
 }
 \description{
 Establish a trait-specific rubric conversion from completed Bayesian BTL
 results. Percentile scoring assigns deterministic, distribution-matched
 performance levels. Linear ordinal calibration fits human rubric labels
-with a proportional-odds cumulative-logit model.
+with a proportional-odds cumulative-logit model. Monotone ordinal calibration
+replaces its linear effect with a nondecreasing penalized cubic spline.
 }
 \details{
 Higher CJ locations and higher ordered rubric levels must mean better
@@ -94,7 +110,12 @@ Fitting \code{ordinal_linear} requires the optional package \pkg{ordinal}.
 Install it with \code{install.packages("ordinal")}. Percentile scoring and
 prediction from an already fitted linear calibration do not require it.
 
-For linear ordinal calibration, labeled and unlabeled items must belong to
+Monotone ordinal fitting and prediction require optional \pkg{mgcv} >= 1.9-4
+(\code{install.packages("mgcv")}). Fitting also requires optional \pkg{withr}
+(\code{install.packages("withr")}) to isolate backend RNG use with a fixed internal
+seed. Saved monotone models require \pkg{mgcv} for spline prediction.
+
+For both ordinal methods, labeled and unlabeled items must belong to
 one completed trait-specific CJ fit. Only labeled rows estimate the calibration:
 \code{z = (theta - mu_cal) / sigma_cal}, where \code{mu_cal} is their mean and
 \code{sigma_cal} their sample standard deviation. Both are stored and reused.
@@ -108,6 +129,28 @@ or uncertainty is unreliable. Such warnings require review before use.
 Standard errors condition on estimated CJ point locations; CJ measurement
 uncertainty is not propagated. Formal proportional-odds diagnostics and
 validation utilities are not yet available.
+
+\code{ordinal_monotone} uses \code{\link[mgcv:scasm]{mgcv::scasm()}} with
+\code{s(z, bs = "sc", xt = "m+", k = k)} and \code{\link[mgcv:ocat]{mgcv::ocat()}} with integer categories
+\code{1:K}. The model is \verb{logit P(Y <= k | z) = tau_k - eta(z)}, where \code{eta} includes
+an intercept and a nondecreasing smooth. The backend fixes the first threshold
+at -1 for identification; its identity link describes the latent location,
+while category cumulative probabilities follow the logistic distribution.
+Bootstrap is disabled. Smoothing is estimated by EFS unless \code{sp} is fixed.
+A 1,001-point calibration grid verifies nondecreasing latent locations and
+nonincreasing cumulative probabilities with tolerance \code{1e-8}. Invalid
+probabilities or monotonicity failures abort; no unconstrained fallback is used.
+Essentially flat effects, singleton categories, and convergence problems warn.
+Small bases and some reversed/separated label patterns can fail in the backend;
+these return contextual fit errors. The five-unique-score requirement is a
+backend feasibility guard, not a recommended calibration sample size.
+Threshold uncertainty is unavailable from this wrapper (the fixed first
+threshold has standard error zero; the remaining entries are \code{NA}).
+Numerical median cutpoints are reported only for unique crossings within the
+calibration range. Flat or unresolved crossings and thresholds outside the
+range have \code{NA} cutpoints and an explanatory status; scoring always uses
+probabilities. Predictions beyond the labeled range are flagged and retain
+the backend's spline extrapolation; their calibration is not established.
 
 Percentile scoring uses \code{\link[stats:quantile]{stats::quantile()}} with type 8 at cumulative target
 proportions. This quantile type is fixed. A score equal to a cutpoint enters
@@ -156,6 +199,13 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
   predictions <- predict(ordinal_fit)
   predictions$probabilities
   predictions$expected_level
+}
+if (requireNamespace("mgcv", quietly = TRUE) &&
+    packageVersion("mgcv") >= "1.9.4" && requireNamespace("withr", quietly = TRUE)) {
+  monotone_fit <- fit_rubric_calibration(completed_cj, rubric = rubric_labels,
+    method = "ordinal_monotone", trait = "organization",
+    levels = c("developing", "proficient", "advanced"), k = 6)
+  predict(monotone_fit)$probabilities
 }
 }
 }

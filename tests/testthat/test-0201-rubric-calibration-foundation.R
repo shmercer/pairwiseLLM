@@ -96,10 +96,6 @@ test_that("public API dispatch reports unimplemented backends without fabricated
   fit <- pairwiseLLM::fit_rubric_calibration
   fixed <- rubric_test_fixed()
   rubric <- tibble::tibble(item_id = letters[1:3], rubric_score = 1:3)
-  for (method in "ordinal_monotone") {
-    expect_error(fit(fixed, rubric, method = method, trait = "trait"),
-      class = "pairwiseLLM_rubric_backend_unavailable")
-  }
   expect_identical(fit(fixed, method = "percentile", trait = "trait", K = 3)$status, "fitted")
   expect_error(fit(fixed, rubric, method = "auto", trait = "trait"), "method")
   expect_error(fit(fixed, rubric, method = "joint", trait = "trait"), "method")
@@ -131,6 +127,11 @@ test_that("calibration fit designs require the correct source scale", {
   state$step_log <- tibble::tibble(pair_id = 1:3, step_id = 1:3, A = c(1L, 2L, 3L), B = c(2L, 3L, 4L),
     Y = 1L, set_i = 1L, set_j = 1L)
   artifact <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, 1L)
+  for (method in c("ordinal_linear", "ordinal_monotone")) {
+    expect_error(pairwiseLLM::fit_rubric_calibration(artifact, rubric, method = method,
+      calibration_design = "linked_anchors", trait = "trait"),
+      class = "pairwiseLLM_rubric_backend_unavailable")
+  }
   object <- prepare(artifact, rubric, calibration_design = "linked_anchors", trait = "trait")
   expect_identical(object$cj$scale_status, "phase_a_reference")
   expect_equal(object$reference$items$theta, unname(fixed$fit$theta_mean))

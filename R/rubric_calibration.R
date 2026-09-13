@@ -141,6 +141,7 @@
   }
   if (object$status == "fitted" && object$method == "percentile") .rubric_validate_percentile(object)
   if (object$status == "fitted" && object$method == "ordinal_linear") .rubric_validate_ordinal_linear(object)
+  if (object$status == "fitted" && object$method == "ordinal_monotone") .rubric_validate_ordinal_monotone(object)
   invisible(object)
 }
 
@@ -181,7 +182,8 @@
 #' Establish a trait-specific rubric conversion from completed Bayesian BTL
 #' results. Percentile scoring assigns deterministic, distribution-matched
 #' performance levels. Linear ordinal calibration fits human rubric labels
-#' with a proportional-odds cumulative-logit model.
+#' with a proportional-odds cumulative-logit model. Monotone ordinal calibration
+#' replaces its linear effect with a nondecreasing penalized cubic spline.
 #'
 #' @param cj A completed [fit_bayes_btl_mcmc()] result, a completed within-set
 #'   [adaptive_rank()] result (or its `adaptive_state`), or an import-ready Phase A
@@ -195,8 +197,8 @@
 #'   `"percentile"`. Percentile scoring is norm-referenced/distribution-matched.
 #' @param calibration_design `"same_set"` for one completed CJ scale, or
 #'   `"linked_anchors"` for a reusable Phase A rubric reference artifact.
-#'   Percentile and linear ordinal scoring currently support only `"same_set"`.
-#'   Linked calibration and the monotone backend are not yet implemented.
+#'   All three scoring methods currently support only `"same_set"`.
+#'   Linked calibration is not yet implemented.
 #' @param trait Single trait identifier. Required when absent from CJ metadata.
 #'   Each analytic trait requires its own CJ analysis and calibration.
 #' @param levels Ordered original rubric labels, from lowest to highest quality.
@@ -209,7 +211,12 @@
 #'   The absolute sum tolerance is `1e-8`; accepted proportions are normalized
 #'   to sum to one for computation, while the requested values are retained.
 #'   Named proportions must match the labels in their specified order.
-#' @param ... Reserved for future method arguments; currently must be empty.
+#' @param ... For `ordinal_monotone` only, uniquely named `k` and `sp` controls.
+#'   `k` is the cubic basis dimension (default 6, integer >= 5). It is reduced
+#'   with a warning to the number of unique labeled CJ scores if necessary;
+#'   fewer than five unique scores fail. `sp = NULL` (default) estimates smoothing
+#'   by extended Fellner-Schall (EFS); a finite positive scalar fixes the penalty
+#'   parameter. Other methods require empty dots. Unknown controls fail.
 #'
 #' @details
 #' Higher CJ locations and higher ordered rubric levels must mean better
@@ -220,7 +227,12 @@
 #' Install it with `install.packages("ordinal")`. Percentile scoring and
 #' prediction from an already fitted linear calibration do not require it.
 #'
-#' For linear ordinal calibration, labeled and unlabeled items must belong to
+#' Monotone ordinal fitting and prediction require optional \pkg{mgcv} >= 1.9-4
+#' (`install.packages("mgcv")`). Fitting also requires optional \pkg{withr}
+#' (`install.packages("withr")`) to isolate backend RNG use with a fixed internal
+#' seed. Saved monotone models require \pkg{mgcv} for spline prediction.
+#'
+#' For both ordinal methods, labeled and unlabeled items must belong to
 #' one completed trait-specific CJ fit. Only labeled rows estimate the calibration:
 #' `z = (theta - mu_cal) / sigma_cal`, where `mu_cal` is their mean and
 #' `sigma_cal` their sample standard deviation. Both are stored and reused.
@@ -234,6 +246,28 @@
 #' Standard errors condition on estimated CJ point locations; CJ measurement
 #' uncertainty is not propagated. Formal proportional-odds diagnostics and
 #' validation utilities are not yet available.
+#'
+#' `ordinal_monotone` uses [mgcv::scasm()] with
+#' `s(z, bs = "sc", xt = "m+", k = k)` and [mgcv::ocat()] with integer categories
+#' `1:K`. The model is `logit P(Y <= k | z) = tau_k - eta(z)`, where `eta` includes
+#' an intercept and a nondecreasing smooth. The backend fixes the first threshold
+#' at -1 for identification; its identity link describes the latent location,
+#' while category cumulative probabilities follow the logistic distribution.
+#' Bootstrap is disabled. Smoothing is estimated by EFS unless `sp` is fixed.
+#' A 1,001-point calibration grid verifies nondecreasing latent locations and
+#' nonincreasing cumulative probabilities with tolerance `1e-8`. Invalid
+#' probabilities or monotonicity failures abort; no unconstrained fallback is used.
+#' Essentially flat effects, singleton categories, and convergence problems warn.
+#' Small bases and some reversed/separated label patterns can fail in the backend;
+#' these return contextual fit errors. The five-unique-score requirement is a
+#' backend feasibility guard, not a recommended calibration sample size.
+#' Threshold uncertainty is unavailable from this wrapper (the fixed first
+#' threshold has standard error zero; the remaining entries are `NA`).
+#' Numerical median cutpoints are reported only for unique crossings within the
+#' calibration range. Flat or unresolved crossings and thresholds outside the
+#' range have `NA` cutpoints and an explanatory status; scoring always uses
+#' probabilities. Predictions beyond the labeled range are flagged and retain
+#' the backend's spline extrapolation; their calibration is not established.
 #'
 #' Percentile scoring uses [stats::quantile()] with type 8 at cumulative target
 #' proportions. This quantile type is fixed. A score equal to a cutpoint enters
@@ -289,6 +323,16 @@
 #'   nonpositive slope, singleton categories, and conditioning on CJ locations.
 #'   `warnings` retains ordinal diagnostic messages and
 #'   `diagnostics$category_probabilities_available` is `TRUE`.
+#'   Monotone ordinal calibration uses the same class, data, transformation,
+#'   and probability availability flag. Its `backend` stores `name`, `version`,
+#'   cumulative `link`, `latent_link`, fitted `model`, `thresholds`, `intercept`,
+#'   `basis` (requested/effective dimension, constraint, order, knots),
+#'   `smoothing` (method, requested/fitted penalty parameters, penalty matrices),
+#'   total `edf`, `smooth_edf`, `convergence`, `threshold_standard_errors`,
+#'   `cutpoints_z`, `cutpoints_theta`, and `cutpoint_status` (`"unique"`,
+#'   `"outside_range"`, or `"flat_or_unresolved"`). `diagnostics$ordinal` stores
+#'   convergence, singleton categories, conditioning on CJ, unavailable threshold
+#'   uncertainty, and numerical `monotonicity` results.
 #'   Deferred methods/designs raise `pairwiseLLM_rubric_backend_unavailable`.
 #' @seealso [predict.pairwiseLLM_rubric_calibration()]
 #' @examples
@@ -308,17 +352,27 @@
 #'   predictions$probabilities
 #'   predictions$expected_level
 #' }
+#' if (requireNamespace("mgcv", quietly = TRUE) &&
+#'     packageVersion("mgcv") >= "1.9.4" && requireNamespace("withr", quietly = TRUE)) {
+#'   monotone_fit <- fit_rubric_calibration(completed_cj, rubric = rubric_labels,
+#'     method = "ordinal_monotone", trait = "organization",
+#'     levels = c("developing", "proficient", "advanced"), k = 6)
+#'   predict(monotone_fit)$probabilities
+#' }
 #' }
 #' @export
 fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
                                    calibration_design = "same_set", trait = NULL,
                                    levels = NULL, K = NULL, target_distribution = NULL, ...) {
-  rlang::check_dots_empty()
+  controls <- if (isTRUE(method == "ordinal_monotone")) .rubric_monotone_controls(...) else rlang::check_dots_empty()
   object <- .rubric_prepare_calibration(cj, rubric, method, calibration_design, trait, levels, K,
     target_distribution)
   if (method == "percentile") return(.rubric_fit_percentile(object))
   if (method == "ordinal_linear" && calibration_design == "same_set") {
     return(.rubric_fit_ordinal_linear(object))
+  }
+  if (method == "ordinal_monotone" && calibration_design == "same_set") {
+    return(.rubric_fit_ordinal_monotone(object, controls))
   }
   rlang::abort(paste0("The `", method, "` rubric backend is not implemented yet for `", calibration_design, "`."),
     class = "pairwiseLLM_rubric_backend_unavailable")
@@ -346,7 +400,7 @@ fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
 #'   (outside the fitted CJ range). Under the original-result restriction,
 #'   extrapolation flags are always false. Stored cutpoints are reused unchanged.
 #'   No category probabilities or probabilistic summaries are returned.
-#'   Linear ordinal predictions include the same five columns, plus
+#'   Both ordinal methods include the same five columns, plus
 #'   `probabilities`, a list-column of numeric K-vectors named by the original
 #'   ordered labels; integer `median_category` and `modal_category`; and
 #'   `expected_level = sum(k * P(Y = k))` for internal indices `k` in `1:K`,
@@ -367,6 +421,7 @@ predict.pairwiseLLM_rubric_calibration <- function(object, newdata = NULL,
   if (object$status != "fitted") rlang::abort("Cannot predict from an unfitted rubric calibration.")
   if (object$method == "percentile") return(.rubric_predict_percentile(object, newdata))
   if (object$method == "ordinal_linear") return(.rubric_predict_ordinal_linear(object, newdata, hard_score))
+  if (object$method == "ordinal_monotone") return(.rubric_predict_ordinal_monotone(object, newdata, hard_score))
   rlang::abort("Rubric prediction backends are not implemented yet.",
     class = "pairwiseLLM_rubric_backend_unavailable")
 }

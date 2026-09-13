@@ -44,6 +44,7 @@ Suggests:
     future.apply,
     glmnet,
     knitr,
+    mgcv (>= 1.9-4),
     mockery,
     ordinal,
     pkgload,
@@ -135,6 +136,7 @@ Collate:
     'rubric_cj_contract.R'
     'rubric_cj_linked.R'
     'rubric_ordinal_linear.R'
+    'rubric_ordinal_monotone.R'
     'rubric_percentile.R'
     'seed_helpers.R'
     'together_live.R'

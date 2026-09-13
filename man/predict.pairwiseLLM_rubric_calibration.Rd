@@ -32,7 +32,7 @@ integer \code{category} in \code{1:K}, original-label \code{rubric_score}, and \
 (outside the fitted CJ range). Under the original-result restriction,
 extrapolation flags are always false. Stored cutpoints are reused unchanged.
 No category probabilities or probabilistic summaries are returned.
-Linear ordinal predictions include the same five columns, plus
+Both ordinal methods include the same five columns, plus
 \code{probabilities}, a list-column of numeric K-vectors named by the original
 ordered labels; integer \code{median_category} and \code{modal_category}; and
 \code{expected_level = sum(k * P(Y = k))} for internal indices \code{k} in \code{1:K},
