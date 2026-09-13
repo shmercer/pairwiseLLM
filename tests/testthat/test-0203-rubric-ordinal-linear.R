@@ -104,7 +104,12 @@ test_that("unlabeled responses do not affect fitting or standardization and can 
   expect_identical(stats::predict(fit, data$cj), pred)
   order <- rev(seq_along(theta))
   reordered <- rubric_linear_fixed(theta[order], ids[order])
-  expect_identical(stats::predict(fit, reordered), pred[order, ])
+  reordered_pred <- stats::predict(fit, reordered)
+  expected_pred <- pred[order, ]
+  # BLAS dot products can differ by roundoff after item reordering.
+  expect_equal(reordered_pred$expected_level, expected_pred$expected_level, tolerance = 1e-12)
+  expect_identical(reordered_pred[names(reordered_pred) != "expected_level"],
+    expected_pred[names(expected_pred) != "expected_level"])
   data$cj$provenance <- list(collection_mode = "batch")
   expect_identical(stats::predict(fit, data$cj), pred)
   expect_error(stats::predict(fit, rubric_linear_fixed(theta + 1e-10, ids)), "unchanged")
