@@ -23,7 +23,8 @@
   .rubric_ids(artifact$items$item_id)
   .rubric_ids(artifact$items$global_item_id, "global_item_id")
   set_id <- artifact$set_id
-  if (!is.numeric(set_id) || length(set_id) != 1L || !is.finite(set_id) ||
+  if (!is.numeric(set_id) || !is.null(dim(set_id)) || length(set_id) != 1L || !is.finite(set_id) ||
+    abs(set_id) > .Machine$integer.max ||
     set_id != as.integer(set_id)) rlang::abort("Phase A reference requires a single integer set_id.")
   items <- artifact$items
   items$set_id <- as.integer(set_id)
@@ -159,13 +160,16 @@
   passes <- vapply(stats_by_spoke, function(x) isTRUE(x$link_diagnostics_pass), logical(1L))
   known_failure <- vapply(stats_by_spoke, function(x) isFALSE(x$link_diagnostics_pass), logical(1L))
   diagnostic_pass <- if (any(known_failure)) FALSE else if (all(passes)) TRUE else NA
+  # Preserve scalar metadata for homogeneous fits and each observed method for mixed spokes.
+  estimation_methods <- unique(vapply(contracts, function(x) x$phase_b$estimation_method, character(1L)))
+  uncertainty_methods <- unique(vapply(contracts, function(x) x$phase_b$uncertainty_approximation, character(1L)))
   .rubric_new_cj(
     .rubric_items(ids, theta, sd, global_ids, state$items$set_id),
     hub_validated$surface$model_variant, "phase_b", "phase_b_linked", trait,
     fit_contract = list(reference = hub_validated$surface, spokes = contracts),
     fit_contract_hash = hub$fit_config_hash,
     provenance = list(finalization = state$meta$stop_reason, hub_id = hub_id, spoke_ids = spokes,
-      estimation_method = "map_laplace", uncertainty_approximation = "laplace_hessian",
+      estimation_method = estimation_methods, uncertainty_approximation = uncertainty_methods,
       link_stage_log = .adaptive_latest_link_stage_rows(state)),
     diagnostics = list(diagnostics_pass = diagnostic_pass, spokes = stats_by_spoke),
     reliability = lapply(stats_by_spoke, function(x) x$reliability_link_global),

@@ -449,7 +449,10 @@ fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
 #'   `global_item_id`, and `theta_sd` (accepted Phase B uncertainty, possibly
 #'   `NA`). Its `linking` attribute contains normalized `reference`, `fit_contract`,
 #'   `provenance` (including hub/spoke IDs and linking stage logs), `diagnostics`,
-#'   and `reliability`. Failed upstream diagnostics warn and remain available;
+#'   and `reliability`. Provenance estimation/uncertainty methods reflect validated
+#'   spoke contracts, including accepted-state reuse. Each is a single string when
+#'   all spokes agree, otherwise the distinct strings in spoke order; per-spoke
+#'   contracts retain the complete attribution. Failed upstream diagnostics warn and remain available;
 #'   accepted scores do not assert adequate precision or successful stopping.
 #'   CJ uncertainty is retained as metadata and is not propagated into category
 #'   probabilities. Reference predictions and same-set output keep their existing

@@ -49,7 +49,10 @@ Linked target output adds \code{set_id} (target spoke), \code{source_item_id},
 \code{global_item_id}, and \code{theta_sd} (accepted Phase B uncertainty, possibly
 \code{NA}). Its \code{linking} attribute contains normalized \code{reference}, \code{fit_contract},
 \code{provenance} (including hub/spoke IDs and linking stage logs), \code{diagnostics},
-and \code{reliability}. Failed upstream diagnostics warn and remain available;
+and \code{reliability}. Provenance estimation/uncertainty methods reflect validated
+spoke contracts, including accepted-state reuse. Each is a single string when
+all spokes agree, otherwise the distinct strings in spoke order; per-spoke
+contracts retain the complete attribution. Failed upstream diagnostics warn and remain available;
 accepted scores do not assert adequate precision or successful stopping.
 CJ uncertainty is retained as metadata and is not propagated into category
 probabilities. Reference predictions and same-set output keep their existing
