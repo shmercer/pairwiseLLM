@@ -356,7 +356,9 @@
 #'   sorted stable item IDs with original Phase A locations/SDs, canonical
 #'   `fit_contract`, original `fit_contract_hash`, and within-set evidence/hash.
 #'   Original reference SDs are retained separately from Phase B's locked hub SDs.
-#' @seealso [predict.pairwiseLLM_rubric_calibration()]
+#' @family rubric calibration
+#' @seealso [predict.pairwiseLLM_rubric_calibration()], [evaluate_rubric_predictions()],
+#'   `vignette("rubric-calibration", package = "pairwiseLLM")` for practical workflows.
 #' @examples
 #' \dontrun{
 #' # Starting from an already completed CJ result; no sampling occurs here.
@@ -457,7 +459,8 @@ fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
 #'   CJ uncertainty is retained as metadata and is not propagated into category
 #'   probabilities. Reference predictions and same-set output keep their existing
 #'   columns and have no `linking` attribute.
-#' @seealso [fit_rubric_calibration()]
+#' @family rubric calibration
+#' @seealso [fit_rubric_calibration()], [evaluate_rubric_predictions()]
 #' @export
 predict.pairwiseLLM_rubric_calibration <- function(object, newdata = NULL,
                                                  hard_score = c("median", "mode"), ...) {

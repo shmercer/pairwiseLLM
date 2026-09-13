@@ -145,6 +145,10 @@ SD of 0.5. Omitting the argument preserves raw means zero and SDs one. Ensemble
 prediction SD is diagnostic disagreement, not an automatic prior SD.
 See [Guide: Adaptive Warm Start](adaptive-warm-start.html) for the offline workflow.
 
+For downstream performance levels or calibration to human rubric scores, see
+[Guide: Rubric Calibration](rubric-calibration.html). It consumes the completed
+fit directly and supports all four Bayesian BTL variants.
+
 ## Citation
 
 > Mercer, S. H. (2026). *Standalone Bayesian BTL with CmdStan* [R package vignette]. Comprehensive

@@ -236,6 +236,7 @@
 #'   Requested diagnostics contain `status`, `stored`, `functional_form`, and
 #'   `common_effect`; their statuses distinguish formal, descriptive and unavailable
 #'   results. No input object or upstream CJ state is modified.
+#' @family rubric calibration
 #' @seealso [fit_rubric_calibration()], [predict.pairwiseLLM_rubric_calibration()]
 #' @examples
 #' \dontrun{

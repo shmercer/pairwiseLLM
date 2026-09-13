@@ -113,4 +113,9 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
 }
 \seealso{
 \code{\link[=fit_rubric_calibration]{fit_rubric_calibration()}}, \code{\link[=predict.pairwiseLLM_rubric_calibration]{predict.pairwiseLLM_rubric_calibration()}}
+
+Other rubric calibration:
+\code{\link[=fit_rubric_calibration]{fit_rubric_calibration()}},
+\code{\link[=predict.pairwiseLLM_rubric_calibration]{predict.pairwiseLLM_rubric_calibration()}}
 }
+\concept{rubric calibration}

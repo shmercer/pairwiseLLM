@@ -1,3 +1,45 @@
+# pairwiseLLM 1.5.0
+
+## Rubric calibration
+
+* Added `fit_rubric_calibration()`, S3 `predict()`, and
+  `evaluate_rubric_predictions()` for completed Bayesian comparative judgments.
+  All four variants (`btl`, `btl_e`, `btl_b`, `btl_e_b`) and completed fixed or
+  adaptive results share the downstream interface. Fixed live/batch collection
+  remains provenance only.
+* Added `percentile` scoring with type-8 quantiles, preserved ties, and requested
+  versus achieved proportions. These are norm-referenced, distribution-matched
+  performance levels; human rubric labels are not fitted.
+* Added default `ordinal_linear` proportional-odds calibration and explicit
+  `ordinal_monotone` calibration with a nondecreasing penalized spline. Ordinal
+  predictions retain full probabilities, median-category scores by default,
+  optional modal scores, expected internal level, and extrapolation flags.
+* Both ordinal methods support a labeled subset within one CJ fit (`same_set`)
+  and a reusable Phase A rubric reference (`linked_anchors`). Linked target
+  prediction requires completed existing Phase B outputs and reuses the stored
+  reference transformation after identity and fit-contract checks. Phase B
+  estimation, selection, probes, and stopping are unchanged.
+* Added normalized ranked probability score, log loss, cumulative calibration
+  summaries, hard-score metrics, and optional training-model diagnostics.
+  Internal label-only cross-validation retains completed CJ evidence and fits
+  scaling and calibration from training labels alone. No automatic method
+  selection is provided.
+* Each analytic trait requires its own CJ analysis and calibration. Missing
+  intended calibration categories fail explicitly; orientation is never silently
+  reversed. All methods condition on accepted CJ point locations: CJ uncertainty
+  is retained where available but is not propagated. Joint CJ/rubric likelihood
+  estimation is not implemented.
+
+## Requirements and documentation
+
+* Raised the minimum supported R version to 4.4.
+* Linear fitting uses optional `ordinal`; monotone fitting and prediction use
+  optional `mgcv (>= 1.9-4)`, with optional `withr` for reproducible fitting.
+  Missing backends give installation guidance without substituting methods.
+* Added a practical rubric-calibration guide and integrated reference help,
+  README, and website navigation, including same-set validation and historical
+  reference reuse through Phase B.
+
 # pairwiseLLM 1.4.0
 
 ## Adaptive ranking

@@ -62,5 +62,10 @@ columns and have no \code{linking} attribute.
 Predict rubric scores from a calibration
 }
 \seealso{
+\code{\link[=fit_rubric_calibration]{fit_rubric_calibration()}}, \code{\link[=evaluate_rubric_predictions]{evaluate_rubric_predictions()}}
+
+Other rubric calibration:
+\code{\link[=evaluate_rubric_predictions]{evaluate_rubric_predictions()}},
 \code{\link[=fit_rubric_calibration]{fit_rubric_calibration()}}
 }
+\concept{rubric calibration}

@@ -1,6 +1,6 @@
 Package: pairwiseLLM
 Title: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
-Version: 1.4.0
+Version: 1.5.0
 Authors@R: 
     person("Sterett H.", "Mercer", , "sterett.mercer@ubc.ca", role = c("aut", "cre", "cph"),
            comment = c(ORCID = "0000-0002-7940-4221"))
@@ -18,8 +18,10 @@ Description: Provides a unified framework for generating, submitting, and
     (Bradley & Terry, 1952 <doi:10.2307/2334029>; see also
     Caron & Doucet, 2012 <doi:10.1080/10618600.2012.638220>) or Elo rating methods (see
     Clark et al., 2018 <doi:10.1371/journal.pone.0190393>) to derive 
-    writing quality scores. For information on pairwise comparisons and
-    comparative judgement, see Thurstone (1927) <doi:10.1037/h0070288>
+    writing quality scores. The Bayesian writing quality scores can be converted to
+    distribution-matched performance levels or calibrated to ordered
+    rubric scores using linear or monotone ordinal models. For information on
+    pairwise comparisons and comparative judgement, see Thurstone (1927) <doi:10.1037/h0070288>
     and Heldsinger & Humphry (2010) <doi:10.1007/BF03216919>.
 License: MIT + file LICENSE
 Encoding: UTF-8

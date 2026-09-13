@@ -31,6 +31,11 @@ For the algorithmic rationale, see
 
 ## Public contract at a glance
 
+To reuse human rubric scores on a historical reference set, see
+[Guide: Rubric Calibration](rubric-calibration.html). Its `linked_anchors` design
+uses this Phase B workflow with the reference as hub, then applies the stored
+calibration to accepted common-scale target locations.
+
 | User task | `adaptive_rank()` input or output | Current behavior |
 |---|---|---|
 | Identify sets | `data$set_id` | Positive integer-like values; `hub_id` must name one observed set. |

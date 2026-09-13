@@ -241,5 +241,11 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
 }
 }
 \seealso{
+\code{\link[=predict.pairwiseLLM_rubric_calibration]{predict.pairwiseLLM_rubric_calibration()}}, \code{\link[=evaluate_rubric_predictions]{evaluate_rubric_predictions()}},
+\code{vignette("rubric-calibration", package = "pairwiseLLM")} for practical workflows.
+
+Other rubric calibration:
+\code{\link[=evaluate_rubric_predictions]{evaluate_rubric_predictions()}},
 \code{\link[=predict.pairwiseLLM_rubric_calibration]{predict.pairwiseLLM_rubric_calibration()}}
 }
+\concept{rubric calibration}
