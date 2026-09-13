@@ -130,8 +130,10 @@ produce warnings; no universal minimum calibration sample size is enforced.
 Finite ordered estimates can be retained with warnings even when convergence
 or uncertainty is unreliable. Such warnings require review before use.
 Standard errors condition on estimated CJ point locations; CJ measurement
-uncertainty is not propagated. Formal proportional-odds diagnostics and
-validation utilities are not yet available.
+uncertainty is not propagated. \code{\link[=evaluate_rubric_predictions]{evaluate_rubric_predictions()}} supplies
+metrics and optional assumption diagnostics; diagnostic refits run only when
+requested during evaluation. Internal rubric-label validation holds CJ fixed
+and refits calibration from training labels alone.
 
 \code{ordinal_monotone} uses \code{\link[mgcv:scasm]{mgcv::scasm()}} with
 \code{s(z, bs = "sc", xt = "m+", k = k)} and \code{\link[mgcv:ocat]{mgcv::ocat()}} with integer categories

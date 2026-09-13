@@ -1,35 +1,3 @@
-# Synthetic completed CJ locations with deterministic category frequencies.
-rubric_linear_fixed <- function(theta, ids = paste0("item", seq_along(theta)), variant = "btl") {
-  draws <- outer(c(-0.125, 0.125), theta, `+`)
-  colnames(draws) <- ids
-  fit <- pairwiseLLM:::build_btl_fit_contract(draws, model_variant = variant,
-    epsilon_draws = if (pairwiseLLM:::model_has_e(variant)) c(0.03, 0.05) else NULL,
-    beta_draws = if (pairwiseLLM:::model_has_b(variant)) c(-0.1, 0.1) else NULL,
-    diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000), diagnostics_pass = TRUE)
-  list(fit = fit, fits = list(fit),
-    item_log_list = list(tibble::tibble(refit_id = 1L, ID = ids,
-      theta_mean = unname(fit$theta_mean), theta_sd = unname(fit$theta_sd))),
-    round_log = tibble::tibble(round_id = 1L, model_variant = variant, reliability_EAP = 0.95))
-}
-
-rubric_linear_data <- function(K = 3L, slope = 1.2, variant = "btl") {
-  theta <- seq(-2, 2, length.out = 9)
-  thresholds <- seq(-1.5, 1.5, length.out = K - 1L)
-  cumulative <- stats::plogis(outer(theta, thresholds, function(x, tau) tau - slope * x))
-  probabilities <- cbind(cumulative, 1) - cbind(0, cumulative)
-  counts <- round(50 * probabilities)
-  grid <- expand.grid(category = seq_len(K), theta = theta)
-  data <- grid[rep(seq_len(nrow(grid)), as.vector(t(counts))), ]
-  ids <- paste0("item", seq_len(nrow(data)))
-  list(cj = rubric_linear_fixed(data$theta, ids, variant),
-    rubric = data.frame(item_id = ids, rubric_score = data$category),
-    theta = data$theta, thresholds = thresholds)
-}
-
-rubric_linear_fit <- function(data) {
-  pairwiseLLM::fit_rubric_calibration(data$cj, data$rubric, trait = "organization")
-}
-
 test_that("linear ordinal K = 3-6 fits recover direction and match backend probabilities", {
   skip_if_not_installed("ordinal")
   withr::local_seed(2030)

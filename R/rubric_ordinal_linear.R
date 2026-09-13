@@ -113,11 +113,8 @@
   cumulative <- stats::plogis(outer(z, object$backend$thresholds,
     function(z, threshold) threshold - object$backend$slope * z))
   probabilities <- cbind(cumulative, 1) - cbind(0, cumulative)
-  if (any(!is.finite(probabilities)) || any(probabilities < 0 | probabilities > 1) ||
-    any(abs(rowSums(probabilities) - 1) > 1e-12)) {
-    rlang::abort("Ordinal predictions did not produce valid category probabilities.")
-  }
   colnames(probabilities) <- as.character(object$levels)
+  .rubric_check_probabilities(probabilities, object$levels, length(theta))
   probabilities
 }
 
@@ -138,7 +135,8 @@
 }
 
 .rubric_ordinal_prediction_table <- function(object, items, probabilities, hard_score) {
-  decisions <- .rubric_ordinal_decisions(probabilities)
+  .rubric_check_probabilities(probabilities, object$levels, nrow(items))
+  decisions <- .rubric_ordinal_decisions(.rubric_probability_copy(probabilities, object$levels))
   category <- decisions[[hard_score]]
   tibble::tibble(item_id = items$item_id, theta = items$theta, category = category,
     rubric_score = object$levels[category],

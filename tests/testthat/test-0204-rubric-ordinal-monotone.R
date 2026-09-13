@@ -1,34 +1,3 @@
-# Deterministic latent logistic quantiles, without random rubric labels.
-rubric_monotone_data <- function(K = 3L, n_unique = 31L, variant = "btl", reverse_items = FALSE) {
-  theta <- rep(seq(-2, 2, length.out = n_unique), each = 12L)
-  u <- rep((seq_len(12L) - 0.5) / 12, n_unique)
-  eta <- theta + 0.25 * theta^3
-  cumulative <- stats::plogis(outer(eta, seq(-1.5, 1.5, length.out = K - 1L), function(e, t) t - e))
-  category <- as.integer(1 + rowSums(cumulative < u))
-  ids <- paste0("item", seq_along(theta))
-  if (reverse_items) {
-    theta <- rev(theta)
-    category <- rev(category)
-    ids <- rev(ids)
-  }
-  draws <- outer(c(-0.125, 0.125), theta, `+`)
-  colnames(draws) <- ids
-  fit <- pairwiseLLM:::build_btl_fit_contract(draws, model_variant = variant,
-    epsilon_draws = if (pairwiseLLM:::model_has_e(variant)) c(0.03, 0.05) else NULL,
-    beta_draws = if (pairwiseLLM:::model_has_b(variant)) c(-0.1, 0.1) else NULL,
-    diagnostics = list(divergences = 0L, max_rhat = 1, min_ess_bulk = 1000), diagnostics_pass = TRUE)
-  cj <- list(fit = fit, fits = list(fit),
-    item_log_list = list(tibble::tibble(refit_id = 1L, ID = ids,
-      theta_mean = unname(fit$theta_mean), theta_sd = unname(fit$theta_sd))),
-    round_log = tibble::tibble(round_id = 1L, model_variant = variant, reliability_EAP = 0.95))
-  list(cj = cj, rubric = data.frame(item_id = ids, rubric_score = category))
-}
-
-rubric_monotone_fit <- function(data, ...) {
-  pairwiseLLM::fit_rubric_calibration(data$cj, data$rubric, method = "ordinal_monotone",
-    trait = "organization", ...)
-}
-
 test_that("monotone backend K = 3-6 verifies probabilities, direction, and metadata", {
   skip_if_not_installed("mgcv", minimum_version = "1.9.4")
   skip_if_not_installed("withr")

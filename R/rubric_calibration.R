@@ -245,8 +245,10 @@
 #' Finite ordered estimates can be retained with warnings even when convergence
 #' or uncertainty is unreliable. Such warnings require review before use.
 #' Standard errors condition on estimated CJ point locations; CJ measurement
-#' uncertainty is not propagated. Formal proportional-odds diagnostics and
-#' validation utilities are not yet available.
+#' uncertainty is not propagated. [evaluate_rubric_predictions()] supplies
+#' metrics and optional assumption diagnostics; diagnostic refits run only when
+#' requested during evaluation. Internal rubric-label validation holds CJ fixed
+#' and refits calibration from training labels alone.
 #'
 #' `ordinal_monotone` uses [mgcv::scasm()] with
 #' `s(z, bs = "sc", xt = "m+", k = k)` and [mgcv::ocat()] with integer categories

@@ -174,11 +174,9 @@
 }
 
 .rubric_monotone_check_probabilities <- function(probabilities, n, K) {
-  if (!is.matrix(probabilities) || !identical(dim(probabilities), as.integer(c(n, K))) ||
-    any(!is.finite(probabilities)) || any(probabilities < 0 | probabilities > 1) ||
-    any(abs(rowSums(probabilities) - 1) > 1e-12)) {
-    rlang::abort("Monotone ordinal predictions did not produce valid category probabilities.")
-  }
+  # The latent-grid calculation has no user labels; use its internal level order.
+  if (is.matrix(probabilities) && ncol(probabilities) == K) colnames(probabilities) <- as.character(seq_len(K))
+  .rubric_check_probabilities(probabilities, seq_len(K), n)
   invisible(probabilities)
 }
 
@@ -204,8 +202,8 @@
   z <- (theta - object$transformation$center) / object$transformation$scale
   cumulative <- .rubric_monotone_cumulative(.rubric_monotone_eta(z, object), object$backend$thresholds)
   probabilities <- cbind(cumulative, 1) - cbind(0, cumulative)
-  .rubric_monotone_check_probabilities(probabilities, length(theta), object$K)
   colnames(probabilities) <- as.character(object$levels)
+  .rubric_check_probabilities(probabilities, object$levels, length(theta))
   probabilities
 }
 
