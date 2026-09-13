@@ -126,7 +126,7 @@
   backend <- object$backend
   transformation <- object$transformation
   scalar <- function(x) is.numeric(x) && is.null(dim(x)) && length(x) == 1L && is.finite(x)
-  if (object$calibration_design != "same_set" || !is.list(backend) ||
+  if (!object$calibration_design %in% c("same_set", "linked_anchors") || !is.list(backend) ||
     !identical(backend$name, "mgcv::scasm") || !identical(backend$link, "logit") ||
     !identical(backend$latent_link, "identity") || !scalar(backend$intercept) ||
     !is.numeric(backend$thresholds) || !is.null(dim(backend$thresholds)) ||

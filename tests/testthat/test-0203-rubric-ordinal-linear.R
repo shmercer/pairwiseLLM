@@ -174,9 +174,10 @@ test_that("linear calibration validates public labels, source scales, and degene
   state$step_log <- tibble::tibble(pair_id = 1:3, step_id = 1:3, A = c(1L, 2L, 3L), B = c(2L, 3L, 4L),
     Y = 1L, set_i = 1L, set_j = 1L)
   artifact <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, 1L)
-  expect_error(pairwiseLLM::fit_rubric_calibration(artifact,
+  expect_warning(linked <- pairwiseLLM::fit_rubric_calibration(artifact,
     data.frame(item_id = letters[1:3], rubric_score = 1:3), trait = "organization",
-    calibration_design = "linked_anchors"), class = "pairwiseLLM_rubric_backend_unavailable")
+    calibration_design = "linked_anchors"), class = "pairwiseLLM_rubric_ordinal_diagnostics")
+  expect_identical(linked$status, "fitted")
 })
 
 test_that("negative, zero, sparse and separated relationships produce reviewable diagnostics", {
@@ -227,7 +228,7 @@ test_that("invalid fitted coefficients, transformations, and backend failures fa
   }
   bad <- fit
   bad$calibration_design <- "linked_anchors"
-  expect_error(stats::predict(bad), "Invalid fitted linear ordinal")
+  expect_error(stats::predict(bad), "linked reference scale")
   bad <- fit
   bad$calibration_range <- c(1, -1)
   expect_error(stats::predict(bad), "Invalid fitted linear ordinal")

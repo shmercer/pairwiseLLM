@@ -133,6 +133,7 @@
   .rubric_trait(object$trait, object$cj$trait)
   .rubric_choice(object$orientation, "higher_is_better", "orientation")
   .rubric_levels(levels = object$levels, K = object$K, target_distribution = object$target_distribution)
+  if (object$calibration_design == "linked_anchors") .rubric_validate_linked_calibration(object)
   if (object$status == "fitted" && is.null(object$backend)) {
     rlang::abort("A fitted rubric calibration requires a statistical backend result.")
   }
@@ -197,8 +198,8 @@
 #'   `"percentile"`. Percentile scoring is norm-referenced/distribution-matched.
 #' @param calibration_design `"same_set"` for one completed CJ scale, or
 #'   `"linked_anchors"` for a reusable Phase A rubric reference artifact.
-#'   All three scoring methods currently support only `"same_set"`.
-#'   Linked calibration is not yet implemented.
+#'   Both ordinal methods support both designs. Percentile scoring supports
+#'   only `"same_set"`.
 #' @param trait Single trait identifier. Required when absent from CJ metadata.
 #'   Each analytic trait requires its own CJ analysis and calibration.
 #' @param levels Ordered original rubric labels, from lowest to highest quality.
@@ -232,8 +233,8 @@
 #' (`install.packages("withr")`) to isolate backend RNG use with a fixed internal
 #' seed. Saved monotone models require \pkg{mgcv} for spline prediction.
 #'
-#' For both ordinal methods, labeled and unlabeled items must belong to
-#' one completed trait-specific CJ fit. Only labeled rows estimate the calibration:
+#' For both ordinal methods, calibration items must belong to one completed
+#' trait-specific CJ fit. Only labeled rows estimate the calibration:
 #' `z = (theta - mu_cal) / sigma_cal`, where `mu_cal` is their mean and
 #' `sigma_cal` their sample standard deviation. Both are stored and reused.
 #' [ordinal::clm()] fits `logit P(Y <= k | z) = tau_k - beta * z` with flexible
@@ -293,8 +294,24 @@
 #' that the originating adaptive run terminated. Existing CJ diagnostics are
 #' retained; failed diagnostics produce a warning.
 #'
-#' Historical prediction must consume accepted Phase B common-scale scores and
-#' reuse the stored reference transformation. Phase B's `theta_link_eap` field
+#' With `linked_anchors`, first obtain an import-ready Phase A artifact for the
+#' human-scored `rubric_reference_set` and fit its ordinal calibration. Next run
+#' Phase A for the target set, then the existing [adaptive_rank()] Phase B linking
+#' workflow with the rubric reference set as hub and targets as one or more
+#' spokes. Pass the completed linking result (or its state) to `predict()`.
+#' Rubric labels are used for calibration; Phase B does not require them.
+#' A rubric reference set contains externally scored material; a Phase B
+#' **hub anchor** is an item selected for routing recurring comparisons.
+#'
+#' Historical prediction validates the stored reference set, stable item IDs,
+#' exact reference locations and uncertainty, within-set evidence, trait,
+#' orientation, and canonical fit contract. A configuration hash alone does not
+#' establish metric identity. Original hashes are retained as provenance;
+#' compatible legacy hashes follow the existing Phase A import rules.
+#' Target-only Phase A scores cannot be used with the stored calibration.
+#' Prediction consumes accepted Phase B common-scale scores and reuses the
+#' stored reference transformation, never the target cohort's mean or SD.
+#' Phase B's `theta_link_eap` field
 #' represents its accepted MAP location with Laplace/Hessian uncertainty.
 #' Rubric scoring is downstream of CJ estimation and does not run comparisons
 #' or change Phase B estimation. Ordinal calibration conditions on accepted
@@ -333,7 +350,10 @@
 #'   `"outside_range"`, or `"flat_or_unresolved"`). `diagnostics$ordinal` stores
 #'   convergence, singleton categories, conditioning on CJ, unavailable threshold
 #'   uncertainty, and numerical `monotonicity` results.
-#'   Deferred methods/designs raise `pairwiseLLM_rubric_backend_unavailable`.
+#'   Linked calibrations additionally retain `reference`: the reference `set_id`,
+#'   sorted stable item IDs with original Phase A locations/SDs, canonical
+#'   `fit_contract`, original `fit_contract_hash`, and within-set evidence/hash.
+#'   Original reference SDs are retained separately from Phase B's locked hub SDs.
 #' @seealso [predict.pairwiseLLM_rubric_calibration()]
 #' @examples
 #' \dontrun{
@@ -359,6 +379,16 @@
 #'     levels = c("developing", "proficient", "advanced"), k = 6)
 #'   predict(monotone_fit)$probabilities
 #' }
+#' # Reference and target Phase A, followed by Phase B, are completed upstream.
+#' if (requireNamespace("ordinal", quietly = TRUE)) {
+#'   linked_fit <- fit_rubric_calibration(reference_phase_a, reference_labels,
+#'     calibration_design = "linked_anchors", trait = "organization",
+#'     levels = c("developing", "proficient", "advanced"))
+#'   predict(linked_fit) # Original reference items.
+#'   target_scores <- predict(linked_fit, completed_phase_b)
+#'   target_scores$set_id
+#'   attr(target_scores, "linking")$diagnostics
+#' }
 #' }
 #' @export
 fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
@@ -368,10 +398,10 @@ fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
   object <- .rubric_prepare_calibration(cj, rubric, method, calibration_design, trait, levels, K,
     target_distribution)
   if (method == "percentile") return(.rubric_fit_percentile(object))
-  if (method == "ordinal_linear" && calibration_design == "same_set") {
+  if (method == "ordinal_linear") {
     return(.rubric_fit_ordinal_linear(object))
   }
-  if (method == "ordinal_monotone" && calibration_design == "same_set") {
+  if (method == "ordinal_monotone") {
     return(.rubric_fit_ordinal_monotone(object, controls))
   }
   rlang::abort(paste0("The `", method, "` rubric backend is not implemented yet for `", calibration_design, "`."),
@@ -386,8 +416,11 @@ fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
 #'   item IDs, exact accepted scores and uncertainty, and matching fit/reference
 #'   evidence. Item reordering is allowed; collection provenance does not affect
 #'   scoring. Raw tables, independent cohorts, refits, and Phase B targets are not
-#'   supported for same-set prediction. Future ordinal linked prediction requires
-#'   accepted Phase B scores on the stored reference scale.
+#'   supported for same-set prediction. For `linked_anchors`, `NULL` scores the
+#'   original reference items; explicit `newdata` must be a completed Phase B
+#'   result (or its state) on the stored reference scale. It returns only target
+#'   items across all spokes, in their input order. Every spoke must have an
+#'   accepted Phase B refit and committed active hub-spoke evidence.
 #' @param hard_score Ordinal hard-score rule: `"median"` (default) or `"mode"`.
 #'   The median is the lowest category whose cumulative probability is at least
 #'   0.5; equality at a median cutpoint therefore selects the lower category.
@@ -410,6 +443,15 @@ fit_rubric_calibration <- function(cj, rubric = NULL, method = "ordinal_linear",
 #'   Ordinal `extrapolated` flags use the labeled calibration range, so unlabeled
 #'   source items can be extrapolated; endpoints are included in the range.
 #'   Stored standardization is reused. Unfitted objects fail clearly.
+#'   Linked target output adds `set_id` (target spoke), `source_item_id`,
+#'   `global_item_id`, and `theta_sd` (accepted Phase B uncertainty, possibly
+#'   `NA`). Its `linking` attribute contains normalized `reference`, `fit_contract`,
+#'   `provenance` (including hub/spoke IDs and linking stage logs), `diagnostics`,
+#'   and `reliability`. Failed upstream diagnostics warn and remain available;
+#'   accepted scores do not assert adequate precision or successful stopping.
+#'   CJ uncertainty is retained as metadata and is not propagated into category
+#'   probabilities. Reference predictions and same-set output keep their existing
+#'   columns and have no `linking` attribute.
 #' @seealso [fit_rubric_calibration()]
 #' @export
 predict.pairwiseLLM_rubric_calibration <- function(object, newdata = NULL,
@@ -419,6 +461,9 @@ predict.pairwiseLLM_rubric_calibration <- function(object, newdata = NULL,
   if (missing(hard_score)) hard_score <- "median"
   .rubric_choice(hard_score, c("median", "mode"), "hard_score")
   if (object$status != "fitted") rlang::abort("Cannot predict from an unfitted rubric calibration.")
+  if (object$calibration_design == "linked_anchors" && !is.null(newdata)) {
+    return(.rubric_predict_linked(object, newdata, hard_score))
+  }
   if (object$method == "percentile") return(.rubric_predict_percentile(object, newdata))
   if (object$method == "ordinal_linear") return(.rubric_predict_ordinal_linear(object, newdata, hard_score))
   if (object$method == "ordinal_monotone") return(.rubric_predict_ordinal_monotone(object, newdata, hard_score))

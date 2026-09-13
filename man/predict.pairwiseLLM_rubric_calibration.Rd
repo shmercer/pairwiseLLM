@@ -14,8 +14,11 @@ items. Same-set scoring accepts the original completed result with unchanged
 item IDs, exact accepted scores and uncertainty, and matching fit/reference
 evidence. Item reordering is allowed; collection provenance does not affect
 scoring. Raw tables, independent cohorts, refits, and Phase B targets are not
-supported for same-set prediction. Future ordinal linked prediction requires
-accepted Phase B scores on the stored reference scale.}
+supported for same-set prediction. For \code{linked_anchors}, \code{NULL} scores the
+original reference items; explicit \code{newdata} must be a completed Phase B
+result (or its state) on the stored reference scale. It returns only target
+items across all spokes, in their input order. Every spoke must have an
+accepted Phase B refit and committed active hub-spoke evidence.}
 
 \item{hard_score}{Ordinal hard-score rule: \code{"median"} (default) or \code{"mode"}.
 The median is the lowest category whose cumulative probability is at least
@@ -42,6 +45,15 @@ level is a continuous summary, not a replacement for the ordinal result.
 Ordinal \code{extrapolated} flags use the labeled calibration range, so unlabeled
 source items can be extrapolated; endpoints are included in the range.
 Stored standardization is reused. Unfitted objects fail clearly.
+Linked target output adds \code{set_id} (target spoke), \code{source_item_id},
+\code{global_item_id}, and \code{theta_sd} (accepted Phase B uncertainty, possibly
+\code{NA}). Its \code{linking} attribute contains normalized \code{reference}, \code{fit_contract},
+\code{provenance} (including hub/spoke IDs and linking stage logs), \code{diagnostics},
+and \code{reliability}. Failed upstream diagnostics warn and remain available;
+accepted scores do not assert adequate precision or successful stopping.
+CJ uncertainty is retained as metadata and is not propagated into category
+probabilities. Reference predictions and same-set output keep their existing
+columns and have no \code{linking} attribute.
 }
 \description{
 Predict rubric scores from a calibration

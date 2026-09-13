@@ -32,8 +32,8 @@ them; otherwise use the original fixed-fit IDs. Omit for percentile scoring.}
 
 \item{calibration_design}{\code{"same_set"} for one completed CJ scale, or
 \code{"linked_anchors"} for a reusable Phase A rubric reference artifact.
-All three scoring methods currently support only \code{"same_set"}.
-Linked calibration is not yet implemented.}
+Both ordinal methods support both designs. Percentile scoring supports
+only \code{"same_set"}.}
 
 \item{trait}{Single trait identifier. Required when absent from CJ metadata.
 Each analytic trait requires its own CJ analysis and calibration.}
@@ -92,7 +92,10 @@ total \code{edf}, \code{smooth_edf}, \code{convergence}, \code{threshold_standar
 \code{"outside_range"}, or \code{"flat_or_unresolved"}). \code{diagnostics$ordinal} stores
 convergence, singleton categories, conditioning on CJ, unavailable threshold
 uncertainty, and numerical \code{monotonicity} results.
-Deferred methods/designs raise \code{pairwiseLLM_rubric_backend_unavailable}.
+Linked calibrations additionally retain \code{reference}: the reference \code{set_id},
+sorted stable item IDs with original Phase A locations/SDs, canonical
+\code{fit_contract}, original \code{fit_contract_hash}, and within-set evidence/hash.
+Original reference SDs are retained separately from Phase B's locked hub SDs.
 }
 \description{
 Establish a trait-specific rubric conversion from completed Bayesian BTL
@@ -115,8 +118,8 @@ Monotone ordinal fitting and prediction require optional \pkg{mgcv} >= 1.9-4
 (\code{install.packages("withr")}) to isolate backend RNG use with a fixed internal
 seed. Saved monotone models require \pkg{mgcv} for spline prediction.
 
-For both ordinal methods, labeled and unlabeled items must belong to
-one completed trait-specific CJ fit. Only labeled rows estimate the calibration:
+For both ordinal methods, calibration items must belong to one completed
+trait-specific CJ fit. Only labeled rows estimate the calibration:
 \code{z = (theta - mu_cal) / sigma_cal}, where \code{mu_cal} is their mean and
 \code{sigma_cal} their sample standard deviation. Both are stored and reused.
 \code{\link[ordinal:clm]{ordinal::clm()}} fits \verb{logit P(Y <= k | z) = tau_k - beta * z} with flexible
@@ -176,8 +179,24 @@ the existing explicit quality-gate override. Import readiness does not assert
 that the originating adaptive run terminated. Existing CJ diagnostics are
 retained; failed diagnostics produce a warning.
 
-Historical prediction must consume accepted Phase B common-scale scores and
-reuse the stored reference transformation. Phase B's \code{theta_link_eap} field
+With \code{linked_anchors}, first obtain an import-ready Phase A artifact for the
+human-scored \code{rubric_reference_set} and fit its ordinal calibration. Next run
+Phase A for the target set, then the existing \code{\link[=adaptive_rank]{adaptive_rank()}} Phase B linking
+workflow with the rubric reference set as hub and targets as one or more
+spokes. Pass the completed linking result (or its state) to \code{predict()}.
+Rubric labels are used for calibration; Phase B does not require them.
+A rubric reference set contains externally scored material; a Phase B
+\strong{hub anchor} is an item selected for routing recurring comparisons.
+
+Historical prediction validates the stored reference set, stable item IDs,
+exact reference locations and uncertainty, within-set evidence, trait,
+orientation, and canonical fit contract. A configuration hash alone does not
+establish metric identity. Original hashes are retained as provenance;
+compatible legacy hashes follow the existing Phase A import rules.
+Target-only Phase A scores cannot be used with the stored calibration.
+Prediction consumes accepted Phase B common-scale scores and reuses the
+stored reference transformation, never the target cohort's mean or SD.
+Phase B's \code{theta_link_eap} field
 represents its accepted MAP location with Laplace/Hessian uncertainty.
 Rubric scoring is downstream of CJ estimation and does not run comparisons
 or change Phase B estimation. Ordinal calibration conditions on accepted
@@ -206,6 +225,16 @@ if (requireNamespace("mgcv", quietly = TRUE) &&
     method = "ordinal_monotone", trait = "organization",
     levels = c("developing", "proficient", "advanced"), k = 6)
   predict(monotone_fit)$probabilities
+}
+# Reference and target Phase A, followed by Phase B, are completed upstream.
+if (requireNamespace("ordinal", quietly = TRUE)) {
+  linked_fit <- fit_rubric_calibration(reference_phase_a, reference_labels,
+    calibration_design = "linked_anchors", trait = "organization",
+    levels = c("developing", "proficient", "advanced"))
+  predict(linked_fit) # Original reference items.
+  target_scores <- predict(linked_fit, completed_phase_b)
+  target_scores$set_id
+  attr(target_scores, "linking")$diagnostics
 }
 }
 }

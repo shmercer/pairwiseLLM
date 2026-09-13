@@ -92,7 +92,7 @@ test_that("percentile foundation validates category specifications without fitti
     target_distribution = c(high = 0.2, mid = 0.3, low = 0.5)), "level order")
 })
 
-test_that("public API dispatch reports unimplemented backends without fabricated fits", {
+test_that("public API dispatch validates supported methods without fabricated fits", {
   fit <- pairwiseLLM::fit_rubric_calibration
   fixed <- rubric_test_fixed()
   rubric <- tibble::tibble(item_id = letters[1:3], rubric_score = 1:3)
@@ -128,9 +128,8 @@ test_that("calibration fit designs require the correct source scale", {
     Y = 1L, set_i = 1L, set_j = 1L)
   artifact <- pairwiseLLM:::.adaptive_phase_a_build_artifact(state, 1L)
   for (method in c("ordinal_linear", "ordinal_monotone")) {
-    expect_error(pairwiseLLM::fit_rubric_calibration(artifact, rubric, method = method,
-      calibration_design = "linked_anchors", trait = "trait"),
-      class = "pairwiseLLM_rubric_backend_unavailable")
+    expect_identical(prepare(artifact, rubric, method = method,
+      calibration_design = "linked_anchors", trait = "trait")$status, "unfitted")
   }
   object <- prepare(artifact, rubric, calibration_design = "linked_anchors", trait = "trait")
   expect_identical(object$cj$scale_status, "phase_a_reference")
