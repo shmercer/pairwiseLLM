@@ -50,6 +50,8 @@ navbar:
           href: articles/adaptive-linking-design.html
         - text: "Standalone Bayesian BTL with CmdStan"
           href: articles/bayesian-btl.html
+        - text: "Guide: Rubric Calibration"
+          href: articles/rubric-calibration.html
         - text: "Prompt Template Positional Bias Testing"
           href: articles/prompt-template-bias.html
 
@@ -85,6 +87,7 @@ articles:
   - title: "Modeling and Bias"
     contents:
       - bayesian-btl
+      - rubric-calibration
       - prompt-template-bias
 
 reference:
@@ -181,6 +184,11 @@ reference:
   - title: "Adaptive warm start"
     contents:
       - has_concept("adaptive warm start")
+  - title: "Rubric calibration"
+    contents:
+      - fit_rubric_calibration
+      - predict.pairwiseLLM_rubric_calibration
+      - evaluate_rubric_predictions
   - title: "Adaptive lifecycle"
     contents:
       - adaptive_rank

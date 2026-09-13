@@ -260,7 +260,7 @@ test_that("release documentation keeps navigation and citation contracts", {
   })
 
   version <- unname(description[1L, "Version"])
-  expect_identical(version, "1.4.0")
+  expect_identical(version, "1.5.0")
   citation <- paste(readLines(file.path(root, "inst", "CITATION")), collapse = "\n")
   codemeta <- jsonlite::fromJSON(file.path(root, "codemeta.json"))
   news <- readLines(file.path(root, "NEWS.md"))
@@ -282,7 +282,7 @@ test_that("release documentation keeps navigation and citation contracts", {
   expect_false(grepl("template_positional_bias", pkgdown, fixed = TRUE))
   expect_true(grepl("articles/prompt-template-bias.html", pkgdown, fixed = TRUE))
 
-  expect_length(vignette_paths, 12L)
+  expect_length(vignette_paths, 13L)
   expect_true(all(vapply(vignette_text, function(text) {
     normalized <- gsub("\n> ", " ", text, fixed = TRUE)
     grepl("Citation", normalized, fixed = TRUE) &&
@@ -389,6 +389,7 @@ test_that("README article navigation is portable and uses descriptive labels", {
     "data-and-prompts",
     "provider-controls-and-recovery",
     "bayesian-btl",
+    "rubric-calibration",
     "advanced-batch-workflows",
     "prompt-template-bias",
     "model-compatibility",

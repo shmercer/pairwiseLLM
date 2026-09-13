@@ -1,6 +1,6 @@
 Package: pairwiseLLM
 Title: Pairwise Comparison Tools for Large Language Model-Based Writing Evaluation
-Version: 1.4.0
+Version: 1.5.0
 Authors@R: 
     person("Sterett H.", "Mercer", , "sterett.mercer@ubc.ca", role = c("aut", "cre", "cph"),
            comment = c(ORCID = "0000-0002-7940-4221"))
@@ -18,8 +18,10 @@ Description: Provides a unified framework for generating, submitting, and
     (Bradley & Terry, 1952 <doi:10.2307/2334029>; see also
     Caron & Doucet, 2012 <doi:10.1080/10618600.2012.638220>) or Elo rating methods (see
     Clark et al., 2018 <doi:10.1371/journal.pone.0190393>) to derive 
-    writing quality scores. For information on pairwise comparisons and
-    comparative judgement, see Thurstone (1927) <doi:10.1037/h0070288>
+    writing quality scores. The Bayesian writing quality scores can be converted to
+    distribution-matched performance levels or calibrated to ordered
+    rubric scores using linear or monotone ordinal models. For information on
+    pairwise comparisons and comparative judgement, see Thurstone (1927) <doi:10.1037/h0070288>
     and Heldsinger & Humphry (2010) <doi:10.1007/BF03216919>.
 License: MIT + file LICENSE
 Encoding: UTF-8
@@ -44,7 +46,9 @@ Suggests:
     future.apply,
     glmnet,
     knitr,
+    mgcv (>= 1.9-4),
     mockery,
+    ordinal,
     pkgload,
     purrr,
     readr,
@@ -66,7 +70,7 @@ Config/testthat/edition: 3
 URL: https://github.com/shmercer/pairwiseLLM, https://shmercer.github.io/pairwiseLLM/
 BugReports: https://github.com/shmercer/pairwiseLLM/issues
 Depends: 
-    R (>= 4.1)
+    R (>= 4.4)
 VignetteBuilder: knitr
 Collate: 
     'adaptive_benchmark_metrics.R'
@@ -130,6 +134,16 @@ Collate:
     'pairwiseLLM-package.R'
     'prompt_template.R'
     'reverse_consistency.R'
+    'rubric_calibration.R'
+    'rubric_cj_contract.R'
+    'rubric_cj_linked.R'
+    'rubric_diagnostics.R'
+    'rubric_linked_anchors.R'
+    'rubric_metrics.R'
+    'rubric_ordinal_linear.R'
+    'rubric_ordinal_monotone.R'
+    'rubric_percentile.R'
+    'rubric_validation.R'
     'seed_helpers.R'
     'together_live.R'
     'traits.R'

@@ -1,38 +1,44 @@
-## Release
+## Release preparation: pairwiseLLM 1.5.0
 
-This is an update from CRAN version 1.1.0 to version 1.3.1.
+This preparation adds downstream rubric calibration of completed Bayesian CJ
+results and raises the minimum R version to 4.4. Ordinal modeling backends remain
+optional in Suggests: ordinal, and mgcv >= 1.9-4 (with withr for monotone fitting).
+Existing Phase B linking algorithms are unchanged.
 
-## Test environments
+## Current local evidence (2026-09-12)
 
-- Local Pop!_OS 24.04 LTS, x86_64-pc-linux-gnu, R 4.6.1 (R-devel):
-  `R CMD check --as-cran --no-manual pairwiseLLM_1.3.1.tar.gz`
-  completed with 0 errors, 0 warnings, and 0 notes.
-- Local minimum-dependency check with `_R_CHECK_DEPENDS_ONLY_=true`: status OK.
-- Local suggested-dependency check with `_R_CHECK_SUGGESTS_ONLY_=true`: status OK.
+On local R 4.6.1, with ordinal 2026.7.26 and mgcv 1.9-4:
 
--Winbuilder: completed with 0 errors, 0 warnings, and 1 note [R Under development (unstable) (2026-09-04 r90492 ucrt)]
+- Focused documentation tests: 499 expectations passed; one pre-existing
+  historical export-audit test skipped because its optional evidence file is
+  absent. Current rubric navigation is independently tested.
+- Rubric documentation/example tests: 44 expectations passed, including actual
+  deterministic accepted Phase B results. No failures or warnings.
+- Roxygen generation, three changed vignette renders, README regeneration,
+  targeted pkgdown pages, and package lint passed.
+- A source archive built with `R CMD build --no-build-vignettes --no-manual`.
+  Its metadata and contents were reviewed; this is not a submission-ready build
+  with all vignettes rebuilt and is not evidence of `R CMD check` success.
 
--Rhub on GitHub CI with macOS-latest(release), windows-latest(release), ubuntu-latest(devel), ubuntu-latest(release), ubuntu-latest(oldrel-1): completed with 0 errors, 0 warnings, and 0 notes.
+## Validation still pending
 
-## R CMD check results
+Full tests, `devtools::check()`, `covr::package_coverage()`, final website/manual
+review, and current-state platform CI remain for the maintainer. Local execution
+on the minimum R 4.4 version was not performed. No current-state Winbuilder,
+R-hub, reverse-dependency, or CRAN acceptance claim is made. Earlier-version
+check results are not evidence for this release preparation.
 
-0 errors | 0 warnings | 0 notes 
+## Examples, optional software, and storage
 
-## Reverse dependencies
+New documentation snippets begin with completed CJ inputs; collection and
+sampling are not performed by rubric scoring. Dependent vignette examples are
+unevaluated in ordinary builds, with downstream code checked using deterministic
+offline fixtures. Tests require no provider credentials. Optional modeling
+packages are checked at use; no installations or backend substitutions occur.
 
-The current CRAN release has no reverse dependencies.
-
-## Internet access and privacy
-
-The package can send user-supplied text to external large-language-model services
-only when the user explicitly calls a live provider workflow. Documentation labels
-these calls and explains credential and submitted-text handling. Checks, tests, and
-evaluated vignette examples do not require credentials or make live provider calls;
-tests mock external requests.
-
-## External software and parallelism
-
-CmdStan and Ollama are optional. Neither is installed or invoked automatically.
-Examples and tests use at most two concurrent workers during checks. Optional
-Bayesian functionality was tested locally with `cmdstanr` 0.9.0 and CmdStan
-2.38.0 using two chains and two parallel chains.
+Rubric runtime introduces no file writes or downloads. Test serialization uses
+temporary directories. CmdStan and its C++17 toolchain remain optional upstream
+requirements for Bayesian CJ fitting; Python remains optional for warm-start
+feature extraction. Website asset downloads during the local pkgdown build were
+separate from package examples/tests. Source-archive review found no compiled
+executables, credentials, planning files, or caches.
