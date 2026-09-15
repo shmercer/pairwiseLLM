@@ -63,7 +63,10 @@ this may include \code{endpoint}, \code{temperature}, \code{top_p}, \code{logpro
 \code{reasoning}, \code{service_tier}, etc. For Anthropic, this may include \code{reasoning},
 \code{max_tokens}, \code{temperature}, or \code{thinking_budget_tokens}. For Gemini, this
 may include \code{thinking_level}, \code{temperature}, \code{top_p}, \code{top_k},
-\code{max_output_tokens}, and \code{service_tier}.}
+\code{max_output_tokens}, and \code{service_tier}.
+
+Gemini also accepts \code{store = TRUE} or \code{FALSE} to control logging for each
+request; omission or \code{NULL} preserves provider/project defaults.}
 }
 \value{
 A list of class \code{"pairwiseLLM_batch"} containing at least:

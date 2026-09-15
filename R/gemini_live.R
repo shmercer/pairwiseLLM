@@ -128,7 +128,11 @@
 #' @param pair_uid Optional stable per-pair identifier; when supplied, this
 #'   value is used verbatim as `custom_id` (otherwise `custom_id` defaults to
 #'   `"LIVE_<ID1>_vs_<ID2>"`).
-#' @param ... Reserved for future extensions. Any `thinking_budget` entry in
+#' @param ... Additional parameters. `store` accepts `NULL` or one non-missing
+#'   logical value. `TRUE` enables and `FALSE` disables request logging;
+#'   omission or `NULL` preserves the provider/project logging default. This
+#'   controls Gemini Developer API logging, not all data retention. Any
+#'   `thinking_budget` entry in
 #'   `...` is ignored (and a warning is emitted) because Gemini 3 does not allow
 #'   `thinking_budget` and `thinking_level` to be used together.
 #'
@@ -230,6 +234,12 @@ gemini_compare_pair_live <- function(
   thinking_level <- match.arg(thinking_level, c("minimal", "low", "medium", "high"))
 
   dots <- list(...)
+  store <- dots$store %||% NULL
+  if (!is.null(store) &&
+      (!is.logical(store) || length(store) != 1L ||
+       !is.null(dim(store)) || is.na(store))) {
+    rlang::abort("`store` must be TRUE, FALSE, or NULL.")
+  }
   if (!is.null(dots$thinking_budget)) {
     rlang::warn(paste0(
       "`thinking_budget` is ignored for Gemini 3. ",
@@ -323,6 +333,8 @@ gemini_compare_pair_live <- function(
   if (!is.null(service_tier)) {
     body$serviceTier <- service_tier
   }
+
+  if (!is.null(store)) body$store <- store
 
   path <- sprintf("/%s/models/%s:generateContent", api_version, model)
 
@@ -577,8 +589,10 @@ gemini_compare_pair_live <- function(
 #'   \code{parallel = TRUE}. Defaults to 1.
 #'   \strong{Guidance:} Use no more than 2 workers to avoid HTTP 429 errors and
 #'   respect shared check-farm resources.
-#' @param ... Reserved for future extensions; passed through to
-#'   [gemini_compare_pair_live()] (but `thinking_budget` is ignored there).
+#' @param ... Additional parameters passed through to [gemini_compare_pair_live()].
+#'   `store = TRUE` or `FALSE` controls request logging for every submitted
+#'   pair; omission or `NULL` preserves the provider/project logging default.
+#'   `thinking_budget` is ignored by the single-pair helper.
 #'
 #' @return A list containing three elements:
 #' \describe{

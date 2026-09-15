@@ -94,7 +94,11 @@ first text part as \code{thoughts}, with subsequent parts collapsed into
 value is used verbatim as \code{custom_id} (otherwise \code{custom_id} defaults to
 \code{"LIVE_<ID1>_vs_<ID2>"}).}
 
-\item{...}{Reserved for future extensions. Any \code{thinking_budget} entry in
+\item{...}{Additional parameters. \code{store} accepts \code{NULL} or one non-missing
+logical value. \code{TRUE} enables and \code{FALSE} disables request logging;
+omission or \code{NULL} preserves the provider/project logging default. This
+controls Gemini Developer API logging, not all data retention. Any
+\code{thinking_budget} entry in
 \code{...} is ignored (and a warning is emitted) because Gemini 3 does not allow
 \code{thinking_budget} and \code{thinking_level} to be used together.}
 }

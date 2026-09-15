@@ -1,3 +1,15 @@
+# pairwiseLLM 1.5.1
+
+## Bug fixes
+
+- OpenAI live comparisons now validate and forward explicit `store = TRUE` and
+  `store = FALSE` for both Responses and Chat Completions, including row-wise
+  wrappers (#245).
+- Gemini Developer API live and batch comparisons now validate and forward
+  `store` to control request logging. Omitted or `NULL` values preserve provider
+  defaults (and Gemini project settings). These controls do not imply a general
+  data-retention guarantee.
+
 # pairwiseLLM 1.5.0
 
 ## Rubric calibration

@@ -1219,4 +1219,52 @@ test_that("submit_gemini_pairs_live reports parallel worker errors", {
   testthat::expect_equal(nrow(res$failed_pairs), 2L)
   testthat::expect_true(all(grepl("parallel fail", res$failed_pairs$error_message)))
 })
+test_that("gemini live store preserves booleans and omission through JSON encoding", {
+  captured <- NULL
+  testthat::local_mocked_bindings(
+    .gemini_api_key = function(...) "fixture-key",
+    .gemini_req_perform = function(req) {
+      captured <<- do.call(jsonlite::toJSON, c(list(x = req$body$data), req$body$params))
+      list()
+    },
+    .gemini_resp_status = function(...) 200L,
+    .gemini_resp_body_json = function(...) list(candidates = list()),
+    .package = "pairwiseLLM"
+  )
+  for (endpoint in "generateContent") {
+    args <- list(ID1 = "A", text1 = "one", ID2 = "B", text2 = "two",
+      model = "gemini-3-flash-preview", trait_name = "clarity", trait_description = "Which is clearer?",
+       include_raw = TRUE)
+    for (extra in list(list(), list(store = NULL), list(store = FALSE), list(store = TRUE))) {
+      do.call(pairwiseLLM::gemini_compare_pair_live, c(args, extra))
+      body <- jsonlite::fromJSON(captured, simplifyVector = FALSE)
+      if (is.null(extra$store)) {
+        expect_false("store" %in% names(body))
+      } else {
+        expect_identical(body$store, extra$store)
+        expect_match(captured, paste0('"store":', tolower(as.character(extra$store))), fixed = TRUE)
+      }
+    }
+  }
+})
+
+test_that("gemini live rejects invalid store before credentials or transport", {
+  calls <- 0L
+  forbidden <- function(...) {
+    calls <<- calls + 1L
+    stop("unexpected request")
+  }
+  testthat::local_mocked_bindings(.gemini_api_key = forbidden,
+    .gemini_req_perform = forbidden, .package = "pairwiseLLM")
+  for (endpoint in "generateContent") {
+    for (value in list(NA, "false", 0, 1L, logical(), c(TRUE, FALSE),
+                       list(FALSE), matrix(FALSE), array(TRUE, 1L))) {
+      expect_error(pairwiseLLM::gemini_compare_pair_live(
+        "A", "one", "B", "two", "gemini-3-flash-preview", "clarity", "Which is clearer?",
+         store = value), "`store` must be TRUE, FALSE, or NULL.", fixed = TRUE)
+    }
+  }
+  expect_identical(calls, 0L)
+})
+
 skip_if_no_psock()

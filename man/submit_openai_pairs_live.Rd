@@ -70,8 +70,10 @@ too high (e.g., >20) may trigger OpenAI rate limit errors (HTTP 429)
 depending on your usage tier.}
 
 \item{...}{Additional OpenAI parameters (temperature, top_p, logprobs,
-reasoning, service_tier, and so on) passed on to
-\code{openai_compare_pair_live}.}
+reasoning, service_tier, store, and so on) passed on to
+\code{openai_compare_pair_live}. \code{store} accepts \code{NULL},
+\code{TRUE}, or \code{FALSE} for either endpoint and is forwarded to
+every submitted pair. Omission or \code{NULL} preserves the OpenAI default.}
 }
 \value{
 A list containing three elements:
