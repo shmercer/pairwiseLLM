@@ -144,6 +144,7 @@ reference:
       - openai_get_batch
       - openai_poll_batch_until_complete
       - openai_download_batch_output
+      - openai_download_batch_errors
       - run_openai_batch_pipeline
       - build_anthropic_batch_requests
       - anthropic_create_batch

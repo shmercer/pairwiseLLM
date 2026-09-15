@@ -79,7 +79,8 @@ testing).}
 
 \item{...}{Additional arguments passed through to
 \code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}}, e.g. \code{temperature}, \code{top_p}, \code{logprobs},
-\code{reasoning}.}
+\code{reasoning}, \code{store}, and \code{max_output_tokens}. Explicitly select
+\code{endpoint = "responses"} when supplying \code{max_output_tokens}.}
 }
 \value{
 A list with elements:
@@ -120,6 +121,15 @@ effort of \code{"low"} is applied for GPT-5 series models unless
 overridden via \code{reasoning}.
 \item otherwise, \code{"chat.completions"} is used.
 }
+
+Omitted or \code{NULL} \code{store} preserves provider defaults. Responses
+are stored for later retrieval by default; \code{store = FALSE} disables that
+response storage, not Batch input/output/error file retention or all data
+retention. See \code{\link[=build_openai_batch_requests]{build_openai_batch_requests()}} for endpoint-specific details.
+Use \code{\link[=openai_download_batch_errors]{openai_download_batch_errors()}} separately to retrieve request failures.
+For an errors-only batch, use \code{poll = FALSE}, then \code{\link[=openai_get_batch]{openai_get_batch()}} or
+\code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}} and the error downloader; this pipeline's
+\code{poll = TRUE} path still requires an output file.
 }
 \examples{
 # The OpenAI batch pipeline requires:
@@ -176,6 +186,7 @@ Other batch backends:
 \code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}},
 \code{\link[=llm_submit_pairs_multi_batch]{llm_submit_pairs_multi_batch()}},
 \code{\link[=openai_create_batch]{openai_create_batch()}},
+\code{\link[=openai_download_batch_errors]{openai_download_batch_errors()}},
 \code{\link[=openai_download_batch_output]{openai_download_batch_output()}},
 \code{\link[=openai_get_batch]{openai_get_batch()}},
 \code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}},

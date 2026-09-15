@@ -107,7 +107,7 @@ testthat::test_that("run_openai_batch_pipeline auto-selects responses for GPT-5 
                                    api_key = NULL) {
       list(id = "batch_1", endpoint = endpoint, status = "created")
     },
-    .env = asNamespace("pairwiseLLM"),
+    .package = "pairwiseLLM",
     {
       out <- pairwiseLLM::run_openai_batch_pipeline(
         pairs = pairs,

@@ -16,7 +16,9 @@ build_openai_batch_requests(
   logprobs = NULL,
   reasoning = NULL,
   include_thoughts = FALSE,
-  request_id_prefix = "EXP"
+  request_id_prefix = "EXP",
+  store = NULL,
+  max_output_tokens = NULL
 )
 }
 \arguments{
@@ -60,6 +62,13 @@ with reasoning, requests a summary. Defaults \code{reasoning} to
 
 \item{request_id_prefix}{String prefix for \code{custom_id}; the full
 ID takes the form \code{"<prefix>_<ID1>_vs_<ID2>"}.}
+
+\item{store}{Optional logical scalar for either endpoint. \code{TRUE} and \code{FALSE}
+are forwarded unchanged; omitted or \code{NULL} leaves the field absent.}
+
+\item{max_output_tokens}{Optional positive whole numeric scalar, at most
+\code{.Machine$integer.max}, for the Responses endpoint only. Includes visible
+output and reasoning tokens. Omitted or \code{NULL} leaves the field absent.}
 }
 \value{
 A tibble with one row per pair and columns:
@@ -75,6 +84,15 @@ A tibble with one row per pair and columns:
 This helper constructs one JSON object per pair of writing samples,
 suitable for use with the OpenAI batch API. It supports both
 \code{/v1/chat/completions} and \code{/v1/responses} endpoints.
+}
+\details{
+Invalid controls fail even for empty \code{pairs}. Responses are stored
+for later API retrieval by default; set \code{store = FALSE} to disable response
+storage. For Chat Completions, \code{store} controls storage for distillation or
+evaluations. Omitting it preserves that endpoint's provider default.
+This parameter does not control Batch input/output/error file retention
+and does not imply zero data retention. See
+\url{https://developers.openai.com/api/docs/guides/your-data}.
 }
 \examples{
 data("example_writing_samples", package = "pairwiseLLM")
@@ -106,7 +124,9 @@ batch_tbl_resp <- build_openai_batch_requests(
   prompt_template = tmpl,
   endpoint = "responses",
   include_thoughts = TRUE, # implies reasoning="low" if not set
-  reasoning = "medium"
+  reasoning = "medium",
+  store = FALSE,
+  max_output_tokens = 1024
 )
 
 batch_tbl_chat
@@ -132,6 +152,7 @@ Other batch backends:
 \code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}},
 \code{\link[=llm_submit_pairs_multi_batch]{llm_submit_pairs_multi_batch()}},
 \code{\link[=openai_create_batch]{openai_create_batch()}},
+\code{\link[=openai_download_batch_errors]{openai_download_batch_errors()}},
 \code{\link[=openai_download_batch_output]{openai_download_batch_output()}},
 \code{\link[=openai_get_batch]{openai_get_batch()}},
 \code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}},

@@ -268,7 +268,11 @@ test_that("release documentation keeps navigation and citation contracts", {
   expect_match(readme, paste0("(Version ", version, ")"), fixed = TRUE)
   expect_identical(codemeta$version, version)
   expect_identical(codemeta$citation$description, paste("R package version", version))
-  expect_identical(news[[1L]], paste("# pairwiseLLM", version))
+  news_headings <- news[grepl("^# ", news)]
+  if (identical(news_headings[[1L]], "# pairwiseLLM (development version)")) {
+    news_headings <- news_headings[-1L]
+  }
+  expect_identical(news_headings[[1L]], paste("# pairwiseLLM", version))
   expect_true(grepl("badge/dynamic/regex", readme, fixed = TRUE))
   expect_true(grepl("raw.githubusercontent.com", readme, fixed = TRUE))
   expect_true(grepl("## Research Studies Using pairwiseLLM", readme, fixed = TRUE))

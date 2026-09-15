@@ -46,6 +46,7 @@ Other batch backends:
 \code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}},
 \code{\link[=llm_submit_pairs_multi_batch]{llm_submit_pairs_multi_batch()}},
 \code{\link[=openai_create_batch]{openai_create_batch()}},
+\code{\link[=openai_download_batch_errors]{openai_download_batch_errors()}},
 \code{\link[=openai_download_batch_output]{openai_download_batch_output()}},
 \code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}},
 \code{\link[=openai_upload_batch_file]{openai_upload_batch_file()}},

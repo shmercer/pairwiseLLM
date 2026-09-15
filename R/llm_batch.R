@@ -81,13 +81,19 @@
 #'   `run_*_batch_pipeline()` functions. This can include provider-specific
 #'   options such as temperature or batch configuration fields. For OpenAI,
 #'   this may include `endpoint`, `temperature`, `top_p`, `logprobs`,
-#'   `reasoning`, `service_tier`, etc. For Anthropic, this may include `reasoning`,
+#'   `reasoning`, `store`, and Responses-only `max_output_tokens`. Select
+#'   `endpoint = "responses"` explicitly for output limits. OpenAI Batch does
+#'   not accept `service_tier` through this helper. For Anthropic, this may include `reasoning`,
 #'   `max_tokens`, `temperature`, or `thinking_budget_tokens`. For Gemini, this
 #'   may include `thinking_level`, `temperature`, `top_p`, `top_k`,
 #'   `max_output_tokens`, and `service_tier`.
 #'
 #'   Gemini also accepts `store = TRUE` or `FALSE` to control logging for each
 #'   request; omission or `NULL` preserves provider/project defaults.
+#'   OpenAI accepts `store` on both endpoints; omission or `NULL` preserves
+#'   provider defaults, including Responses storage for later retrieval.
+#'   `store = FALSE` does not disable Batch file retention or all data retention.
+#'   Use [openai_download_batch_errors()] to retrieve OpenAI request failures.
 #'
 #' @return
 #' A list of class `"pairwiseLLM_batch"` containing at least:
@@ -130,7 +136,9 @@
 #'   trait_description = td$description,
 #'   prompt_template   = tmpl,
 #'   include_thoughts  = FALSE,
-#'   service_tier      = "flex"
+#'   endpoint          = "responses",
+#'   store             = FALSE,
+#'   max_output_tokens = 1024
 #' )
 #' res_openai <- llm_download_batch_results(batch_openai)
 #'

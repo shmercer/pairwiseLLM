@@ -209,6 +209,8 @@ openai_get_batch <- function(
 #'
 #' Given a batch ID, retrieves the batch metadata, extracts the
 #' `output_file_id`, and downloads the corresponding file content to `path`.
+#' Request failures are stored separately; use [openai_download_batch_errors()]
+#' to retrieve them and reconcile records by `custom_id`, not line order.
 #'
 #' @param batch_id The batch ID (e.g. `"batch_abc123"`).
 #' @param path Local file path to write the downloaded `.jsonl` output.
@@ -246,7 +248,53 @@ openai_download_batch_output <- function(
     )
   }
 
-  file_path <- paste0("/files/", output_file_id, "/content")
+  .openai_download_file_content(output_file_id, path, api_key)
+}
+
+#' Download the error file for an OpenAI batch
+#'
+#' Retrieves batch metadata and downloads the raw JSONL file identified by
+#' `error_file_id`. This works even when the batch has no `output_file_id`.
+#' An error is raised if no valid error file ID is available; the message
+#' includes the batch ID and status. HTTP and local file-write errors propagate.
+#' An existing local file is overwritten only after its content is downloaded.
+#'
+#' Successful requests are retrieved with [openai_download_batch_output()].
+#' Reconcile both files against submitted requests by `custom_id`, not line
+#' order. This helper does not parse errors or retry failed comparisons.
+#'
+#' @param batch_id The batch ID (e.g. `"batch_abc123"`).
+#' @param path Local file path to write the downloaded error `.jsonl` file.
+#' @param api_key Optional OpenAI API key. Defaults to
+#'   `Sys.getenv("OPENAI_API_KEY")`.
+#'
+#' @return Invisibly, the path to the downloaded file.
+#' @examples
+#' \dontrun{
+#' # Requires OPENAI_API_KEY and a batch with an error_file_id.
+#' openai_download_batch_errors("batch_abc123", "batch_errors.jsonl")
+#' errors <- lapply(readLines("batch_errors.jsonl"), jsonlite::fromJSON)
+#' }
+#' @seealso [openai_get_batch()], [openai_download_batch_output()]
+#' @family batch backends
+#' @export
+openai_download_batch_errors <- function(batch_id, path, api_key = NULL) {
+  batch <- openai_get_batch(batch_id, api_key = api_key)
+  error_file_id <- batch$error_file_id
+  if (!is.character(error_file_id) || length(error_file_id) != 1L ||
+      !is.null(dim(error_file_id)) || is.na(error_file_id) || !nzchar(error_file_id)) {
+    rlang::abort(paste0(
+      "Batch ", batch_id, " has no valid error_file_id. ",
+      "Status is: ", batch$status %||% "unknown"
+    ))
+  }
+  .openai_download_file_content(error_file_id, path, api_key)
+}
+
+#' @keywords internal
+#' @noRd
+.openai_download_file_content <- function(file_id, path, api_key = NULL) {
+  file_path <- paste0("/files/", file_id, "/content")
 
   api_key <- .openai_api_key(api_key)
 
@@ -411,7 +459,17 @@ openai_poll_batch_until_complete <- function(
 #'   `Sys.getenv("OPENAI_API_KEY")`.
 #' @param ... Additional arguments passed through to
 #'   [build_openai_batch_requests()], e.g. `temperature`, `top_p`, `logprobs`,
-#'   `reasoning`.
+#'   `reasoning`, `store`, and `max_output_tokens`. Explicitly select
+#'   `endpoint = "responses"` when supplying `max_output_tokens`.
+#'
+#' @details Omitted or `NULL` `store` preserves provider defaults. Responses
+#'   are stored for later retrieval by default; `store = FALSE` disables that
+#'   response storage, not Batch input/output/error file retention or all data
+#'   retention. See [build_openai_batch_requests()] for endpoint-specific details.
+#'   Use [openai_download_batch_errors()] separately to retrieve request failures.
+#'   For an errors-only batch, use `poll = FALSE`, then [openai_get_batch()] or
+#'   [openai_poll_batch_until_complete()] and the error downloader; this pipeline's
+#'   `poll = TRUE` path still requires an output file.
 #'
 #' @return A list with elements:
 #' * `batch_input_path`  – path to the input `.jsonl` file.
@@ -613,6 +671,19 @@ openai_poll_batch_until_complete <- function(
 #'   \code{"low"} for GPT-5 series models if not specified.
 #' @param request_id_prefix String prefix for \code{custom_id}; the full
 #'   ID takes the form \code{"<prefix>_<ID1>_vs_<ID2>"}.
+#' @param store Optional logical scalar for either endpoint. `TRUE` and `FALSE`
+#'   are forwarded unchanged; omitted or `NULL` leaves the field absent.
+#' @param max_output_tokens Optional positive whole numeric scalar, at most
+#'   `.Machine$integer.max`, for the Responses endpoint only. Includes visible
+#'   output and reasoning tokens. Omitted or `NULL` leaves the field absent.
+#'
+#' @details Invalid controls fail even for empty `pairs`. Responses are stored
+#'   for later API retrieval by default; set `store = FALSE` to disable response
+#'   storage. For Chat Completions, `store` controls storage for distillation or
+#'   evaluations. Omitting it preserves that endpoint's provider default.
+#'   This parameter does not control Batch input/output/error file retention
+#'   and does not imply zero data retention. See
+#'   <https://developers.openai.com/api/docs/guides/your-data>.
 #'
 #' @return A tibble with one row per pair and columns:
 #'   \itemize{
@@ -653,7 +724,9 @@ openai_poll_batch_until_complete <- function(
 #'   prompt_template = tmpl,
 #'   endpoint = "responses",
 #'   include_thoughts = TRUE, # implies reasoning="low" if not set
-#'   reasoning = "medium"
+#'   reasoning = "medium",
+#'   store = FALSE,
+#'   max_output_tokens = 1024
 #' )
 #'
 #' batch_tbl_chat
@@ -677,8 +750,29 @@ openai_poll_batch_until_complete <- function(
                                           logprobs = NULL,
                                           reasoning = NULL,
                                           include_thoughts = FALSE,
-                                          request_id_prefix = "EXP") {
+                                          request_id_prefix = "EXP",
+                                          store = NULL,
+                                          max_output_tokens = NULL) {
     endpoint <- match.arg(endpoint)
+    if (!is.null(store) &&
+        (!is.logical(store) || length(store) != 1L ||
+         !is.null(dim(store)) || is.na(store))) {
+      rlang::abort("`store` must be TRUE, FALSE, or NULL.")
+    }
+    if (!is.null(max_output_tokens)) {
+      valid_max_output_tokens <- is.numeric(max_output_tokens) &&
+        length(max_output_tokens) == 1L && is.null(dim(max_output_tokens)) &&
+        !is.na(max_output_tokens) && is.finite(max_output_tokens) &&
+        max_output_tokens >= 1 && max_output_tokens <= .Machine$integer.max &&
+        max_output_tokens == floor(max_output_tokens)
+      if (!valid_max_output_tokens) {
+        rlang::abort("`max_output_tokens` must be a positive integer within R's integer range.")
+      }
+      if (endpoint != "responses") {
+        rlang::abort("`max_output_tokens` is supported only by the OpenAI Responses endpoint.")
+      }
+      max_output_tokens <- as.integer(max_output_tokens)
+    }
     pairs <- tibble::as_tibble(pairs)
 
     if (nrow(pairs) == 0L) {
@@ -744,8 +838,10 @@ openai_poll_batch_until_complete <- function(
         if (!is.null(temperature)) body$temperature <- temperature
         if (!is.null(top_p)) body$top_p <- top_p
         if (!is.null(logprobs)) body$logprobs <- logprobs
+        if (!is.null(max_output_tokens)) body$max_output_tokens <- max_output_tokens
         obj <- list(custom_id = custom_id, method = "POST", url = "/v1/responses", body = body)
       }
+    if (!is.null(store)) obj$body$store <- store
     out_list[[i]] <- obj
   }
 

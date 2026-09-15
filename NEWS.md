@@ -2,6 +2,12 @@
 
 ## Bug fixes
 
+- OpenAI Batch requests now accept `store` on both endpoints and
+  `max_output_tokens` on Responses, including through the batch wrappers.
+  Explicit storage values are preserved and omitted controls remain absent.
+  The new `openai_download_batch_errors()` helper downloads request failures
+  separately from successful output for ID-based reconciliation (#249).
+
 - Both OpenAI live endpoints now preserve explicit `service_tier` requests
   across model families. `"standard"` and `"default"` send `"default"`;
   `"auto"`, `"flex"`, and `"priority"` are forwarded unchanged. Omitted or

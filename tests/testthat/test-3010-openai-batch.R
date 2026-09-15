@@ -11,6 +11,92 @@ write_openai_batch_file <- pairwiseLLM:::write_openai_batch_file
 parse_openai_batch_output <- pairwiseLLM:::parse_openai_batch_output
 build_prompt <- pairwiseLLM:::build_prompt
 
+testthat::test_that("Batch storage controls preserve booleans in every serialized request", {
+  pairs <- tibble::tibble(ID1 = c("A", "C"), text1 = "First", ID2 = c("B", "D"), text2 = "Second")
+  path <- file.path(withr::local_tempdir(), "requests.jsonl")
+  for (endpoint in c("chat.completions", "responses")) {
+    for (model in c("gpt-4.1", "gpt-5.6-terra")) {
+      args <- list(pairs = pairs, model = model, trait_name = "Cohesion",
+                   trait_description = "Connections", endpoint = endpoint)
+      baseline <- do.call(build_openai_batch_requests, args)
+      for (extra in list(list(), list(store = NULL), list(store = FALSE), list(store = TRUE))) {
+        batch <- do.call(build_openai_batch_requests, c(args, extra))
+        write_openai_batch_file(batch, path)
+        lines <- readLines(path)
+        testthat::expect_length(lines, 2L)
+        for (i in seq_along(lines)) {
+          obj <- jsonlite::fromJSON(lines[i], simplifyVector = FALSE)
+          testthat::expect_identical(obj$custom_id, baseline$custom_id[i])
+          testthat::expect_identical(obj$body$store, extra$store)
+          testthat::expect_identical("store" %in% names(obj$body), !is.null(extra$store))
+          body <- batch$body[[i]]
+          body$store <- NULL
+          testthat::expect_identical(body, baseline$body[[i]])
+        }
+      }
+    }
+  }
+})
+
+testthat::test_that("Batch output limits serialize with reasoning and sampling intact", {
+  pairs <- tibble::tibble(ID1 = c("A", "C"), text1 = "First", ID2 = c("B", "D"), text2 = "Second")
+  path <- file.path(withr::local_tempdir(), "requests.jsonl")
+  args <- list(pairs = pairs, model = "gpt-5.6-terra", trait_name = "Cohesion",
+               trait_description = "Connections", endpoint = "responses", reasoning = "none",
+               temperature = 0, top_p = 1, logprobs = TRUE, store = FALSE)
+  baseline <- do.call(build_openai_batch_requests, args)
+  testthat::expect_identical(
+    do.call(build_openai_batch_requests, c(args, list(max_output_tokens = NULL))), baseline
+  )
+  for (limit in c(1, 64, .Machine$integer.max)) {
+    batch <- do.call(build_openai_batch_requests, c(args, list(max_output_tokens = limit)))
+    write_openai_batch_file(batch, path)
+    objects <- lapply(readLines(path), jsonlite::fromJSON)
+    for (i in seq_along(objects)) {
+      testthat::expect_identical(objects[[i]]$body$max_output_tokens, as.integer(limit))
+      testthat::expect_identical(objects[[i]]$body$reasoning$effort, "none")
+      testthat::expect_identical(objects[[i]]$body$store, FALSE)
+      body <- batch$body[[i]]
+      body$max_output_tokens <- NULL
+      testthat::expect_identical(body, baseline$body[[i]])
+    }
+  }
+  positional <- build_openai_batch_requests(
+    pairs, "gpt-4.1", "Cohesion", "Connections", set_prompt_template(),
+    "responses", NULL, NULL, NULL, NULL, FALSE, "OLD"
+  )
+  testthat::expect_identical(positional$custom_id, c("OLD_A_vs_B", "OLD_C_vs_D"))
+  testthat::expect_false(any(c("store", "max_output_tokens") %in% names(positional$body[[1]])))
+})
+
+testthat::test_that("Batch controls reject invalid values before empty-pair handling", {
+  pairs <- tibble::tibble(ID1 = "A", text1 = "First", ID2 = "B", text2 = "Second")
+  for (n in 0:1) {
+    args <- list(pairs = pairs[seq_len(n), ], model = "gpt-4.1", trait_name = "Cohesion",
+                 trait_description = "Connections", endpoint = "responses")
+    for (value in list(NA, 0, "false", logical(), c(TRUE, FALSE), matrix(TRUE), list(FALSE))) {
+      testthat::expect_error(do.call(build_openai_batch_requests, c(args, list(store = value))),
+                            "`store` must be TRUE, FALSE, or NULL.", fixed = TRUE)
+    }
+    for (value in list(NA_real_, NaN, Inf, -Inf, 0, -1, 1.5, "64", TRUE, numeric(),
+                       c(1, 2), matrix(64), list(64), .Machine$integer.max + 1)) {
+      testthat::expect_error(
+        do.call(build_openai_batch_requests, c(args, list(max_output_tokens = value))),
+        "`max_output_tokens` must be a positive integer", fixed = TRUE
+      )
+    }
+    args$endpoint <- "chat.completions"
+    testthat::expect_error(
+      do.call(build_openai_batch_requests, c(args, list(max_output_tokens = 64))),
+      "supported only by the OpenAI Responses endpoint", fixed = TRUE
+    )
+  }
+  empty <- build_openai_batch_requests(pairs[0, ], "gpt-4.1", "Cohesion", "Connections",
+                                       endpoint = "responses", store = FALSE, max_output_tokens = 64)
+  testthat::expect_identical(nrow(empty), 0L)
+  testthat::expect_named(empty, c("custom_id", "method", "url", "body"))
+})
+
 testthat::test_that("build_openai_batch_requests builds valid chat.completions JSONL objects", {
   data("example_writing_samples", package = "pairwiseLLM")
   pairs <- make_pairs(example_writing_samples)
