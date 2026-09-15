@@ -95,8 +95,10 @@ packages.}
 \strong{Guidance:} Use no more than 2 workers to avoid HTTP 429 errors and
 respect shared check-farm resources.}
 
-\item{...}{Reserved for future extensions; passed through to
-\code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}} (but \code{thinking_budget} is ignored there).}
+\item{...}{Additional parameters passed through to \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}.
+\code{store = TRUE} or \code{FALSE} controls request logging for every submitted
+pair; omission or \code{NULL} preserves the provider/project logging default.
+\code{thinking_budget} is ignored by the single-pair helper.}
 }
 \value{
 A list containing three elements:

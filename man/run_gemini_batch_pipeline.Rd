@@ -86,7 +86,9 @@ or \code{NULL} for provider default behavior, or \code{"flex"} /
 \item{...}{Additional arguments forwarded to
 \code{\link{build_gemini_batch_requests}} (for example
 \code{temperature}, \code{top_p}, \code{top_k},
-\code{max_output_tokens}).}
+\code{max_output_tokens}, \code{store}). \code{store = TRUE} or
+\code{FALSE} controls logging for every batch request; omission or
+\code{NULL} preserves the provider/project logging default.}
 }
 \value{
 A list with elements:

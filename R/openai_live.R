@@ -41,10 +41,15 @@ NULL
 #' @param include_raw Logical; if TRUE, adds a \code{raw_response} column.
 #' @param ... Additional OpenAI parameters, for example
 #'   \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},
-#'   \code{service_tier}, \code{max_output_tokens}, \code{pair_uid}, and
+#'   \code{service_tier}, \code{max_output_tokens}, \code{store}, \code{pair_uid}, and
 #'   (optionally) \code{include_thoughts}. \code{max_output_tokens} must be a
 #'   positive integer and is supported only by the Responses endpoint. When
 #'   \code{pair_uid} is supplied, it is used verbatim as \code{custom_id}.
+#'   \code{store} accepts \code{NULL} or one non-missing logical value for
+#'   either endpoint. \code{TRUE}/\code{FALSE} are sent unchanged; omission
+#'   or \code{NULL} leaves the field absent and preserves the OpenAI default.
+#'   For Responses, \code{store = FALSE} disables response storage for later
+#'   retrieval. This is not a general data-retention guarantee.
 #'   The same validation rules for
 #'   gpt-5 models are applied as in \code{\link{build_openai_batch_requests}}.
 #'   When using the Responses endpoint with reasoning models, you can request
@@ -132,6 +137,12 @@ openai_compare_pair_live <- function(
   if (!is.character(model) || length(model) != 1L) stop("model invalid")
 
   dots <- list(...)
+  store <- dots$store %||% NULL
+  if (!is.null(store) &&
+      (!is.logical(store) || length(store) != 1L ||
+       !is.null(dim(store)) || is.na(store))) {
+    rlang::abort("`store` must be TRUE, FALSE, or NULL.")
+  }
   include_thoughts <- dots$include_thoughts %||% FALSE
   pair_uid <- dots$pair_uid %||% NULL
   top_p <- dots$top_p %||% NULL
@@ -211,6 +222,8 @@ openai_compare_pair_live <- function(
     if (!is.null(max_output_tokens)) body$max_output_tokens <- max_output_tokens
     path <- "/responses"
   }
+
+  if (!is.null(store)) body$store <- store
 
   # ✅ Resolve key only at the last responsible moment (right before HTTP)
   api_key <- .openai_api_key(api_key)
@@ -380,8 +393,10 @@ openai_compare_pair_live <- function(
 #'   too high (e.g., >20) may trigger OpenAI rate limit errors (HTTP 429)
 #'   depending on your usage tier.
 #' @param ... Additional OpenAI parameters (temperature, top_p, logprobs,
-#'   reasoning, service_tier, and so on) passed on to
-#'   \code{openai_compare_pair_live}.
+#'   reasoning, service_tier, store, and so on) passed on to
+#'   \code{openai_compare_pair_live}. \code{store} accepts \code{NULL},
+#'   \code{TRUE}, or \code{FALSE} for either endpoint and is forwarded to
+#'   every submitted pair. Omission or \code{NULL} preserves the OpenAI default.
 #'
 #' @return A list containing three elements:
 #' \describe{

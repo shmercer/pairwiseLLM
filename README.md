@@ -1,5 +1,5 @@
 
-<!-- README-source-md5: 71aa2d5425c3a075022d9855ade1966f -->
+<!-- README-source-md5: d2db7e66be8033a08558a6af900ad80c -->
 
 <figure>
 <img src="man/figures/pairwiseLLM-banner.jpg"
@@ -100,7 +100,7 @@ Provider-required constraints, such as Anthropic extended thinking’s
 
 ## Installation
 
-Version 1.5.0 requires **R \>= 4.4**.
+Version 1.5.1 requires **R \>= 4.4**.
 
 `pairwiseLLM` is available on CRAN, install with:
 
@@ -1029,5 +1029,5 @@ MIT License. See `LICENSE`.
 ## Citation
 
 > Mercer, S. H. (2026). *pairwiseLLM: Pairwise writing quality
-> comparisons with large language models* (Version 1.5.0) \[R package;
+> comparisons with large language models* (Version 1.5.1) \[R package;
 > Computer software\]. <https://github.com/shmercer/pairwiseLLM>

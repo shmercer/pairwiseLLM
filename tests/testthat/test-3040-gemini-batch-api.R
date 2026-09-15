@@ -685,7 +685,7 @@ testthat::test_that("run_gemini_batch_pipeline emits verbose messages", {
 
   testthat::local_mocked_bindings(
     gemini_create_batch = function(...) list(name = "batch-1"),
-    .env = asNamespace("pairwiseLLM")
+    .package = "pairwiseLLM"
   )
 
   msgs <- capture_messages(
@@ -718,7 +718,7 @@ testthat::test_that("run_gemini_batch_pipeline emits verbose messages", {
       writeLines(line, output_path)
       output_path
     },
-    .env = asNamespace("pairwiseLLM")
+    .package = "pairwiseLLM"
   )
 
   msgs <- capture_messages(
@@ -832,7 +832,7 @@ testthat::test_that("gemini_download_batch_results validates requests_tbl", {
 
   testthat::with_mocked_bindings(
     gemini_download_batch_results = orig_gemini_download_batch_results,
-    .env = asNamespace("pairwiseLLM"),
+    .package = "pairwiseLLM",
     {
       testthat::expect_error(
         gemini_download_batch_results(batch_obj, list(), tmp),
@@ -851,7 +851,7 @@ testthat::test_that("gemini_download_batch_results errors on unsupported inlined
 
   testthat::with_mocked_bindings(
     gemini_download_batch_results = orig_gemini_download_batch_results,
-    .env = asNamespace("pairwiseLLM"),
+    .package = "pairwiseLLM",
     {
       testthat::expect_error(
         gemini_download_batch_results(batch_obj, reqs, tmp),
@@ -872,7 +872,7 @@ testthat::test_that("gemini_download_batch_results errors when response table is
 
   testthat::with_mocked_bindings(
     gemini_download_batch_results = orig_gemini_download_batch_results,
-    .env = asNamespace("pairwiseLLM"),
+    .package = "pairwiseLLM",
     {
       testthat::expect_error(
         gemini_download_batch_results(batch_obj, reqs, tmp),
@@ -880,4 +880,60 @@ testthat::test_that("gemini_download_batch_results errors when response table is
       )
     }
   )
+})
+
+
+test_that("Gemini batch store survives construction, pipeline and submission payload", {
+  root <- withr::local_tempdir()
+  pairs <- tibble::tibble(ID1 = c("A", "C"), ID2 = c("B", "D"),
+    text1 = "one", text2 = "two")
+  captured <- NULL
+  testthat::local_mocked_bindings(
+    .gemini_api_key = function(...) "fixture-key",
+    .gemini_req_perform = function(req) {
+      captured <<- do.call(jsonlite::toJSON, c(list(x = req$body$data), req$body$params))
+      list()
+    },
+    .gemini_resp_body_json = function(...) list(name = "batches/fixture"),
+    .package = "pairwiseLLM")
+  for (extra in list(list(), list(store = NULL), list(store = FALSE), list(store = TRUE))) {
+    args <- c(list(pairs = pairs, model = "gemini-3-flash-preview", trait_name = "clarity",
+      trait_description = "Which is clearer?"), extra)
+    built <- do.call(pairwiseLLM::build_gemini_batch_requests, args)
+    out <- do.call(pairwiseLLM::llm_submit_pairs_batch, c(args, list(backend = "gemini",
+      poll = FALSE, verbose = FALSE, batch_input_path = file.path(root, "input.json"))))
+    wire <- jsonlite::fromJSON(captured, simplifyVector = FALSE)
+    saved <- jsonlite::read_json(file.path(root, "input.json"))
+    submitted <- wire$batch$input_config$requests$requests
+    expect_length(submitted, 2L)
+    expect_length(saved$requests, 2L)
+    for (i in seq_len(2L)) {
+      for (request in list(built$request[[i]], submitted[[i]]$request, saved$requests[[i]]$request)) {
+        expect_identical(request$store, extra$store)
+        expect_false("store" %in% names(request$generationConfig))
+        expect_identical("store" %in% names(request), !is.null(extra$store))
+      }
+    }
+  }
+})
+
+test_that("Gemini batch invalid store fails before writing input or submitting", {
+  root <- withr::local_tempdir()
+  path <- file.path(root, "input.json")
+  calls <- 0L
+  forbidden <- function(...) {
+    calls <<- calls + 1L
+    stop("unexpected submission")
+  }
+  testthat::local_mocked_bindings(.gemini_api_key = forbidden,
+    .gemini_req_perform = forbidden, .package = "pairwiseLLM")
+  pairs <- tibble::tibble(ID1 = "A", ID2 = "B", text1 = "one", text2 = "two")
+  for (value in list(NA, "false", 0, 1L, logical(), c(TRUE, FALSE),
+                     list(FALSE), matrix(FALSE), array(TRUE, 1L))) {
+    expect_error(pairwiseLLM::run_gemini_batch_pipeline(pairs, "gemini-3-flash-preview",
+      "clarity", "Which is clearer?", store = value, batch_input_path = path, poll = FALSE),
+      "`store` must be TRUE, FALSE, or NULL.", fixed = TRUE)
+    expect_false(file.exists(path))
+  }
+  expect_identical(calls, 0L)
 })

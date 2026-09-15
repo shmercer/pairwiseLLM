@@ -80,7 +80,12 @@ are forwarded to \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live
 \code{service_tier} is provider-specific: OpenAI, Gemini Developer API, and
 Vertex each validate and encode it using their own request surfaces. For
 Gemini Developer API and Vertex, supported public values are \code{"standard"}
-(default / omitted), \code{"flex"}, and \code{"priority"}.}
+(default / omitted), \code{"flex"}, and \code{"priority"}.
+
+For OpenAI and Gemini Developer API, \code{store} accepts \code{NULL}, \code{TRUE}, or
+\code{FALSE}. It controls OpenAI response storage or Gemini request logging;
+omission or \code{NULL} preserves provider/project defaults. See the selected
+provider helper for details; this is not a cross-provider retention policy.}
 }
 \value{
 A tibble with one row and the same columns as the underlying

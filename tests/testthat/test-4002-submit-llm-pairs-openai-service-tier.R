@@ -46,7 +46,7 @@ testthat::test_that("submit_llm_pairs forwards service_tier to openai live", {
         failed_attempts = tibble::tibble()
       )
     },
-    .env = asNamespace("pairwiseLLM"),
+    .package = "pairwiseLLM",
     {
       submit_llm_pairs(
         pairs = pairs,

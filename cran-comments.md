@@ -1,11 +1,45 @@
-## Release preparation: pairwiseLLM 1.5.0
+## Release preparation: pairwiseLLM 1.5.1
+
+This patch fixes ignored `store` values for both OpenAI live endpoints and
+Gemini Developer API live and batch requests (#245). Explicit logical values
+are validated and forwarded; omission or NULL preserves provider/project
+settings. Public signatures, output schemas, R >= 4.4, and dependencies remain
+unchanged. These provider-specific controls are not general retention guarantees.
+
+## Current local evidence (2026-09-15)
+
+On local R 4.6.1:
+
+- Nine focused test files: 1,335 passed expectations, zero failures, errors, or
+  warnings. Four existing tests skipped (three require PSOCK sockets and one
+  requires an unavailable historical audit file); two existing top-level socket
+  guards also produced skip notices. New storage regressions all executed.
+- Scoped covr evidence from the focused tests: openai_live.R 95.37%,
+  gemini_live.R 98.62%, gemini_batch_api.R 96.35%. This is file coverage, not a
+  package-wide coverage result.
+- Roxygen and README regeneration, metadata/hash checks, and nine targeted
+  pkgdown reference pages passed. Reference examples were disabled; tests use
+  mocked transport and no provider credentials.
+- Package lint returned zero findings; git diff --check and numeric-prefix
+  uniqueness checks passed.
+
+## Validation still pending
+
+Full tests, devtools::check(), package-wide coverage, current-state platform CI,
+minimum-R execution, and maintainer release review remain pending. No package
+build, CRAN submission, tag, publication, or provider smoke call was performed.
+The 1.5.0 record below is historical and is not current patch validation.
+
+## Historical 1.5.0 preparation
+
+### Release preparation: pairwiseLLM 1.5.0
 
 This preparation adds downstream rubric calibration of completed Bayesian CJ
 results and raises the minimum R version to 4.4. Ordinal modeling backends remain
 optional in Suggests: ordinal, and mgcv >= 1.9-4 (with withr for monotone fitting).
 Existing Phase B linking algorithms are unchanged.
 
-## Current local evidence (2026-09-12)
+### Current local evidence (2026-09-12)
 
 On local R 4.6.1, with ordinal 2026.7.26 and mgcv 1.9-4:
 
@@ -20,7 +54,7 @@ On local R 4.6.1, with ordinal 2026.7.26 and mgcv 1.9-4:
   Its metadata and contents were reviewed; this is not a submission-ready build
   with all vignettes rebuilt and is not evidence of `R CMD check` success.
 
-## Validation still pending
+### Validation still pending
 
 Full tests, `devtools::check()`, `covr::package_coverage()`, final website/manual
 review, and current-state platform CI remain for the maintainer. Local execution
@@ -28,7 +62,7 @@ on the minimum R 4.4 version was not performed. No current-state Winbuilder,
 R-hub, reverse-dependency, or CRAN acceptance claim is made. Earlier-version
 check results are not evidence for this release preparation.
 
-## Examples, optional software, and storage
+### Examples, optional software, and storage
 
 New documentation snippets begin with completed CJ inputs; collection and
 sampling are not performed by rubric scoring. Dependent vignette examples are

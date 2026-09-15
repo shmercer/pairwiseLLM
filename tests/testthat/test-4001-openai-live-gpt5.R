@@ -243,3 +243,52 @@ testthat::test_that("gpt-5.6 named tiers keep reasoning and service tier semanti
     }
   )
 })
+
+
+test_that("openai live store preserves booleans and omission through JSON encoding", {
+  captured <- NULL
+  testthat::local_mocked_bindings(
+    .openai_api_key = function(...) "fixture-key",
+    .openai_req_perform = function(req) {
+      captured <<- do.call(jsonlite::toJSON, c(list(x = req$body$data), req$body$params))
+      list()
+    },
+    .openai_resp_status = function(...) 200L,
+    .openai_resp_body_json = function(...) list(object = "response", model = "gpt-4.1", output = list()),
+    .package = "pairwiseLLM"
+  )
+  for (endpoint in c("responses", "chat.completions")) {
+    args <- list(ID1 = "A", text1 = "one", ID2 = "B", text2 = "two",
+      model = "gpt-4.1", trait_name = "clarity", trait_description = "Which is clearer?",
+      endpoint = endpoint, include_raw = TRUE)
+    for (extra in list(list(), list(store = NULL), list(store = FALSE), list(store = TRUE))) {
+      do.call(pairwiseLLM::openai_compare_pair_live, c(args, extra))
+      body <- jsonlite::fromJSON(captured, simplifyVector = FALSE)
+      if (is.null(extra$store)) {
+        expect_false("store" %in% names(body))
+      } else {
+        expect_identical(body$store, extra$store)
+        expect_match(captured, paste0('"store":', tolower(as.character(extra$store))), fixed = TRUE)
+      }
+    }
+  }
+})
+
+test_that("openai live rejects invalid store before credentials or transport", {
+  calls <- 0L
+  forbidden <- function(...) {
+    calls <<- calls + 1L
+    stop("unexpected request")
+  }
+  testthat::local_mocked_bindings(.openai_api_key = forbidden,
+    .openai_req_perform = forbidden, .package = "pairwiseLLM")
+  for (endpoint in c("responses", "chat.completions")) {
+    for (value in list(NA, "false", 0, 1L, logical(), c(TRUE, FALSE),
+                       list(FALSE), matrix(FALSE), array(TRUE, 1L))) {
+      expect_error(pairwiseLLM::openai_compare_pair_live(
+        "A", "one", "B", "two", "gpt-4.1", "clarity", "Which is clearer?",
+        endpoint = endpoint, store = value), "`store` must be TRUE, FALSE, or NULL.", fixed = TRUE)
+    }
+  }
+  expect_identical(calls, 0L)
+})

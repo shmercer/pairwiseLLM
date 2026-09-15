@@ -97,7 +97,12 @@ For \code{"anthropic"}, \code{"gemini"}, and \code{"vertex"}, they are forwarded
 \code{max_output_tokens}, \code{include_thoughts}, \code{service_tier},
 \code{thinking_level}, and provider-specific controls. For \code{"ollama"},
 arguments are forwarded to \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}} and may include
-\code{host}, \code{think}, \code{num_ctx}, and other Ollama-specific options.}
+\code{host}, \code{think}, \code{num_ctx}, and other Ollama-specific options.
+
+For OpenAI and Gemini Developer API, \code{store} accepts \code{NULL}, \code{TRUE}, or
+\code{FALSE}. It controls OpenAI response storage or Gemini request logging;
+omission or \code{NULL} preserves provider/project defaults. See the selected
+provider helper for details; this is not a cross-provider retention policy.}
 }
 \value{
 A list containing:

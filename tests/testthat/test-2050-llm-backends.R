@@ -1305,3 +1305,61 @@ testthat::test_that("submit_llm_pairs rejects unsupported backend values", {
     "Backend 'unsupported' is not implemented yet"
   )
 })
+
+
+test_that("live dispatchers preserve store for every sequential and parallel pair", {
+  skip_if_not_installed("future")
+  skip_if_not_installed("future.apply")
+  pairs <- tibble::tibble(ID1 = c("A", "C"), ID2 = c("B", "D"),
+    text1 = "one", text2 = "two")
+  bodies <- list()
+  capture <- function(req) {
+    bodies[[length(bodies) + 1L]] <<- req$body$data
+    list()
+  }
+  openai_body <- list(object = "response", model = "fixture",
+    output = list(list(type = "message",
+      content = list(list(text = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>")))))
+  gemini_body <- list(candidates = list(list(content = list(parts = list(
+    list(text = "<BETTER_SAMPLE>SAMPLE_1</BETTER_SAMPLE>"))))))
+  testthat::local_mocked_bindings(
+    .openai_api_key = function(...) "fixture-key", .gemini_api_key = function(...) "fixture-key",
+    .openai_req_perform = capture, .gemini_req_perform = capture,
+    .openai_resp_status = function(...) 200L, .gemini_resp_status = function(...) 200L,
+    .openai_resp_body_json = function(...) openai_body,
+    .gemini_resp_body_json = function(...) gemini_body, .package = "pairwiseLLM")
+  testthat::local_mocked_bindings(plan = function(...) NULL, .package = "future")
+  testthat::local_mocked_bindings(
+    future_lapply = function(X, FUN, ...) lapply(X, FUN), .package = "future.apply")
+  for (backend in c("openai", "gemini")) {
+    model <- if (backend == "openai") "gpt-4.1" else "gemini-3-flash-preview"
+    for (value in list(FALSE, TRUE, NULL)) {
+      bodies <- list()
+      one <- pairwiseLLM::llm_compare_pair("A", "one", "B", "two", model,
+        "clarity", "Which is clearer?", backend = backend, endpoint = "responses", store = value)
+      expect_identical(one$better_id, "A")
+      expect_identical(bodies[[1L]]$store, value)
+      for (parallel in c(FALSE, TRUE)) {
+        bodies <- list()
+        out <- pairwiseLLM::submit_llm_pairs(pairs, model, "clarity", "Which is clearer?",
+          backend = backend, endpoint = "responses", store = value,
+          parallel = parallel, workers = 2L, verbose = FALSE, progress = FALSE, include_raw = TRUE)
+        expect_length(bodies, 2L)
+        expect_identical(out$results$better_id, pairs$ID1)
+        expect_equal(nrow(out$failed_pairs), 0L)
+        expect_true("raw_response" %in% names(out$results))
+        for (body in bodies) expect_identical(body$store, value)
+      }
+    }
+    for (parallel in c(FALSE, TRUE)) {
+      bodies <- list()
+      out <- pairwiseLLM::submit_llm_pairs(pairs, model, "clarity", "Which is clearer?",
+        backend = backend, endpoint = "responses", store = NA,
+        parallel = parallel, workers = 2L, verbose = FALSE, progress = FALSE)
+      expect_length(bodies, 0L)
+      expect_equal(nrow(out$failed_pairs), 2L)
+      expect_true(all(grepl("`store` must be TRUE, FALSE, or NULL.",
+        out$failed_pairs$error_message, fixed = TRUE)))
+    }
+  }
+})

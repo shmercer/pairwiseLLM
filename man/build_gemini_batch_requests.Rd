@@ -78,7 +78,11 @@ request field.}
 visible chain-of-thought. For most pairwise scoring use cases this should
 remain \code{FALSE}.}
 
-\item{...}{Reserved for future extensions. Any \code{thinking_budget}
+\item{...}{Additional parameters. \code{store} accepts \code{NULL} or one
+non-missing logical value. \code{TRUE} enables and \code{FALSE} disables
+request logging for every batch request. Omission or \code{NULL} preserves
+the provider/project logging default. This controls Gemini Developer API
+logging, not all data retention. Any \code{thinking_budget}
 entries are ignored (Gemini 3 does not support thinking budgets).}
 }
 \value{

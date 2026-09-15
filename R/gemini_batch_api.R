@@ -357,7 +357,11 @@
 #'   \code{thinkingConfig.includeThoughts = TRUE} so that Gemini returns
 #'   visible chain-of-thought. For most pairwise scoring use cases this should
 #'   remain \code{FALSE}.
-#' @param ... Reserved for future extensions. Any \code{thinking_budget}
+#' @param ... Additional parameters. \code{store} accepts \code{NULL} or one
+#'   non-missing logical value. \code{TRUE} enables and \code{FALSE} disables
+#'   request logging for every batch request. Omission or \code{NULL} preserves
+#'   the provider/project logging default. This controls Gemini Developer API
+#'   logging, not all data retention. Any \code{thinking_budget}
 #'   entries are ignored (Gemini 3 does not support thinking budgets).
 #'
 #' @return A tibble with one row per pair and two main columns:
@@ -445,6 +449,12 @@ build_gemini_batch_requests <- function(
   is_flash <- grepl("gemini-3-.*flash", model, ignore.case = TRUE)
 
   dots <- list(...)
+  store <- dots$store %||% NULL
+  if (!is.null(store) &&
+      (!is.logical(store) || length(store) != 1L ||
+       !is.null(dim(store)) || is.na(store))) {
+    rlang::abort("`store` must be TRUE, FALSE, or NULL.")
+  }
   if (!is.null(dots$thinking_budget)) {
     rlang::warn(paste0(
       "`thinking_budget` is ignored for Gemini 3. ",
@@ -520,6 +530,8 @@ build_gemini_batch_requests <- function(
     if (!is.null(service_tier)) {
       req$serviceTier <- service_tier
     }
+
+    if (!is.null(store)) req$store <- store
 
     req
   }
@@ -1277,7 +1289,9 @@ parse_gemini_batch_output <- function(results_path, requests_tbl) {
 #' @param ... Additional arguments forwarded to
 #'   \code{\link{build_gemini_batch_requests}} (for example
 #'   \code{temperature}, \code{top_p}, \code{top_k},
-#'   \code{max_output_tokens}).
+#'   \code{max_output_tokens}, \code{store}). \code{store = TRUE} or
+#'   \code{FALSE} controls logging for every batch request; omission or
+#'   \code{NULL} preserves the provider/project logging default.
 #'
 #' @return A list with elements:
 #' \describe{

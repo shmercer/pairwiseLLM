@@ -51,10 +51,15 @@ openai_compare_pair_live(
 
 \item{...}{Additional OpenAI parameters, for example
 \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},
-\code{service_tier}, \code{max_output_tokens}, \code{pair_uid}, and
+\code{service_tier}, \code{max_output_tokens}, \code{store}, \code{pair_uid}, and
 (optionally) \code{include_thoughts}. \code{max_output_tokens} must be a
 positive integer and is supported only by the Responses endpoint. When
 \code{pair_uid} is supplied, it is used verbatim as \code{custom_id}.
+\code{store} accepts \code{NULL} or one non-missing logical value for
+either endpoint. \code{TRUE}/\code{FALSE} are sent unchanged; omission
+or \code{NULL} leaves the field absent and preserves the OpenAI default.
+For Responses, \code{store = FALSE} disables response storage for later
+retrieval. This is not a general data-retention guarantee.
 The same validation rules for
 gpt-5 models are applied as in \code{\link{build_openai_batch_requests}}.
 When using the Responses endpoint with reasoning models, you can request
