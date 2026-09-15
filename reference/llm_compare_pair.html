@@ -190,7 +190,11 @@ are forwarded to <code><a href="ollama_compare_pair_live.html">ollama_compare_pa
 <p><code>service_tier</code> is provider-specific: OpenAI, Gemini Developer API, and
 Vertex each validate and encode it using their own request surfaces. For
 Gemini Developer API and Vertex, supported public values are <code>"standard"</code>
-(default / omitted), <code>"flex"</code>, and <code>"priority"</code>.</p>
+(default / omitted), <code>"flex"</code>, and <code>"priority"</code>.
+For both OpenAI live endpoints, <code>"standard"</code> and <code>"default"</code> send
+<code>"default"</code>; <code>"auto"</code>, <code>"flex"</code>, and <code>"priority"</code> are sent unchanged.
+Omission or <code>NULL</code> allows OpenAI's project-configured <code>"auto"</code> behavior.
+Model/tier availability is validated by OpenAI.</p>
 <p>For OpenAI and Gemini Developer API, <code>store</code> accepts <code>NULL</code>, <code>TRUE</code>, or
 <code>FALSE</code>. It controls OpenAI response storage or Gemini request logging;
 omission or <code>NULL</code> preserves provider/project defaults. See the selected

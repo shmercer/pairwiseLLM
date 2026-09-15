@@ -184,6 +184,10 @@ all backends (though defaults may vary).</p></dd>
 are forwarded to <code><a href="submit_openai_pairs_live.html">submit_openai_pairs_live()</a></code> and typically include
 <code>temperature</code>, <code>top_p</code>, <code>logprobs</code>, <code>reasoning</code>, <code>service_tier</code>, and
 <code>include_thoughts</code>.
+For both OpenAI live endpoints, <code>service_tier = "standard"</code> or <code>"default"</code>
+sends <code>"default"</code>; <code>"auto"</code>, <code>"flex"</code>, and <code>"priority"</code> are sent unchanged.
+Omission or <code>NULL</code> allows OpenAI's project-configured <code>"auto"</code> behavior.
+Model/tier availability is validated by OpenAI.
 For <code>"anthropic"</code>, <code>"gemini"</code>, and <code>"vertex"</code>, they are forwarded to
 <code><a href="submit_anthropic_pairs_live.html">submit_anthropic_pairs_live()</a></code>, <code><a href="submit_gemini_pairs_live.html">submit_gemini_pairs_live()</a></code>, or
 <code><a href="submit_vertex_pairs_live.html">submit_vertex_pairs_live()</a></code> and may include options such as

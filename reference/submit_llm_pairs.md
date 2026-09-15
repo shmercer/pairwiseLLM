@@ -133,8 +133,12 @@ submit_llm_pairs(
   forwarded to
   [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md)
   and typically include `temperature`, `top_p`, `logprobs`, `reasoning`,
-  `service_tier`, and `include_thoughts`. For `"anthropic"`, `"gemini"`,
-  and `"vertex"`, they are forwarded to
+  `service_tier`, and `include_thoughts`. For both OpenAI live
+  endpoints, `service_tier = "standard"` or `"default"` sends
+  `"default"`; `"auto"`, `"flex"`, and `"priority"` are sent unchanged.
+  Omission or `NULL` allows OpenAI's project-configured `"auto"`
+  behavior. Model/tier availability is validated by OpenAI. For
+  `"anthropic"`, `"gemini"`, and `"vertex"`, they are forwarded to
   [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md),
   [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md),
   or

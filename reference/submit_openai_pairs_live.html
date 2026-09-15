@@ -167,7 +167,12 @@ depending on your usage tier.</p></dd>
 reasoning, service_tier, store, and so on) passed on to
 <code>openai_compare_pair_live</code>. <code>store</code> accepts <code>NULL</code>,
 <code>TRUE</code>, or <code>FALSE</code> for either endpoint and is forwarded to
-every submitted pair. Omission or <code>NULL</code> preserves the OpenAI default.</p></dd>
+every submitted pair. Omission or <code>NULL</code> preserves the OpenAI default.
+For either endpoint, <code>service_tier = "standard"</code> or <code>"default"</code>
+sends <code>"default"</code>; <code>"auto"</code>, <code>"flex"</code>, and
+<code>"priority"</code> are sent unchanged. Omission or <code>NULL</code> allows
+OpenAI's project-configured <code>"auto"</code> behavior. Model/tier availability
+is validated by OpenAI.</p></dd>
 
 </dl></div>
     <div class="section level2">

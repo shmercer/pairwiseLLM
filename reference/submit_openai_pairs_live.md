@@ -108,7 +108,11 @@ submit_openai_pairs_live(
   service_tier, store, and so on) passed on to
   `openai_compare_pair_live`. `store` accepts `NULL`, `TRUE`, or `FALSE`
   for either endpoint and is forwarded to every submitted pair. Omission
-  or `NULL` preserves the OpenAI default.
+  or `NULL` preserves the OpenAI default. For either endpoint,
+  `service_tier = "standard"` or `"default"` sends `"default"`;
+  `"auto"`, `"flex"`, and `"priority"` are sent unchanged. Omission or
+  `NULL` allows OpenAI's project-configured `"auto"` behavior.
+  Model/tier availability is validated by OpenAI.
 
 ## Value
 

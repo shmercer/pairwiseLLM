@@ -150,6 +150,11 @@ positive integer and is supported only by the Responses endpoint. When
 <code>store</code> accepts <code>NULL</code> or one non-missing logical value for
 either endpoint. <code>TRUE</code>/<code>FALSE</code> are sent unchanged; omission
 or <code>NULL</code> leaves the field absent and preserves the OpenAI default.
+For either endpoint, <code>service_tier = "standard"</code> or <code>"default"</code>
+sends <code>"default"</code>; explicit <code>"auto"</code>, <code>"flex"</code>, and
+<code>"priority"</code> are sent unchanged. Omission or <code>NULL</code> leaves
+the field absent, allowing OpenAI's project-configured <code>"auto"</code>
+behavior. Model/tier availability is validated by OpenAI.
 For Responses, <code>store = FALSE</code> disables response storage for later
 retrieval. This is not a general data-retention guarantee.
 The same validation rules for

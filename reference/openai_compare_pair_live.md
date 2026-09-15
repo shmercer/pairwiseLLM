@@ -92,9 +92,14 @@ openai_compare_pair_live(
   `custom_id`. `store` accepts `NULL` or one non-missing logical value
   for either endpoint. `TRUE`/`FALSE` are sent unchanged; omission or
   `NULL` leaves the field absent and preserves the OpenAI default. For
-  Responses, `store = FALSE` disables response storage for later
-  retrieval. This is not a general data-retention guarantee. The same
-  validation rules for gpt-5 models are applied as in
+  either endpoint, `service_tier = "standard"` or `"default"` sends
+  `"default"`; explicit `"auto"`, `"flex"`, and `"priority"` are sent
+  unchanged. Omission or `NULL` leaves the field absent, allowing
+  OpenAI's project-configured `"auto"` behavior. Model/tier availability
+  is validated by OpenAI. For Responses, `store = FALSE` disables
+  response storage for later retrieval. This is not a general
+  data-retention guarantee. The same validation rules for gpt-5 models
+  are applied as in
   [`build_openai_batch_requests`](https://shmercer.github.io/pairwiseLLM/reference/build_openai_batch_requests.md).
   When using the Responses endpoint with reasoning models, you can
   request reasoning summaries in the `thoughts` column by setting

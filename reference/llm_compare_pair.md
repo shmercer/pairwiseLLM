@@ -136,7 +136,11 @@ llm_compare_pair(
   `service_tier` is provider-specific: OpenAI, Gemini Developer API, and
   Vertex each validate and encode it using their own request surfaces.
   For Gemini Developer API and Vertex, supported public values are
-  `"standard"` (default / omitted), `"flex"`, and `"priority"`.
+  `"standard"` (default / omitted), `"flex"`, and `"priority"`. For both
+  OpenAI live endpoints, `"standard"` and `"default"` send `"default"`;
+  `"auto"`, `"flex"`, and `"priority"` are sent unchanged. Omission or
+  `NULL` allows OpenAI's project-configured `"auto"` behavior.
+  Model/tier availability is validated by OpenAI.
 
   For OpenAI and Gemini Developer API, `store` accepts `NULL`, `TRUE`,
   or `FALSE`. It controls OpenAI response storage or Gemini request
