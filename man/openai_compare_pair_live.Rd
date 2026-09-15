@@ -58,6 +58,11 @@ positive integer and is supported only by the Responses endpoint. When
 \code{store} accepts \code{NULL} or one non-missing logical value for
 either endpoint. \code{TRUE}/\code{FALSE} are sent unchanged; omission
 or \code{NULL} leaves the field absent and preserves the OpenAI default.
+For either endpoint, \code{service_tier = "standard"} or \code{"default"}
+sends \code{"default"}; explicit \code{"auto"}, \code{"flex"}, and
+\code{"priority"} are sent unchanged. Omission or \code{NULL} leaves
+the field absent, allowing OpenAI's project-configured \code{"auto"}
+behavior. Model/tier availability is validated by OpenAI.
 For Responses, \code{store = FALSE} disables response storage for later
 retrieval. This is not a general data-retention guarantee.
 The same validation rules for

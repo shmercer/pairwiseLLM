@@ -1,3 +1,13 @@
+# pairwiseLLM (development version)
+
+## Bug fixes
+
+- Both OpenAI live endpoints now preserve explicit `service_tier` requests
+  across model families. `"standard"` and `"default"` send `"default"`;
+  `"auto"`, `"flex"`, and `"priority"` are forwarded unchanged. Omitted or
+  `NULL` tiers leave the field absent, preserving OpenAI's project-configured
+  auto behavior (#247).
+
 # pairwiseLLM 1.5.1
 
 ## Bug fixes

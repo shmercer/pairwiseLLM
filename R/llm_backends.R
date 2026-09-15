@@ -79,6 +79,10 @@
 #'   Vertex each validate and encode it using their own request surfaces. For
 #'   Gemini Developer API and Vertex, supported public values are `"standard"`
 #'   (default / omitted), `"flex"`, and `"priority"`.
+#'   For both OpenAI live endpoints, `"standard"` and `"default"` send
+#'   `"default"`; `"auto"`, `"flex"`, and `"priority"` are sent unchanged.
+#'   Omission or `NULL` allows OpenAI's project-configured `"auto"` behavior.
+#'   Model/tier availability is validated by OpenAI.
 #'
 #'   For OpenAI and Gemini Developer API, `store` accepts `NULL`, `TRUE`, or
 #'   `FALSE`. It controls OpenAI response storage or Gemini request logging;
@@ -397,6 +401,10 @@ llm_compare_pair <- function(
 #'   are forwarded to [submit_openai_pairs_live()] and typically include
 #'   `temperature`, `top_p`, `logprobs`, `reasoning`, `service_tier`, and
 #'   `include_thoughts`.
+#'   For both OpenAI live endpoints, `service_tier = "standard"` or `"default"`
+#'   sends `"default"`; `"auto"`, `"flex"`, and `"priority"` are sent unchanged.
+#'   Omission or `NULL` allows OpenAI's project-configured `"auto"` behavior.
+#'   Model/tier availability is validated by OpenAI.
 #'   For `"anthropic"`, `"gemini"`, and `"vertex"`, they are forwarded to
 #'   [submit_anthropic_pairs_live()], [submit_gemini_pairs_live()], or
 #'   [submit_vertex_pairs_live()] and may include options such as

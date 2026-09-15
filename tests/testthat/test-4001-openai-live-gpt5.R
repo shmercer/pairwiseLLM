@@ -108,63 +108,57 @@ testthat::test_that("Responses requests forward and validate max_output_tokens",
   )
 })
 
-testthat::test_that("gpt-5.2 service_tier includes flex/priority and omits standard", {
-  td <- trait_description("overall_quality")
-  tmpl <- set_prompt_template()
-  captured_body <- NULL
-
-  fake_body <- list(object = "response", model = "gpt-5.2", output = list())
-
-  testthat::with_mocked_bindings(
-    .openai_api_key = function(...) "KEY",
-    .openai_req_body_json = function(req, body) {
-      captured_body <<- body
-      req
+testthat::test_that("live endpoints preserve explicit service tiers in JSON", {
+  captured <- NULL
+  testthat::local_mocked_bindings(
+    .openai_api_key = function(...) "fixture-key",
+    .openai_req_perform = function(req) {
+      captured <<- do.call(jsonlite::toJSON, c(list(x = req$body$data), req$body$params))
+      list()
     },
-    .openai_req_perform = function(req) structure(list(), class = "fake_resp"),
-    .openai_resp_body_json = function(...) fake_body,
     .openai_resp_status = function(...) 200L,
-    {
-      pairwiseLLM::openai_compare_pair_live(
-        ID1 = "A", text1 = "Text A",
-        ID2 = "B", text2 = "Text B",
-        model = "gpt-5.2-2025-12-11",
-        trait_name = td$name,
-        trait_description = td$description,
-        prompt_template = tmpl,
-        endpoint = "responses",
-        reasoning = "none",
-        service_tier = "flex"
-      )
-      testthat::expect_equal(captured_body$service_tier, "flex")
-
-      pairwiseLLM::openai_compare_pair_live(
-        ID1 = "A", text1 = "Text A",
-        ID2 = "B", text2 = "Text B",
-        model = "gpt-5.2-2025-12-11",
-        trait_name = td$name,
-        trait_description = td$description,
-        prompt_template = tmpl,
-        endpoint = "responses",
-        reasoning = "none",
-        service_tier = "priority"
-      )
-      testthat::expect_equal(captured_body$service_tier, "priority")
-
-      pairwiseLLM::openai_compare_pair_live(
-        ID1 = "A", text1 = "Text A",
-        ID2 = "B", text2 = "Text B",
-        model = "gpt-5.2-2025-12-11",
-        trait_name = td$name,
-        trait_description = td$description,
-        prompt_template = tmpl,
-        endpoint = "responses",
-        reasoning = "none",
-        service_tier = "standard"
-      )
-      testthat::expect_true(is.null(captured_body$service_tier))
-    }
+    .openai_resp_body_json = function(...) list(object = "response", output = list()),
+    .package = "pairwiseLLM"
   )
+  cases <- list(list(), list(service_tier = NULL), list(service_tier = "standard"),
+    list(service_tier = "default"), list(service_tier = "auto"),
+    list(service_tier = "flex"), list(service_tier = "priority"))
+  expected <- list(NULL, NULL, "default", "default", "auto", "flex", "priority")
+  for (endpoint in c("responses", "chat.completions")) {
+    for (model in c("gpt-4.1", "gpt-5.2-2025-12-11", "gpt-5.6-sol")) {
+      args <- list(ID1 = "A", text1 = "one", ID2 = "B", text2 = "two",
+        model = model, trait_name = "clarity", trait_description = "Which is clearer?",
+        endpoint = endpoint)
+      for (i in seq_along(cases)) {
+        do.call(pairwiseLLM::openai_compare_pair_live, c(args, cases[[i]]))
+        body <- jsonlite::fromJSON(captured, simplifyVector = FALSE)
+        if (is.null(expected[[i]])) {
+          testthat::expect_false("service_tier" %in% names(body))
+        } else {
+          testthat::expect_identical(body$service_tier, expected[[i]])
+        }
+      }
+    }
+  }
+})
+
+testthat::test_that("live endpoints reject invalid service tiers before credentials or transport", {
+  calls <- 0L
+  forbidden <- function(...) {
+    calls <<- calls + 1L
+    stop("unexpected request")
+  }
+  testthat::local_mocked_bindings(.openai_api_key = forbidden,
+    .openai_req_perform = forbidden, .package = "pairwiseLLM")
+  for (endpoint in c("responses", "chat.completions")) {
+    for (value in list(NA_character_, "gold", "", 1, TRUE, character(),
+                       c("default", "flex"), list("default"))) {
+      testthat::expect_error(pairwiseLLM::openai_compare_pair_live(
+        "A", "one", "B", "two", "gpt-4.1", "clarity", "Which is clearer?",
+        endpoint = endpoint, service_tier = value), "`service_tier`", fixed = TRUE)
+    }
+  }
+  testthat::expect_identical(calls, 0L)
 })
 
 testthat::test_that("gpt-5.4-mini keeps flex tier and model-default sampling when reasoning is none", {

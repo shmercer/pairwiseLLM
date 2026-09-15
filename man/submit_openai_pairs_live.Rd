@@ -73,7 +73,12 @@ depending on your usage tier.}
 reasoning, service_tier, store, and so on) passed on to
 \code{openai_compare_pair_live}. \code{store} accepts \code{NULL},
 \code{TRUE}, or \code{FALSE} for either endpoint and is forwarded to
-every submitted pair. Omission or \code{NULL} preserves the OpenAI default.}
+every submitted pair. Omission or \code{NULL} preserves the OpenAI default.
+For either endpoint, \code{service_tier = "standard"} or \code{"default"}
+sends \code{"default"}; \code{"auto"}, \code{"flex"}, and
+\code{"priority"} are sent unchanged. Omission or \code{NULL} allows
+OpenAI's project-configured \code{"auto"} behavior. Model/tier availability
+is validated by OpenAI.}
 }
 \value{
 A list containing three elements:
