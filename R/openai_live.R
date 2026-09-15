@@ -48,6 +48,11 @@ NULL
 #'   \code{store} accepts \code{NULL} or one non-missing logical value for
 #'   either endpoint. \code{TRUE}/\code{FALSE} are sent unchanged; omission
 #'   or \code{NULL} leaves the field absent and preserves the OpenAI default.
+#'   For either endpoint, \code{service_tier = "standard"} or \code{"default"}
+#'   sends \code{"default"}; explicit \code{"auto"}, \code{"flex"}, and
+#'   \code{"priority"} are sent unchanged. Omission or \code{NULL} leaves
+#'   the field absent, allowing OpenAI's project-configured \code{"auto"}
+#'   behavior. Model/tier availability is validated by OpenAI.
 #'   For Responses, \code{store = FALSE} disables response storage for later
 #'   retrieval. This is not a general data-retention guarantee.
 #'   The same validation rules for
@@ -171,10 +176,7 @@ openai_compare_pair_live <- function(
     include_thoughts = include_thoughts
   )
 
-  service_tier <- normalize_openai_service_tier(dots$service_tier %||% "standard")
-  if (!is_gpt5_series_model(model) || service_tier %in% c("default", "auto")) {
-    service_tier <- NULL
-  }
+  service_tier <- normalize_openai_service_tier(dots$service_tier)
 
   temperature <- if ("temperature" %in% names(dots)) {
     dots$temperature
@@ -215,7 +217,6 @@ openai_compare_pair_live <- function(
       if (isTRUE(include_thoughts)) reasoning_list$summary <- "auto"
       body$reasoning <- reasoning_list
     }
-    if (!is.null(service_tier)) body$service_tier <- service_tier
     if (!is.null(temperature)) body$temperature <- temperature
     if (!is.null(top_p)) body$top_p <- top_p
     if (!is.null(logprobs)) body$logprobs <- logprobs
@@ -223,6 +224,7 @@ openai_compare_pair_live <- function(
     path <- "/responses"
   }
 
+  if (!is.null(service_tier)) body$service_tier <- service_tier
   if (!is.null(store)) body$store <- store
 
   # ✅ Resolve key only at the last responsible moment (right before HTTP)
@@ -397,6 +399,11 @@ openai_compare_pair_live <- function(
 #'   \code{openai_compare_pair_live}. \code{store} accepts \code{NULL},
 #'   \code{TRUE}, or \code{FALSE} for either endpoint and is forwarded to
 #'   every submitted pair. Omission or \code{NULL} preserves the OpenAI default.
+#'   For either endpoint, \code{service_tier = "standard"} or \code{"default"}
+#'   sends \code{"default"}; \code{"auto"}, \code{"flex"}, and
+#'   \code{"priority"} are sent unchanged. Omission or \code{NULL} allows
+#'   OpenAI's project-configured \code{"auto"} behavior. Model/tier availability
+#'   is validated by OpenAI.
 #'
 #' @return A list containing three elements:
 #' \describe{

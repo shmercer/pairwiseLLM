@@ -81,6 +81,10 @@ are forwarded to \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live
 Vertex each validate and encode it using their own request surfaces. For
 Gemini Developer API and Vertex, supported public values are \code{"standard"}
 (default / omitted), \code{"flex"}, and \code{"priority"}.
+For both OpenAI live endpoints, \code{"standard"} and \code{"default"} send
+\code{"default"}; \code{"auto"}, \code{"flex"}, and \code{"priority"} are sent unchanged.
+Omission or \code{NULL} allows OpenAI's project-configured \code{"auto"} behavior.
+Model/tier availability is validated by OpenAI.
 
 For OpenAI and Gemini Developer API, \code{store} accepts \code{NULL}, \code{TRUE}, or
 \code{FALSE}. It controls OpenAI response storage or Gemini request logging;

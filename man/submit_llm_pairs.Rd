@@ -91,6 +91,10 @@ all backends (though defaults may vary).}
 are forwarded to \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}} and typically include
 \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning}, \code{service_tier}, and
 \code{include_thoughts}.
+For both OpenAI live endpoints, \code{service_tier = "standard"} or \code{"default"}
+sends \code{"default"}; \code{"auto"}, \code{"flex"}, and \code{"priority"} are sent unchanged.
+Omission or \code{NULL} allows OpenAI's project-configured \code{"auto"} behavior.
+Model/tier availability is validated by OpenAI.
 For \code{"anthropic"}, \code{"gemini"}, and \code{"vertex"}, they are forwarded to
 \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}}, \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, or
 \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}} and may include options such as
