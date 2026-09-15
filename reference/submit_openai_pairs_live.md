@@ -105,7 +105,10 @@ submit_openai_pairs_live(
 - ...:
 
   Additional OpenAI parameters (temperature, top_p, logprobs, reasoning,
-  service_tier, and so on) passed on to `openai_compare_pair_live`.
+  service_tier, store, and so on) passed on to
+  `openai_compare_pair_live`. `store` accepts `NULL`, `TRUE`, or `FALSE`
+  for either endpoint and is forwarded to every submitted pair. Omission
+  or `NULL` preserves the OpenAI default.
 
 ## Value
 

@@ -146,9 +146,11 @@ submit_gemini_pairs_live(
 
 - ...:
 
-  Reserved for future extensions; passed through to
-  [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md)
-  (but `thinking_budget` is ignored there).
+  Additional parameters passed through to
+  [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md).
+  `store = TRUE` or `FALSE` controls request logging for every submitted
+  pair; omission or `NULL` preserves the provider/project logging
+  default. `thinking_budget` is ignored by the single-pair helper.
 
 ## Value
 

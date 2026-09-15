@@ -131,7 +131,10 @@ run_gemini_batch_pipeline(
 
   Additional arguments forwarded to
   [`build_gemini_batch_requests`](https://shmercer.github.io/pairwiseLLM/reference/build_gemini_batch_requests.md)
-  (for example `temperature`, `top_p`, `top_k`, `max_output_tokens`).
+  (for example `temperature`, `top_p`, `top_k`, `max_output_tokens`,
+  `store`). `store = TRUE` or `FALSE` controls logging for every batch
+  request; omission or `NULL` preserves the provider/project logging
+  default.
 
 ## Value
 

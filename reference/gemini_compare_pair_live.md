@@ -139,9 +139,13 @@ gemini_compare_pair_live(
 
 - ...:
 
-  Reserved for future extensions. Any `thinking_budget` entry in `...`
-  is ignored (and a warning is emitted) because Gemini 3 does not allow
-  `thinking_budget` and `thinking_level` to be used together.
+  Additional parameters. `store` accepts `NULL` or one non-missing
+  logical value. `TRUE` enables and `FALSE` disables request logging;
+  omission or `NULL` preserves the provider/project logging default.
+  This controls Gemini Developer API logging, not all data retention.
+  Any `thinking_budget` entry in `...` is ignored (and a warning is
+  emitted) because Gemini 3 does not allow `thinking_budget` and
+  `thinking_level` to be used together.
 
 ## Value
 

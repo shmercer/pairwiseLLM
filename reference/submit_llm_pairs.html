@@ -11,7 +11,7 @@ text2), submits each pair to the selected backend, and aggregates the results.">
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -190,7 +190,11 @@ For <code>"anthropic"</code>, <code>"gemini"</code>, and <code>"vertex"</code>, 
 <code>max_output_tokens</code>, <code>include_thoughts</code>, <code>service_tier</code>,
 <code>thinking_level</code>, and provider-specific controls. For <code>"ollama"</code>,
 arguments are forwarded to <code><a href="submit_ollama_pairs_live.html">submit_ollama_pairs_live()</a></code> and may include
-<code>host</code>, <code>think</code>, <code>num_ctx</code>, and other Ollama-specific options.</p></dd>
+<code>host</code>, <code>think</code>, <code>num_ctx</code>, and other Ollama-specific options.</p>
+<p>For OpenAI and Gemini Developer API, <code>store</code> accepts <code>NULL</code>, <code>TRUE</code>, or
+<code>FALSE</code>. It controls OpenAI response storage or Gemini request logging;
+omission or <code>NULL</code> preserves provider/project defaults. See the selected
+provider helper for details; this is not a cross-provider retention policy.</p></dd>
 
 </dl></div>
     <div class="section level2">

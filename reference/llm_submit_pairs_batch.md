@@ -154,6 +154,9 @@ llm_submit_pairs_batch(
   For Gemini, this may include `thinking_level`, `temperature`, `top_p`,
   `top_k`, `max_output_tokens`, and `service_tier`.
 
+  Gemini also accepts `store = TRUE` or `FALSE` to control logging for
+  each request; omission or `NULL` preserves provider/project defaults.
+
 ## Value
 
 A list of class `"pairwiseLLM_batch"` containing at least:

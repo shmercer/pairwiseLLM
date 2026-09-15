@@ -111,8 +111,12 @@ build_gemini_batch_requests(
 
 - ...:
 
-  Reserved for future extensions. Any `thinking_budget` entries are
-  ignored (Gemini 3 does not support thinking budgets).
+  Additional parameters. `store` accepts `NULL` or one non-missing
+  logical value. `TRUE` enables and `FALSE` disables request logging for
+  every batch request. Omission or `NULL` preserves the provider/project
+  logging default. This controls Gemini Developer API logging, not all
+  data retention. Any `thinking_budget` entries are ignored (Gemini 3
+  does not support thinking budgets).
 
 ## Value
 

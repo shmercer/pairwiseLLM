@@ -146,6 +146,12 @@ submit_llm_pairs(
   and may include `host`, `think`, `num_ctx`, and other Ollama-specific
   options.
 
+  For OpenAI and Gemini Developer API, `store` accepts `NULL`, `TRUE`,
+  or `FALSE`. It controls OpenAI response storage or Gemini request
+  logging; omission or `NULL` preserves provider/project defaults. See
+  the selected provider helper for details; this is not a cross-provider
+  retention policy.
+
 ## Value
 
 A list containing:

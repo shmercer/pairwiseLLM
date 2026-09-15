@@ -11,7 +11,7 @@ tibble that mirrors the structure used for OpenAI / Anthropic live calls."></hea
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -193,7 +193,11 @@ value is used verbatim as <code>custom_id</code> (otherwise <code>custom_id</cod
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
-<dd><p>Reserved for future extensions. Any <code>thinking_budget</code> entry in
+<dd><p>Additional parameters. <code>store</code> accepts <code>NULL</code> or one non-missing
+logical value. <code>TRUE</code> enables and <code>FALSE</code> disables request logging;
+omission or <code>NULL</code> preserves the provider/project logging default. This
+controls Gemini Developer API logging, not all data retention. Any
+<code>thinking_budget</code> entry in
 <code>...</code> is ignored (and a warning is emitted) because Gemini 3 does not allow
 <code>thinking_budget</code> and <code>thinking_level</code> to be used together.</p></dd>
 

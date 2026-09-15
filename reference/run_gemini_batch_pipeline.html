@@ -21,7 +21,7 @@ parse_gemini_batch_output.
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -190,7 +190,9 @@ or <code>NULL</code> for provider default behavior, or <code>"flex"</code> /
 <dd><p>Additional arguments forwarded to
 <code><a href="build_gemini_batch_requests.html">build_gemini_batch_requests</a></code> (for example
 <code>temperature</code>, <code>top_p</code>, <code>top_k</code>,
-<code>max_output_tokens</code>).</p></dd>
+<code>max_output_tokens</code>, <code>store</code>). <code>store = TRUE</code> or
+<code>FALSE</code> controls logging for every batch request; omission or
+<code>NULL</code> preserves the provider/project logging default.</p></dd>
 
 </dl></div>
     <div class="section level2">

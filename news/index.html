@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -49,6 +49,14 @@
       <small>Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.5.1" id="pairwisellm-151">pairwiseLLM 1.5.1<a class="anchor" aria-label="anchor" href="#pairwisellm-151"></a></h2>
+<div class="section level3">
+<h3 id="bug-fixes-1-5-1">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-1-5-1"></a></h3>
+<ul><li>OpenAI live comparisons now validate and forward explicit <code>store = TRUE</code> and <code>store = FALSE</code> for both Responses and Chat Completions, including row-wise wrappers (<a href="https://github.com/shmercer/pairwiseLLM/issues/245" class="external-link">#245</a>).</li>
+<li>Gemini Developer API live and batch comparisons now validate and forward <code>store</code> to control request logging. Omitted or <code>NULL</code> values preserve provider defaults (and Gemini project settings). These controls do not imply a general data-retention guarantee.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.5.0" id="pairwisellm-150">pairwiseLLM 1.5.0<a class="anchor" aria-label="anchor" href="#pairwisellm-150"></a></h2>
 <div class="section level3">

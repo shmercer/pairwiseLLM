@@ -85,12 +85,16 @@ openai_compare_pair_live(
 - ...:
 
   Additional OpenAI parameters, for example `temperature`, `top_p`,
-  `logprobs`, `reasoning`, `service_tier`, `max_output_tokens`,
+  `logprobs`, `reasoning`, `service_tier`, `max_output_tokens`, `store`,
   `pair_uid`, and (optionally) `include_thoughts`. `max_output_tokens`
   must be a positive integer and is supported only by the Responses
   endpoint. When `pair_uid` is supplied, it is used verbatim as
-  `custom_id`. The same validation rules for gpt-5 models are applied as
-  in
+  `custom_id`. `store` accepts `NULL` or one non-missing logical value
+  for either endpoint. `TRUE`/`FALSE` are sent unchanged; omission or
+  `NULL` leaves the field absent and preserves the OpenAI default. For
+  Responses, `store = FALSE` disables response storage for later
+  retrieval. This is not a general data-retention guarantee. The same
+  validation rules for gpt-5 models are applied as in
   [`build_openai_batch_requests`](https://shmercer.github.io/pairwiseLLM/reference/build_openai_batch_requests.md).
   When using the Responses endpoint with reasoning models, you can
   request reasoning summaries in the `thoughts` column by setting

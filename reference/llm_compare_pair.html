@@ -29,7 +29,7 @@ appropriate live comparison helper:
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -190,7 +190,11 @@ are forwarded to <code><a href="ollama_compare_pair_live.html">ollama_compare_pa
 <p><code>service_tier</code> is provider-specific: OpenAI, Gemini Developer API, and
 Vertex each validate and encode it using their own request surfaces. For
 Gemini Developer API and Vertex, supported public values are <code>"standard"</code>
-(default / omitted), <code>"flex"</code>, and <code>"priority"</code>.</p></dd>
+(default / omitted), <code>"flex"</code>, and <code>"priority"</code>.</p>
+<p>For OpenAI and Gemini Developer API, <code>store</code> accepts <code>NULL</code>, <code>TRUE</code>, or
+<code>FALSE</code>. It controls OpenAI response storage or Gemini request logging;
+omission or <code>NULL</code> preserves provider/project defaults. See the selected
+provider helper for details; this is not a cross-provider retention policy.</p></dd>
 
 </dl></div>
     <div class="section level2">

@@ -11,7 +11,7 @@ pair to the Google Gemini API, and collects the results."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -200,8 +200,10 @@ respect shared check-farm resources.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
-<dd><p>Reserved for future extensions; passed through to
-<code><a href="gemini_compare_pair_live.html">gemini_compare_pair_live()</a></code> (but <code>thinking_budget</code> is ignored there).</p></dd>
+<dd><p>Additional parameters passed through to <code><a href="gemini_compare_pair_live.html">gemini_compare_pair_live()</a></code>.
+<code>store = TRUE</code> or <code>FALSE</code> controls request logging for every submitted
+pair; omission or <code>NULL</code> preserves the provider/project logging default.
+<code>thinking_budget</code> is ignored by the single-pair helper.</p></dd>
 
 </dl></div>
     <div class="section level2">

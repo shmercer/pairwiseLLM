@@ -13,7 +13,7 @@ parse_openai_batch_output."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -143,10 +143,15 @@ analogue of <code><a href="build_openai_batch_requests.html">build_openai_batch_
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
 <dd><p>Additional OpenAI parameters, for example
 <code>temperature</code>, <code>top_p</code>, <code>logprobs</code>, <code>reasoning</code>,
-<code>service_tier</code>, <code>max_output_tokens</code>, <code>pair_uid</code>, and
+<code>service_tier</code>, <code>max_output_tokens</code>, <code>store</code>, <code>pair_uid</code>, and
 (optionally) <code>include_thoughts</code>. <code>max_output_tokens</code> must be a
 positive integer and is supported only by the Responses endpoint. When
 <code>pair_uid</code> is supplied, it is used verbatim as <code>custom_id</code>.
+<code>store</code> accepts <code>NULL</code> or one non-missing logical value for
+either endpoint. <code>TRUE</code>/<code>FALSE</code> are sent unchanged; omission
+or <code>NULL</code> leaves the field absent and preserves the OpenAI default.
+For Responses, <code>store = FALSE</code> disables response storage for later
+retrieval. This is not a general data-retention guarantee.
 The same validation rules for
 gpt-5 models are applied as in <code><a href="build_openai_batch_requests.html">build_openai_batch_requests</a></code>.
 When using the Responses endpoint with reasoning models, you can request

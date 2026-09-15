@@ -13,7 +13,7 @@ collects the results."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -164,8 +164,10 @@ depending on your usage tier.</p></dd>
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
 <dd><p>Additional OpenAI parameters (temperature, top_p, logprobs,
-reasoning, service_tier, and so on) passed on to
-<code>openai_compare_pair_live</code>.</p></dd>
+reasoning, service_tier, store, and so on) passed on to
+<code>openai_compare_pair_live</code>. <code>store</code> accepts <code>NULL</code>,
+<code>TRUE</code>, or <code>FALSE</code> for either endpoint and is forwarded to
+every submitted pair. Omission or <code>NULL</code> preserves the OpenAI default.</p></dd>
 
 </dl></div>
     <div class="section level2">

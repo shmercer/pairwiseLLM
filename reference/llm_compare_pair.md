@@ -138,6 +138,12 @@ llm_compare_pair(
   For Gemini Developer API and Vertex, supported public values are
   `"standard"` (default / omitted), `"flex"`, and `"priority"`.
 
+  For OpenAI and Gemini Developer API, `store` accepts `NULL`, `TRUE`,
+  or `FALSE`. It controls OpenAI response storage or Gemini request
+  logging; omission or `NULL` preserves provider/project defaults. See
+  the selected provider helper for details; this is not a cross-provider
+  retention policy.
+
 ## Value
 
 A tibble with one row and the same columns as the underlying
