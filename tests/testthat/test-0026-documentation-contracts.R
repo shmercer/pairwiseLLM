@@ -109,7 +109,7 @@ test_that("Task 07 export audit and reference grouping cover every export", {
   additional_topics <- c(
     "example_writing_samples", "example_writing_samples1000", "example_writing_pairs",
     "example_writing_results", "example_openai_batch_output",
-    "print.pairwiseLLM_cost_estimate", "print.adaptive_state"
+    "print.pairwiseLLM_cost_estimate", "print.adaptive_state", "pairwiseLLM"
   )
   expect_setequal(reference_names, c(exports, additional_topics))
   expect_false(anyDuplicated(reference_names) > 0L)
@@ -279,8 +279,8 @@ test_that("release documentation keeps navigation and citation contracts", {
   expect_true(grepl("https://osf.io/preprints/edarxiv/4k9r8_v2", readme, fixed = TRUE))
   expect_false(grepl("https://osf.io/preprints/edarxiv/4k9r8_v1", readme, fixed = TRUE))
 
-  expect_true(grepl("detailed_guides", pkgdown, fixed = TRUE))
-  expect_true(grepl("Detailed Guides", pkgdown, fixed = TRUE))
+  expect_true(grepl("guides", pkgdown, fixed = TRUE))
+  expect_true(grepl("Statistical Design", pkgdown, fixed = TRUE))
   expect_false(grepl("provider_batch", pkgdown, fixed = TRUE))
   expect_false(grepl("modeling_bias", pkgdown, fixed = TRUE))
   expect_false(grepl("template_positional_bias", pkgdown, fixed = TRUE))
@@ -372,9 +372,9 @@ test_that("README article navigation is portable and uses descriptive labels", {
   )
   source <- readLines(file.path(root, "README.Rmd"), warn = FALSE)
   readme <- paste(source, collapse = "\n")
-  concepts_start <- match("## Core Concepts", source)
-  vignettes_start <- match("## Vignettes", source)
-  vignettes_end <- match("## Adaptive pairing & ranking (overview)", source)
+  concepts_start <- match("## Try an offline example", source)
+  vignettes_start <- match("## All guides and statistical background", source)
+  vignettes_end <- match("## Research Studies Using pairwiseLLM", source)
 
   expect_false(any(grepl("^title:", source)))
   expect_identical(sum(grepl("^# pairwiseLLM:", source)), 1L)
@@ -450,7 +450,13 @@ test_that("Task 06 documentation distinguishes statistics and estimator inputs",
     collapse = "\n"
   )
 
-  expect_true(grepl("Uses the mean and the selected `budget_quantile`", readme, fixed = TRUE))
+  recovery <- paste(
+    readLines(file.path(root, "vignettes", "provider-controls-and-recovery.Rmd"), warn = FALSE),
+    collapse = "\n"
+  )
+  expect_true(grepl("mean output tokens", recovery, fixed = TRUE))
+  expect_true(grepl("budget_quantile", recovery, fixed = TRUE))
+  expect_true(grepl("provider-controls-and-recovery.html", readme, fixed = TRUE))
   expect_false(grepl("using median output tokens", getting_started, fixed = TRUE))
   expect_true(grepl("exact paired test", bias, fixed = TRUE))
   expect_true(grepl("non-significant test as evidence", bias, fixed = TRUE))
@@ -663,8 +669,8 @@ test_that("adaptive-linking design vignette tracks the normative Phase A/B contr
 
   pkgdown_labels <- c(
     'text: "Guide: Adaptive Pairing"',
-    'text: "Design: Adaptive Pairing"',
     'text: "Guide: Adaptive Linking"',
+    'text: "Design: Adaptive Pairing"',
     'text: "Design: Adaptive Linking"'
   )
   pkgdown_positions <- vapply(

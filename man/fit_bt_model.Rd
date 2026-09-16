@@ -71,8 +71,16 @@ The input \code{bt_data} must contain exactly three columns:
 }
 
 Ability estimates (\code{theta}) represent latent "writing quality"
-parameters on a log-odds scale. Standard errors are included for both
+parameters on a log-odds scale. Higher values mean stronger relative
+performance on the assessed trait. Zero is not a pass mark, and these
+estimates are not rubric grades or automatically comparable across
+independently fitted sets. Standard errors are included for both
 modeling engines. MLE reliability is only available from \pkg{sirt}.
+
+Install an optional engine before fitting, for example with
+\code{install.packages("sirt")}. Pairwise data preparation does not need that
+engine. See the \href{https://shmercer.github.io/pairwiseLLM/articles/getting-started.html}{offline walkthrough}
+for fitting and interpreting bundled synthetic comparisons.
 }
 \examples{
 # Example using built-in comparison data

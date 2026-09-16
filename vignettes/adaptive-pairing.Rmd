@@ -1,6 +1,9 @@
 ---
 title: "Guide: Adaptive Pairing"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 2
 vignette: >
   %\VignetteIndexEntry{Guide: Adaptive Pairing}
   %\VignetteEngine{knitr::rmarkdown}
@@ -13,17 +16,10 @@ knitr::opts_chunk$set(
   comment = "#>"
 )
 
-cmdstan_available <- identical(Sys.getenv("PAIRWISELLM_RUN_CMDSTAN_VIGNETTES"), "true") &&
-  requireNamespace("cmdstanr", quietly = TRUE) &&
-  tryCatch(
-    !is.null(cmdstanr::cmdstan_version()),
-    error = function(e) FALSE
-  )
-
-knitr::opts_chunk$set(eval = cmdstan_available)
+knitr::opts_chunk$set(eval = FALSE)
 ```
 
-## Scope
+## What you will do
 
 This article shows how to rank **one set of items** with [adaptive_rank()]. The wrapper reads and
 validates the items, starts or resumes a run, requests comparisons from a judge, performs Bayesian
@@ -31,6 +27,15 @@ refits, and returns the ranking and audit logs. Most users should start with thi
 than assembling the lower-level state and runner functions themselves. Executable CmdStan chunks
 are disabled during ordinary package builds. Set `PAIRWISELLM_RUN_CMDSTAN_VIGNETTES=true` to opt in
 when rendering this source locally.
+
+**You need:** one set of texts with stable IDs and a working CmdStan setup.
+The first example uses a simulated local judge; the later live example also
+needs a provider account. **You get:** item scores and uncertainty, a stopping
+status, and logs of the comparisons and refits. A run returning successfully is
+not by itself evidence that its statistical stopping criteria passed.
+
+Read the offline run and its inspection steps first. Strategy details, custom
+judges, replay, and predictive initialization are optional follow-up sections.
 
 ## Choose a comparison workflow
 
@@ -42,70 +47,6 @@ judgment is costly and you want the next comparison to respond to evidence alrea
 The runtime accepts `N >= 2` unique items. A range such as 30--2,000 items is operating guidance,
 not an enforced limit. Very small sets may exhaust all eligible candidates before a Bayesian
 refit, while large studies should be planned around provider cost, refit time, and storage.
-
-## What happens during a run?
-
-Within-set ranking has three phases.
-
-1. **Connected shuffled bootstrap.** Every predictive mode uses the same seeded chain of
-   `N - 1` valid comparisons to connect the observed graph. Predictive initialization occurs
-   before these observations and does not change their schedule.
-2. **Post-bootstrap pairing.** TrueSkill updates after every valid comparison. The selected
-   pairing strategy chooses subsequent pairs; the default hybrid balances anchor, long, mid,
-   and local comparisons, exposure, repeated-pair limits, and fallbacks.
-3. **Phase 3: near stop.** After a Bayesian refit passes diagnostics and its EAP reliability is
-   within 0.05 of the stopping threshold, later refits use the stricter near-stop ESS requirement.
-   Pair-selection behavior does not otherwise change merely because Phase 3 was entered.
-
-TrueSkill is the fast, step-by-step selection model. Bayesian Bradley--Terry--Luce (BTL) refits are
-slower and intermittent. They provide posterior item estimates and uncertainty, convergence
-diagnostics, EAP reliability, stability checks, and stopping decisions. Hybrid live ranks,
-strata, rolling anchors, pair probabilities, base utility, and the long-link gate use TrueSkill
-throughout. BTL still contributes to `global_identified`, which can change later hybrid tapering
-and routing; selection is not wholly independent of BTL.
-
-```text
-items -> predictive initialization -> connected shuffled bootstrap
-  -> select one pair -> judge -> commit valid outcome and update TrueSkill
-           ^                          |
-           |                          v
-           +-- continue <- periodic BTL refit -> stop check
-```
-
-Adaptive selection is intended to direct effort toward useful comparisons, but it does not
-guarantee a particular ranking, reliability, cost reduction, or improvement over random pairing.
-Those outcomes depend on the items, judge, budget, and model assumptions.
-
-## Choose a post-bootstrap pairing strategy
-
-Set `adaptive_config = list(pairing_strategy = "trueskill_p50")`, for example.
-The four choices apply after the common bootstrap:
-
-| Strategy | Partner rule |
-| --- | --- |
-| `hybrid` (default) | Staged anchor/long/mid/local selection with TrueSkill ambiguity utility. |
-| `random` | Uniform seeded choice among legal partners. |
-| `trueskill_p50` | Minimize `abs(p_ts(i > j) - 0.50)`. |
-| `trueskill_pollitt` | Minimize `min(abs(p_ts(i > j) - 1/3), abs(p_ts(i > j) - 2/3))`. |
-
-Each direct strategy first chooses a focal item uniformly from sorted IDs at the
-minimum current committed degree, using the run seed and committed count. It then
-selects a legal partner by the rule above; target-distance ties break by partner ID.
-Pollitt is **Pollitt-inspired**: it uses TrueSkill probabilities, whereas the earlier
-article used BTL probabilities.
-
-Direct strategies use no hybrid stage quotas, coverage overrides, or star-cap
-fallbacks. They allow at most two observations per unordered pair, preserve normal
-presentation balancing and reversal on repeat, and retry the same policy draw after
-invalid results. They stop if the chosen focal item has no legal partner, even if
-other pairs remain. These strategies currently support **ordinary within-set runs
-only**; linking runs require `hybrid`. Phase B linking remains unchanged.
-
-In direct step logs, `round_stage` and `pair_type` are `direct_pairing`,
-`pairing_strategy` identifies the policy, and `i_id` identifies the focal item.
-`p_ij` is the pre-judgment TrueSkill probability for presented A over B;
-`target_distance` is symmetric under reversal and is missing for random pairing.
-BTL refit cadence and stopping still apply to every strategy.
 
 ## Install and check CmdStan
 
@@ -124,6 +65,8 @@ cmdstanr::install_cmdstan()
 Before starting a study, confirm that CmdStan can be found:
 
 ```{r cmdstan-check, eval=TRUE}
+cmdstan_available <- requireNamespace("cmdstanr", quietly = TRUE) &&
+  tryCatch(!is.null(cmdstanr::cmdstan_version()), error = function(e) FALSE)
 cmdstan_available
 
 if (cmdstan_available) {
@@ -131,8 +74,16 @@ if (cmdstan_available) {
 }
 ```
 
-The executable ranking chunks below run when CmdStan is available. The deterministic judge is
+A `TRUE` check means CmdStan was found; it does not test compilation. The
+ranking chunks also require the opt-in flag when rendering this document.
+You can run the displayed R code interactively after completing setup. The deterministic judge is
 local, so the example never makes a network request or incurs provider charges.
+
+```{r render-control, include=FALSE, eval=TRUE}
+run_cmdstan_examples <- cmdstan_available &&
+  identical(Sys.getenv("PAIRWISELLM_RUN_CMDSTAN_VIGNETTES"), "true")
+knitr::opts_chunk$set(eval = run_cmdstan_examples)
+```
 
 ## A complete offline run with `adaptive_rank()`
 
@@ -248,6 +199,70 @@ three-column format accepted by `build_bt_data()`.
 diagnostics and stopping, and `adaptive_item_log(stack = TRUE)` for change across refits. Empty
 typed tables are expected before the corresponding event occurs; they are not evidence that the
 accessor failed. `summarize_adaptive()` is a compact view, not a diagnostic recomputation.
+
+## What happens during a run?
+
+Within-set ranking has three phases.
+
+1. **Connected shuffled bootstrap.** Every predictive mode uses the same seeded chain of
+   `N - 1` valid comparisons to connect the observed graph. Predictive initialization occurs
+   before these observations and does not change their schedule.
+2. **Post-bootstrap pairing.** TrueSkill updates after every valid comparison. The selected
+   pairing strategy chooses subsequent pairs; the default hybrid balances anchor, long, mid,
+   and local comparisons, exposure, repeated-pair limits, and fallbacks.
+3. **Phase 3: near stop.** After a Bayesian refit passes diagnostics and its EAP reliability is
+   within 0.05 of the stopping threshold, later refits use the stricter near-stop ESS requirement.
+   Pair-selection behavior does not otherwise change merely because Phase 3 was entered.
+
+TrueSkill is the fast, step-by-step selection model. Bayesian Bradley--Terry--Luce (BTL) refits are
+slower and intermittent. They provide posterior item estimates and uncertainty, convergence
+diagnostics, EAP reliability, stability checks, and stopping decisions. Hybrid live ranks,
+strata, rolling anchors, pair probabilities, base utility, and the long-link gate use TrueSkill
+throughout. BTL still contributes to `global_identified`, which can change later hybrid tapering
+and routing; selection is not wholly independent of BTL.
+
+```text
+items -> predictive initialization -> connected shuffled bootstrap
+  -> select one pair -> judge -> commit valid outcome and update TrueSkill
+           ^                          |
+           |                          v
+           +-- continue <- periodic BTL refit -> stop check
+```
+
+Adaptive selection is intended to direct effort toward useful comparisons, but it does not
+guarantee a particular ranking, reliability, cost reduction, or improvement over random pairing.
+Those outcomes depend on the items, judge, budget, and model assumptions.
+
+## Choose a post-bootstrap pairing strategy
+
+Set `adaptive_config = list(pairing_strategy = "trueskill_p50")`, for example.
+The four choices apply after the common bootstrap:
+
+| Strategy | Partner rule |
+| --- | --- |
+| `hybrid` (default) | Staged anchor/long/mid/local selection with TrueSkill ambiguity utility. |
+| `random` | Uniform seeded choice among legal partners. |
+| `trueskill_p50` | Minimize `abs(p_ts(i > j) - 0.50)`. |
+| `trueskill_pollitt` | Minimize `min(abs(p_ts(i > j) - 1/3), abs(p_ts(i > j) - 2/3))`. |
+
+Each direct strategy first chooses a focal item uniformly from sorted IDs at the
+minimum current committed degree, using the run seed and committed count. It then
+selects a legal partner by the rule above; target-distance ties break by partner ID.
+Pollitt is **Pollitt-inspired**: it uses TrueSkill probabilities, whereas the earlier
+article used BTL probabilities.
+
+Direct strategies use no hybrid stage quotas, coverage overrides, or star-cap
+fallbacks. They allow at most two observations per unordered pair, preserve normal
+presentation balancing and reversal on repeat, and retry the same policy draw after
+invalid results. They stop if the chosen focal item has no legal partner, even if
+other pairs remain. These strategies currently support **ordinary within-set runs
+only**; linking runs require `hybrid`. Phase B linking remains unchanged.
+
+In direct step logs, `round_stage` and `pair_type` are `direct_pairing`,
+`pairing_strategy` identifies the policy, and `i_id` identifies the focal item.
+`p_ij` is the pre-judgment TrueSkill probability for presented A over B;
+`target_distance` is symmetric under reversal and is missing for random pairing.
+BTL refit cadence and stopping still apply to every strategy.
 
 ## Lower-level lifecycle and offline judges
 

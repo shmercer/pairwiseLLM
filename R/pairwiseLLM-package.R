@@ -7,7 +7,21 @@
 #' Bayesian BTL (MCMC) workflow.
 #'
 #' @details
-#' ## Typical workflow (most users)
+#' ## Start here
+#' Compare writing samples two at a time, then estimate relative quality from
+#' the winners. The [Getting Started guide](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+#' begins with an offline example and explains scores before collecting new data.
+#'
+#' - Already have comparisons? Use [build_bt_data()] and [fit_bt_model()], or
+#'   [build_btl_results_data()] and [fit_bayes_btl_mcmc()] for Bayesian scores.
+#' - Need to collect fixed pairs? Start with [submit_llm_pairs()] for live
+#'   processing or [llm_submit_pairs_batch()] for provider batch processing.
+#' - Want comparisons selected during the run? Start with [adaptive_rank()].
+#' - Need rubric levels? [fit_rubric_calibration()] consumes completed Bayesian
+#'   CJ results; use `predict()` for scores and [evaluate_rubric_predictions()]
+#'   for evaluation against human labels. Frequentist BT/Elo fits are not inputs.
+#'
+#' ## Typical fixed-pair workflow
 #' 1. **Load items** using [read_samples_df()] or [read_samples_dir()].
 #' 2. **Create a pairing design** with [make_pairs()] or [sample_pairs()],
 #'    optionally adding reversals via [sample_reverse_pairs()].
@@ -23,8 +37,9 @@
 #'      [submit_openai_pairs_live()], [submit_anthropic_pairs_live()],
 #'      [submit_gemini_pairs_live()], [submit_vertex_pairs_live()],
 #'      [submit_ollama_pairs_live()], [submit_together_pairs_live()].
-#'    - Batch (recommended for scale): [run_openai_batch_pipeline()],
-#'      [run_anthropic_batch_pipeline()], [run_gemini_batch_pipeline()].
+#'    - Batch (when later retrieval suits the workload): [llm_submit_pairs_batch()]
+#'      and [llm_download_batch_results()]. For resumable multi-job work, use
+#'      [llm_submit_pairs_multi_batch()] and [llm_resume_multi_batches()].
 #'      Vertex is currently supported on the live path only.
 #' 6. **Assemble modeling data** with [build_bt_data()] or [build_elo_data()]
 #'    (and for some pipelines, [build_btl_results_data()]).
@@ -48,11 +63,18 @@
 #' ## Adaptive Bayesian pairing + ranking (end-to-end loop)
 #' If you want the package to both **choose pairs** and **fit Bayesian BTL**
 #' in an auditable loop, use the adaptive workflow:
-#' - Start a session with [adaptive_rank_start()] (or use the wrapper [adaptive_rank()]).
+#' - Start with the complete workflow wrapper [adaptive_rank()].
+#' - For a custom lifecycle, initialize state with [adaptive_rank_start()].
 #' - Run live rounds with [adaptive_rank_run_live()].
 #' - Resume an existing run with [adaptive_rank_resume()].
 #' - Persist / reload sessions with [save_adaptive_session()], [load_adaptive_session()],
 #'   and validate directories with [validate_session_dir()].
+#'
+#' ## Choose an example dataset
+#' - [example_writing_samples]: synthetic texts for preparing comparisons.
+#' - [example_writing_pairs]: bundled winners for an offline BT/Elo example.
+#' - [example_writing_results]: the same outcomes in Bayesian input format.
+#' - [example_openai_batch_output]: a parser fixture, not a new provider run.
 #'
 #' ## Exported functions by task
 #'

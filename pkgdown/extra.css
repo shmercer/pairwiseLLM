@@ -1,0 +1,15 @@
+/* Let long display equations scroll without widening the article. */
+main math[display="block"],
+main .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  padding-block: 0.25rem;
+}
+
+/* Keep the stacked sidebar inside the mobile viewport. */
+@media (max-width: 767.98px) {
+  aside.col-md-3 {
+    margin-inline: 0;
+  }
+}

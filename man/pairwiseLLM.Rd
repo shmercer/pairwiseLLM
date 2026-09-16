@@ -12,7 +12,24 @@ and (3) fitting ranking models (Elo, Bradley–Terry) including an adaptive,
 Bayesian BTL (MCMC) workflow.
 }
 \details{
-\subsection{Typical workflow (most users)}{
+\subsection{Start here}{
+
+Compare writing samples two at a time, then estimate relative quality from
+the winners. The \href{https://shmercer.github.io/pairwiseLLM/articles/getting-started.html}{Getting Started guide}
+begins with an offline example and explains scores before collecting new data.
+\itemize{
+\item Already have comparisons? Use \code{\link[=build_bt_data]{build_bt_data()}} and \code{\link[=fit_bt_model]{fit_bt_model()}}, or
+\code{\link[=build_btl_results_data]{build_btl_results_data()}} and \code{\link[=fit_bayes_btl_mcmc]{fit_bayes_btl_mcmc()}} for Bayesian scores.
+\item Need to collect fixed pairs? Start with \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} for live
+processing or \code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}} for provider batch processing.
+\item Want comparisons selected during the run? Start with \code{\link[=adaptive_rank]{adaptive_rank()}}.
+\item Need rubric levels? \code{\link[=fit_rubric_calibration]{fit_rubric_calibration()}} consumes completed Bayesian
+CJ results; use \code{predict()} for scores and \code{\link[=evaluate_rubric_predictions]{evaluate_rubric_predictions()}}
+for evaluation against human labels. Frequentist BT/Elo fits are not inputs.
+}
+}
+
+\subsection{Typical fixed-pair workflow}{
 \enumerate{
 \item \strong{Load items} using \code{\link[=read_samples_df]{read_samples_df()}} or \code{\link[=read_samples_dir]{read_samples_dir()}}.
 \item \strong{Create a pairing design} with \code{\link[=make_pairs]{make_pairs()}} or \code{\link[=sample_pairs]{sample_pairs()}},
@@ -30,8 +47,9 @@ templates managed by \code{\link[=list_prompt_templates]{list_prompt_templates()
 \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}, \code{\link[=submit_anthropic_pairs_live]{submit_anthropic_pairs_live()}},
 \code{\link[=submit_gemini_pairs_live]{submit_gemini_pairs_live()}}, \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
 \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}, \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}.
-\item Batch (recommended for scale): \code{\link[=run_openai_batch_pipeline]{run_openai_batch_pipeline()}},
-\code{\link[=run_anthropic_batch_pipeline]{run_anthropic_batch_pipeline()}}, \code{\link[=run_gemini_batch_pipeline]{run_gemini_batch_pipeline()}}.
+\item Batch (when later retrieval suits the workload): \code{\link[=llm_submit_pairs_batch]{llm_submit_pairs_batch()}}
+and \code{\link[=llm_download_batch_results]{llm_download_batch_results()}}. For resumable multi-job work, use
+\code{\link[=llm_submit_pairs_multi_batch]{llm_submit_pairs_multi_batch()}} and \code{\link[=llm_resume_multi_batches]{llm_resume_multi_batches()}}.
 Vertex is currently supported on the live path only.
 }
 \item \strong{Assemble modeling data} with \code{\link[=build_bt_data]{build_bt_data()}} or \code{\link[=build_elo_data]{build_elo_data()}}
@@ -65,11 +83,21 @@ different request transports.
 If you want the package to both \strong{choose pairs} and \strong{fit Bayesian BTL}
 in an auditable loop, use the adaptive workflow:
 \itemize{
-\item Start a session with \code{\link[=adaptive_rank_start]{adaptive_rank_start()}} (or use the wrapper \code{\link[=adaptive_rank]{adaptive_rank()}}).
+\item Start with the complete workflow wrapper \code{\link[=adaptive_rank]{adaptive_rank()}}.
+\item For a custom lifecycle, initialize state with \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}.
 \item Run live rounds with \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}.
 \item Resume an existing run with \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}}.
 \item Persist / reload sessions with \code{\link[=save_adaptive_session]{save_adaptive_session()}}, \code{\link[=load_adaptive_session]{load_adaptive_session()}},
 and validate directories with \code{\link[=validate_session_dir]{validate_session_dir()}}.
+}
+}
+
+\subsection{Choose an example dataset}{
+\itemize{
+\item \link{example_writing_samples}: synthetic texts for preparing comparisons.
+\item \link{example_writing_pairs}: bundled winners for an offline BT/Elo example.
+\item \link{example_writing_results}: the same outcomes in Bayesian input format.
+\item \link{example_openai_batch_output}: a parser fixture, not a new provider run.
 }
 }
 

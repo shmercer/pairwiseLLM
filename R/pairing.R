@@ -2,8 +2,13 @@
 #'
 #' Given a data frame of samples with columns \code{ID} and \code{text},
 #' this function generates all unordered pairs (combinations) of samples.
-#' Each pair appears exactly once, with \code{ID1} < \code{ID2} in
-#' lexicographic order.
+#' Each pair appears exactly once. The first and second positions follow the
+#' input row order; IDs are not sorted lexicographically. This function only
+#' prepares data and makes no provider requests.
+#'
+#' With `N` samples there are `choose(N, 2)` pairs: 20 samples produce 190
+#' pairs, while 100 produce 4,950. Use [randomize_pair_order()] to vary which
+#' sample appears first, and plan the comparison budget before submission.
 #'
 #' @param samples A tibble or data frame with columns \code{ID} and \code{text}.
 #'
@@ -25,7 +30,7 @@
 #' # Using the built-in example data
 #' data("example_writing_samples")
 #' pairs_example <- make_pairs(example_writing_samples)
-#' nrow(pairs_example) # should be choose(10, 2) = 45
+#' nrow(pairs_example) # should be choose(20, 2) = 190
 #'
 #' @seealso [read_samples_df()], [read_samples_dir()]
 #' @family pairing and data
@@ -77,6 +82,10 @@ make_pairs <- function(samples) {
 #' proportion of pairs to retain (\code{pair_pct}), the absolute number
 #' of pairs (\code{n_pairs}), or both (in which case the minimum of the
 #' two is used).
+#'
+#' A random subset does not guarantee that every item participates or that
+#' all items are connected through comparisons. Inspect the design before
+#' using the collected outcomes to rank a complete set.
 #'
 #' @param pairs A tibble with columns \code{ID1}, \code{text1},
 #'   \code{ID2}, and \code{text2}.

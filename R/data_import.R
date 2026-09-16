@@ -4,6 +4,14 @@
 #' enforces that IDs are unique. By default, it assumes the first
 #' column is the ID and the second column is the text.
 #'
+#' Use one row per writing sample and keep IDs stable across collection and
+#' analysis. Map spreadsheet column names with `id_col` and `text_col`. For a
+#' CSV, first use `read.csv("writing.csv", colClasses = "character")` to
+#' preserve identifiers such as `"001"`. Inspect blank/missing IDs and texts
+#' yourself; this reader checks duplicates, not all data-quality problems.
+#' See the [getting started guide](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+#' for a complete example.
+#'
 #' @param df A data frame or tibble containing at least two columns.
 #' @param id_col Column specifying the IDs. Can be a column name (string)
 #'   or a column index (integer). Defaults to 1.

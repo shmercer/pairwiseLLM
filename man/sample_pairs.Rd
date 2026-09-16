@@ -28,6 +28,11 @@ proportion of pairs to retain (\code{pair_pct}), the absolute number
 of pairs (\code{n_pairs}), or both (in which case the minimum of the
 two is used).
 }
+\details{
+A random subset does not guarantee that every item participates or that
+all items are connected through comparisons. Inspect the design before
+using the collected outcomes to rank a complete set.
+}
 \examples{
 samples <- tibble::tibble(
   ID   = c("S1", "S2", "S3", "S4"),

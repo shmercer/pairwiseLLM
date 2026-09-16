@@ -2,7 +2,7 @@
 % Please edit documentation in R/prompt_template.R
 \name{set_prompt_template}
 \alias{set_prompt_template}
-\title{Get or set a prompt template for pairwise comparisons}
+\title{Read or validate a prompt template for pairwise comparisons}
 \usage{
 set_prompt_template(template = NULL, file = NULL)
 }
@@ -24,10 +24,11 @@ placeholders \code{{TRAIT_NAME}}, \code{{TRAIT_DESCRIPTION}},
 \code{{SAMPLE_1}}, and \code{{SAMPLE_2}}.
 }
 \details{
-The default template is stored as a plain-text file in
-\code{inst/templates/default.txt} and loaded at run time. This
-makes it easy to inspect and modify the prompt text without
-changing the R code.
+Save the returned text and pass it as \code{prompt_template} to a comparison
+function. Despite its name, this function does not change a global active
+template. Keep custom template files in your own project, rather than
+editing the installed package. Use \code{\link[=register_prompt_template]{register_prompt_template()}} and
+\code{\link[=get_prompt_template]{get_prompt_template()}} to manage named templates for the current session.
 }
 \examples{
 # Get the default template shipped with the package

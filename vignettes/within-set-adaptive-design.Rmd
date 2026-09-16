@@ -1,6 +1,9 @@
 ---
 title: "Design: Adaptive Pairing"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 2
 vignette: >
   %\VignetteIndexEntry{Design: Adaptive Pairing}
   %\VignetteEngine{knitr::rmarkdown}
@@ -23,6 +26,19 @@ tutorial, begin with
 [Guide: Adaptive Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html).
 The public entry points are `adaptive_rank()`, `adaptive_rank_start()`,
 `adaptive_rank_run_live()`, and `adaptive_rank_resume()`.
+
+## Reading guide
+
+For the broad idea, read **Foundational concepts** and **Algorithm overview**.
+For implementation detail, follow the selection sections through **Bayesian BTL
+refits**. For deciding whether a result can be interpreted, read **Diagnostics,
+reliability, and stopping** and **Audit trail and reproducibility**. The glossary
+supplies the units and symbols used throughout.
+
+In practical terms, the fast model helps choose what to compare next; the Bayesian
+refits estimate quality and assess whether the accumulated evidence supports
+stopping. A high-looking ranking alone cannot replace those diagnostic checks.
+The formal sections below specify the interaction between these models.
 
 ## Foundational concepts
 
