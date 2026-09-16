@@ -2,7 +2,9 @@
 
 Given a data frame of samples with columns `ID` and `text`, this
 function generates all unordered pairs (combinations) of samples. Each
-pair appears exactly once, with `ID1` \< `ID2` in lexicographic order.
+pair appears exactly once. The first and second positions follow the
+input row order; IDs are not sorted lexicographically. This function
+only prepares data and makes no provider requests.
 
 ## Usage
 
@@ -23,6 +25,14 @@ A tibble with columns:
 - `ID1`, `text1`
 
 - `ID2`, `text2`
+
+## Details
+
+With `N` samples there are `choose(N, 2)` pairs: 20 samples produce 190
+pairs, while 100 produce 4,950. Use
+[`randomize_pair_order()`](https://shmercer.github.io/pairwiseLLM/reference/randomize_pair_order.md)
+to vary which sample appears first, and plan the comparison budget
+before submission.
 
 ## See also
 
@@ -57,6 +67,6 @@ pairs_all
 # Using the built-in example data
 data("example_writing_samples")
 pairs_example <- make_pairs(example_writing_samples)
-nrow(pairs_example) # should be choose(10, 2) = 45
+nrow(pairs_example) # should be choose(20, 2) = 190
 #> [1] 190
 ```

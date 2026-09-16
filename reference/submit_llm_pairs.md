@@ -180,6 +180,16 @@ This function supports parallel processing, incremental saving, and
 resume capability for the `"openai"`, `"anthropic"`, `"gemini"`,
 `"vertex"`, `"together"`, and `"ollama"` backends.
 
+Start with `parallel = FALSE` and a small collection example. Cloud
+calls transmit sample text to the chosen provider and may incur charges.
+Inspect all three returned components before modeling; a successful
+retry can leave an entry in `failed_attempts` even when the pair has a
+valid result. Use a separate `save_path` for each study/model/trait
+configuration. See [Getting
+Started](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+and the [recovery
+guide](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html).
+
 At present, the following backends are implemented:
 
 - `"openai"` →
@@ -243,7 +253,7 @@ pairs <- example_writing_samples |>
 td <- trait_description("overall_quality")
 tmpl <- set_prompt_template()
 
-# Parallel execution with OpenAI (requires future package)
+# Small sequential collection example (paid requests, not a full ranking design)
 res_live <- submit_llm_pairs(
   pairs             = pairs,
   model             = "gpt-4.1",
@@ -252,10 +262,18 @@ res_live <- submit_llm_pairs(
   prompt_template   = tmpl,
   backend           = "openai",
   endpoint          = "chat.completions",
-  parallel          = TRUE,
-  workers           = 2,
+  parallel          = FALSE,
   save_path         = "results_openai.csv"
 )
+
+# Inspect successes, unresolved pairs, and failed attempts separately.
+res_live$results
+res_live$failed_pairs
+res_live$failed_attempts
+# After inspecting failures and collecting an adequate comparison design:
+bt_data <- build_bt_data(res_live$results)
+
+# Optional: parallel = TRUE, workers = 2 needs future and future.apply.
 
 # Live comparisons using a local Ollama backend with incremental saving
 res_ollama <- submit_llm_pairs(

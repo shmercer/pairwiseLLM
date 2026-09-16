@@ -36,6 +36,12 @@ sample_pairs(pairs, pair_pct = 1, n_pairs = NULL, seed = NULL)
 
 A tibble containing the sampled rows of `pairs`.
 
+## Details
+
+A random subset does not guarantee that every item participates or that
+all items are connected through comparisons. Inspect the design before
+using the collected outcomes to rank a complete set.
+
 ## See also
 
 [`read_samples_df()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_df.md),

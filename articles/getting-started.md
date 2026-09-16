@@ -1,646 +1,339 @@
 # Getting Started with pairwiseLLM
 
-## 1. Introduction
+## What you will do
 
-`pairwiseLLM` provides a unified workflow for generating and analyzing
-**pairwise comparisons of writing quality** using live LLM APIs (OpenAI,
-Anthropic, Gemini Developer API, Vertex AI Gemini API, Together.ai),
-local models via Ollama, and batch APIs for OpenAI, Anthropic, and
-Gemini Developer API.
+`pairwiseLLM` turns judgments about **which of two writing samples is
+better** into relative writing-quality scores. The aspect being judged,
+such as overall quality or organization, is called a **trait**.
+Comparing samples in this way is also called **comparative judgment
+(CJ)**.
 
-A typical workflow:
+This guide assumes you can run R code and work with a data frame. First,
+you will analyze bundled synthetic comparisons without an API key or
+provider charges. Then you will prepare samples and see how to collect
+new comparisons using an LLM. All code through “Prepare a judging
+prompt” runs locally; cloud requests later in the guide are shown but
+are not executed when this page builds.
 
-1.  Select writing samples  
-2.  Construct pairwise comparison sets  
-3.  Submit comparisons to an LLM (live or batch API)  
-4.  Parse model outputs  
-5.  Fit Bradley–Terry or Elo models to obtain latent writing-quality
-    scores
+## Install the tools for this example
 
-For prompt evaluation and positional-bias diagnostics, see:
+Use **R 4.4 or later**. Install the package and the optional `sirt`
+modeling engine once, then load pairwiseLLM in each new R session:
 
-- [Prompt Template Positional Bias
-  Testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
+``` r
 
-For advanced batch processing workflows, see:
+install.packages(c("pairwiseLLM", "sirt"))
+library(pairwiseLLM)
+```
 
-- [Advanced: Submitting and Polling Multiple
-  Batches](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html)
+You do not need CmdStan, Python, or an LLM account for this first
+example. Bayesian and adaptive analyses have additional setup described
+in their guides.
 
-------------------------------------------------------------------------
+## Your first result: scores from bundled comparisons
 
-## 2. Setting API Keys
+The package includes 190 comparison outcomes covering every unordered
+pair of 20 synthetic writing samples. These outcomes were generated for
+demonstration; they are not new LLM judgments or evidence of assessment
+validity.
 
-`pairwiseLLM` reads provider keys **only from environment variables**,
-never from R options or global variables.
+``` r
 
-| Provider Surface                          | Environment Variable |
-|-------------------------------------------|----------------------|
-| [OpenAI](https://openai.com/api/)         | OPENAI_API_KEY       |
-| [Anthropic](https://platform.claude.com/) | ANTHROPIC_API_KEY    |
-| Gemini Developer API                      | GEMINI_API_KEY       |
-| Vertex AI Gemini API                      | VERTEX_API_KEY       |
-| [Together](https://www.together.ai/)      | TOGETHER_API_KEY     |
+data("example_writing_pairs", package = "pairwiseLLM")
+head(example_writing_pairs, 4)
+#> # A tibble: 4 × 3
+#>   ID1   ID2   better_id
+#>   <chr> <chr> <chr>    
+#> 1 S01   S02   S02      
+#> 2 S01   S03   S03      
+#> 3 S01   S04   S04      
+#> 4 S01   S05   S01
+```
 
-`backend = "gemini"` uses the Gemini Developer API and
-`backend = "vertex"` uses the Vertex AI Gemini API. Those backends use
-separate API-key surfaces.
+`ID1` and `ID2` identify the two samples. `better_id` identifies the
+winner.
+[`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md)
+converts these winners into the format needed by a Bradley–Terry (BT)
+model. The model estimates relative scores from the pattern of wins and
+losses.
 
-Configure only the key for the cloud backend you plan to use; you do not
-need keys for every provider. You can put the relevant key in your
-`~/.Renviron`:
+``` r
 
-    OPENAI_API_KEY="sk-..."
-    ANTHROPIC_API_KEY="..."
-    GEMINI_API_KEY="..."
-    VERTEX_API_KEY="..."
-    TOGETHER_API_KEY="..."
+bt_data <- build_bt_data(example_writing_pairs)
+fit <- fit_bt_model(bt_data, engine = "sirt", verbose = FALSE)
+scores <- fit$theta |> dplyr::arrange(dplyr::desc(theta))
+head(scores, 5)
+#> # A tibble: 5 × 3
+#>   ID    theta    se
+#>   <chr> <dbl> <dbl>
+#> 1 S18   2.88  1.16 
+#> 2 S13   1.91  0.794
+#> 3 S20   1.73  0.985
+#> 4 S15   1.12  0.842
+#> 5 S14   0.921 0.836
+```
 
-Check which keys are available:
+If `sirt` is missing, run the installation command above before this
+block. Choosing the engine explicitly makes this example consistent
+across machines;
+[`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
+also supports an automatic choice and `BradleyTerry2`.
 
-    library(pairwiseLLM)
+### Read the scores
 
-    check_llm_api_keys()
-    #> Some LLM API keys are not set. This is expected when you use only selected backends.
-    #> # A tibble: 5 × 4
-    #>   backend   service              env_var           has_key
-    #>   <chr>     <chr>                <chr>             <lgl>
-    #> 1 openai    OpenAI               OPENAI_API_KEY    TRUE
-    #> 2 anthropic Anthropic            ANTHROPIC_API_KEY TRUE
-    #> 3 gemini    Google Gemini        GEMINI_API_KEY    TRUE
-    #> 4 vertex    Vertex AI Gemini API VERTEX_API_KEY    TRUE
-    #> 5 together  Together.ai          TOGETHER_API_KEY  TRUE
+| Column | Meaning | How to use it |
+|----|----|----|
+| `ID` | The sample identifier | Match the result to your original text. |
+| `theta` | Estimated relative writing quality | Higher values indicate stronger writing on the assessed trait. |
+| `se` | Standard error of the estimate | Larger values mean greater model uncertainty. |
 
-[Ollama](https://ollama.com/) runs locally and does not require an API
-key, just that the Ollama server is running.
+The displayed rows are ordered by score. The full `scores` table has 20
+rows. A difference between two estimates is not automatically a
+meaningful difference: consider their uncertainty and the quality of the
+judgments.
 
-------------------------------------------------------------------------
+Zero is a location on a relative scale, not a pass mark. These values
+are not percentages or rubric grades, and independently fitted cohorts
+do not share a common scale. For rubric categories, use the [rubric
+calibration
+guide](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.md),
+which requires completed **Bayesian** CJ results; the frequentist fit
+above is not an accepted input.
 
-## 3. Example Writing Data
+### Save an analysis
 
-The package ships with 20 simulated student writing samples with clear
-differences in quality:
+``` r
+
+write.csv(scores, "writing_scores.csv", row.names = FALSE)
+saveRDS(fit, "writing_bt_fit.rds")
+# In a later session: fit <- readRDS("writing_bt_fit.rds")
+```
+
+The CSV is convenient for viewing scores in a spreadsheet. The RDS
+preserves the fitted R object. These paths are relative to your current
+working directory.
+
+## Prepare your own writing samples
+
+Start with one row per sample, a unique, non-missing `ID`, and a `text`
+column. Keep IDs stable so that saved results continue to refer to the
+same samples. Do not include names or other identifying information
+merely to label rows.
+
+``` r
+
+my_samples <- data.frame(
+  ID = c("essay_01", "essay_02", "essay_03"),
+  text = c(
+    "Writing helps us explain our ideas to others.",
+    "We write to communicate, remember, and develop an argument.",
+    "Writing is useful. I use it at school."
+  )
+)
+samples <- read_samples_df(my_samples)
+```
+
+For a spreadsheet saved as CSV, map its columns to the package’s names:
+
+``` r
+
+my_data <- read.csv("writing.csv", colClasses = "character")
+samples <- read_samples_df(my_data, id_col = "student_code", text_col = "response")
+```
+
+These three short texts illustrate the data format only. For the
+collection example below, use the bundled 20 samples so every object is
+defined:
 
 ``` r
 
 data("example_writing_samples", package = "pairwiseLLM")
-dplyr::slice_head(example_writing_samples, n = 3)
-#> # A tibble: 3 × 3
-#>   ID    text                                                       quality_score
-#>   <chr> <chr>                                                              <int>
-#> 1 S01   "Writing assessment is hard. People write different thing…             1
-#> 2 S02   "It is hard to grade writing. Some are long and some are …             2
-#> 3 S03   "Assessing writing is difficult because everyone writes d…             3
+samples <- read_samples_df(example_writing_samples[, c("ID", "text")])
+all_pairs <- make_pairs(samples)
+nrow(all_pairs)
+#> [1] 190
+
+pairs_small <- all_pairs |>
+  sample_pairs(n_pairs = 10, seed = 123) |>
+  randomize_pair_order(seed = 99)
 ```
 
-Each sample has:
+Pair construction makes no provider calls. Twenty samples produce
+`choose(20, 2) = 190` unordered pairs; the total grows quickly as you
+add samples. Randomizing presentation helps distribute which sample
+appears first.
 
-- `ID`  
-- `text`
+**The ten-pair subset is a collection demonstration, not a complete
+ranking study.** Random sampling does not guarantee that every sample
+appears or that all samples are connected through comparisons. The
+offline fit above uses the full bundled comparison set. Plan coverage
+and diagnostics before fitting your own collected data; [adaptive
+pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md)
+is an alternative that selects comparisons as evidence accumulates.
 
-------------------------------------------------------------------------
+## Prepare a judging prompt
 
-## 4. Constructing Pairwise Comparisons
-
-Create all unordered pairs:
-
-``` r
-
-pairs <- example_writing_samples |>
-  make_pairs()
-
-dplyr::slice_head(pairs, n = 5)
-#> # A tibble: 5 × 4
-#>   ID1   text1                                                        ID2   text2
-#>   <chr> <chr>                                                        <chr> <chr>
-#> 1 S01   "Writing assessment is hard. People write different things.… S02   "It …
-#> 2 S01   "Writing assessment is hard. People write different things.… S03   "Ass…
-#> 3 S01   "Writing assessment is hard. People write different things.… S04   "Gra…
-#> 4 S01   "Writing assessment is hard. People write different things.… S05   "Wri…
-#> 5 S01   "Writing assessment is hard. People write different things.… S06   "It …
-```
-
-Sample a subset of pairs:
-
-``` r
-
-pairs_small <- sample_pairs(pairs, n_pairs = 10, seed = 123)
-```
-
-Randomize SAMPLE_1 / SAMPLE_2 order:
-
-``` r
-
-pairs_small <- randomize_pair_order(pairs_small, seed = 99)
-```
-
-------------------------------------------------------------------------
-
-## 5. Traits and Prompt Templates
-
-### 5.1 Using a built-in trait
+A prompt combines the trait, the judging instructions, and the two
+texts. Start with a built-in trait and template:
 
 ``` r
 
 td <- trait_description("overall_quality")
-td
-#> $name
+tmpl <- get_prompt_template("default")
+td$name
 #> [1] "Overall Quality"
-#> 
-#> $description
-#> [1] "Overall quality of the writing, considering how well ideas are expressed,\nhow clearly the writing is organized, and how effective the language and\nconventions are."
 ```
 
-Or define your own:
+You can inspect exactly what the model will receive before paying for a
+call:
 
 ``` r
 
-td_custom <- trait_description(
-  custom_name = "Clarity",
-  custom_description = "How clearly and effectively ideas are expressed."
+prompt <- build_prompt(
+  template = tmpl,
+  trait_name = td$name,
+  trait_desc = td$description,
+  text1 = pairs_small$text1[[1]],
+  text2 = pairs_small$text2[[1]]
 )
-```
-
-### 5.2 Using or customizing prompt templates
-
-Load default prompt:
-
-``` r
-
-tmpl <- set_prompt_template()
-cat(substr(tmpl, 1, 300))
+cat(substr(prompt, 1, 350))
 #> You are a debate adjudicator. Your task is to weigh the comparative strengths of two writing samples regarding a specific trait.
 #> 
-#> TRAIT: {TRAIT_NAME}
-#> DEFINITION: {TRAIT_DESCRIPTION}
+#> TRAIT: Overall Quality
+#> DEFINITION: Overall quality of the writing, considering how well ideas are expressed,
+#> how clearly the writing is organized, and how effective the language and
+#> conventions are.
 #> 
 #> SAMPLES:
 #> 
-#> === SAMPLE_1 ===
-#> {SAMPLE_1}
-#> 
-#> === SAMPLE_2 ===
-#> {SAMPLE_2}
-#> 
-#> EVALUATION PROCESS (Mental Simulation):
-#> 
-#> 1.  **Ad
+#> === SAMPLE
 ```
 
-Placeholders required in custom prompt templates:
+This shows only the beginning; use `cat(prompt)` to read the full prompt
+locally. See [Data Schemas and Prompt
+Management](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.md)
+for custom traits, file templates, named registration, and required
+placeholders.
 
-- `{TRAIT_NAME}`
-- `{TRAIT_DESCRIPTION}`
-- `{SAMPLE_1}`
-- `{SAMPLE_2}`
+## Collect a small set of new judgments
 
-Load a template from file:
+The remaining submission examples make **cloud requests that may incur
+charges** when you run them. They send the prompt and sample text to
+your chosen provider. Review its privacy and retention terms before
+submitting sensitive data.
+
+### Configure one provider
+
+A **backend** selects the service; `model` selects a model offered by
+that service. This example uses OpenAI. Use an identifier available to
+your account; example identifiers are not a guarantee of current
+availability. See [Backends and Tested Model
+Configurations](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.md)
+for the provider/key table and official catalogs.
+
+For the current R session:
 
 ``` r
 
-set_prompt_template(file = "my_template.txt")
+Sys.setenv(OPENAI_API_KEY = "your-key-here")
+check_llm_api_keys()
 ```
 
-For named registration, replacement, removal, and the schemas used in
-later steps, see [Data Schemas and Prompt
-Management](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.html).
+`has_key = TRUE` means R can see a nonempty value; it does not test
+whether the key is valid or the account can access a model. Missing keys
+for other providers are expected. Never put a real key in a shared
+script or report.
 
-------------------------------------------------------------------------
+For persistent local setup, put `OPENAI_API_KEY="your-key-here"` in your
+`~/.Renviron` file and restart R. If you use `usethis`,
+`usethis::edit_r_environ()` opens that file. This is a file you choose
+to store; the package does not save credentials for you. Ollama uses a
+local server and does not require a provider API key.
 
-## 6. Live Pairwise Comparisons
-
-The unified wrapper works for **OpenAI, Anthropic, Gemini Developer API,
-Vertex AI Gemini API, Together.ai, and Ollama**.
-
-It supports **parallel processing** and **incremental output file
-saving** (resume capability) for **all** supported backends. The
-function returns a list containing:
-
-- `$results`: observed outcomes only (canonical schema)
-- `$failed_pairs`: scheduled pairs with no observed outcome
-- `$failed_attempts`: attempt-level failures (retries, timeouts, parse
-  errors, invalid winners)
+### Submit the pairs
 
 ``` r
 
-# Example using parallel processing and incremental saving
 res_list <- submit_llm_pairs(
-  pairs             = pairs_small,
-  backend           = "openai", # also "anthropic", "gemini", "vertex", "together", "ollama"
-  model             = "gpt-4o",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  # New features:
-  parallel          = TRUE,
-  workers           = 2,
-  save_path         = "live_results.csv"
-)
-```
-
-`service_tier` is provider-specific rather than portable across
-backends. Gemini Developer API and Vertex AI Gemini API currently accept
-the public values `"standard"`, `"flex"`, and `"priority"`, but Vertex
-is live-only and uses a different wire format internally.
-
-``` r
-
-# Gemini Developer API live request
-res_gemini <- submit_llm_pairs(
-  pairs             = pairs_small,
-  backend           = "gemini",
-  model             = "gemini-3.5-flash-lite",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  service_tier      = "priority"
-)
-
-# Vertex AI Gemini API live request
-res_vertex <- submit_llm_pairs(
-  pairs             = pairs_small,
-  backend           = "vertex",
-  model             = "gemini-3.8-flash",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  service_tier      = "flex"
-)
-```
-
-For OpenAI, `service_tier = "flex"` requests lower-cost, slower Flex
-processing when the selected model supports it. Capacity may be
-unavailable; Flex is not priority routing. Service-tier meanings are
-provider-specific.
-
-Preview results:
-
-``` r
-
-# Successes are in the $results tibble
-dplyr::slice_head(res_list$results, 5)
-
-# Failures (if any) are in $failed_pairs
-if (nrow(res_list$failed_pairs) > 0) {
-  print(res_list$failed_pairs)
-}
-
-# Attempt-level failures (if any) are in $failed_attempts
-if (nrow(res_list$failed_attempts) > 0) {
-  print(res_list$failed_attempts)
-}
-```
-
-Each row in `$results` includes: - `custom_id` (uses `pair_uid` if
-supplied; otherwise defaults to `LIVE_<ID1>_vs_<ID2>`) - `ID1`, `ID2` -
-parsed `<BETTER_SAMPLE>` tag → `better_sample` and `better_id` -
-canonical aliases/keys: `A_id`, `B_id`, `winner_pos`, `ordered_key`,
-`unordered_key`, `pair_uid`, `received_at`, `backend`, `model` -
-thoughts (reasoning text, if available) and content (final answer)
-
-------------------------------------------------------------------------
-
-## 7. Preparing Data for BT or Elo Modeling
-
-Convert the LLM output (specifically the `$results` tibble for
-[`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
-output) to a 3-column BT dataset:
-
-``` r
-
-# res_list: output list from submit_llm_pairs()
-# We extract the $results tibble for modeling
-bt_data <- build_bt_data(res_list$results)
-dplyr::slice_head(bt_data, 5)
-```
-
-and/or a dataset for Elo modeling:
-
-``` r
-
-# res_list: output from submit_llm_pairs()
-elo_data <- build_elo_data(res_list$results)
-```
-
-------------------------------------------------------------------------
-
-## 8. Bradley–Terry Modeling
-
-Fit model:
-
-``` r
-
-bt_fit <- fit_bt_model(bt_data)
-```
-
-Summarize results:
-
-``` r
-
-summarize_bt_fit(bt_fit)
-```
-
-The output includes:
-
-- latent θ ability scores  
-- SEs  
-- reliability (when using `sirt` engine)
-
-------------------------------------------------------------------------
-
-## 9. Elo Modeling
-
-``` r
-
-elo_fit <- fit_elo_model(elo_data, runs = 5)
-elo_fit
-```
-
-Outputs:
-
-- Elo ratings for each sample  
-- unweighted and weighted reliability  
-- trial counts
-
-------------------------------------------------------------------------
-
-## 10. Batch APIs (Large Jobs)
-
-### 10.1 Submit a batch
-
-Batch helpers support `"openai"`, `"anthropic"`, and `"gemini"`.
-`backend = "vertex"` is rejected explicitly because Vertex batch mode is
-not implemented in this series.
-
-``` r
-
-batch <- llm_submit_pairs_batch(
-  backend            = "gemini",
-  model              = "gemini-3.8-flash",
-  pairs              = pairs_small,
-  trait_name         = td$name,
-  trait_description  = td$description,
-  prompt_template    = tmpl,
-  service_tier       = "priority"
-)
-```
-
-### 10.2 Download results
-
-``` r
-
-res_batch <- llm_download_batch_results(batch)
-head(res_batch)
-```
-
-### 10.3 Multi‑Batch Jobs
-
-In addition to the standard batch helpers, you can split a large job
-into multiple segments using
-[`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md)
-and then poll all of them with
-[`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md).
-This is particularly useful when you have many pairs or want to ensure
-that you can resume if the session ends.
-
-``` r
-
-# Generate a small set of pairs
-pairs_small <- example_writing_samples |>
-  make_pairs() |>
-  sample_pairs(n_pairs = 10, seed = 4321) |>
-  randomize_pair_order(seed = 8765)
-
-td   <- trait_description("overall_quality")
-tmpl <- set_prompt_template()
-
-# Split into two batches and include reasoning/chain-of-thought
-multi_job <- llm_submit_pairs_multi_batch(
-  pairs             = pairs_small,
-  backend           = "openai",
-  model             = "gpt-5.1",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  n_segments        = 2,
-  output_dir        = "myjob",
-  write_registry    = TRUE,
-  include_thoughts  = TRUE
-)
-
-# Poll and merge results.  Combined results are written to
-# "myjob/combined_results.csv" or the directory you specify.
-res <- llm_resume_multi_batches(
-  jobs               = multi_job$jobs,
-  interval_seconds   = 30,
-  write_combined_csv = TRUE
-)
-
-head(res$combined)
-```
-
-### 10.4 Estimating cost before you run
-
-For large jobs, it is often useful to estimate token usage and cost
-before launching a live run or submitting a batch. `pairwiseLLM`
-includes
-[`estimate_llm_pairs_cost()`](https://shmercer.github.io/pairwiseLLM/reference/estimate_llm_pairs_cost.md),
-which runs a small **pilot** (paid live calls) and then estimates the
-rest of the job by calibrating input tokens from prompt byte length.
-
-The output includes both:
-
-- **Expected cost** (using mean output tokens from usable pilot calls)
-- **Budget cost** (using a high quantile of pilot output tokens,
-  controlled by `budget_quantile`)
-
-If you are running a discounted batch workflow, set `mode = "batch"` and
-supply a `batch_discount` multiplier.
-
-``` r
-
-# Create a moderate set of pairs
-pairs_big <- example_writing_samples |>
-  make_pairs() |>
-  sample_pairs(n_pairs = 200, seed = 123) |>
-  randomize_pair_order(seed = 456)
-
-td   <- trait_description("overall_quality")
-tmpl <- set_prompt_template()
-
-est <- estimate_llm_pairs_cost(
-  pairs = pairs_big,
-  backend = "anthropic",                # "openai", "anthropic", "gemini", "together"
-  model = "claude-sonnet-4-5",
+  pairs = pairs_small,
+  backend = "openai",
+  model = "gpt-4o",
   trait_name = td$name,
   trait_description = td$description,
   prompt_template = tmpl,
-  mode = "batch",
-  batch_discount = 0.5,                 # set to 1 for no discount
-  n_test = 10,                          # paid pilot calls (live)
-  budget_quantile = 0.9,                # p90 output tokens
-  cost_per_million_input = 3.0,         # fill in your provider pricing
-  cost_per_million_output = 15.0
+  parallel = FALSE,
+  save_path = "live_results.csv"
 )
-
-est$summary
 ```
 
-#### Deterministic calculation example
+The run processes pairs sequentially and saves completed results
+incrementally. Use a distinct file for each study/model/trait
+configuration. To continue the same interrupted run, keep its inputs and
+saved file and repeat the call; matching saved pairs are skipped.
+Parallel execution is optional and requires `future` and `future.apply`;
+leave it off for a first run.
 
-Suppose a two-pair live pilot records input-token counts of 20 and 40
-and completion-token counts of 10 and 30. The prompt-byte calibration
-predicts 60 and 80 input tokens for the two remaining pairs. With
-`budget_quantile = 0.9`, R’s type-7 sample quantile of `c(10, 30)` is
-28.
-
-At input and output prices of 1 currency unit per million tokens and
-`batch_discount = 0.5`, the estimator calculates:
-
-- observed live pilot tokens: 60 input and 40 output;
-- remaining expected tokens: 140 input and `mean(c(10, 30)) * 2 = 40`
-  output;
-- remaining budget output tokens: `28 * 2 = 56`;
-- expected cost: `(60 + 40 + 0.5 * (140 + 40)) / 1e6 = 0.000190`; and
-- budget cost: `(60 + 40 + 0.5 * (140 + 56)) / 1e6 = 0.000198`.
-
-The pilot observations are included once at live prices. They are not
-averaged into the estimated remaining count and are not discounted.
-
-Avoid paying twice: reuse pilot results
-
-The estimator returns the original pilot output object and the pairs not
-included in the pilot (`remaining_pairs`). Use `remaining_pairs` to
-submit only the remaining work after you are satisfied with the
-estimate. Pilot judgments are not automatically merged into the later
-submission result:
+### Check what succeeded
 
 ``` r
 
-remaining_pairs <- est$remaining_pairs
-
-# Example: submit only the remaining pairs as a batch
-
-batch <- llm_submit_pairs_batch(
-          backend = "anthropic",
-          model = "claude-sonnet-4-5",
-          pairs = remaining_pairs,
-          trait_name = td$name,
-          trait_description = td$description,
-          prompt_template = tmpl)
-
-results <- llm_download_batch_results(batch)
+head(res_list$results)
+res_list$failed_pairs
+res_list$failed_attempts
 ```
 
-Notes:
+| Component | What it tells you |
+|----|----|
+| `results` | Comparisons with a valid winner. `better_id` identifies the winning sample. |
+| `failed_pairs` | Scheduled pairs with no valid outcome. |
+| `failed_attempts` | Attempt-level problems, including failures followed by successful retries. |
 
-- The estimator does not require a provider tokenizer; it uses prompt
-  byte length calibrated on the pilot.
-- Ollama is not supported in the estimator (local models do not incur
-  token costs).
-- Reasoning/thinking tokens are treated as output tokens for pricing.
-- Supply current prices for the selected provider, model, endpoint, and
-  mode; the package does not maintain or validate a pricing catalog.
+An HTTP success alone is not a valid judgment. Inspect unresolved pairs
+before analysis; missing winners are not ties. The [recovery
+guide](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.md)
+explains retrying failures and keeping successful work.
 
-------------------------------------------------------------------------
+Once you have collected an adequate comparison design and inspected
+failures, prepare its successful outcomes with
+`build_bt_data(res_list$results)` and use the same fit-and-inspect steps
+as the offline example. Do not interpret the small submission
+demonstration as an adequate design for all 20 samples.
 
-## 11. Backend-Specific Tools
+## Choose the next workflow
 
-Most users use the unified interface, but backend helpers are available.
+| Your goal | Guide or function |
+|----|----|
+| More control over data and judging instructions | [Data and prompts](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.md) |
+| Estimate token costs with a paid pilot; configure or troubleshoot providers | [Provider controls and recovery](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.md) |
+| Submit fixed pairs for later retrieval, including resumable large jobs | [Batch workflows](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.md) |
+| Fit Elo ratings instead of BT scores | [`build_elo_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_elo_data.md) and [`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md) (optional `EloChoice`) |
+| Estimate Bayesian scores and inspect convergence | [Bayesian BTL](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.md) (requires CmdStan) |
+| Let the next pair depend on earlier judgments | [Adaptive pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md) (requires CmdStan) |
+| Convert completed Bayesian scores to ordered rubric levels | [Rubric calibration](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.md) |
+| Compare separately evaluated cohorts on a shared scale | [Adaptive linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.md) |
+| Check whether presentation order affects judgments | [Prompt bias testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.md) |
 
-#### 11.1 OpenAI
+Live processing is useful for interactive work. Batch processing can
+suit larger fixed-pair jobs when you can wait for completion; support
+and pricing depend on the provider. There is no universal pair-count
+threshold for choosing between them.
 
-- [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md)
-- [`build_openai_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_openai_batch_requests.md)
-- [`run_openai_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_openai_batch_pipeline.md)
-- [`parse_openai_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_openai_batch_output.md)
+## Common first-run problems
 
-#### 11.2 Anthropic
+| Problem | First check |
+|----|----|
+| The offline model says `sirt` is missing | Run `install.packages("sirt")` once, then rerun the fit. |
+| R cannot see my key | Restart R after editing `.Renviron`, then use [`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md). |
+| The provider rejects the model or a setting | Check account access and the provider’s current catalog; start with minimal controls. |
+| Some comparisons are missing | Inspect `failed_pairs` and `failed_attempts`; keep successful results. |
+| Scores look unlike familiar grades | BT scores are relative estimates; rubric scoring is a separate Bayesian workflow. |
+| A batch is still pending | Poll or resume the existing job; do not submit it again merely because it is unfinished. |
 
-- [`submit_anthropic_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.md)
-- [`build_anthropic_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_anthropic_batch_requests.md)
-- [`run_anthropic_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_anthropic_batch_pipeline.md)
-- [`parse_anthropic_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_anthropic_batch_output.md)
+For a reproducible issue report, include your code with credentials
+removed, the error, provider/model, operating system, and
+[`sessionInfo()`](https://rdrr.io/r/utils/sessionInfo.html) output.
 
-#### 11.3 Google Gemini
-
-- [`submit_gemini_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.md)
-- [`build_gemini_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_gemini_batch_requests.md)
-- [`run_gemini_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_gemini_batch_pipeline.md)
-- [`parse_gemini_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_gemini_batch_output.md)
-
-#### 11.4 Vertex AI Gemini API (live only)
-
-- [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md)
-- [`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)
-
-#### 11.5 Together.ai (live only)
-
-- [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md)
-- [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md)
-
-#### 11.6 Ollama (local, live only)
-
-- [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
-- [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
-- [`ensure_only_ollama_model_loaded()`](https://shmercer.github.io/pairwiseLLM/reference/ensure_only_ollama_model_loaded.md)
-
-Reasoning/thinking constraints, partial-result handling, retries, and
-local-resource guidance are covered in [Provider Controls and
-Recovery](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html).
-
-------------------------------------------------------------------------
-
-## 12. Troubleshooting
-
-#### Missing API keys
-
-``` r
-
-check_llm_api_keys()
-#> No LLM API keys are currently set for known backends:
-#>   - OpenAI:         OPENAI_API_KEY
-#>   - Anthropic:      ANTHROPIC_API_KEY
-#>   - Google Gemini:  GEMINI_API_KEY
-#>   - Vertex AI:      VERTEX_API_KEY
-#>   - Together.ai:    TOGETHER_API_KEY
-#> 
-#> Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:
-#>   OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"
-#>   ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"
-#>   GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"
-#>   VERTEX_API_KEY    = "YOUR_VERTEX_KEY_HERE"
-#>   TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"
-#> # A tibble: 5 × 4
-#>   backend   service              env_var           has_key
-#>   <chr>     <chr>                <chr>             <lgl>  
-#> 1 openai    OpenAI               OPENAI_API_KEY    FALSE  
-#> 2 anthropic Anthropic            ANTHROPIC_API_KEY FALSE  
-#> 3 gemini    Google Gemini        GEMINI_API_KEY    FALSE  
-#> 4 vertex    Vertex AI Gemini API VERTEX_API_KEY    FALSE  
-#> 5 together  Together.ai          TOGETHER_API_KEY  FALSE
-```
-
-#### Timeouts
-
-Use batch APIs for \>40 pairs. Split a large job into multiple segments
-using
-[`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md)
-and then poll/download all of them with
-[`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md)
-
-#### Positional bias
-
-Use
-[`compute_reverse_consistency()`](https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.md) +
-[`check_positional_bias()`](https://shmercer.github.io/pairwiseLLM/reference/check_positional_bias.md);
-see [Prompt Template Positional Bias
-Testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
-for a full example.
-
-------------------------------------------------------------------------
-
-## 13. Citation
+## Citation
 
 > Mercer, S. H. (2026). *Getting started with pairwiseLLM* \[R package
 > vignette\]. Comprehensive R Archive Network.

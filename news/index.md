@@ -2,6 +2,20 @@
 
 ## pairwiseLLM 1.5.1
 
+### Documentation
+
+- Reworked the README and Getting Started around a runnable offline
+  example, score interpretation, and a sequential path to collecting new
+  comparisons.
+- Added practical reading guidance, prerequisites, output explanations,
+  and recovery advice across the vignettes, while retaining formal
+  statistical design content. Corrected pair-count, example-order, and
+  CmdStan setup guidance.
+- Organized pkgdown navigation and function reference by user task,
+  separated practical guides from statistical design articles, and
+  clarified introductory function help. Existing article URLs and
+  package interfaces are preserved.
+
 ### Bug fixes
 
 - Batch polling and result downloads now retry transient HTTP and

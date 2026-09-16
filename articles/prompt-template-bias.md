@@ -1,6 +1,28 @@
 # Prompt Template Positional Bias Testing
 
-## 1. Motivation
+## How to read this guide
+
+Use this guide to check whether presentation order changes a judge’s
+decisions. You need matched comparisons in both orders, made with the
+same trait, model, and prompt configuration. The archived results below
+illustrate the analysis; they do not certify current models as unbiased.
+Reading the tables and templates makes no provider calls; collecting
+your own forward/reverse results can incur charges.
+
+Two questions are different:
+
+| Question | Example and interpretation |
+|----|----|
+| Does the same essay win after swapping order? | Essay A wins when first and when second: a consistent underlying winner. `prop_consistent` summarizes this agreement. |
+| Does the judge favor a display position? | The first-displayed essay wins in both orders: the underlying winner changes, suggesting a position preference for that pair. |
+
+One pair is not enough to establish a systematic effect. Read the
+statistical interpretation below before treating a test result as
+evidence about bias. For a first analysis, follow the process and
+interpretation sections; use the long historical configuration tables
+when comparing the archived experiments.
+
+## Motivation
 
 `pairwiseLLM` uses large language models (LLMs) to compare pairs of
 writing samples and decide which sample is better on a given trait (for
@@ -34,7 +56,7 @@ For advanced batch processing workflows, see:
 
 ------------------------------------------------------------------------
 
-## 2. Testing Process Summary
+## Testing Process Summary
 
 This section describes an archived 2025 experiment bundled with
 pairwiseLLM 1.3.0. The result artifact was added to the repository on
@@ -139,7 +161,7 @@ the experiment.
 
 ------------------------------------------------------------------------
 
-## 3. Trait descriptions and custom traits
+## Trait descriptions and custom traits
 
 In the tests, we evaluated samples for overall quality.
 
@@ -178,7 +200,7 @@ trait_description(name, custom_name = NULL, custom_description = NULL)
 
 ------------------------------------------------------------------------
 
-### 3.1 Built-in traits
+### Built-in traits
 
 The package includes some predefined traits accessible by name:
 
@@ -210,7 +232,7 @@ This description is inserted into your chosen prompt template wherever
 
 ------------------------------------------------------------------------
 
-### 3.2 Setting a different built-in trait
+### Setting a different built-in trait
 
 To switch evaluations to another trait, simply pass its ID:
 
@@ -231,7 +253,7 @@ This will update all trait-specific wording in the prompt.
 
 ------------------------------------------------------------------------
 
-### 3.3 Creating a custom trait
+### Creating a custom trait
 
 If your study requires a new writing dimension, you can define your own
 trait directly in the call:
@@ -265,7 +287,7 @@ prompt <- build_prompt(
 
 ------------------------------------------------------------------------
 
-### 3.4 Why traits matter for positional bias testing
+### Why traits matter for positional bias testing
 
 Traits determine the **criterion of comparison**, and different traits
 may produce different sensitivity patterns in LLM behavior. For example:
@@ -280,7 +302,7 @@ same workflow described earlier in this vignette.
 
 ------------------------------------------------------------------------
 
-## 4. Example data used in tests
+## Example data used in tests
 
 The positional-bias experiments in this vignette use the
 `example_writing_samples` dataset that ships with the package.
@@ -337,7 +359,7 @@ example_writing_samples |>
 
 ------------------------------------------------------------------------
 
-## 5. Built-in prompt templates
+## Built-in prompt templates
 
 The tested templates are stored as plain-text files in the package and
 exposed via the template registry. You can retrieve them with
@@ -401,7 +423,7 @@ cat(prompt_text)
 
 ------------------------------------------------------------------------
 
-## 6. Forward and reverse pairs
+## Forward and reverse pairs
 
 Here is a small example of how we constructed forward and reverse
 datasets for each experiment:
@@ -445,7 +467,7 @@ within each unordered pair.
 
 ------------------------------------------------------------------------
 
-## 7. Thinking / Reasoning Configurations Used in Testing
+## Thinking / Reasoning Configurations Used in Testing
 
 The archived artifact uses a `thinking` column to distinguish two
 historical request configurations:
@@ -462,7 +484,7 @@ request.
 
 ------------------------------------------------------------------------
 
-### 7.1 Anthropic (Claude 4.5 models)
+### Anthropic (Claude 4.5 models)
 
 The Anthropic experiment recorded the following controls.
 
@@ -488,7 +510,7 @@ temperature.
 
 ------------------------------------------------------------------------
 
-### 7.2 Gemini 3 Pro Preview
+### Gemini 3 Pro Preview
 
 The Gemini experiment used the `thinkingLevel` field available to that
 request shape at the time.
@@ -506,7 +528,7 @@ No cross-provider equivalence of reasoning effort was established.
 
 ------------------------------------------------------------------------
 
-### 7.3 OpenAI (gpt-4.1, gpt-4o, gpt-5.1)
+### OpenAI (gpt-4.1, gpt-4o, gpt-5.1)
 
 The OpenAI experiment used two API shapes:
 
@@ -533,7 +555,7 @@ Used for **all models**, including gpt-5.1:
 
 This mode returns reasoning metadata that is stripped prior to analysis.
 
-### 7.4 TogetherAI (Deepseek-R1, Deepseek-V3, Kimi-K2, Qwen3)
+### TogetherAI (Deepseek-R1, Deepseek-V3, Kimi-K2, Qwen3)
 
 For Together.ai, the archived experiment used the Chat Completions API
 (`/v1/chat/completions`) with the following historical identifiers:
@@ -552,7 +574,7 @@ Temperature settings used in testing: - “deepseek-ai/DeepSeek-R1”:
 
 ------------------------------------------------------------------------
 
-### 7.5 Summary of historical request configurations
+### Summary of historical request configurations
 
 | Backend | Thinking Mode | What It Controls | Temperature Used | Notes |
 |----|----|----|----|----|
@@ -566,7 +588,7 @@ Temperature settings used in testing: - “deepseek-ai/DeepSeek-R1”:
 
 ------------------------------------------------------------------------
 
-## 8. Loading summary results
+## Loading summary results
 
 The archived results are stored in
 `inst/extdata/template_test_summary_all.csv`. Only aggregate rows
@@ -593,7 +615,7 @@ head(summary_tbl)
 
 ------------------------------------------------------------------------
 
-### 8.1 Column definitions
+### Column definitions
 
 The columns in `summary_tbl` are:
 
@@ -634,7 +656,7 @@ The columns in `summary_tbl` are:
 
 ------------------------------------------------------------------------
 
-### 8.2 Interpreting the statistics
+### Interpreting the statistics
 
 The three key statistics for each (template, provider, model, thinking)
 combination are:
@@ -692,7 +714,7 @@ was historically summarized as:
 
 ------------------------------------------------------------------------
 
-## 9. Summary results by prompt
+## Summary results by prompt
 
 In this section we present, for each template:
 
@@ -710,9 +732,9 @@ In this section we present, for each template:
 
 ------------------------------------------------------------------------
 
-### 9.1 Template `test1`
+### Template `test1`
 
-#### 9.1.1 Template text
+#### Template text
 
 ``` r
 
@@ -751,7 +773,7 @@ cat(get_prompt_template("test1"))
 #> (Provide only the XML tag).
 ```
 
-#### 9.1.2 Summary table
+#### Summary table
 
 ``` r
 
@@ -796,9 +818,9 @@ summary_tbl |>
 
 ------------------------------------------------------------------------
 
-### 9.2 Template `test2`
+### Template `test2`
 
-#### 9.2.1 Template text
+#### Template text
 
 ``` r
 
@@ -841,7 +863,7 @@ cat(get_prompt_template("test2"))
 #> <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
 ```
 
-#### 9.2.2 Summary table
+#### Summary table
 
 ``` r
 
@@ -886,9 +908,9 @@ summary_tbl |>
 
 ------------------------------------------------------------------------
 
-### 9.3 Template `test3`
+### Template `test3`
 
-#### 9.3.1 Template text
+#### Template text
 
 ``` r
 
@@ -939,7 +961,7 @@ cat(get_prompt_template("test3"))
 #> Output only the XML tag with your choice. No explanations or additional text.
 ```
 
-#### 9.3.2 Summary table
+#### Summary table
 
 ``` r
 
@@ -984,9 +1006,9 @@ summary_tbl |>
 
 ------------------------------------------------------------------------
 
-### 9.4 Template `test4`
+### Template `test4`
 
-#### 9.4.1 Template text
+#### Template text
 
 ``` r
 
@@ -1021,7 +1043,7 @@ cat(get_prompt_template("test4"))
 #> <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE> if Sample 2 is better
 ```
 
-#### 9.4.2 Summary table
+#### Summary table
 
 ``` r
 
@@ -1066,9 +1088,9 @@ summary_tbl |>
 
 ------------------------------------------------------------------------
 
-### 9.5 Template `test5`
+### Template `test5`
 
-#### 9.5.1 Template text
+#### Template text
 
 ``` r
 
@@ -1104,7 +1126,7 @@ cat(get_prompt_template("test5"))
 #> <BETTER_SAMPLE>SAMPLE_2</BETTER_SAMPLE>
 ```
 
-#### 9.5.2 Summary table
+#### Summary table
 
 ``` r
 
@@ -1149,7 +1171,7 @@ summary_tbl |>
 
 ------------------------------------------------------------------------
 
-## 10. Per-backend summary
+## Per-backend summary
 
 It is often useful to examine positional-bias metrics **within each
 backend** to see whether:
@@ -1170,7 +1192,7 @@ in testing.
 
 ------------------------------------------------------------------------
 
-### 10.1 Anthropic models
+### Anthropic models
 
 ``` r
 
@@ -1234,7 +1256,7 @@ configuration. {.table}
 
 ------------------------------------------------------------------------
 
-### 10.2 Gemini models
+### Gemini models
 
 ``` r
 
@@ -1273,7 +1295,7 @@ configuration. {.table}
 
 ------------------------------------------------------------------------
 
-### 10.3 OpenAI models
+### OpenAI models
 
 ``` r
 
@@ -1327,7 +1349,7 @@ configuration. {.table style="width:100%;"}
 
 ------------------------------------------------------------------------
 
-### 10.4 TogetherAI-hosted models
+### TogetherAI-hosted models
 
 ``` r
 
@@ -1381,7 +1403,7 @@ configuration. {.table}
 
 ------------------------------------------------------------------------
 
-## 11. Conclusion
+## Conclusion
 
 This vignette demonstrates a workflow for describing reversal agreement
 and testing directional positional preference in prompt templates.
@@ -1396,7 +1418,7 @@ statistical review is appropriate when formal inference is required.
 
 ------------------------------------------------------------------------
 
-## 12. Citation
+## Citation
 
 > Mercer, S. H. (2026). *Prompt template positional bias testing* \[R
 > package vignette\]. Comprehensive R Archive Network.

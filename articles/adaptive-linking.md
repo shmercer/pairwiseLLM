@@ -6,6 +6,20 @@ point. The executable examples use a deterministic local judge so that
 rendering does not require credentials or make network requests. A
 detailed live-LLM workflow example appears later.
 
+For example, suppose last year’s essays define a reference scale and you
+want to report this year’s essays on that same scale. Last year’s set is
+the **hub**; the new set is a **spoke**. Ranking each year separately is
+insufficient because the two score scales have different origins.
+Comparisons between years supply the evidence needed to link them.
+
+**You need:** texts and stable IDs for each set, a designated reference
+hub, and CmdStan; compatible saved Phase A artifacts can be reused.
+**You get:** linked target scores, uncertainty, and per-spoke
+diagnostics. Start with the one-spoke example before adding more
+cohorts. The small offline simulation below illustrates the interface
+and deliberately relaxes quality requirements; the live-study section is
+the route for actual data collection.
+
 Adaptive linking has two phases:
 
 1.  **Phase A** ranks each set internally and produces a canonical
@@ -56,19 +70,21 @@ credential when a custom local judge is supplied.
 
 ``` r
 
-cmdstan_available <- identical(Sys.getenv("PAIRWISELLM_RUN_CMDSTAN_VIGNETTES"), "true") &&
-  requireNamespace("cmdstanr", quietly = TRUE) &&
-  tryCatch({
-    cmdstanr::cmdstan_version()
-    TRUE
-  }, error = function(e) FALSE)
+cmdstan_available <- requireNamespace("cmdstanr", quietly = TRUE) &&
+  tryCatch(!is.null(cmdstanr::cmdstan_version()), error = function(e) FALSE)
 
 cmdstan_available
 #> [1] FALSE
+
+# Rendering control only; not an installation check.
+run_cmdstan_examples <- cmdstan_available &&
+  identical(Sys.getenv("PAIRWISELLM_RUN_CMDSTAN_VIGNETTES"), "true")
 ```
 
-If this prints `FALSE`, install and verify CmdStan before running the
-remaining executable chunks. Those chunks are disabled during ordinary
+If `cmdstan_available` prints `FALSE`, install and verify CmdStan before
+running the fitting chunks. A `TRUE` value means CmdStan was found, not
+that compilation has been tested. `run_cmdstan_examples` separately
+controls document rendering. Those chunks are disabled during ordinary
 package builds; set `PAIRWISELLM_RUN_CMDSTAN_VIGNETTES=true` to opt in
 when rendering this source locally.
 
@@ -245,6 +261,10 @@ below explicitly accepts its known simulated Phase A artifacts as a
 **trusted override**. Setting `quality_gate_accepted = TRUE` tells the
 package to trust external quality review; it does not repair weak
 evidence or diagnostics. Do not use it to silence a failed real study.
+
+> **Simulation only:** the following block overrides the quality gate
+> for tiny demonstration artifacts. Do not copy this override into a
+> real study as a way to bypass failed reliability or diagnostic checks.
 
 ``` r
 
@@ -444,6 +464,9 @@ observed surfaces.
 First produce the third canonical artifact. As above, the trusted flag
 is appropriate here only because the fixture and its deterministic truth
 are under our control.
+
+> **Simulation only:** this third artifact uses the same explicit
+> quality-gate override as the tiny one-spoke demonstration.
 
 ``` r
 

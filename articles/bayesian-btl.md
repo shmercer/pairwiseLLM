@@ -5,14 +5,27 @@ fits a Bayesian Bradley–Terry–Luce (BTL) model to an existing fixed set
 of pairwise outcomes. It reuses the adaptive fit and summary contracts
 but does not perform adaptive pair selection.
 
+## When to use this guide
+
+Use this workflow when you already have pairwise winners and want
+Bayesian score estimates, uncertainty, and convergence diagnostics. It
+is also a route to the completed Bayesian input required for rubric
+calibration. To let the package choose new comparisons during
+collection, use the adaptive guide instead.
+
+**You need:** recorded comparisons, their item IDs, and CmdStan. **You
+get:** one score summary per item plus fit diagnostics. The code below
+uses synthetic outcomes; the short sampling settings demonstrate the
+interface, not a validated assessment or a sufficient sampling budget
+for your study.
+
 ## Prerequisites
 
 The fit requires the suggested `cmdstanr` package, CmdStan, and a
 working C++ toolchain. Installation is a machine-level setup and does
-not require provider credentials. Executable fitting chunks are disabled
-during ordinary package builds. Set
-`PAIRWISELLM_RUN_CMDSTAN_VIGNETTES=true` to opt in when rendering this
-source locally.
+not require provider credentials. Fitting chunks are shown but not
+evaluated during document builds. Run them interactively after setup; no
+provider requests are needed for this example.
 
 ``` r
 
@@ -26,12 +39,18 @@ cmdstanr::install_cmdstan()
 
 ``` r
 
+cmdstan_available <- requireNamespace("cmdstanr", quietly = TRUE) &&
+  tryCatch(!is.null(cmdstanr::cmdstan_version()), error = function(e) FALSE)
 cmdstan_available
 #> [1] FALSE
 ```
 
-## Prepare canonical input
+A `TRUE` value means CmdStan was found. Compilation and model fitting
+are separate checks performed when you run the fit.
 
+## Prepare modeling input
+
+“Canonical” means the standard column layout expected by this workflow.
 The public builder accepts `ID1`, `ID2`, and `better_id`, validates that
 each winner belongs to its pair, and adds deterministic keys, iteration
 values, timestamps, and provenance columns.
@@ -79,7 +98,7 @@ especially with sparse data.
 
 ## Fit and summarize
 
-The following deterministic example is not evaluated during
+The following seeded sampling example is not evaluated during
 documentation builds. Run it after the availability check returns
 `TRUE`. The small iteration count keeps the walkthrough practical and is
 for workflow demonstration, not production inference.
@@ -116,6 +135,20 @@ are conditional on the selected model and observed judgments. Check
 divergences, R-hat, effective sample size, and sampling warnings before
 interpreting ranks. A failed diagnostic is not repaired by hiding the
 warning or reporting only posterior means.
+
+### What the output means
+
+| Output | Interpretation |
+|----|----|
+| `theta_mean`, `theta_sd` | Posterior mean relative quality and posterior uncertainty for each item. |
+| `rank_mean` | Posterior mean rank; uncertainty can make it non-integer. |
+| `deg` | Number of committed comparisons involving that item. |
+| `diagnostics_pass` | Whether the fit meets the implemented diagnostic checks; inspect individual diagnostics too. |
+| `max_rhat`, `min_ess_bulk`, `divergences` | Sampling checks for chain agreement, effective information, and numerical problems. |
+
+Higher quality locations indicate stronger writing, but adjacent ranks
+can be uncertain. Keep both the item summaries and diagnostic table when
+saving or reporting an analysis.
 
 ## Cumulative refits
 

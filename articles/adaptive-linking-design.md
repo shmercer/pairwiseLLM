@@ -23,6 +23,22 @@ The current linking contract uses anchored-joint estimation and globally
 shared judge parameters. It also uses a hard-locked hub, concurrent
 spokes, and a fixed probe effort per refit.
 
+## Reading guide
+
+Read **Foundational concepts** and **Common-scale identification** to
+understand why separate rankings need linking. Continue to **D-optimal
+active selection** and **Probes and calibration** for how between-set
+evidence is obtained. Use **Refits, diagnostics, and identification**,
+**Stopping, blockers, and freezing**, and the output section to
+interpret a completed run.
+
+A useful example is a reference collection from last year and a new
+cohort this year. Fixing the reference scale gives the new cohort a
+common ruler; comparing each cohort only within itself does not. The hub
+is that reference, and the spokes are the cohorts being linked. The
+equations below state exactly which quantities are fixed, estimated, or
+used only for selecting comparisons.
+
 ## Foundational concepts
 
 Pairwise comparative judgment (CJ) asks a judge to choose between two

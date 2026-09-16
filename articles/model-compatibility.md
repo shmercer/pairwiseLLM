@@ -1,5 +1,21 @@
 # Backends and Tested Model Configurations
 
+## Choose a backend and model
+
+Start with a provider you can access, check whether you need live or
+batch processing, and configure only its credential. A model identifier
+is the exact name sent to that service. Use its official catalog to
+check availability, then try a small request with minimal controls
+before planning a larger run.
+
+This page provides the backend/key table and dated test evidence. A past
+success is useful evidence about one configuration, not a recommendation
+or a promise that it remains available. See [Getting
+Started](https://shmercer.github.io/pairwiseLLM/articles/getting-started.md)
+for a first request and [Provider Controls and
+Recovery](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.md)
+for troubleshooting.
+
 ## What the package supports
 
 `pairwiseLLM` implements request and response handling for six backends.

@@ -10,7 +10,8 @@
 <link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
 <script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Prompt Template Positional Bias Testing">
+<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
+<meta property="og:title" content="Prompt Template Positional Bias Testing">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -29,23 +30,27 @@
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
-<li class="nav-item"><a class="nav-link" href="../index.html"><span class="fa fa-home"></span> Home</a></li>
 <li class="nav-item"><a class="nav-link" href="../articles/getting-started.html">Get Started</a></li>
 <li class="active nav-item dropdown">
-  <button class="nav-link dropdown-toggle" type="button" id="dropdown-detailed-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Detailed Guides</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-detailed-guides">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Guides</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-guides">
 <li><a class="dropdown-item" href="../articles/data-and-prompts.html">Data Schemas and Prompt Management</a></li>
     <li><a class="dropdown-item" href="../articles/provider-controls-and-recovery.html">Provider Controls and Recovery</a></li>
     <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
-    <li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
-    <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
     <li><a class="dropdown-item" href="../articles/prompt-template-bias.html">Prompt Template Positional Bias Testing</a></li>
+  </ul>
+</li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-statistical-design" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Statistical Design</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-statistical-design">
+<li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
@@ -79,7 +84,45 @@
     
     
 <div class="section level2">
-<h2 id="motivation">1. Motivation<a class="anchor" aria-label="anchor" href="#motivation"></a>
+<h2 id="how-to-read-this-guide">How to read this guide<a class="anchor" aria-label="anchor" href="#how-to-read-this-guide"></a>
+</h2>
+<p>Use this guide to check whether presentation order changes a judge’s
+decisions. You need matched comparisons in both orders, made with the
+same trait, model, and prompt configuration. The archived results below
+illustrate the analysis; they do not certify current models as unbiased.
+Reading the tables and templates makes no provider calls; collecting
+your own forward/reverse results can incur charges.</p>
+<p>Two questions are different:</p>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th>Question</th>
+<th>Example and interpretation</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>Does the same essay win after swapping order?</td>
+<td>Essay A wins when first and when second: a consistent underlying
+winner. <code>prop_consistent</code> summarizes this agreement.</td>
+</tr>
+<tr class="even">
+<td>Does the judge favor a display position?</td>
+<td>The first-displayed essay wins in both orders: the underlying winner
+changes, suggesting a position preference for that pair.</td>
+</tr>
+</tbody>
+</table>
+<p>One pair is not enough to establish a systematic effect. Read the
+statistical interpretation below before treating a test result as
+evidence about bias. For a first analysis, follow the process and
+interpretation sections; use the long historical configuration tables
+when comparing the archived experiments.</p>
+</div>
+<div class="section level2">
+<h2 id="motivation">Motivation<a class="anchor" aria-label="anchor" href="#motivation"></a>
 </h2>
 <p><code>pairwiseLLM</code> uses large language models (LLMs) to compare
 pairs of writing samples and decide which sample is better on a given
@@ -118,7 +161,7 @@ Submitting and Polling Multiple Batches</a></li>
 <hr>
 </div>
 <div class="section level2">
-<h2 id="testing-process-summary">2. Testing Process Summary<a class="anchor" aria-label="anchor" href="#testing-process-summary"></a>
+<h2 id="testing-process-summary">Testing Process Summary<a class="anchor" aria-label="anchor" href="#testing-process-summary"></a>
 </h2>
 <p>This section describes an archived 2025 experiment bundled with
 pairwiseLLM 1.3.0. The result artifact was added to the repository on
@@ -247,7 +290,7 @@ the experiment.</p>
 <hr>
 </div>
 <div class="section level2">
-<h2 id="trait-descriptions-and-custom-traits">3. Trait descriptions and custom traits<a class="anchor" aria-label="anchor" href="#trait-descriptions-and-custom-traits"></a>
+<h2 id="trait-descriptions-and-custom-traits">Trait descriptions and custom traits<a class="anchor" aria-label="anchor" href="#trait-descriptions-and-custom-traits"></a>
 </h2>
 <p>In the tests, we evaluated samples for overall quality.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
@@ -282,7 +325,7 @@ choosing which sample is better. Each trait has:</p>
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="va">name</span>, custom_name <span class="op">=</span> <span class="cn">NULL</span>, custom_description <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
 <hr>
 <div class="section level3">
-<h3 id="built-in-traits">3.1 Built-in traits<a class="anchor" aria-label="anchor" href="#built-in-traits"></a>
+<h3 id="built-in-traits">Built-in traits<a class="anchor" aria-label="anchor" href="#built-in-traits"></a>
 </h3>
 <p>The package includes some predefined traits accessible by name:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
@@ -302,7 +345,7 @@ wherever <code>{TRAIT_DESCRIPTION}</code> appears.</p>
 <hr>
 </div>
 <div class="section level3">
-<h3 id="setting-a-different-built-in-trait">3.2 Setting a different built-in trait<a class="anchor" aria-label="anchor" href="#setting-a-different-built-in-trait"></a>
+<h3 id="setting-a-different-built-in-trait">Setting a different built-in trait<a class="anchor" aria-label="anchor" href="#setting-a-different-built-in-trait"></a>
 </h3>
 <p>To switch evaluations to another trait, simply pass its ID:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
@@ -319,7 +362,7 @@ wherever <code>{TRAIT_DESCRIPTION}</code> appears.</p>
 <hr>
 </div>
 <div class="section level3">
-<h3 id="creating-a-custom-trait">3.3 Creating a custom trait<a class="anchor" aria-label="anchor" href="#creating-a-custom-trait"></a>
+<h3 id="creating-a-custom-trait">Creating a custom trait<a class="anchor" aria-label="anchor" href="#creating-a-custom-trait"></a>
 </h3>
 <p>If your study requires a new writing dimension, you can define your
 own trait directly in the call:</p>
@@ -346,7 +389,7 @@ own trait directly in the call:</p>
 <hr>
 </div>
 <div class="section level3">
-<h3 id="why-traits-matter-for-positional-bias-testing">3.4 Why traits matter for positional bias testing<a class="anchor" aria-label="anchor" href="#why-traits-matter-for-positional-bias-testing"></a>
+<h3 id="why-traits-matter-for-positional-bias-testing">Why traits matter for positional bias testing<a class="anchor" aria-label="anchor" href="#why-traits-matter-for-positional-bias-testing"></a>
 </h3>
 <p>Traits determine the <strong>criterion of comparison</strong>, and
 different traits may produce different sensitivity patterns in LLM
@@ -364,7 +407,7 @@ the same workflow described earlier in this vignette.</p>
 </div>
 </div>
 <div class="section level2">
-<h2 id="example-data-used-in-tests">4. Example data used in tests<a class="anchor" aria-label="anchor" href="#example-data-used-in-tests"></a>
+<h2 id="example-data-used-in-tests">Example data used in tests<a class="anchor" aria-label="anchor" href="#example-data-used-in-tests"></a>
 </h2>
 <p>The positional-bias experiments in this vignette use the
 <code>example_writing_samples</code> dataset that ships with the
@@ -695,7 +738,7 @@ psychometrics cannot resolve.
 <hr>
 </div>
 <div class="section level2">
-<h2 id="built-in-prompt-templates">5. Built-in prompt templates<a class="anchor" aria-label="anchor" href="#built-in-prompt-templates"></a>
+<h2 id="built-in-prompt-templates">Built-in prompt templates<a class="anchor" aria-label="anchor" href="#built-in-prompt-templates"></a>
 </h2>
 <p>The tested templates are stored as plain-text files in the package
 and exposed via the template registry. You can retrieve them with
@@ -746,7 +789,7 @@ and exposed via the template registry. You can retrieve them with
 <hr>
 </div>
 <div class="section level2">
-<h2 id="forward-and-reverse-pairs">6. Forward and reverse pairs<a class="anchor" aria-label="anchor" href="#forward-and-reverse-pairs"></a>
+<h2 id="forward-and-reverse-pairs">Forward and reverse pairs<a class="anchor" aria-label="anchor" href="#forward-and-reverse-pairs"></a>
 </h2>
 <p>Here is a small example of how we constructed forward and reverse
 datasets for each experiment:</p>
@@ -786,7 +829,7 @@ pair.</p>
 <hr>
 </div>
 <div class="section level2">
-<h2 id="thinking-reasoning-configurations-used-in-testing">7. Thinking / Reasoning Configurations Used in Testing<a class="anchor" aria-label="anchor" href="#thinking-reasoning-configurations-used-in-testing"></a>
+<h2 id="thinking-reasoning-configurations-used-in-testing">Thinking / Reasoning Configurations Used in Testing<a class="anchor" aria-label="anchor" href="#thinking-reasoning-configurations-used-in-testing"></a>
 </h2>
 <p>The archived artifact uses a <code>thinking</code> column to
 distinguish two historical request configurations:</p>
@@ -800,7 +843,7 @@ the package’s dated compatibility registry before constructing a new
 request.</p>
 <hr>
 <div class="section level3">
-<h3 id="anthropic-claude-4-5-models">7.1 Anthropic (Claude 4.5 models)<a class="anchor" aria-label="anchor" href="#anthropic-claude-4-5-models"></a>
+<h3 id="anthropic-claude-4-5-models">Anthropic (Claude 4.5 models)<a class="anchor" aria-label="anchor" href="#anthropic-claude-4-5-models"></a>
 </h3>
 <p>The Anthropic experiment recorded the following controls.</p>
 <div class="section level4">
@@ -838,7 +881,7 @@ temperature.</p>
 </div>
 </div>
 <div class="section level3">
-<h3 id="gemini-3-pro-preview">7.2 Gemini 3 Pro Preview<a class="anchor" aria-label="anchor" href="#gemini-3-pro-preview"></a>
+<h3 id="gemini-3-pro-preview">Gemini 3 Pro Preview<a class="anchor" aria-label="anchor" href="#gemini-3-pro-preview"></a>
 </h3>
 <p>The Gemini experiment used the <code>thinkingLevel</code> field
 available to that request shape at the time.</p>
@@ -866,7 +909,7 @@ established.</p>
 </div>
 </div>
 <div class="section level3">
-<h3 id="openai-gpt-4-1-gpt-4o-gpt-5-1">7.3 OpenAI (gpt-4.1, gpt-4o, gpt-5.1)<a class="anchor" aria-label="anchor" href="#openai-gpt-4-1-gpt-4o-gpt-5-1"></a>
+<h3 id="openai-gpt-4-1-gpt-4o-gpt-5-1">OpenAI (gpt-4.1, gpt-4o, gpt-5.1)<a class="anchor" aria-label="anchor" href="#openai-gpt-4-1-gpt-4o-gpt-5-1"></a>
 </h3>
 <p>The OpenAI experiment used two API shapes:</p>
 <ol style="list-style-type: decimal">
@@ -914,7 +957,7 @@ analysis.</p>
 </div>
 </div>
 <div class="section level3">
-<h3 id="togetherai-deepseek-r1-deepseek-v3-kimi-k2-qwen3">7.4 TogetherAI (Deepseek-R1, Deepseek-V3, Kimi-K2, Qwen3)<a class="anchor" aria-label="anchor" href="#togetherai-deepseek-r1-deepseek-v3-kimi-k2-qwen3"></a>
+<h3 id="togetherai-deepseek-r1-deepseek-v3-kimi-k2-qwen3">TogetherAI (Deepseek-R1, Deepseek-V3, Kimi-K2, Qwen3)<a class="anchor" aria-label="anchor" href="#togetherai-deepseek-r1-deepseek-v3-kimi-k2-qwen3"></a>
 </h3>
 <p>For Together.ai, the archived experiment used the Chat Completions
 API (<code>/v1/chat/completions</code>) with the following historical
@@ -935,7 +978,7 @@ output.</p>
 <hr>
 </div>
 <div class="section level3">
-<h3 id="summary-of-historical-request-configurations">7.5 Summary of historical request configurations<a class="anchor" aria-label="anchor" href="#summary-of-historical-request-configurations"></a>
+<h3 id="summary-of-historical-request-configurations">Summary of historical request configurations<a class="anchor" aria-label="anchor" href="#summary-of-historical-request-configurations"></a>
 </h3>
 <table style="width:100%;" class="table">
 <colgroup>
@@ -1013,7 +1056,7 @@ extracted to <code>thoughts</code>
 </div>
 </div>
 <div class="section level2">
-<h2 id="loading-summary-results">8. Loading summary results<a class="anchor" aria-label="anchor" href="#loading-summary-results"></a>
+<h2 id="loading-summary-results">Loading summary results<a class="anchor" aria-label="anchor" href="#loading-summary-results"></a>
 </h2>
 <p>The archived results are stored in
 <code>inst/extdata/template_test_summary_all.csv</code>. Only aggregate
@@ -1036,7 +1079,7 @@ paired test.</p>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> test1       anthro… clau… with_th…           0.884     0.447            0.045<span style="text-decoration: underline;">3</span></span></span></code></pre></div>
 <hr>
 <div class="section level3">
-<h3 id="column-definitions">8.1 Column definitions<a class="anchor" aria-label="anchor" href="#column-definitions"></a>
+<h3 id="column-definitions">Column definitions<a class="anchor" aria-label="anchor" href="#column-definitions"></a>
 </h3>
 <p>The columns in <code>summary_tbl</code> are:</p>
 <ul>
@@ -1071,7 +1114,7 @@ test to informative inconsistent pairs.</p></li>
 <hr>
 </div>
 <div class="section level3">
-<h3 id="interpreting-the-statistics">8.2 Interpreting the statistics<a class="anchor" aria-label="anchor" href="#interpreting-the-statistics"></a>
+<h3 id="interpreting-the-statistics">Interpreting the statistics<a class="anchor" aria-label="anchor" href="#interpreting-the-statistics"></a>
 </h3>
 <p>The three key statistics for each (template, provider, model,
 thinking) combination are:</p>
@@ -1152,7 +1195,7 @@ choices; paired raw outcomes would be needed for the current test.</li>
 </div>
 </div>
 <div class="section level2">
-<h2 id="summary-results-by-prompt">9. Summary results by prompt<a class="anchor" aria-label="anchor" href="#summary-results-by-prompt"></a>
+<h2 id="summary-results-by-prompt">Summary results by prompt<a class="anchor" aria-label="anchor" href="#summary-results-by-prompt"></a>
 </h2>
 <p>In this section we present, for each template:</p>
 <ol style="list-style-type: decimal">
@@ -1182,10 +1225,10 @@ thinking) configuration and columns:</p>
 </ol>
 <hr>
 <div class="section level3">
-<h3 id="template-test1">9.1 Template <code>test1</code><a class="anchor" aria-label="anchor" href="#template-test1"></a>
+<h3 id="template-test1">Template <code>test1</code><a class="anchor" aria-label="anchor" href="#template-test1"></a>
 </h3>
 <div class="section level4">
-<h4 id="template-text">9.1.1 Template text<a class="anchor" aria-label="anchor" href="#template-text"></a>
+<h4 id="template-text">Template text<a class="anchor" aria-label="anchor" href="#template-text"></a>
 </h4>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"test1"</span><span class="op">)</span><span class="op">)</span></span>
@@ -1223,7 +1266,7 @@ thinking) configuration and columns:</p>
 <span><span class="co">#&gt; (Provide only the XML tag).</span></span></code></pre></div>
 </div>
 <div class="section level4">
-<h4 id="summary-table">9.1.2 Summary table<a class="anchor" aria-label="anchor" href="#summary-table"></a>
+<h4 id="summary-table">Summary table<a class="anchor" aria-label="anchor" href="#summary-table"></a>
 </h4>
 <div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
@@ -1389,10 +1432,10 @@ thinking) configuration and columns:</p>
 </div>
 </div>
 <div class="section level3">
-<h3 id="template-test2">9.2 Template <code>test2</code><a class="anchor" aria-label="anchor" href="#template-test2"></a>
+<h3 id="template-test2">Template <code>test2</code><a class="anchor" aria-label="anchor" href="#template-test2"></a>
 </h3>
 <div class="section level4">
-<h4 id="template-text-1">9.2.1 Template text<a class="anchor" aria-label="anchor" href="#template-text-1"></a>
+<h4 id="template-text-1">Template text<a class="anchor" aria-label="anchor" href="#template-text-1"></a>
 </h4>
 <div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"test2"</span><span class="op">)</span><span class="op">)</span></span>
@@ -1434,7 +1477,7 @@ thinking) configuration and columns:</p>
 <span><span class="co">#&gt; &lt;BETTER_SAMPLE&gt;SAMPLE_2&lt;/BETTER_SAMPLE&gt;</span></span></code></pre></div>
 </div>
 <div class="section level4">
-<h4 id="summary-table-1">9.2.2 Summary table<a class="anchor" aria-label="anchor" href="#summary-table-1"></a>
+<h4 id="summary-table-1">Summary table<a class="anchor" aria-label="anchor" href="#summary-table-1"></a>
 </h4>
 <div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
@@ -1600,10 +1643,10 @@ thinking) configuration and columns:</p>
 </div>
 </div>
 <div class="section level3">
-<h3 id="template-test3">9.3 Template <code>test3</code><a class="anchor" aria-label="anchor" href="#template-test3"></a>
+<h3 id="template-test3">Template <code>test3</code><a class="anchor" aria-label="anchor" href="#template-test3"></a>
 </h3>
 <div class="section level4">
-<h4 id="template-text-2">9.3.1 Template text<a class="anchor" aria-label="anchor" href="#template-text-2"></a>
+<h4 id="template-text-2">Template text<a class="anchor" aria-label="anchor" href="#template-text-2"></a>
 </h4>
 <div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"test3"</span><span class="op">)</span><span class="op">)</span></span>
@@ -1653,7 +1696,7 @@ thinking) configuration and columns:</p>
 <span><span class="co">#&gt; Output only the XML tag with your choice. No explanations or additional text.</span></span></code></pre></div>
 </div>
 <div class="section level4">
-<h4 id="summary-table-2">9.3.2 Summary table<a class="anchor" aria-label="anchor" href="#summary-table-2"></a>
+<h4 id="summary-table-2">Summary table<a class="anchor" aria-label="anchor" href="#summary-table-2"></a>
 </h4>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
@@ -1819,10 +1862,10 @@ thinking) configuration and columns:</p>
 </div>
 </div>
 <div class="section level3">
-<h3 id="template-test4">9.4 Template <code>test4</code><a class="anchor" aria-label="anchor" href="#template-test4"></a>
+<h3 id="template-test4">Template <code>test4</code><a class="anchor" aria-label="anchor" href="#template-test4"></a>
 </h3>
 <div class="section level4">
-<h4 id="template-text-3">9.4.1 Template text<a class="anchor" aria-label="anchor" href="#template-text-3"></a>
+<h4 id="template-text-3">Template text<a class="anchor" aria-label="anchor" href="#template-text-3"></a>
 </h4>
 <div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"test4"</span><span class="op">)</span><span class="op">)</span></span>
@@ -1856,7 +1899,7 @@ thinking) configuration and columns:</p>
 <span><span class="co">#&gt; &lt;BETTER_SAMPLE&gt;SAMPLE_2&lt;/BETTER_SAMPLE&gt; if Sample 2 is better</span></span></code></pre></div>
 </div>
 <div class="section level4">
-<h4 id="summary-table-3">9.4.2 Summary table<a class="anchor" aria-label="anchor" href="#summary-table-3"></a>
+<h4 id="summary-table-3">Summary table<a class="anchor" aria-label="anchor" href="#summary-table-3"></a>
 </h4>
 <div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
@@ -2022,10 +2065,10 @@ thinking) configuration and columns:</p>
 </div>
 </div>
 <div class="section level3">
-<h3 id="template-test5">9.5 Template <code>test5</code><a class="anchor" aria-label="anchor" href="#template-test5"></a>
+<h3 id="template-test5">Template <code>test5</code><a class="anchor" aria-label="anchor" href="#template-test5"></a>
 </h3>
 <div class="section level4">
-<h4 id="template-text-4">9.5.1 Template text<a class="anchor" aria-label="anchor" href="#template-text-4"></a>
+<h4 id="template-text-4">Template text<a class="anchor" aria-label="anchor" href="#template-text-4"></a>
 </h4>
 <div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"test5"</span><span class="op">)</span><span class="op">)</span></span>
@@ -2060,7 +2103,7 @@ thinking) configuration and columns:</p>
 <span><span class="co">#&gt; &lt;BETTER_SAMPLE&gt;SAMPLE_2&lt;/BETTER_SAMPLE&gt;</span></span></code></pre></div>
 </div>
 <div class="section level4">
-<h4 id="summary-table-4">9.5.2 Summary table<a class="anchor" aria-label="anchor" href="#summary-table-4"></a>
+<h4 id="summary-table-4">Summary table<a class="anchor" aria-label="anchor" href="#summary-table-4"></a>
 </h4>
 <div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
@@ -2227,7 +2270,7 @@ thinking) configuration and columns:</p>
 </div>
 </div>
 <div class="section level2">
-<h2 id="per-backend-summary">10. Per-backend summary<a class="anchor" aria-label="anchor" href="#per-backend-summary"></a>
+<h2 id="per-backend-summary">Per-backend summary<a class="anchor" aria-label="anchor" href="#per-backend-summary"></a>
 </h2>
 <p>It is often useful to examine positional-bias metrics <strong>within
 each backend</strong> to see whether:</p>
@@ -2255,7 +2298,7 @@ from 0.5</li>
 used in testing.</p>
 <hr>
 <div class="section level3">
-<h3 id="anthropic-models">10.1 Anthropic models<a class="anchor" aria-label="anchor" href="#anthropic-models"></a>
+<h3 id="anthropic-models">Anthropic models<a class="anchor" aria-label="anchor" href="#anthropic-models"></a>
 </h3>
 <div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
@@ -2543,7 +2586,7 @@ thinking configuration.</caption>
 <hr>
 </div>
 <div class="section level3">
-<h3 id="gemini-models">10.2 Gemini models<a class="anchor" aria-label="anchor" href="#gemini-models"></a>
+<h3 id="gemini-models">Gemini models<a class="anchor" aria-label="anchor" href="#gemini-models"></a>
 </h3>
 <div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
@@ -2631,7 +2674,7 @@ thinking configuration.</caption>
 <hr>
 </div>
 <div class="section level3">
-<h3 id="openai-models">10.3 OpenAI models<a class="anchor" aria-label="anchor" href="#openai-models"></a>
+<h3 id="openai-models">OpenAI models<a class="anchor" aria-label="anchor" href="#openai-models"></a>
 </h3>
 <div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
@@ -2839,7 +2882,7 @@ thinking configuration.</caption>
 <hr>
 </div>
 <div class="section level3">
-<h3 id="togetherai-hosted-models">10.4 TogetherAI-hosted models<a class="anchor" aria-label="anchor" href="#togetherai-hosted-models"></a>
+<h3 id="togetherai-hosted-models">TogetherAI-hosted models<a class="anchor" aria-label="anchor" href="#togetherai-hosted-models"></a>
 </h3>
 <div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">summary_tbl</span> <span class="op">|&gt;</span></span>
@@ -3048,7 +3091,7 @@ thinking configuration.</caption>
 </div>
 </div>
 <div class="section level2">
-<h2 id="conclusion">11. Conclusion<a class="anchor" aria-label="anchor" href="#conclusion"></a>
+<h2 id="conclusion">Conclusion<a class="anchor" aria-label="anchor" href="#conclusion"></a>
 </h2>
 <p>This vignette demonstrates a workflow for describing reversal
 agreement and testing directional positional preference in prompt
@@ -3063,7 +3106,7 @@ statistical review is appropriate when formal inference is required.</p>
 <hr>
 </div>
 <div class="section level2">
-<h2 id="citation">12. Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
+<h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
 <p>Mercer, S. H. (2026). <em>Prompt template positional bias

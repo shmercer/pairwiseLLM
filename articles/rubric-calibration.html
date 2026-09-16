@@ -10,7 +10,8 @@
 <link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
 <script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Guide: Rubric Calibration">
+<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
+<meta property="og:title" content="Guide: Rubric Calibration">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -29,23 +30,27 @@
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
-<li class="nav-item"><a class="nav-link" href="../index.html"><span class="fa fa-home"></span> Home</a></li>
 <li class="nav-item"><a class="nav-link" href="../articles/getting-started.html">Get Started</a></li>
 <li class="active nav-item dropdown">
-  <button class="nav-link dropdown-toggle" type="button" id="dropdown-detailed-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Detailed Guides</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-detailed-guides">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Guides</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-guides">
 <li><a class="dropdown-item" href="../articles/data-and-prompts.html">Data Schemas and Prompt Management</a></li>
     <li><a class="dropdown-item" href="../articles/provider-controls-and-recovery.html">Provider Controls and Recovery</a></li>
     <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
-    <li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
-    <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
     <li><a class="dropdown-item" href="../articles/prompt-template-bias.html">Prompt Template Positional Bias Testing</a></li>
+  </ul>
+</li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-statistical-design" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Statistical Design</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-statistical-design">
+<li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
@@ -82,6 +87,18 @@
 results into ordered performance levels. The ordinal methods learn the
 relationship between CJ quality and human rubric scores. Percentile
 scoring matches a chosen marginal distribution without learning rubric
+criteria.</p>
+<p><strong>You need:</strong> a completed Bayesian CJ analysis and, for
+ordinal calibration, human rubric labels for some of its items.
+<strong>You get:</strong> a rubric label for each eligible item, full
+category probabilities for ordinal methods, and diagnostics. The
+frequentist BT/Elo fits in Getting Started are not accepted calibration
+inputs.</p>
+<p>For example, you might have compared essays for organization and want
+to report “developing”, “proficient”, or “advanced”. Human scores teach
+the ordinal model how that trait’s CJ scale relates to those labels. If
+you have no human scores, percentile levels describe relative standing
+under your chosen distribution; they do not establish mastery of rubric
 criteria.</p>
 <div class="section level2">
 <h2 id="choose-the-workflow">Choose the workflow<a class="anchor" aria-label="anchor" href="#choose-the-workflow"></a>
@@ -159,8 +176,8 @@ evaluated during normal documentation builds. No provider calls or
 CmdStan sampling occur in the rubric examples. The downstream snippets
 are tested with deterministic completed-result fixtures in the package’s
 test suite.</p>
-<p>Version 1.5.0 requires <strong>R &gt;= 4.4</strong>. Percentile
-scoring needs no optional modeling backend. Linear fitting requires
+<p>pairwiseLLM requires <strong>R &gt;= 4.4</strong>. Percentile scoring
+needs no optional modeling backend. Linear fitting requires
 <code>ordinal</code>; saved linear prediction does not. Monotone fitting
 requires <code>mgcv &gt;= 1.9-4</code> and <code>withr</code>; saved
 monotone prediction requires <code>mgcv</code>. Install the optional
@@ -182,6 +199,32 @@ organization-specific CJ result. <code>training_labels</code> and
 when the adaptive result or artifact provides them; otherwise use the
 original fixed-fit IDs. Alignment is by ID, never row position. Omitted
 items or <code>NA</code> rubric scores are unlabeled.</p>
+<p>A label table has this shape (illustrative IDs only; use IDs from
+your completed analysis and enough labels to support fitting and
+validation):</p>
+<table class="table">
+<thead><tr class="header">
+<th>item_id</th>
+<th>rubric_score</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>essay_01</td>
+<td>developing</td>
+</tr>
+<tr class="even">
+<td>essay_07</td>
+<td>proficient</td>
+</tr>
+<tr class="odd">
+<td>essay_12</td>
+<td>advanced</td>
+</tr>
+</tbody>
+</table>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">training_labels</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.csv</a></span><span class="op">(</span><span class="st">"training_labels.csv"</span>, colClasses <span class="op">=</span> <span class="st">"character"</span><span class="op">)</span></span>
+<span><span class="va">evaluation_labels</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.csv</a></span><span class="op">(</span><span class="st">"evaluation_labels.csv"</span>, colClasses <span class="op">=</span> <span class="st">"character"</span><span class="op">)</span></span></code></pre></div>
 <p>Declare levels from lowest to highest quality. Numeric scores can
 infer ascending levels, and ordered factors retain their declared
 levels. Character scores need explicit <code>levels</code>. One fit has
@@ -198,7 +241,7 @@ held-out accuracy.</p>
 <div class="section level2">
 <h2 id="same-set-linear-calibration">Same-set linear calibration<a class="anchor" aria-label="anchor" href="#same-set-linear-calibration"></a>
 </h2>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">calibration</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_rubric_calibration.html">fit_rubric_calibration</a></span><span class="op">(</span></span>
 <span>    <span class="va">completed_cj</span>, <span class="va">training_labels</span>,</span>
@@ -226,7 +269,7 @@ cohorts and refits require a different deployment analysis.</p>
 <div class="section level2">
 <h2 id="read-probabilities-and-hard-scores">Read probabilities and hard scores<a class="anchor" aria-label="anchor" href="#read-probabilities-and-hard-scores"></a>
 </h2>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">probability_matrix</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="va">scores</span><span class="op">$</span><span class="va">probabilities</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">probability_matrix</span><span class="op">)</span></span>
@@ -247,11 +290,23 @@ summary, not a replacement for the ordinal outcome.
 <code>extrapolated</code> marks scores outside the labeled training
 range, even among original same-set items. Endpoints are inside the
 range.</p>
+<p>For an illustrative probability vector
+<code>(developing = 0.20, proficient = 0.55, advanced = 0.25)</code>,
+cumulative probability first reaches 0.5 at “proficient”, so that is the
+default median-category score. The probabilities also show substantial
+uncertainty; reporting the category alone discards it. These numbers
+illustrate the decision rule and are not fitted results.</p>
+<p>For a report, retain <code>item_id</code>, <code>rubric_score</code>,
+<code>probabilities</code>, and <code>extrapolated</code> for ordinal
+predictions. Explain an extrapolation flag as a score outside the
+labeled calibration range. Percentile predictions instead require
+requested and achieved category proportions. Keep the method, trait, and
+validation results with either kind of output.</p>
 </div>
 <div class="section level2">
 <h2 id="evaluate-held-out-labels-and-inspect-diagnostics">Evaluate held-out labels and inspect diagnostics<a class="anchor" aria-label="anchor" href="#evaluate-held-out-labels-and-inspect-diagnostics"></a>
 </h2>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">assessment</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/evaluate_rubric_predictions.html">evaluate_rubric_predictions</a></span><span class="op">(</span></span>
 <span>    <span class="va">calibration</span>, <span class="va">evaluation_labels</span>, diagnostics <span class="op">=</span> <span class="cn">TRUE</span></span>
@@ -293,7 +348,7 @@ avoid optimistic reported performance.</p>
 <div class="section level2">
 <h2 id="explicit-monotone-alternative">Explicit monotone alternative<a class="anchor" aria-label="anchor" href="#explicit-monotone-alternative"></a>
 </h2>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"mgcv"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">&amp;&amp;</span></span>
 <span>    <span class="fu"><a href="https://rdrr.io/r/utils/packageDescription.html" class="external-link">packageVersion</a></span><span class="op">(</span><span class="st">"mgcv"</span><span class="op">)</span> <span class="op">&gt;=</span> <span class="st">"1.9.4"</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"withr"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">monotone_calibration</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_rubric_calibration.html">fit_rubric_calibration</a></span><span class="op">(</span></span>
@@ -324,7 +379,7 @@ there.</p>
 <div class="section level2">
 <h2 id="percentile-levels-without-human-labels">Percentile levels without human labels<a class="anchor" aria-label="anchor" href="#percentile-levels-without-human-labels"></a>
 </h2>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">percentile_calibration</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_rubric_calibration.html">fit_rubric_calibration</a></span><span class="op">(</span></span>
 <span>  <span class="va">completed_cj</span>, method <span class="op">=</span> <span class="st">"percentile"</span>, trait <span class="op">=</span> <span class="st">"organization"</span>,</span>
 <span>  levels <span class="op">=</span> <span class="va">rubric_levels</span>, target_distribution <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.2</span>, <span class="fl">0.5</span>, <span class="fl">0.3</span><span class="op">)</span></span>
@@ -374,7 +429,7 @@ target set 2. Extract the artifact list for fitting; the rubric fitter
 does not take a path or the whole Phase A manifest. The following
 assumes <code>reference_phase_a</code> contains that original artifact
 and <code>reference_labels</code> contains its human scores.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">linked_calibration</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_rubric_calibration.html">fit_rubric_calibration</a></span><span class="op">(</span></span>
 <span>    <span class="va">reference_phase_a</span>, <span class="va">reference_labels</span>,</span>
@@ -393,7 +448,7 @@ unique <code>ID</code> and <code>global_item_id</code>,
 call is never run during documentation builds. Keep production quality
 gates and resume the session until completion; exhausting a budget alone
 does not establish precision.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">completed_phase_b</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank.html">adaptive_rank</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">linking_samples</span>, id_col <span class="op">=</span> <span class="st">"ID"</span>, text_col <span class="op">=</span> <span class="st">"text"</span>,</span>
 <span>  judge <span class="op">=</span> <span class="va">judge</span>, n_steps <span class="op">=</span> <span class="va">comparison_budget</span>, btl_config <span class="op">=</span> <span class="va">btl_config</span>,</span>
@@ -407,7 +462,7 @@ does not establish precision.</p>
 workflow. Phase B hard-locks hub locations and retains its shared judge
 parameters, D-optimal selection, probes, and stopping. Rubric labels are
 not required during linking.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">target_scores</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">linked_calibration</span>, newdata <span class="op">=</span> <span class="va">completed_phase_b</span><span class="op">)</span></span>
 <span>  <span class="va">target_scores</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"global_item_id"</span>, <span class="st">"set_id"</span>, <span class="st">"rubric_score"</span>, <span class="st">"theta_sd"</span>, <span class="st">"extrapolated"</span><span class="op">)</span><span class="op">]</span></span>
@@ -431,7 +486,7 @@ locations.</p>
 <p>Reference holdout performance assesses calibration on the reference
 scale. To assess transport, use external human labels for linked
 targets:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">target_assessment</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/evaluate_rubric_predictions.html">evaluate_rubric_predictions</a></span><span class="op">(</span></span>
 <span>    <span class="va">linked_calibration</span>, <span class="va">target_labels</span>, newdata <span class="op">=</span> <span class="va">completed_phase_b</span></span>
@@ -452,7 +507,7 @@ overlap. Each may have different levels or a different Bayesian variant.
 Compatibility must hold within each trait’s reference/target linking
 workflow. One holistic CJ scale cannot supply multiple analytic trait
 calibrations.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">evidence_calibration</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_rubric_calibration.html">fit_rubric_calibration</a></span><span class="op">(</span></span>
 <span>    <span class="va">evidence_cj</span>, <span class="va">evidence_training_labels</span>, trait <span class="op">=</span> <span class="st">"evidence"</span>,</span>

@@ -1,6 +1,6 @@
 # Advanced: Submitting and Polling Multiple Batches
 
-## 1. Overview
+## Overview
 
 This vignette demonstrates how to use **pairwiseLLM** for **Batch API
 workflows** (server-side batching), which are distinct from the live API
@@ -8,11 +8,12 @@ calls described in the [Getting Started with
 pairwiseLLM](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
 vignette.
 
-Batch workflows are ideal for large-scale jobs because they:
+Batch workflows can suit larger fixed-pair jobs when turnaround is
+flexible. They:
 
 - Allow submitting thousands of pairs at once  
 - Are often cheaper (e.g., discounted batch pricing on some providers)  
-- Avoid client-side timeout and connection issues  
+- Continue remotely after submission even if your R session ends
 - Can be polled and resumed even if your local R session ends
 
 Supported Batch API providers:
@@ -55,6 +56,14 @@ In this vignette, we will cover:
 - Polling and resuming safely via on-disk registries
 - Producing per-run and merged results tables
 
+Submission, polling, and downloads can still fail or time out; saving
+job IDs lets you recover existing work. The local setup and pair
+preparation below run without credentials. Submitted examples require a
+provider account and may incur charges. This guide uses `dplyr`,
+`tidyr`, `purrr`, `readr`, and `stringr`; install these optional
+packages if needed. In particular, `readr` is needed to save and reload
+the job registry even in the first single-batch example.
+
 > Note: All heavy API calls in this vignette are set to `eval = FALSE`
 > so that the vignette remains CRAN-safe. You can enable them in your
 > own project.
@@ -70,55 +79,7 @@ vignette:
 - [Prompt Template Positional Bias
   Testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
 
-### OpenAI storage, output limits, and error files
-
-OpenAI Batch accepts `store = TRUE` or `FALSE` on both endpoints.
-Omitted or `NULL` values preserve provider defaults: Responses are
-stored for later API retrieval by default. `store = FALSE` disables that
-response storage; it does not disable Batch input/output/error file
-retention or imply zero data retention. See [OpenAI data
-controls](https://developers.openai.com/api/docs/guides/your-data).
-
-Select `endpoint = "responses"` explicitly when setting
-`max_output_tokens`. The limit includes both visible output and
-reasoning tokens. These controls pass through
-[`run_openai_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_openai_batch_pipeline.md)
-and
-[`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md).
-
-``` r
-
-job <- run_openai_batch_pipeline(
-  pairs = pairs,
-  model = "gpt-5.6-terra",
-  trait_name = "Cohesion",
-  trait_description = "How clearly the ideas connect.",
-  endpoint = "responses",
-  reasoning = "none",
-  store = FALSE,
-  max_output_tokens = 64,
-  poll = FALSE
-)
-batch <- openai_poll_batch_until_complete(job$batch$id)
-if (!is.null(batch$output_file_id) && nzchar(batch$output_file_id)) {
-  openai_download_batch_output(batch$id, "batch_output.jsonl")
-}
-if (!is.null(batch$error_file_id) && nzchar(batch$error_file_id)) {
-  openai_download_batch_errors(batch$id, "batch_errors.jsonl")
-  errors <- lapply(readLines("batch_errors.jsonl"), jsonlite::fromJSON)
-}
-```
-
-Successful output and request failures are separate files. Reconcile
-both with the submitted requests by `custom_id`, never line order. The
-error downloader preserves the raw JSONL and works when no output file
-exists. It errors clearly when no error file is available. Batch-level
-validation errors can instead appear in `batch$errors`. The pipeline’s
-`poll = TRUE` path still expects an output file; the separate steps
-above also handle errors-only batches. See the [OpenAI Batch
-guide](https://developers.openai.com/api/docs/guides/batch).
-
-## 2. Setup and API Keys
+## Setup and API Keys
 
 ``` r
 
@@ -149,30 +110,9 @@ Check which are set:
 ``` r
 
 check_llm_api_keys()
-#> No LLM API keys are currently set for known backends:
-#>   - OpenAI:         OPENAI_API_KEY
-#>   - Anthropic:      ANTHROPIC_API_KEY
-#>   - Google Gemini:  GEMINI_API_KEY
-#>   - Vertex AI:      VERTEX_API_KEY
-#>   - Together.ai:    TOGETHER_API_KEY
-#> 
-#> Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:
-#>   OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"
-#>   ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"
-#>   GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"
-#>   VERTEX_API_KEY    = "YOUR_VERTEX_KEY_HERE"
-#>   TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"
-#> # A tibble: 5 × 4
-#>   backend   service              env_var           has_key
-#>   <chr>     <chr>                <chr>             <lgl>  
-#> 1 openai    OpenAI               OPENAI_API_KEY    FALSE  
-#> 2 anthropic Anthropic            ANTHROPIC_API_KEY FALSE  
-#> 3 gemini    Google Gemini        GEMINI_API_KEY    FALSE  
-#> 4 vertex    Vertex AI Gemini API VERTEX_API_KEY    FALSE  
-#> 5 together  Together.ai          TOGETHER_API_KEY  FALSE
 ```
 
-## 3. Example Data and Prompt Template
+## Example Data and Prompt Template
 
 We use the built-in writing samples and a single trait
 (`overall_quality`).
@@ -246,7 +186,101 @@ get_pairs_for_direction <- function(direction = c("forward", "reverse")) {
 }
 ```
 
-## 4. Designing the Batch Grid
+## First batch: submit once, then resume
+
+Start with one provider and the `pairs_forward`, `td`, and `tmpl`
+objects created above. This example creates one remote batch and a local
+job registry. Use a new output directory for a new job; keep it to
+resume the same job.
+
+``` r
+
+first_job <- llm_submit_pairs_multi_batch(
+  pairs = pairs_forward,
+  backend = "openai",
+  model = "gpt-4.1",
+  trait_name = td$name,
+  trait_description = td$description,
+  prompt_template = tmpl,
+  n_segments = 1,
+  output_dir = "first_batch",
+  write_registry = TRUE
+)
+```
+
+Later, including in a new R session, load the saved registry to poll and
+download that same job. Do not rerun submission merely because it has
+not finished.
+
+``` r
+
+library(pairwiseLLM)
+first_results <- llm_resume_multi_batches(
+  jobs = NULL,
+  output_dir = "first_batch",
+  write_combined_csv = TRUE
+)
+head(first_results$combined)
+```
+
+Inspect the registry and per-job results before treating the combined
+rows as a complete collection. Preserve error files and reconcile
+unsuccessful request IDs; a returned table alone does not establish that
+every requested comparison succeeded. For a simpler single-provider
+pipeline without multi-job registry management, see
+[`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md)
+and
+[`llm_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.md).
+
+## OpenAI storage, output limits, and error files
+
+OpenAI Batch accepts `store = TRUE` or `FALSE` on both endpoints.
+Omitted or `NULL` values preserve provider defaults: Responses are
+stored for later API retrieval by default. `store = FALSE` disables that
+response storage; it does not disable Batch input/output/error file
+retention or imply zero data retention. See [OpenAI data
+controls](https://developers.openai.com/api/docs/guides/your-data).
+
+Select `endpoint = "responses"` explicitly when setting
+`max_output_tokens`. The limit includes both visible output and
+reasoning tokens. These controls pass through
+[`run_openai_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_openai_batch_pipeline.md)
+and
+[`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md).
+
+``` r
+
+job <- run_openai_batch_pipeline(
+  pairs = pairs_forward,
+  model = "gpt-5.6-terra",
+  trait_name = "Cohesion",
+  trait_description = "How clearly the ideas connect.",
+  endpoint = "responses",
+  reasoning = "none",
+  store = FALSE,
+  max_output_tokens = 64,
+  poll = FALSE
+)
+batch <- openai_poll_batch_until_complete(job$batch$id)
+if (!is.null(batch$output_file_id) && nzchar(batch$output_file_id)) {
+  openai_download_batch_output(batch$id, "batch_output.jsonl")
+}
+if (!is.null(batch$error_file_id) && nzchar(batch$error_file_id)) {
+  openai_download_batch_errors(batch$id, "batch_errors.jsonl")
+  errors <- lapply(readLines("batch_errors.jsonl"), jsonlite::fromJSON)
+}
+```
+
+Successful output and request failures are separate files. Reconcile
+both with the submitted requests by `custom_id`, never line order. The
+error downloader preserves the raw JSONL and works when no output file
+exists. It errors clearly when no error file is available. Batch-level
+validation errors can instead appear in `batch$errors`. The pipeline’s
+`poll = TRUE` path still expects an output file; the separate steps
+above also handle errors-only batches. See the [OpenAI Batch
+guide](https://developers.openai.com/api/docs/guides/batch).
+
+## Designing the Batch Grid
 
 Suppose we want to test several prompt templates across:
 
@@ -337,7 +371,7 @@ templates_tbl
 #> 5 test5       <chr [1]>
 ```
 
-## 5. Submitting Many Batches with the Multi‑Batch Helpers
+## Submitting Many Batches with the Multi‑Batch Helpers
 
 The key idea is:
 
@@ -349,7 +383,7 @@ The key idea is:
 - Within each run you can still split into multiple segments using
   `batch_size` or `n_segments`
 
-### 5.1 Create a run plan and output directory
+### Create a run plan and output directory
 
 ``` r
 
@@ -369,7 +403,7 @@ run_plan <- tidyr::crossing(
 run_plan |> dplyr::select(run_id, template_id, provider, model, thinking, direction, run_dir)
 ```
 
-### 5.2 Submit all runs (no polling)
+### Submit all runs (no polling)
 
 Below we submit each run using
 [`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md).
@@ -463,7 +497,7 @@ At this point, each run directory contains:
 
 You can safely stop R or restart your machine after submission.
 
-## 6. Polling, Downloading, and Parsing (Resumable)
+## Polling, Downloading, and Parsing (Resumable)
 
 To poll all runs, read the manifest and call
 [`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md)
@@ -494,7 +528,7 @@ poll_one_run <- function(run_dir) {
 polled <- purrr::map(manifest$run_dir, poll_one_run)
 ```
 
-### 6.1 Building a single merged results table (all runs)
+### Building a single merged results table (all runs)
 
 Each element of `polled` contains a `combined` tibble for that run
 (i.e., all segments bound together). We can attach run metadata
@@ -528,7 +562,7 @@ readr::write_csv(combined_all, combined_path)
 combined_path
 ```
 
-## 7. Resuming After Interruption
+## Resuming After Interruption
 
 Resuming jobs is possible:
 
@@ -556,7 +590,7 @@ unfinished_dirs <- manifest$run_dir[vapply(manifest$run_dir, needs_poll, logical
 polled <- purrr::map(unfinished_dirs, poll_one_run)
 ```
 
-## 8. Next Steps
+## Next Steps
 
 Once you have per-run results CSVs (e.g., one per template × model ×
 thinking × direction), you can:
@@ -574,7 +608,7 @@ thinking × direction), you can:
   [`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md)
   (when `EloChoice` is installed)
 
-## 9. Citation
+## Citation
 
 > Mercer, S. H. (2026). *Advanced: Submitting and polling multiple
 > batches* \[R package vignette\]. Comprehensive R Archive Network.

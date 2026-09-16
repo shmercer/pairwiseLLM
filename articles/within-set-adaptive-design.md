@@ -16,6 +16,21 @@ The public entry points are
 and
 [`adaptive_rank_resume()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_resume.md).
 
+## Reading guide
+
+For the broad idea, read **Foundational concepts** and **Algorithm
+overview**. For implementation detail, follow the selection sections
+through **Bayesian BTL refits**. For deciding whether a result can be
+interpreted, read **Diagnostics, reliability, and stopping** and **Audit
+trail and reproducibility**. The glossary supplies the units and symbols
+used throughout.
+
+In practical terms, the fast model helps choose what to compare next;
+the Bayesian refits estimate quality and assess whether the accumulated
+evidence supports stopping. A high-looking ranking alone cannot replace
+those diagnostic checks. The formal sections below specify the
+interaction between these models.
+
 ## Foundational concepts
 
 Pairwise comparative judgment (CJ) asks a judge to choose between two

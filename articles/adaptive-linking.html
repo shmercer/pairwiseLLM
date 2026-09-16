@@ -10,7 +10,8 @@
 <link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
 <script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Guide: Adaptive Linking">
+<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
+<meta property="og:title" content="Guide: Adaptive Linking">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -29,23 +30,27 @@
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
-<li class="nav-item"><a class="nav-link" href="../index.html"><span class="fa fa-home"></span> Home</a></li>
 <li class="nav-item"><a class="nav-link" href="../articles/getting-started.html">Get Started</a></li>
 <li class="active nav-item dropdown">
-  <button class="nav-link dropdown-toggle" type="button" id="dropdown-detailed-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Detailed Guides</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-detailed-guides">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-guides" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Guides</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-guides">
 <li><a class="dropdown-item" href="../articles/data-and-prompts.html">Data Schemas and Prompt Management</a></li>
     <li><a class="dropdown-item" href="../articles/provider-controls-and-recovery.html">Provider Controls and Recovery</a></li>
     <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
-    <li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
-    <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
     <li><a class="dropdown-item" href="../articles/prompt-template-bias.html">Prompt Template Positional Bias Testing</a></li>
+  </ul>
+</li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-statistical-design" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Statistical Design</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-statistical-design">
+<li><a class="dropdown-item" href="../articles/within-set-adaptive-design.html">Design: Adaptive Pairing</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-linking-design.html">Design: Adaptive Linking</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
@@ -83,6 +88,19 @@ sets onto one common scale. It uses [adaptive_rank()] as the main entry
 point. The executable examples use a deterministic local judge so that
 rendering does not require credentials or make network requests. A
 detailed live-LLM workflow example appears later.</p>
+<p>For example, suppose last year’s essays define a reference scale and
+you want to report this year’s essays on that same scale. Last year’s
+set is the <strong>hub</strong>; the new set is a
+<strong>spoke</strong>. Ranking each year separately is insufficient
+because the two score scales have different origins. Comparisons between
+years supply the evidence needed to link them.</p>
+<p><strong>You need:</strong> texts and stable IDs for each set, a
+designated reference hub, and CmdStan; compatible saved Phase A
+artifacts can be reused. <strong>You get:</strong> linked target scores,
+uncertainty, and per-spoke diagnostics. Start with the one-spoke example
+before adding more cohorts. The small offline simulation below
+illustrates the interface and deliberately relaxes quality requirements;
+the live-study section is the route for actual data collection.</p>
 <p>Adaptive linking has two phases:</p>
 <ol style="list-style-type: decimal">
 <li>
@@ -193,20 +211,22 @@ active.</p>
 <code>cmdstanr</code>, a working C++ toolchain, and CmdStan. They do not
 require an LLM credential when a custom local judge is supplied.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">cmdstan_available</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"PAIRWISELLM_RUN_CMDSTAN_VIGNETTES"</span><span class="op">)</span>, <span class="st">"true"</span><span class="op">)</span> <span class="op">&amp;&amp;</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"cmdstanr"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">&amp;&amp;</span></span>
-<span>  <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>    <span class="fu">cmdstanr</span><span class="fu">::</span><span class="fu"><a href="https://mc-stan.org/cmdstanr/reference/set_cmdstan_path.html" class="external-link">cmdstan_version</a></span><span class="op">(</span><span class="op">)</span></span>
-<span>    <span class="cn">TRUE</span></span>
-<span>  <span class="op">}</span>, error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">cmdstan_available</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"cmdstanr"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">&amp;&amp;</span></span>
+<span>  <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="fu">cmdstanr</span><span class="fu">::</span><span class="fu"><a href="https://mc-stan.org/cmdstanr/reference/set_cmdstan_path.html" class="external-link">cmdstan_version</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span>, error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">cmdstan_available</span></span>
-<span><span class="co">#&gt; [1] FALSE</span></span></code></pre></div>
-<p>If this prints <code>FALSE</code>, install and verify CmdStan before
-running the remaining executable chunks. Those chunks are disabled
-during ordinary package builds; set
-<code>PAIRWISELLM_RUN_CMDSTAN_VIGNETTES=true</code> to opt in when
-rendering this source locally.</p>
+<span><span class="co">#&gt; [1] FALSE</span></span>
+<span></span>
+<span><span class="co"># Rendering control only; not an installation check.</span></span>
+<span><span class="va">run_cmdstan_examples</span> <span class="op">&lt;-</span> <span class="va">cmdstan_available</span> <span class="op">&amp;&amp;</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"PAIRWISELLM_RUN_CMDSTAN_VIGNETTES"</span><span class="op">)</span>, <span class="st">"true"</span><span class="op">)</span></span></code></pre></div>
+<p>If <code>cmdstan_available</code> prints <code>FALSE</code>, install
+and verify CmdStan before running the fitting chunks. A
+<code>TRUE</code> value means CmdStan was found, not that compilation
+has been tested. <code>run_cmdstan_examples</code> separately controls
+document rendering. Those chunks are disabled during ordinary package
+builds; set <code>PAIRWISELLM_RUN_CMDSTAN_VIGNETTES=true</code> to opt
+in when rendering this source locally.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span></span>
 <span>  <span class="st">"cmdstanr"</span>,</span>
@@ -371,6 +391,12 @@ A artifacts as a <strong>trusted override</strong>. Setting
 <code>quality_gate_accepted = TRUE</code> tells the package to trust
 external quality review; it does not repair weak evidence or
 diagnostics. Do not use it to silence a failed real study.</p>
+<blockquote>
+<p><strong>Simulation only:</strong> the following block overrides the
+quality gate for tiny demonstration artifacts. Do not copy this override
+into a real study as a way to bypass failed reliability or diagnostic
+checks.</p>
+</blockquote>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">phase_a_artifacts</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>  `1` <span class="op">=</span> <span class="va">hub_run</span><span class="op">$</span><span class="va">phase_a</span><span class="op">$</span><span class="va">manifest</span><span class="op">[[</span><span class="st">"1"</span><span class="op">]</span><span class="op">]</span>,</span>
@@ -588,6 +614,10 @@ observed surfaces.</p>
 <p>First produce the third canonical artifact. As above, the trusted
 flag is appropriate here only because the fixture and its deterministic
 truth are under our control.</p>
+<blockquote>
+<p><strong>Simulation only:</strong> this third artifact uses the same
+explicit quality-gate override as the tiny one-spoke demonstration.</p>
+</blockquote>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">spoke_3_run</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank.html">adaptive_rank</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">spoke_3_samples</span>,</span>

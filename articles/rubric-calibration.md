@@ -6,6 +6,19 @@ relationship between CJ quality and human rubric scores. Percentile
 scoring matches a chosen marginal distribution without learning rubric
 criteria.
 
+**You need:** a completed Bayesian CJ analysis and, for ordinal
+calibration, human rubric labels for some of its items. **You get:** a
+rubric label for each eligible item, full category probabilities for
+ordinal methods, and diagnostics. The frequentist BT/Elo fits in Getting
+Started are not accepted calibration inputs.
+
+For example, you might have compared essays for organization and want to
+report “developing”, “proficient”, or “advanced”. Human scores teach the
+ordinal model how that trait’s CJ scale relates to those labels. If you
+have no human scores, percentile levels describe relative standing under
+your chosen distribution; they do not establish mastery of rubric
+criteria.
+
 ## Choose the workflow
 
 | Available evidence | Method and design | Interpretation |
@@ -55,11 +68,11 @@ CmdStan sampling occur in the rubric examples. The downstream snippets
 are tested with deterministic completed-result fixtures in the package’s
 test suite.
 
-Version 1.5.0 requires **R \>= 4.4**. Percentile scoring needs no
-optional modeling backend. Linear fitting requires `ordinal`; saved
-linear prediction does not. Monotone fitting requires `mgcv >= 1.9-4`
-and `withr`; saved monotone prediction requires `mgcv`. Install the
-optional packages only when you use those methods:
+pairwiseLLM requires **R \>= 4.4**. Percentile scoring needs no optional
+modeling backend. Linear fitting requires `ordinal`; saved linear
+prediction does not. Monotone fitting requires `mgcv >= 1.9-4` and
+`withr`; saved monotone prediction requires `mgcv`. Install the optional
+packages only when you use those methods:
 
 ``` r
 
@@ -81,6 +94,21 @@ occur in that CJ result. Use global IDs when the adaptive result or
 artifact provides them; otherwise use the original fixed-fit IDs.
 Alignment is by ID, never row position. Omitted items or `NA` rubric
 scores are unlabeled.
+
+A label table has this shape (illustrative IDs only; use IDs from your
+completed analysis and enough labels to support fitting and validation):
+
+| item_id  | rubric_score |
+|----------|--------------|
+| essay_01 | developing   |
+| essay_07 | proficient   |
+| essay_12 | advanced     |
+
+``` r
+
+training_labels <- read.csv("training_labels.csv", colClasses = "character")
+evaluation_labels <- read.csv("evaluation_labels.csv", colClasses = "character")
+```
 
 Declare levels from lowest to highest quality. Numeric scores can infer
 ascending levels, and ordered factors retain their declared levels.
@@ -152,6 +180,19 @@ label values. It is a continuous summary, not a replacement for the
 ordinal outcome. `extrapolated` marks scores outside the labeled
 training range, even among original same-set items. Endpoints are inside
 the range.
+
+For an illustrative probability vector
+`(developing = 0.20, proficient = 0.55, advanced = 0.25)`, cumulative
+probability first reaches 0.5 at “proficient”, so that is the default
+median-category score. The probabilities also show substantial
+uncertainty; reporting the category alone discards it. These numbers
+illustrate the decision rule and are not fitted results.
+
+For a report, retain `item_id`, `rubric_score`, `probabilities`, and
+`extrapolated` for ordinal predictions. Explain an extrapolation flag as
+a score outside the labeled calibration range. Percentile predictions
+instead require requested and achieved category proportions. Keep the
+method, trait, and validation results with either kind of output.
 
 ## Evaluate held-out labels and inspect diagnostics
 

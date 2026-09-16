@@ -36,6 +36,17 @@ A tibble with columns:
 
 Any remaining columns in `df` are retained unchanged.
 
+## Details
+
+Use one row per writing sample and keep IDs stable across collection and
+analysis. Map spreadsheet column names with `id_col` and `text_col`. For
+a CSV, first use `read.csv("writing.csv", colClasses = "character")` to
+preserve identifiers such as `"001"`. Inspect blank/missing IDs and
+texts yourself; this reader checks duplicates, not all data-quality
+problems. See the [getting started
+guide](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+for a complete example.
+
 ## See also
 
 [`read_samples_dir()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_dir.md),

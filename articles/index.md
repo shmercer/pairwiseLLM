@@ -22,12 +22,8 @@
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md):
 - [Guide: Adaptive Warm
   Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.md):
-- [Design: Adaptive
-  Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.md):
 - [Guide: Adaptive
   Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.md):
-- [Design: Adaptive
-  Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.md):
 
 ### Modeling and Bias
 
@@ -37,3 +33,12 @@
   Calibration](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.md):
 - [Prompt Template Positional Bias
   Testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.md):
+
+### Statistical Design
+
+Formal models, assumptions, selection rules, and stopping criteria.
+
+- [Design: Adaptive
+  Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.md):
+- [Design: Adaptive
+  Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.md):

@@ -7,7 +7,42 @@ including an adaptive, Bayesian BTL (MCMC) workflow.
 
 ## Details
 
-### Typical workflow (most users)
+### Start here
+
+Compare writing samples two at a time, then estimate relative quality
+from the winners. The [Getting Started
+guide](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+begins with an offline example and explains scores before collecting new
+data.
+
+- Already have comparisons? Use
+  [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md)
+  and
+  [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md),
+  or
+  [`build_btl_results_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_btl_results_data.md)
+  and
+  [`fit_bayes_btl_mcmc()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bayes_btl_mcmc.md)
+  for Bayesian scores.
+
+- Need to collect fixed pairs? Start with
+  [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
+  for live processing or
+  [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md)
+  for provider batch processing.
+
+- Want comparisons selected during the run? Start with
+  [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md).
+
+- Need rubric levels?
+  [`fit_rubric_calibration()`](https://shmercer.github.io/pairwiseLLM/reference/fit_rubric_calibration.md)
+  consumes completed Bayesian CJ results; use
+  [`predict()`](https://rdrr.io/r/stats/predict.html) for scores and
+  [`evaluate_rubric_predictions()`](https://shmercer.github.io/pairwiseLLM/reference/evaluate_rubric_predictions.md)
+  for evaluation against human labels. Frequentist BT/Elo fits are not
+  inputs.
+
+### Typical fixed-pair workflow
 
 1.  **Load items** using
     [`read_samples_df()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_df.md)
@@ -52,10 +87,14 @@ including an adaptive, Bayesian BTL (MCMC) workflow.
       [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
       [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md).
 
-    - Batch (recommended for scale):
-      [`run_openai_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_openai_batch_pipeline.md),
-      [`run_anthropic_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_anthropic_batch_pipeline.md),
-      [`run_gemini_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_gemini_batch_pipeline.md).
+    - Batch (when later retrieval suits the workload):
+      [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md)
+      and
+      [`llm_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.md).
+      For resumable multi-job work, use
+      [`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md)
+      and
+      [`llm_resume_multi_batches()`](https://shmercer.github.io/pairwiseLLM/reference/llm_resume_multi_batches.md).
       Vertex is currently supported on the live path only.
 
 6.  **Assemble modeling data** with
@@ -101,10 +140,11 @@ including an adaptive, Bayesian BTL (MCMC) workflow.
 If you want the package to both **choose pairs** and **fit Bayesian
 BTL** in an auditable loop, use the adaptive workflow:
 
-- Start a session with
-  [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md)
-  (or use the wrapper
-  [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)).
+- Start with the complete workflow wrapper
+  [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md).
+
+- For a custom lifecycle, initialize state with
+  [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md).
 
 - Run live rounds with
   [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md).
@@ -117,6 +157,20 @@ BTL** in an auditable loop, use the adaptive workflow:
   [`load_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/load_adaptive_session.md),
   and validate directories with
   [`validate_session_dir()`](https://shmercer.github.io/pairwiseLLM/reference/validate_session_dir.md).
+
+### Choose an example dataset
+
+- [example_writing_samples](https://shmercer.github.io/pairwiseLLM/reference/example_writing_samples.md):
+  synthetic texts for preparing comparisons.
+
+- [example_writing_pairs](https://shmercer.github.io/pairwiseLLM/reference/example_writing_pairs.md):
+  bundled winners for an offline BT/Elo example.
+
+- [example_writing_results](https://shmercer.github.io/pairwiseLLM/reference/example_writing_results.md):
+  the same outcomes in Bayesian input format.
+
+- [example_openai_batch_output](https://shmercer.github.io/pairwiseLLM/reference/example_openai_batch_output.md):
+  a parser fixture, not a new provider run.
 
 ### Exported functions by task
 

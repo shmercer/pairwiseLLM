@@ -4,6 +4,32 @@ This article follows data from source samples to modeling inputs and
 shows how prompt templates are managed. All examples are deterministic
 and run without provider credentials.
 
+A **schema** is the required set of column names and types. You need a
+data frame of texts; you will get pair rows, prompts, and modeling
+inputs. This page explains those transitions. Start with [Getting
+Started](https://shmercer.github.io/pairwiseLLM/articles/getting-started.md)
+if you want to see the complete analysis before customizing it.
+
+## Bring a spreadsheet or data frame
+
+Use one row per writing sample. Keep a unique, non-missing character ID
+for each sample across collection, saved results, and scoring; do not
+use row position as identity. A CSV import can map your existing column
+names:
+
+``` r
+
+library(pairwiseLLM)
+writing <- read.csv("writing.csv", colClasses = "character")
+samples <- read_samples_df(writing, id_col = "essay_id", text_col = "response")
+```
+
+For example, `essay_id = "E001"` and `response = "The essay text..."`
+become `ID = "E001"` and `text = "The essay text..."`. Remove blank or
+missing IDs and texts before continuing. The reader checks duplicate
+IDs; it is not a substitute for inspecting the quality of your input
+data.
+
 ## Samples and pairs
 
 [`read_samples_df()`](https://shmercer.github.io/pairwiseLLM/reference/read_samples_df.md)
@@ -83,7 +109,9 @@ remove_prompt_template(example_name)
 ```
 
 [`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md)
-returns the built-in default or validates an inline/file template.
+returns the built-in default or validates an inline/file template. Save
+its return value and pass it as `prompt_template`; it does not change a
+global active prompt.
 [`get_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/get_prompt_template.md)
 resolves a user registration before a built-in template of the same
 name.
