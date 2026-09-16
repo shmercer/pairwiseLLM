@@ -6,9 +6,12 @@ This function takes the output of
 completion, downloading and parsing results as they finish. It
 implements a conservative polling loop with a configurable interval
 between rounds and a small delay between individual jobs to reduce the
-risk of API rate‑limit errors. The httr2 retry wrapper is still invoked
-for each API call, so transient HTTP errors will be retried with
-exponential back‑off.
+risk of API rate‑limit errors. Each retrieval GET has a bounded HTTP
+retry budget. Exhausted transient retrievals leave the job unfinished
+for the next polling round; permanent HTTP errors, parsing errors and
+local file errors propagate immediately. There is no overall round
+limit. Retrieval retries do not resubmit comparisons or add scientific
+failed-attempt rows.
 
 ## Usage
 
@@ -118,15 +121,13 @@ llm_resume_multi_batches(
 
 - openai_max_retries:
 
-  Integer giving the maximum number of times to retry certain OpenAI API
-  calls when a transient HTTP 5xx error occurs. In particular, when
-  downloading batch output with
-  [`openai_download_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_output.md),
-  the function will attempt to fetch the output file up to
-  `openai_max_retries` times if an `httr2_http_500` error is raised.
-  Between retries the function sleeps for `per_job_delay` seconds. Set
-  to a small positive value (e.g. 3) to automatically recover from
-  occasional server errors. Defaults to 3.
+  Positive integer giving the total HTTP attempt budget per GET when
+  downloading OpenAI batch output, including its metadata lookup.
+  Defaults to 3. Retries honor `Retry-After` or use exponential backoff
+  with jitter; `per_job_delay` controls spacing between jobs, not HTTP
+  retries. There is no additional outer download retry loop. Status
+  polling and other providers' retrievals use three HTTP attempts per
+  GET.
 
 ## Value
 

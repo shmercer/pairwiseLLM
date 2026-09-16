@@ -35,8 +35,8 @@ openai_poll_batch_until_complete(
 
 - max_attempts:
 
-  Maximum number of polling attempts. This is mainly useful for testing;
-  default is `Inf`.
+  Maximum number of logical status polls, excluding internal HTTP
+  retries. This is mainly useful for testing; default is `Inf`.
 
 - api_key:
 
@@ -55,6 +55,25 @@ The final Batch object (a list) as returned by
 
 This is a synchronous helper – it will block until one of the conditions
 above is met.
+
+## Polling limits
+
+HTTP retries occur within a logical status poll. Elapsed time includes
+retry waits, but `timeout_seconds` is checked between status requests;
+an in-flight GET and its retries can finish after that limit. Existing
+terminal-status and timeout return behavior is preserved.
+
+## Retrieval retries
+
+Batch metadata and result-file GET requests retry HTTP 408, 429, all 5xx
+responses, and transport failures, with at most three total HTTP
+attempts per GET. Valid `Retry-After` seconds or HTTP dates take
+precedence; otherwise retries use exponential backoff starting at 0.5
+seconds plus up to 0.25 seconds of jitter, capped at 30 seconds. Other
+HTTP errors fail immediately. Exhaustion raises the original error with
+the additional class `pairwiseLLM_batch_retry_exhausted`. These retries
+retrieve the same batch; they do not resubmit comparisons or create
+scientific failed-attempt rows.
 
 ## See also
 

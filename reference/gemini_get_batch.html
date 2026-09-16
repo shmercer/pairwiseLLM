@@ -94,6 +94,19 @@ returned by <code><a href="gemini_create_batch.html">gemini_create_batch</a></co
 <code>BATCH_NAME</code> is a string such as <code>"batches/123456"</code>.</p>
     </div>
     <div class="section level2">
+    <h2 id="retrieval-retries">Retrieval retries<a class="anchor" aria-label="anchor" href="#retrieval-retries"></a></h2>
+
+
+<p>Batch metadata and result-file GET requests retry HTTP 408, 429, all 5xx
+responses, and transport failures, with at most three total HTTP attempts
+per GET. Valid <code>Retry-After</code> seconds or HTTP dates take precedence; otherwise
+retries use exponential backoff starting at 0.5 seconds plus up to 0.25
+seconds of jitter, capped at 30 seconds. Other HTTP errors fail immediately.
+Exhaustion raises the original error with the additional class
+<code>pairwiseLLM_batch_retry_exhausted</code>. These retries retrieve the same batch;
+they do not resubmit comparisons or create scientific failed-attempt rows.</p>
+    </div>
+    <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="llm_submit_pairs_batch.html">llm_submit_pairs_batch()</a></code>, <code><a href="llm_download_batch_results.html">llm_download_batch_results()</a></code></p>
 <p>Other batch backends:

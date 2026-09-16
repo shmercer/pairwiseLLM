@@ -45,6 +45,18 @@ This helper downloads that file and writes it to disk. It is the
 Anthropic counterpart to
 [`openai_download_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_output.md).
 
+## Retrieval retries
+
+Batch metadata and result-file GET requests retry HTTP 408, 429, all 5xx
+responses, and transport failures, with at most three total HTTP
+attempts per GET. Valid `Retry-After` seconds or HTTP dates take
+precedence; otherwise retries use exponential backoff starting at 0.5
+seconds plus up to 0.25 seconds of jitter, capped at 30 seconds. Other
+HTTP errors fail immediately. Exhaustion raises the original error with
+the additional class `pairwiseLLM_batch_retry_exhausted`. These retries
+retrieve the same batch; they do not resubmit comparisons or create
+scientific failed-attempt rows.
+
 ## See also
 
 [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md),

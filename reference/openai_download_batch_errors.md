@@ -38,6 +38,18 @@ Successful requests are retrieved with
 Reconcile both files against submitted requests by `custom_id`, not line
 order. This helper does not parse errors or retry failed comparisons.
 
+## Retrieval retries
+
+Batch metadata and result-file GET requests retry HTTP 408, 429, all 5xx
+responses, and transport failures, with at most three total HTTP
+attempts per GET. Valid `Retry-After` seconds or HTTP dates take
+precedence; otherwise retries use exponential backoff starting at 0.5
+seconds plus up to 0.25 seconds of jitter, capped at 30 seconds. Other
+HTTP errors fail immediately. Exhaustion raises the original error with
+the additional class `pairwiseLLM_batch_retry_exhausted`. These retries
+retrieve the same batch; they do not resubmit comparisons or create
+scientific failed-attempt rows.
+
 ## See also
 
 [`openai_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_get_batch.md),
