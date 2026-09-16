@@ -1,6 +1,6 @@
 # Changelog
 
-## pairwiseLLM (development version)
+## pairwiseLLM 1.5.1
 
 ### Bug fixes
 
@@ -29,14 +29,11 @@
   OpenAI’s project-configured auto behavior
   ([\#247](https://github.com/shmercer/pairwiseLLM/issues/247)).
 
-## pairwiseLLM 1.5.1
-
-### Bug fixes
-
 - OpenAI live comparisons now validate and forward explicit
   `store = TRUE` and `store = FALSE` for both Responses and Chat
   Completions, including row-wise wrappers
   ([\#245](https://github.com/shmercer/pairwiseLLM/issues/245)).
+
 - Gemini Developer API live and batch comparisons now validate and
   forward `store` to control request logging. Omitted or `NULL` values
   preserve provider defaults (and Gemini project settings). These
