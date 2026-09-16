@@ -15,6 +15,7 @@ before Task 01 of the v1.5.0 series; do not renumber unrelated tests.
 - 0000–0999: Core utilities, helpers, and pure functions
 - 2000–2999: Live / interactive backends (e.g., human, API-based)
 - 3000–3999: Batch workflows, resume logic, persistence
+  - 3070: Shared batch retrieval retry and cross-provider recovery regressions
 - 4000–4999: OpenAI parameter and endpoint compatibility regressions
 - 5000–5999: Adaptive pairing and ranking
   - State objects and invariants

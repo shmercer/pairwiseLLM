@@ -357,8 +357,11 @@ llm_submit_pairs_multi_batch <- function(
 #' downloading and parsing results as they finish.  It implements a
 #' conservative polling loop with a configurable interval between rounds and
 #' a small delay between individual jobs to reduce the risk of API rate‑limit
-#' errors.  The httr2 retry wrapper is still invoked for each API call, so
-#' transient HTTP errors will be retried with exponential back‑off.
+#' errors. Each retrieval GET has a bounded HTTP retry budget. Exhausted
+#' transient retrievals leave the job unfinished for the next polling round;
+#' permanent HTTP errors, parsing errors and local file errors propagate
+#' immediately. There is no overall round limit. Retrieval retries do not
+#' resubmit comparisons or add scientific failed-attempt rows.
 #'
 #' @param jobs A list of job objects returned by
 #'   [llm_submit_pairs_multi_batch()].  If `NULL`, a registry CSV is loaded
@@ -399,15 +402,13 @@ llm_submit_pairs_multi_batch <- function(
 #'   assumed to be relative to `output_dir`.  This argument is ignored when
 #'   `write_combined_csv = FALSE`.
 
-#' @param openai_max_retries Integer giving the maximum number of times to
-#'   retry certain OpenAI API calls when a transient HTTP 5xx error occurs.
-#'   In particular, when downloading batch output with
-#'   [openai_download_batch_output()], the function will attempt to fetch
-#'   the output file up to `openai_max_retries` times if an
-#'   `httr2_http_500` error is raised.  Between retries the function sleeps
-#'   for `per_job_delay` seconds.  Set to a small positive value (e.g. 3)
-#'   to automatically recover from occasional server errors.  Defaults to 3.
-
+#' @param openai_max_retries Positive integer giving the total HTTP attempt
+#'   budget per GET when downloading OpenAI batch output, including its metadata
+#'   lookup. Defaults to 3. Retries honor `Retry-After` or use exponential backoff
+#'   with jitter; `per_job_delay` controls spacing between jobs, not HTTP retries.
+#'   There is no additional outer download retry loop. Status polling and other
+#'   providers' retrievals use three HTTP attempts per GET.
+#'
 #' @param write_registry Logical; if `TRUE`, a CSV registry of batch jobs
 #'   will be written (or updated) at the end of polling.  When reading
 #'   jobs from a saved registry via `output_dir`, this argument can be used
@@ -591,20 +592,11 @@ llm_resume_multi_batches <- function(
         ))
       }
 
-      # Poll based on provider type
+      # Each GET owns its HTTP retry budget; only exhaustion is deferred.
       if (provider == "openai") {
-        # Wrap the OpenAI batch retrieval in tryCatch to handle transient errors
-        batch <- tryCatch(
-          openai_get_batch(batch_id),
-          error = function(e) {
-            if (isTRUE(verbose)) {
-              message(sprintf(
-                "[llm_resume_multi_batches] Error retrieving OpenAI batch %s: %s",
-                batch_id, conditionMessage(e)
-              ))
-            }
-            return(NULL)
-          }
+        batch <- .batch_retrieval_try(
+          openai_get_batch(batch_id), "OpenAI", batch_id,
+          "Error retrieving", verbose
         )
         if (!is.null(batch)) {
           status <- batch$status %||% "unknown"
@@ -617,36 +609,20 @@ llm_resume_multi_batches <- function(
           # Terminal states as per API: completed, failed, cancelled, expired
           if (status %in% c("completed", "failed", "cancelled", "expired")) {
             if (identical(status, "completed")) {
-              download <- tryCatch(
+              download <- .batch_retrieval_try(
                 {
-                  .pairwiseLLM_retry_backoff(
-                    fn = function() {
-                      openai_download_batch_output(
-                        batch_id = batch_id,
-                        path     = job$batch_output_path
-                      )
-                      TRUE
-                    },
-                    max_attempts = openai_max_retries,
-                    base_delay = per_job_delay
+                  .openai_download_batch_output(
+                    batch_id = batch_id,
+                    path = job$batch_output_path,
+                    max_attempts = openai_max_retries
                   )
+                  TRUE
                 },
-                error = function(e) e
+                "OpenAI", batch_id, "Failed to download", verbose
               )
-              if (inherits(download, "error")) {
-                if (isTRUE(attr(download, "retry_exhausted"))) {
-                  if (isTRUE(verbose)) {
-                    message(sprintf(
-                      paste0(
-                        "[llm_resume_multi_batches] Failed to download OpenAI batch %s after ",
-                        "%d attempts; will retry in next round."
-                      ),
-                      batch_id, openai_max_retries
-                    ))
-                  }
-                  next
-                }
-                rlang::abort(conditionMessage(download), parent = download)
+              if (is.null(download)) {
+                Sys.sleep(per_job_delay)
+                next
               } else {
                 res <- parse_openai_batch_output(job$batch_output_path)
                 pairs_tbl <- coerce_pairs_tbl(resolve_pairs(job))
@@ -696,7 +672,14 @@ llm_resume_multi_batches <- function(
           }
         }
       } else if (provider == "anthropic") {
-        batch <- anthropic_get_batch(batch_id)
+        batch <- .batch_retrieval_try(
+          anthropic_get_batch(batch_id), "Anthropic", batch_id,
+          "Error retrieving", verbose
+        )
+        if (is.null(batch)) {
+          Sys.sleep(per_job_delay)
+          next
+        }
         status <- batch$processing_status %||% "unknown"
         if (isTRUE(verbose)) {
           message(sprintf(
@@ -706,10 +689,17 @@ llm_resume_multi_batches <- function(
         }
         if (status %in% c("ended", "errored", "canceled", "expired")) {
           if (identical(status, "ended")) {
-            out_path <- anthropic_download_batch_results(
-              batch_id    = batch_id,
-              output_path = job$batch_output_path
+            out_path <- .batch_retrieval_try(
+              anthropic_download_batch_results(
+                batch_id = batch_id,
+                output_path = job$batch_output_path
+              ),
+              "Anthropic", batch_id, "Failed to download", verbose
             )
+            if (is.null(out_path)) {
+              Sys.sleep(per_job_delay)
+              next
+            }
             res <- parse_anthropic_batch_output(
               jsonl_path  = out_path,
               tag_prefix  = tag_prefix,
@@ -759,21 +749,9 @@ llm_resume_multi_batches <- function(
           jobs[[j]]$done <- TRUE
         }
       } else if (provider == "gemini") {
-        # Wrap the Gemini API call in tryCatch so that transient errors (e.g. 4xx/5xx)
-        # do not abort the polling loop.  If an error occurs, we simply skip
-        # processing this job in the current round and will try again later.
-        batch <- tryCatch(
-          gemini_get_batch(batch_id),
-          error = function(e) {
-            # Always report the error when verbose is TRUE or by default
-            if (isTRUE(verbose)) {
-              message(sprintf(
-                "[llm_resume_multi_batches] Error retrieving Gemini batch %s: %s",
-                batch_id, conditionMessage(e)
-              ))
-            }
-            return(NULL)
-          }
+        batch <- .batch_retrieval_try(
+          gemini_get_batch(batch_id), "Gemini", batch_id,
+          "Error retrieving", verbose
         )
         if (!is.null(batch)) {
           # The Gemini REST API reports the batch state under metadata$state in
@@ -817,11 +795,21 @@ llm_resume_multi_batches <- function(
                 request   = lapply(req_items, `[[`, "request")
               )
               # Download the batch results to the designated output path
-              gemini_download_batch_results(
-                batch        = batch_id,
-                requests_tbl = req_tbl,
-                output_path  = job$batch_output_path
+              download <- .batch_retrieval_try(
+                {
+                  gemini_download_batch_results(
+                    batch = batch_id,
+                    requests_tbl = req_tbl,
+                    output_path = job$batch_output_path
+                  )
+                  TRUE
+                },
+                "Gemini", batch_id, "Failed to download", verbose
               )
+              if (is.null(download)) {
+                Sys.sleep(per_job_delay)
+                next
+              }
               # Parse the downloaded JSONL into a tidy tibble
               res <- parse_gemini_batch_output(
                 results_path = job$batch_output_path,

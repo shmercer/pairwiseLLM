@@ -768,7 +768,7 @@ testthat::test_that("gemini_get_batch returns parsed response", {
       captured_path <<- path
       structure(list(path = path), class = "httr2_request")
     },
-    .gemini_req_perform = function(req) structure(list(), class = "httr2_response"),
+    .batch_req_perform = function(req) structure(list(), class = "httr2_response"),
     .gemini_resp_body_json = function(resp, simplifyVector = TRUE) list(name = "batches/1"),
     {
       res <- gemini_get_batch("batches/1", api_key = "key", api_version = "v1beta")

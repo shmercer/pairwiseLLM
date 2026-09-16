@@ -80,14 +80,12 @@ case it will be used exactly as given.  Otherwise the file name is
 assumed to be relative to \code{output_dir}.  This argument is ignored when
 \code{write_combined_csv = FALSE}.}
 
-\item{openai_max_retries}{Integer giving the maximum number of times to
-retry certain OpenAI API calls when a transient HTTP 5xx error occurs.
-In particular, when downloading batch output with
-\code{\link[=openai_download_batch_output]{openai_download_batch_output()}}, the function will attempt to fetch
-the output file up to \code{openai_max_retries} times if an
-\code{httr2_http_500} error is raised.  Between retries the function sleeps
-for \code{per_job_delay} seconds.  Set to a small positive value (e.g. 3)
-to automatically recover from occasional server errors.  Defaults to 3.}
+\item{openai_max_retries}{Positive integer giving the total HTTP attempt
+budget per GET when downloading OpenAI batch output, including its metadata
+lookup. Defaults to 3. Retries honor \code{Retry-After} or use exponential backoff
+with jitter; \code{per_job_delay} controls spacing between jobs, not HTTP retries.
+There is no additional outer download retry loop. Status polling and other
+providers' retrievals use three HTTP attempts per GET.}
 }
 \value{
 A list with four elements: \code{jobs}, the updated jobs list with each
@@ -107,8 +105,11 @@ previously written registry CSV) and polls each batch until completion,
 downloading and parsing results as they finish.  It implements a
 conservative polling loop with a configurable interval between rounds and
 a small delay between individual jobs to reduce the risk of API rate‑limit
-errors.  The httr2 retry wrapper is still invoked for each API call, so
-transient HTTP errors will be retried with exponential back‑off.
+errors. Each retrieval GET has a bounded HTTP retry budget. Exhausted
+transient retrievals leave the job unfinished for the next polling round;
+permanent HTTP errors, parsing errors and local file errors propagate
+immediately. There is no overall round limit. Retrieval retries do not
+resubmit comparisons or add scientific failed-attempt rows.
 }
 \examples{
 # Continuing the example from llm_submit_pairs_multi_batch():
