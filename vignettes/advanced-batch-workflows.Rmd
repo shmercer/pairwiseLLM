@@ -67,6 +67,48 @@ For prompt evaluation and positional-bias diagnostics, see the companion vignett
 
 * [Prompt Template Positional Bias Testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
 
+## OpenAI storage, output limits, and error files
+
+OpenAI Batch accepts `store = TRUE` or `FALSE` on both endpoints. Omitted or
+`NULL` values preserve provider defaults: Responses are stored for later API
+retrieval by default. `store = FALSE` disables that response storage; it does
+not disable Batch input/output/error file retention or imply zero data retention.
+See [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data).
+
+Select `endpoint = "responses"` explicitly when setting `max_output_tokens`.
+The limit includes both visible output and reasoning tokens. These controls
+pass through `run_openai_batch_pipeline()` and `llm_submit_pairs_batch()`.
+
+```{r openai-controls, eval=FALSE}
+job <- run_openai_batch_pipeline(
+  pairs = pairs,
+  model = "gpt-5.6-terra",
+  trait_name = "Cohesion",
+  trait_description = "How clearly the ideas connect.",
+  endpoint = "responses",
+  reasoning = "none",
+  store = FALSE,
+  max_output_tokens = 64,
+  poll = FALSE
+)
+batch <- openai_poll_batch_until_complete(job$batch$id)
+if (!is.null(batch$output_file_id) && nzchar(batch$output_file_id)) {
+  openai_download_batch_output(batch$id, "batch_output.jsonl")
+}
+if (!is.null(batch$error_file_id) && nzchar(batch$error_file_id)) {
+  openai_download_batch_errors(batch$id, "batch_errors.jsonl")
+  errors <- lapply(readLines("batch_errors.jsonl"), jsonlite::fromJSON)
+}
+```
+
+Successful output and request failures are separate files. Reconcile both with
+the submitted requests by `custom_id`, never line order. The error downloader
+preserves the raw JSONL and works when no output file exists. It errors clearly
+when no error file is available. Batch-level validation errors can instead appear
+in `batch$errors`. The pipeline's `poll = TRUE` path still expects an output file;
+the separate steps above also handle errors-only batches. See the
+[OpenAI Batch guide](https://developers.openai.com/api/docs/guides/batch).
+
 # 2. Setup and API Keys
 
 ```{r setup, message=FALSE}

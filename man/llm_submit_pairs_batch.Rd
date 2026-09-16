@@ -60,13 +60,19 @@ result (where supported by backends).}
 \verb{run_*_batch_pipeline()} functions. This can include provider-specific
 options such as temperature or batch configuration fields. For OpenAI,
 this may include \code{endpoint}, \code{temperature}, \code{top_p}, \code{logprobs},
-\code{reasoning}, \code{service_tier}, etc. For Anthropic, this may include \code{reasoning},
+\code{reasoning}, \code{store}, and Responses-only \code{max_output_tokens}. Select
+\code{endpoint = "responses"} explicitly for output limits. OpenAI Batch does
+not accept \code{service_tier} through this helper. For Anthropic, this may include \code{reasoning},
 \code{max_tokens}, \code{temperature}, or \code{thinking_budget_tokens}. For Gemini, this
 may include \code{thinking_level}, \code{temperature}, \code{top_p}, \code{top_k},
 \code{max_output_tokens}, and \code{service_tier}.
 
 Gemini also accepts \code{store = TRUE} or \code{FALSE} to control logging for each
-request; omission or \code{NULL} preserves provider/project defaults.}
+request; omission or \code{NULL} preserves provider/project defaults.
+OpenAI accepts \code{store} on both endpoints; omission or \code{NULL} preserves
+provider defaults, including Responses storage for later retrieval.
+\code{store = FALSE} does not disable Batch file retention or all data retention.
+Use \code{\link[=openai_download_batch_errors]{openai_download_batch_errors()}} to retrieve OpenAI request failures.}
 }
 \value{
 A list of class \code{"pairwiseLLM_batch"} containing at least:
@@ -164,7 +170,9 @@ batch_openai <- llm_submit_pairs_batch(
   trait_description = td$description,
   prompt_template   = tmpl,
   include_thoughts  = FALSE,
-  service_tier      = "flex"
+  endpoint          = "responses",
+  store             = FALSE,
+  max_output_tokens = 1024
 )
 res_openai <- llm_download_batch_results(batch_openai)
 
@@ -213,6 +221,7 @@ Other batch backends:
 \code{\link[=llm_resume_multi_batches]{llm_resume_multi_batches()}},
 \code{\link[=llm_submit_pairs_multi_batch]{llm_submit_pairs_multi_batch()}},
 \code{\link[=openai_create_batch]{openai_create_batch()}},
+\code{\link[=openai_download_batch_errors]{openai_download_batch_errors()}},
 \code{\link[=openai_download_batch_output]{openai_download_batch_output()}},
 \code{\link[=openai_get_batch]{openai_get_batch()}},
 \code{\link[=openai_poll_batch_until_complete]{openai_poll_batch_until_complete()}},

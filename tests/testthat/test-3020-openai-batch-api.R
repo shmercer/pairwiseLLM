@@ -21,6 +21,86 @@ build_openai_batch_requests <- pairwiseLLM:::build_openai_batch_requests
 write_openai_batch_file <- pairwiseLLM:::write_openai_batch_file
 parse_openai_batch_output <- pairwiseLLM:::parse_openai_batch_output
 
+testthat::test_that("Batch downloaders select separate files and preserve raw contents", {
+  directory <- withr::local_tempdir()
+  payload <- charToRaw('{"custom_id":"request-2","error":{"code":"batch_expired"}}\n')
+  captured <- new.env(parent = emptyenv())
+  captured$batch <- list(id = "b1", status = "expired", output_file_id = "success", error_file_id = "errors")
+  testthat::local_mocked_bindings(
+    openai_get_batch = function(batch_id, api_key) {
+      testthat::expect_identical(batch_id, "b1")
+      testthat::expect_identical(api_key, "synthetic-key")
+      captured$batch
+    },
+    .openai_request = function(path, api_key) {
+      testthat::expect_identical(api_key, "synthetic-key")
+      captured$path <- path
+      "REQ"
+    },
+    req_perform = function(req) {
+      testthat::expect_identical(req, "REQ")
+      "RESP"
+    },
+    resp_body_raw = function(resp) {
+      testthat::expect_identical(resp, "RESP")
+      payload
+    },
+    .package = "pairwiseLLM"
+  )
+  for (kind in c("output", "errors")) {
+    downloader <- if (kind == "output") pairwiseLLM::openai_download_batch_output else
+      pairwiseLLM::openai_download_batch_errors
+    path <- file.path(directory, paste0(kind, ".jsonl"))
+    result <- withVisible(downloader("b1", path, api_key = "synthetic-key"))
+    testthat::expect_identical(result, list(value = path, visible = FALSE))
+    expected_id <- if (kind == "output") "success" else "errors"
+    testthat::expect_identical(captured$path, paste0("/files/", expected_id, "/content"))
+    testthat::expect_identical(readBin(path, "raw", n = length(payload)), payload)
+  }
+  captured$batch$output_file_id <- NULL
+  path <- file.path(directory, "errors-only.jsonl")
+  pairwiseLLM::openai_download_batch_errors("b1", path, api_key = "synthetic-key")
+  testthat::expect_identical(readBin(path, "raw", n = length(payload)), payload)
+})
+
+testthat::test_that("Unavailable batch error files fail before downloading or writing", {
+  path <- file.path(withr::local_tempdir(), "errors.jsonl")
+  writeLines("existing", path)
+  captured <- new.env(parent = emptyenv())
+  captured$batch <- list()
+  testthat::local_mocked_bindings(
+    openai_get_batch = function(...) captured$batch,
+    .openai_request = function(...) stop("unexpected download"),
+    .package = "pairwiseLLM"
+  )
+  for (status in list(NULL, "failed", "completed")) {
+    for (id in list(NULL, "", NA_character_, character(), c("one", "two"), 1, matrix("id"))) {
+      captured$batch <- list(status = status, error_file_id = id)
+      expected_status <- if (is.null(status)) "unknown" else status
+      testthat::expect_error(
+        pairwiseLLM::openai_download_batch_errors("b1", path),
+        paste0("Batch b1 has no valid error_file_id. Status is: ", expected_status), fixed = TRUE
+      )
+      testthat::expect_identical(readLines(path), "existing")
+    }
+  }
+})
+
+testthat::test_that("Failed Batch file downloads leave existing local contents intact", {
+  path <- file.path(withr::local_tempdir(), "existing.jsonl")
+  writeLines("existing", path)
+  testthat::local_mocked_bindings(
+    openai_get_batch = function(...) list(output_file_id = "success", error_file_id = "errors"),
+    .openai_request = function(...) "REQ",
+    req_perform = function(...) stop("synthetic HTTP failure"),
+    .package = "pairwiseLLM"
+  )
+  for (downloader in list(pairwiseLLM::openai_download_batch_output, pairwiseLLM::openai_download_batch_errors)) {
+    testthat::expect_error(downloader("b1", path, api_key = "synthetic-key"), "synthetic HTTP failure")
+    testthat::expect_identical(readLines(path), "existing")
+  }
+})
+
 # ---------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------
