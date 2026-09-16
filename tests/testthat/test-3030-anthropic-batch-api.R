@@ -809,6 +809,9 @@ testthat::test_that("anthropic_create_batch and get_batch use request helpers", 
     .anthropic_req_perform = function(req) {
       structure(list(), class = "httr2_response")
     },
+    .batch_req_perform = function(req) {
+      structure(list(), class = "httr2_response")
+    },
     .anthropic_resp_body_json = function(resp, simplifyVector = TRUE) {
       list(id = "msgbatch_1", processing_status = "in_progress")
     },
@@ -831,7 +834,7 @@ testthat::test_that("anthropic_download_batch_results writes response body", {
 
   testthat::with_mocked_bindings(
     anthropic_get_batch = function(...) list(results_url = "https://example.com/results.jsonl"),
-    .anthropic_req_perform = function(req) {
+    .batch_req_perform = function(req) {
       structure(list(), class = "httr2_response")
     },
     {

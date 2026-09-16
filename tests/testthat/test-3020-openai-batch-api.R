@@ -27,7 +27,7 @@ testthat::test_that("Batch downloaders select separate files and preserve raw co
   captured <- new.env(parent = emptyenv())
   captured$batch <- list(id = "b1", status = "expired", output_file_id = "success", error_file_id = "errors")
   testthat::local_mocked_bindings(
-    openai_get_batch = function(batch_id, api_key) {
+    .openai_get_batch = function(batch_id, api_key, ...) {
       testthat::expect_identical(batch_id, "b1")
       testthat::expect_identical(api_key, "synthetic-key")
       captured$batch
@@ -37,7 +37,7 @@ testthat::test_that("Batch downloaders select separate files and preserve raw co
       captured$path <- path
       "REQ"
     },
-    req_perform = function(req) {
+    .batch_req_perform = function(req, ...) {
       testthat::expect_identical(req, "REQ")
       "RESP"
     },
@@ -90,9 +90,9 @@ testthat::test_that("Failed Batch file downloads leave existing local contents i
   path <- file.path(withr::local_tempdir(), "existing.jsonl")
   writeLines("existing", path)
   testthat::local_mocked_bindings(
-    openai_get_batch = function(...) list(output_file_id = "success", error_file_id = "errors"),
+    .openai_get_batch = function(...) list(output_file_id = "success", error_file_id = "errors"),
     .openai_request = function(...) "REQ",
-    req_perform = function(...) stop("synthetic HTTP failure"),
+    .batch_req_perform = function(...) stop("synthetic HTTP failure"),
     .package = "pairwiseLLM"
   )
   for (downloader in list(pairwiseLLM::openai_download_batch_output, pairwiseLLM::openai_download_batch_errors)) {
@@ -243,7 +243,7 @@ testthat::test_that("openai_get_batch builds path correctly", {
       testthat::expect_true(grepl("batch_123", path))
       "REQ"
     },
-    req_perform = function(...) "RESP",
+    .batch_req_perform = function(...) "RESP",
     resp_body_json = function(...) list(id = "batch_123", status = "completed"),
     {
       res <- openai_get_batch("batch_123", api_key = "k")
@@ -255,7 +255,7 @@ testthat::test_that("openai_get_batch builds path correctly", {
 testthat::test_that("openai_download_batch_output handles validation and download", {
   # 1. No output_file_id check
   testthat::with_mocked_bindings(
-    openai_get_batch = function(...) list(id = "b1", status = "failed"),
+    .openai_get_batch = function(...) list(id = "b1", status = "failed"),
     {
       testthat::expect_error(
         openai_download_batch_output("b1", "path"),
@@ -268,12 +268,12 @@ testthat::test_that("openai_download_batch_output handles validation and downloa
   tf <- tempfile()
   on.exit(unlink(tf))
   testthat::with_mocked_bindings(
-    openai_get_batch = function(...) list(id = "b1", output_file_id = "f1"),
+    .openai_get_batch = function(...) list(id = "b1", output_file_id = "f1"),
     .openai_request = function(path, ...) {
       testthat::expect_equal(path, "/files/f1/content")
       "REQ"
     },
-    req_perform = function(...) "RESP",
+    .batch_req_perform = function(...) "RESP",
     resp_body_raw = function(...) charToRaw("AB"),
     {
       out <- openai_download_batch_output("b1", tf, api_key = "k")

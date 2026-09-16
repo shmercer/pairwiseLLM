@@ -497,6 +497,7 @@ anthropic_create_batch <- function(
 #'
 #' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
 #' @family batch backends
+#' @inheritSection openai_get_batch Retrieval retries
 #' @export
 anthropic_get_batch <- function(
   batch_id,
@@ -515,7 +516,7 @@ anthropic_get_batch <- function(
     anthropic_version = anthropic_version
   )
 
-  resp <- .anthropic_req_perform(req)
+  resp <- .batch_req_perform(req)
   .anthropic_resp_body_json(resp, simplifyVector = TRUE)
 }
 
@@ -551,6 +552,12 @@ anthropic_get_batch <- function(
 #'
 #' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
 #' @family batch backends
+#' @inheritSection openai_get_batch Retrieval retries
+#' @section Polling limits:
+#' HTTP retries occur within a logical status poll. Elapsed time includes retry
+#' waits, but `timeout_seconds` is checked between status requests; an in-flight
+#' GET and its retries can finish after that limit. Existing terminal-status and
+#' timeout return behavior is preserved.
 #' @export
 anthropic_poll_batch_until_complete <- function(
   batch_id,
@@ -638,6 +645,7 @@ anthropic_poll_batch_until_complete <- function(
 #'
 #' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
 #' @family batch backends
+#' @inheritSection openai_get_batch Retrieval retries
 #' @export
 anthropic_download_batch_results <- function(
   batch_id,
@@ -667,7 +675,7 @@ anthropic_download_batch_results <- function(
     "anthropic-version" = anthropic_version
   )
 
-  resp <- .anthropic_req_perform(req)
+  resp <- .batch_req_perform(req)
   txt <- httr2::resp_body_string(resp)
 
   # The results are already JSONL; write as-is.

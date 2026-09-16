@@ -30,7 +30,7 @@ Imports:
     cli,
     curl,
     dplyr,
-    httr2,
+    httr2 (>= 1.1.0),
     jsonlite,
     rlang,
     stats,
@@ -97,6 +97,7 @@ Collate:
     'anthropic_batch_api.R'
     'anthropic_live.R'
     'api_keys.R'
+    'batch_retrieval.R'
     'bayes_btl_mcmc.R'
     'bayes_btl_mcmc_adaptive.R'
     'bayes_btl_summarize.R'

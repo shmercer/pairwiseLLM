@@ -175,6 +175,16 @@ openai_create_batch <- function(
 
 #' Retrieve an OpenAI batch
 #'
+#' @section Retrieval retries:
+#' Batch metadata and result-file GET requests retry HTTP 408, 429, all 5xx
+#' responses, and transport failures, with at most three total HTTP attempts
+#' per GET. Valid `Retry-After` seconds or HTTP dates take precedence; otherwise
+#' retries use exponential backoff starting at 0.5 seconds plus up to 0.25
+#' seconds of jitter, capped at 30 seconds. Other HTTP errors fail immediately.
+#' Exhaustion raises the original error with the additional class
+#' `pairwiseLLM_batch_retry_exhausted`. These retries retrieve the same batch;
+#' they do not resubmit comparisons or create scientific failed-attempt rows.
+#'
 #' @param batch_id The batch ID (e.g. `"batch_abc123"`).
 #' @param api_key Optional OpenAI API key.
 #'
@@ -195,12 +205,18 @@ openai_get_batch <- function(
   batch_id,
   api_key = NULL
 ) {
+  .openai_get_batch(batch_id, api_key)
+}
+
+#' @keywords internal
+#' @noRd
+.openai_get_batch <- function(batch_id, api_key = NULL, max_attempts = 3L) {
   path <- paste0("/batches/", batch_id)
 
   api_key <- .openai_api_key(api_key)
 
   req <- .openai_request(path, api_key)
-  resp <- req_perform(req)
+  resp <- .batch_req_perform(req, max_attempts = max_attempts)
 
   resp_body_json(resp, simplifyVector = TRUE)
 }
@@ -231,13 +247,20 @@ openai_get_batch <- function(
 #'
 #' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
 #' @family batch backends
+#' @inheritSection openai_get_batch Retrieval retries
 #' @export
 openai_download_batch_output <- function(
   batch_id,
   path,
   api_key = NULL
 ) {
-  batch <- openai_get_batch(batch_id, api_key = api_key)
+  .openai_download_batch_output(batch_id, path, api_key)
+}
+
+#' @keywords internal
+#' @noRd
+.openai_download_batch_output <- function(batch_id, path, api_key = NULL, max_attempts = 3L) {
+  batch <- .openai_get_batch(batch_id, api_key = api_key, max_attempts = max_attempts)
 
   output_file_id <- batch$output_file_id %||% NULL
   if (is.null(output_file_id) || !nzchar(output_file_id)) {
@@ -248,7 +271,7 @@ openai_download_batch_output <- function(
     )
   }
 
-  .openai_download_file_content(output_file_id, path, api_key)
+  .openai_download_file_content(output_file_id, path, api_key, max_attempts)
 }
 
 #' Download the error file for an OpenAI batch
@@ -277,6 +300,7 @@ openai_download_batch_output <- function(
 #' }
 #' @seealso [openai_get_batch()], [openai_download_batch_output()]
 #' @family batch backends
+#' @inheritSection openai_get_batch Retrieval retries
 #' @export
 openai_download_batch_errors <- function(batch_id, path, api_key = NULL) {
   batch <- openai_get_batch(batch_id, api_key = api_key)
@@ -293,13 +317,13 @@ openai_download_batch_errors <- function(batch_id, path, api_key = NULL) {
 
 #' @keywords internal
 #' @noRd
-.openai_download_file_content <- function(file_id, path, api_key = NULL) {
+.openai_download_file_content <- function(file_id, path, api_key = NULL, max_attempts = 3L) {
   file_path <- paste0("/files/", file_id, "/content")
 
   api_key <- .openai_api_key(api_key)
 
   req <- .openai_request(file_path, api_key)
-  resp <- req_perform(req)
+  resp <- .batch_req_perform(req, max_attempts = max_attempts)
 
   raw <- resp_body_raw(resp)
   writeBin(raw, path)
@@ -320,8 +344,8 @@ openai_download_batch_errors <- function(batch_id, path, api_key = NULL) {
 #' @param interval_seconds Number of seconds to wait between polling attempts.
 #' @param timeout_seconds Maximum total time to wait in seconds before
 #'   giving up.
-#' @param max_attempts Maximum number of polling attempts. This is mainly useful
-#'   for testing; default is `Inf`.
+#' @param max_attempts Maximum number of logical status polls, excluding internal
+#'   HTTP retries. This is mainly useful for testing; default is `Inf`.
 #' @param api_key Optional OpenAI API key.
 #' @param verbose Logical; if `TRUE`, prints status messages to the console.
 #'
@@ -344,6 +368,12 @@ openai_download_batch_errors <- function(batch_id, path, api_key = NULL) {
 #'
 #' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
 #' @family batch backends
+#' @inheritSection openai_get_batch Retrieval retries
+#' @section Polling limits:
+#' HTTP retries occur within a logical status poll. Elapsed time includes retry
+#' waits, but `timeout_seconds` is checked between status requests; an in-flight
+#' GET and its retries can finish after that limit. Existing terminal-status and
+#' timeout return behavior is preserved.
 #' @export
 openai_poll_batch_until_complete <- function(
     batch_id,
@@ -353,7 +383,7 @@ openai_poll_batch_until_complete <- function(
     api_key = NULL,
     verbose = TRUE
 ) {
-  start_time <- Sys.time()
+  start_time <- .batch_now()
   attempts <- 0L
 
   repeat {
@@ -383,7 +413,7 @@ openai_poll_batch_until_complete <- function(
     }
 
     # Check time-based timeout
-    elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+    elapsed <- as.numeric(difftime(.batch_now(), start_time, units = "secs"))
     if (elapsed > timeout_seconds) {
       stop(
         "Timeout (", timeout_seconds, " seconds) waiting for batch ",

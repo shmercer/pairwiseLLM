@@ -706,6 +706,7 @@ gemini_create_batch <- function(
 #'
 #' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
 #' @family batch backends
+#' @inheritSection openai_get_batch Retrieval retries
 #' @export
 gemini_get_batch <- function(
   batch_name,
@@ -720,7 +721,7 @@ gemini_get_batch <- function(
   path <- sprintf("/%s/%s", api_version, batch_name)
 
   req <- .gemini_request(path = path, api_key = api_key)
-  resp <- .gemini_req_perform(req)
+  resp <- .batch_req_perform(req)
 
   .gemini_resp_body_json(resp, simplifyVector = TRUE)
 }
@@ -761,6 +762,12 @@ gemini_get_batch <- function(
 #'
 #' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
 #' @family batch backends
+#' @inheritSection openai_get_batch Retrieval retries
+#' @section Polling limits:
+#' HTTP retries occur within a logical status poll. Elapsed time includes retry
+#' waits, but `timeout_seconds` is checked between status requests; an in-flight
+#' GET and its retries can finish after that limit. Existing terminal-status and
+#' timeout return behavior is preserved.
 #' @export
 gemini_poll_batch_until_complete <- function(
   batch_name,
@@ -775,7 +782,7 @@ gemini_poll_batch_until_complete <- function(
     stop("`batch_name` must be a non-empty character scalar.", call. = FALSE)
   }
 
-  start_time <- Sys.time()
+  start_time <- .batch_now()
   last_batch <- NULL
 
   terminal_states <- c(
@@ -811,7 +818,7 @@ gemini_poll_batch_until_complete <- function(
       break
     }
 
-    elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+    elapsed <- as.numeric(difftime(.batch_now(), start_time, units = "secs"))
     if (!is.infinite(timeout_seconds) && elapsed > timeout_seconds) {
       if (verbose) {
         warning(
@@ -896,6 +903,7 @@ gemini_poll_batch_until_complete <- function(
 #'
 #' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
 #' @family batch backends
+#' @inheritSection openai_get_batch Retrieval retries
 #' @export
 gemini_download_batch_results <- function(
   batch,

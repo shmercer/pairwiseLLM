@@ -2,6 +2,13 @@
 
 ## Bug fixes
 
+- Batch polling and result downloads now retry transient HTTP and network
+  failures consistently across OpenAI, Anthropic, and Gemini, honoring
+  `Retry-After`. Multi-batch resume defers exhausted transient retrievals while
+  surfacing permanent errors immediately. Retrieval retries reuse existing
+  batch IDs without adding scientific attempts; polling timeouts remain checked
+  between status requests. Requires httr2 >= 1.1.0 (#251).
+
 - OpenAI Batch requests now accept `store` on both endpoints and
   `max_output_tokens` on Responses, including through the batch wrappers.
   Explicit storage values are preserved and omitted controls remain absent.

@@ -38,6 +38,26 @@ This helper repeatedly calls \code{\link{gemini_get_batch}} until the
 batch's \code{metadata$state} enters a terminal state or a time limit is
 reached. For the REST API, states have the form "BATCH_STATE_*".
 }
+\section{Polling limits}{
+
+HTTP retries occur within a logical status poll. Elapsed time includes retry
+waits, but \code{timeout_seconds} is checked between status requests; an in-flight
+GET and its retries can finish after that limit. Existing terminal-status and
+timeout return behavior is preserved.
+}
+
+\section{Retrieval retries}{
+
+Batch metadata and result-file GET requests retry HTTP 408, 429, all 5xx
+responses, and transport failures, with at most three total HTTP attempts
+per GET. Valid \code{Retry-After} seconds or HTTP dates take precedence; otherwise
+retries use exponential backoff starting at 0.5 seconds plus up to 0.25
+seconds of jitter, capped at 30 seconds. Other HTTP errors fail immediately.
+Exhaustion raises the original error with the additional class
+\code{pairwiseLLM_batch_retry_exhausted}. These retries retrieve the same batch;
+they do not resubmit comparisons or create scientific failed-attempt rows.
+}
+
 \examples{
 # Offline: polling parameters and batch name are plain R objects
 batch_name <- "batches/123456"

@@ -179,7 +179,7 @@ test_that("llm_resume_multi_batches processes OpenAI jobs and cleans up JSON fil
   writeLines("{}", con = input_path)
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       # Write a simple JSON object to the path
       writeLines('[{"custom_id":"c1","ID1":"A","ID2":"B"}]', path)
       invisible(NULL)
@@ -383,7 +383,7 @@ test_that("llm_resume_multi_batches loads jobs from registry when jobs is NULL",
   # Stub functions to complete immediately
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       writeLines('[{"custom_id":"c1","ID1":"A","ID2":"B"}]', path)
     },
     parse_openai_batch_output = function(path) {
@@ -447,7 +447,7 @@ test_that("llm_resume_multi_batches writes combined results CSV when requested",
   # Stub OpenAI functions
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       writeLines('[{"custom_id":"c1","ID1":"A","ID2":"B"}]', path)
     },
     parse_openai_batch_output = function(path) {
@@ -573,7 +573,7 @@ test_that("openai batch submission fails after maximum retries", {
   )
 })
 
-test_that("openai download retries on 5xx errors and succeeds", {
+test_that("OpenAI downloads resume next round after exhausted HTTP retries", {
   # Setup job list for a single openai batch
   input_path <- tempfile(fileext = ".jsonl")
   output_path <- tempfile(fileext = ".jsonl")
@@ -602,10 +602,11 @@ test_that("openai download retries on 5xx errors and succeeds", {
   download_attempt <- 0L
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       download_attempt <<- download_attempt + 1L
       if (download_attempt == 1L) {
-        err <- structure(list(message = "Download failed"), class = c("httr2_http_500", "error", "condition"))
+        err <- structure(list(message = "Download failed"),
+          class = c("pairwiseLLM_batch_retry_exhausted", "httr2_http_500", "error", "condition"))
         stop(err)
       } else {
         writeLines('[{"custom_id":"x","ID1":"A","ID2":"B"}]', path)
@@ -678,7 +679,7 @@ test_that("llm_resume_multi_batches writes combined results CSV to absolute path
   # Stub functions
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       writeLines('[{"custom_id":"x","ID1":"A","ID2":"B"}]', path)
       invisible(NULL)
     },
@@ -755,7 +756,7 @@ test_that("llm_resume_multi_batches updates registry when write_registry=TRUE", 
   # Now stub OpenAI functions for resume
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       writeLines('[{"custom_id":"z","ID1":"1","ID2":"2"}]', path)
       invisible(NULL)
     },
@@ -1263,7 +1264,7 @@ test_that("llm_resume_multi_batches writes combined CSV to nested relative path"
   nested_path <- file.path(out_dir, "subdir1", "subdir2", "comb.csv")
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       writeLines('[{"custom_id":"n","ID1":"A","ID2":"B"}]', path)
       invisible(NULL)
     },
@@ -1316,7 +1317,7 @@ test_that("llm_resume_multi_batches propagates unexpected OpenAI download errors
   writeLines("{}", con = input_path)
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       # throw non-HTTP error (not retryable)
       stop("unhandled error")
     },
@@ -1370,7 +1371,7 @@ test_that("llm_resume_multi_batches writes combined CSV to default path", {
   dir.create(out_dir, recursive = TRUE)
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       writeLines('[{"custom_id":"def","ID1":"A","ID2":"B"}]', path)
       invisible(NULL)
     },
@@ -1473,7 +1474,7 @@ test_that("llm_resume_multi_batches handles OpenAI non‑terminal statuses", {
       call_count <<- call_count + 1L
       list(status = status_sequence[min(call_count, length(status_sequence))])
     },
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       stop("download should not be called when job failed")
     },
     {
@@ -1595,7 +1596,7 @@ test_that("llm_resume_multi_batches errors when pair data is missing", {
 
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       writeLines('[{"custom_id":"c1","ID1":"A","ID2":"B","better_id":"A"}]', path)
       invisible(NULL)
     },
@@ -1655,7 +1656,7 @@ test_that("llm_resume_multi_batches retries gemini batch after retrieval error",
     gemini_get_batch = function(name) {
       call_count <<- call_count + 1L
       if (call_count == 1L) {
-        stop("temporary error")
+        rlang::abort("temporary error", class = "pairwiseLLM_batch_retry_exhausted")
       }
       list(metadata = list(state = "BATCH_STATE_SUCCEEDED"))
     },
@@ -1719,7 +1720,7 @@ test_that("llm_resume_multi_batches returns combined failed_attempts", {
 
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       writeLines('[{"custom_id":"c1","ID1":"A","ID2":"B","better_id":"C"}]', path)
       invisible(NULL)
     },
@@ -1779,7 +1780,7 @@ test_that("llm_resume_multi_batches reads pairs from pairs_path with A/B columns
 
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       writeLines('[{"custom_id":"c1","ID1":"A","ID2":"B","better_id":"A"}]', path)
       invisible(NULL)
     },
@@ -1836,7 +1837,7 @@ test_that("llm_resume_multi_batches unwraps list-column pairs", {
 
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       writeLines('[{"custom_id":"c1","ID1":"A","ID2":"B","better_id":"A"}]', path)
       invisible(NULL)
     },
@@ -1889,11 +1890,11 @@ test_that("llm_resume_multi_batches retries openai_get_batch after error", {
     openai_get_batch = function(id) {
       call_count <<- call_count + 1L
       if (call_count == 1L) {
-        stop("temporary error")
+        rlang::abort("temporary error", class = "pairwiseLLM_batch_retry_exhausted")
       }
       list(status = "completed")
     },
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       writeLines('[{"custom_id":"c1","ID1":"A","ID2":"B","better_id":"A"}]', path)
       invisible(NULL)
     },
@@ -1934,7 +1935,7 @@ test_that("llm_submit_pairs_multi_batch errors on retry exhaustion", {
       attr(err, "retry_exhausted") <- TRUE
       list(result = err)
     },
-    .env = ns,
+    .package = "pairwiseLLM",
     {
       expect_error(
         llm_submit_pairs_multi_batch(
@@ -1965,7 +1966,7 @@ test_that("llm_submit_pairs_multi_batch surfaces non-retry errors", {
       err <- structure(list(message = "boom"), class = c("error", "condition"))
       list(result = err)
     },
-    .env = ns,
+    .package = "pairwiseLLM",
     {
       expect_error(
         llm_submit_pairs_multi_batch(
@@ -2076,7 +2077,7 @@ test_that("llm_resume_multi_batches reads pairs_path with A_id/B_id and id1/id2"
 
   with_mocked_bindings(
     openai_get_batch = function(id) list(status = "completed"),
-    openai_download_batch_output = function(batch_id, path) {
+    .openai_download_batch_output = function(batch_id, path, max_attempts) {
       writeLines('[{"custom_id":"c1","ID1":"A","ID2":"B","better_id":"A"}]', path)
       invisible(NULL)
     },
@@ -2127,10 +2128,10 @@ test_that("llm_resume_multi_batches reports OpenAI retrieval errors when verbose
     with_mocked_bindings(
       openai_get_batch = function(id) {
         calls <<- calls + 1L
-        if (calls == 1L) stop("temporary error")
+        if (calls == 1L) rlang::abort("temporary error", class = "pairwiseLLM_batch_retry_exhausted")
         list(status = "completed")
       },
-      openai_download_batch_output = function(batch_id, path) {
+      .openai_download_batch_output = function(batch_id, path, max_attempts) {
         writeLines('[{"custom_id":"c1","ID1":"A","ID2":"B","better_id":"A"}]', path)
       },
       parse_openai_batch_output = function(path) {
@@ -2182,16 +2183,11 @@ test_that("llm_resume_multi_batches retries OpenAI downloads after exhaustion", 
   msgs <- capture_messages(
     testthat::with_mocked_bindings(
       openai_get_batch = function(id) list(status = "completed"),
-      .pairwiseLLM_retry_backoff = function(...) {
+      .openai_download_batch_output = function(batch_id, path, max_attempts) {
         attempt <<- attempt + 1L
         if (attempt == 1L) {
-          err <- structure(list(message = "download failed"), class = c("error", "condition"))
-          attr(err, "retry_exhausted") <- TRUE
-          return(err)
+          rlang::abort("download failed", class = "pairwiseLLM_batch_retry_exhausted")
         }
-        TRUE
-      },
-      openai_download_batch_output = function(batch_id, path) {
         writeLines('[{"custom_id":"c1","ID1":"A","ID2":"B","better_id":"A"}]', path)
       },
       parse_openai_batch_output = function(path) {
@@ -2204,7 +2200,7 @@ test_that("llm_resume_multi_batches retries OpenAI downloads after exhaustion", 
           error_message = NA_character_
         )
       },
-      .env = ns,
+      .package = "pairwiseLLM",
       {
         llm_resume_multi_batches(
           jobs = jobs,
@@ -2307,7 +2303,7 @@ test_that("llm_resume_multi_batches logs Gemini errors and writes results", {
     with_mocked_bindings(
       gemini_get_batch = function(name) {
         call_count <<- call_count + 1L
-        if (call_count == 1L) stop("temporary gemini error")
+        if (call_count == 1L) rlang::abort("temporary gemini error", class = "pairwiseLLM_batch_retry_exhausted")
         list(metadata = list(state = "BATCH_STATE_SUCCEEDED"))
       },
       gemini_download_batch_results = function(batch, requests_tbl, output_path) {
@@ -2373,7 +2369,7 @@ test_that("llm_resume_multi_batches logs combined results output when verbose", 
   msgs <- capture_messages(
     with_mocked_bindings(
       openai_get_batch = function(id) list(status = "completed"),
-      openai_download_batch_output = function(batch_id, path) {
+      .openai_download_batch_output = function(batch_id, path, max_attempts) {
         writeLines('[{"custom_id":"c1","ID1":"A","ID2":"B","better_id":"A"}]', path)
       },
       parse_openai_batch_output = function(path) {
