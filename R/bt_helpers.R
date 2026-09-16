@@ -11,6 +11,12 @@
 #'   \item \code{reliability}: MLE reliability (for \pkg{sirt}) or \code{NA}
 #' }
 #'
+#' Standard errors describe model uncertainty; small differences in estimates
+#' should not be interpreted without considering that uncertainty. Reliability
+#' is a study-level summary repeated on each row, not an item-specific score.
+#' The returned rows retain input order; sort explicitly by `rank` or `theta`
+#' when preparing a ranked report.
+#'
 #' @param fit A list returned by \code{\link{fit_bt_model}}.
 #' @param decreasing Logical; should higher \code{theta} values receive
 #'   lower rank numbers? If \code{TRUE} (default), the highest \code{theta}

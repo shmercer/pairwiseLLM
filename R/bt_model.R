@@ -130,8 +130,16 @@ build_bt_data <- function(results) {
 #' }
 #'
 #' Ability estimates (\code{theta}) represent latent "writing quality"
-#' parameters on a log-odds scale. Standard errors are included for both
+#' parameters on a log-odds scale. Higher values mean stronger relative
+#' performance on the assessed trait. Zero is not a pass mark, and these
+#' estimates are not rubric grades or automatically comparable across
+#' independently fitted sets. Standard errors are included for both
 #' modeling engines. MLE reliability is only available from \pkg{sirt}.
+#'
+#' Install an optional engine before fitting, for example with
+#' `install.packages("sirt")`. Pairwise data preparation does not need that
+#' engine. See the [offline walkthrough](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
+#' for fitting and interpreting bundled synthetic comparisons.
 #'
 #' @param bt_data A data frame or tibble with exactly three columns:
 #'   two character ID columns and one numeric \code{result} column

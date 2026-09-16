@@ -28,6 +28,15 @@ This function extracts ID and text columns from a data frame and
 enforces that IDs are unique. By default, it assumes the first
 column is the ID and the second column is the text.
 }
+\details{
+Use one row per writing sample and keep IDs stable across collection and
+analysis. Map spreadsheet column names with \code{id_col} and \code{text_col}. For a
+CSV, first use \code{read.csv("writing.csv", colClasses = "character")} to
+preserve identifiers such as \code{"001"}. Inspect blank/missing IDs and texts
+yourself; this reader checks duplicates, not all data-quality problems.
+See the \href{https://shmercer.github.io/pairwiseLLM/articles/getting-started.html}{getting started guide}
+for a complete example.
+}
 \examples{
 df <- data.frame(
   StudentID = c("S1", "S2"),

@@ -15,6 +15,18 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 library(pairwiseLLM)
 ```
 
+## Before you start
+
+Warm start is optional; skip it for your first adaptive run. Return here when
+you have defensible prior scores or a prediction model developed from earlier
+assessments. No default predictive model is bundled. The first numeric-prior
+example runs locally without Python or CmdStan; later sections cover optional
+feature extraction and model training.
+
+**You get:** ID-aligned starting information for BTL, TrueSkill, or both. This
+information does not replace observed comparisons or guarantee lower cost.
+Use [Adaptive Pairing](adaptive-pairing.html) to learn the ranking workflow first.
+
 ## What warm-start prediction does
 
 A **warm-start prediction** estimates relative writing quality before comparisons

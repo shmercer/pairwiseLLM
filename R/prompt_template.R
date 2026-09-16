@@ -33,7 +33,7 @@
 }
 
 
-#' Get or set a prompt template for pairwise comparisons
+#' Read or validate a prompt template for pairwise comparisons
 #'
 #' This function returns a default prompt template that includes
 #' placeholders for the trait name, trait description, and two
@@ -41,10 +41,11 @@
 #' placeholders \code{{TRAIT_NAME}}, \code{{TRAIT_DESCRIPTION}},
 #' \code{{SAMPLE_1}}, and \code{{SAMPLE_2}}.
 #'
-#' The default template is stored as a plain-text file in
-#' \code{inst/templates/default.txt} and loaded at run time. This
-#' makes it easy to inspect and modify the prompt text without
-#' changing the R code.
+#' Save the returned text and pass it as `prompt_template` to a comparison
+#' function. Despite its name, this function does not change a global active
+#' template. Keep custom template files in your own project, rather than
+#' editing the installed package. Use [register_prompt_template()] and
+#' [get_prompt_template()] to manage named templates for the current session.
 #'
 #' @param template Optional character string containing a custom template.
 #'   If \code{NULL}, a default template is returned.

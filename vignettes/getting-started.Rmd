@@ -1,548 +1,289 @@
 ---
 title: "Getting Started with pairwiseLLM"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 2
 vignette: >
   %\VignetteIndexEntry{Getting Started with pairwiseLLM}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include=FALSE}
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  eval = TRUE
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(pairwiseLLM)
+```
+
+## What you will do
+
+`pairwiseLLM` turns judgments about **which of two writing samples is better**
+into relative writing-quality scores. The aspect being judged, such as overall
+quality or organization, is called a **trait**. Comparing samples in this way is
+also called **comparative judgment (CJ)**.
+
+This guide assumes you can run R code and work with a data frame. First, you
+will analyze bundled synthetic comparisons without an API key or provider
+charges. Then you will prepare samples and see how to collect new comparisons
+using an LLM. All code through “Prepare a judging prompt” runs locally; cloud
+requests later in the guide are shown but are not executed when this page builds.
+
+## Install the tools for this example
+
+Use **R 4.4 or later**. Install the package and the optional `sirt` modeling
+engine once, then load pairwiseLLM in each new R session:
+
+```{r installation, eval=FALSE}
+install.packages(c("pairwiseLLM", "sirt"))
+library(pairwiseLLM)
+```
+
+You do not need CmdStan, Python, or an LLM account for this first example.
+Bayesian and adaptive analyses have additional setup described in their guides.
+
+## Your first result: scores from bundled comparisons
+
+The package includes 190 comparison outcomes covering every unordered pair of
+20 synthetic writing samples. These outcomes were generated for demonstration;
+they are not new LLM judgments or evidence of assessment validity.
+
+```{r offline-data}
+data("example_writing_pairs", package = "pairwiseLLM")
+head(example_writing_pairs, 4)
+```
+
+`ID1` and `ID2` identify the two samples. `better_id` identifies the winner.
+`build_bt_data()` converts these winners into the format needed by a
+Bradley–Terry (BT) model. The model estimates relative scores from the pattern
+of wins and losses.
+
+```{r offline-fit, eval=requireNamespace("sirt", quietly=TRUE)}
+bt_data <- build_bt_data(example_writing_pairs)
+fit <- fit_bt_model(bt_data, engine = "sirt", verbose = FALSE)
+scores <- fit$theta |> dplyr::arrange(dplyr::desc(theta))
+head(scores, 5)
+```
+
+If `sirt` is missing, run the installation command above before this block.
+Choosing the engine explicitly makes this example consistent across machines;
+`fit_bt_model()` also supports an automatic choice and `BradleyTerry2`.
+
+### Read the scores
+
+| Column | Meaning | How to use it |
+| --- | --- | --- |
+| `ID` | The sample identifier | Match the result to your original text. |
+| `theta` | Estimated relative writing quality | Higher values indicate stronger writing on the assessed trait. |
+| `se` | Standard error of the estimate | Larger values mean greater model uncertainty. |
+
+The displayed rows are ordered by score. The full `scores` table has 20 rows.
+A difference between two estimates is not automatically a meaningful difference:
+consider their uncertainty and the quality of the judgments.
+
+Zero is a location on a relative scale, not a pass mark. These values are not
+percentages or rubric grades, and independently fitted cohorts do not share a
+common scale. For rubric categories, use the
+[rubric calibration guide](rubric-calibration.html), which requires completed
+**Bayesian** CJ results; the frequentist fit above is not an accepted input.
+
+### Save an analysis
+
+```{r save-offline-results, eval=FALSE}
+write.csv(scores, "writing_scores.csv", row.names = FALSE)
+saveRDS(fit, "writing_bt_fit.rds")
+# In a later session: fit <- readRDS("writing_bt_fit.rds")
+```
+
+The CSV is convenient for viewing scores in a spreadsheet. The RDS preserves
+the fitted R object. These paths are relative to your current working directory.
+
+## Prepare your own writing samples
+
+Start with one row per sample, a unique, non-missing `ID`, and a `text` column.
+Keep IDs stable so that saved results continue to refer to the same samples.
+Do not include names or other identifying information merely to label rows.
+
+```{r personal-data}
+my_samples <- data.frame(
+  ID = c("essay_01", "essay_02", "essay_03"),
+  text = c(
+    "Writing helps us explain our ideas to others.",
+    "We write to communicate, remember, and develop an argument.",
+    "Writing is useful. I use it at school."
+  )
 )
-
-library(pairwiseLLM)
-library(dplyr)
+samples <- read_samples_df(my_samples)
 ```
 
-# 1. Introduction
+For a spreadsheet saved as CSV, map its columns to the package's names:
 
-`pairwiseLLM` provides a unified workflow for generating and analyzing
-**pairwise comparisons of writing quality** using live LLM APIs
-(OpenAI, Anthropic, Gemini Developer API, Vertex AI Gemini API,
-Together.ai), local models via Ollama, and batch APIs for OpenAI,
-Anthropic, and Gemini Developer API.
-
-A typical workflow:
-
-1. Select writing samples  
-2. Construct pairwise comparison sets  
-3. Submit comparisons to an LLM (live or batch API)  
-4. Parse model outputs  
-5. Fit Bradley–Terry or Elo models to obtain latent writing-quality scores  
-
-For prompt evaluation and positional-bias diagnostics, see:
-
-* [Prompt Template Positional Bias Testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
-
-For advanced batch processing workflows, see:
-
-* [Advanced: Submitting and Polling Multiple Batches](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.html)
-
----
-
-# 2. Setting API Keys
-
-`pairwiseLLM` reads provider keys **only from environment variables**, never from R options or global variables.
-
-| Provider Surface | Environment Variable |
-|------------------|----------------------|
-| [OpenAI](https://openai.com/api/) | OPENAI_API_KEY |
-| [Anthropic](https://platform.claude.com/) | ANTHROPIC_API_KEY |
-| Gemini Developer API | GEMINI_API_KEY |
-| Vertex AI Gemini API | VERTEX_API_KEY |
-| [Together](https://www.together.ai/) | TOGETHER_API_KEY |
-
-`backend = "gemini"` uses the Gemini Developer API and
-`backend = "vertex"` uses the Vertex AI Gemini API. Those backends use
-separate API-key surfaces.
-
-Configure only the key for the cloud backend you plan to use; you do not need
-keys for every provider. You can put the relevant key in your `~/.Renviron`:
-
-```
-OPENAI_API_KEY="sk-..."
-ANTHROPIC_API_KEY="..."
-GEMINI_API_KEY="..."
-VERTEX_API_KEY="..."
-TOGETHER_API_KEY="..."
+```{r csv-data, eval=FALSE}
+my_data <- read.csv("writing.csv", colClasses = "character")
+samples <- read_samples_df(my_data, id_col = "student_code", text_col = "response")
 ```
 
-Check which keys are available:
+These three short texts illustrate the data format only. For the collection
+example below, use the bundled 20 samples so every object is defined:
 
-```
-library(pairwiseLLM)
-
-check_llm_api_keys()
-#> Some LLM API keys are not set. This is expected when you use only selected backends.
-#> # A tibble: 5 × 4
-#>   backend   service              env_var           has_key
-#>   <chr>     <chr>                <chr>             <lgl>
-#> 1 openai    OpenAI               OPENAI_API_KEY    TRUE
-#> 2 anthropic Anthropic            ANTHROPIC_API_KEY TRUE
-#> 3 gemini    Google Gemini        GEMINI_API_KEY    TRUE
-#> 4 vertex    Vertex AI Gemini API VERTEX_API_KEY    TRUE
-#> 5 together  Together.ai          TOGETHER_API_KEY  TRUE
-```
-
-[Ollama](https://ollama.com/) runs locally and does not require an API key, just that the Ollama server is running.
-
----
-
-# 3. Example Writing Data
-
-The package ships with 20 simulated student writing samples with clear differences in quality:
-
-```{r}
+```{r collection-data}
 data("example_writing_samples", package = "pairwiseLLM")
-dplyr::slice_head(example_writing_samples, n = 3)
+samples <- read_samples_df(example_writing_samples[, c("ID", "text")])
+all_pairs <- make_pairs(samples)
+nrow(all_pairs)
+
+pairs_small <- all_pairs |>
+  sample_pairs(n_pairs = 10, seed = 123) |>
+  randomize_pair_order(seed = 99)
 ```
 
-Each sample has:
+Pair construction makes no provider calls. Twenty samples produce
+`choose(20, 2) = 190` unordered pairs; the total grows quickly as you add samples.
+Randomizing presentation helps distribute which sample appears first.
 
-- `ID`  
-- `text`  
+**The ten-pair subset is a collection demonstration, not a complete ranking
+study.** Random sampling does not guarantee that every sample appears or that
+all samples are connected through comparisons. The offline fit above uses the
+full bundled comparison set. Plan coverage and diagnostics before fitting your
+own collected data; [adaptive pairing](adaptive-pairing.html) is an alternative
+that selects comparisons as evidence accumulates.
 
----
+## Prepare a judging prompt
 
-# 4. Constructing Pairwise Comparisons
+A prompt combines the trait, the judging instructions, and the two texts.
+Start with a built-in trait and template:
 
-Create all unordered pairs:
-
-```{r}
-pairs <- example_writing_samples |>
-  make_pairs()
-
-dplyr::slice_head(pairs, n = 5)
-```
-
-Sample a subset of pairs:
-
-```{r}
-pairs_small <- sample_pairs(pairs, n_pairs = 10, seed = 123)
-```
-
-Randomize SAMPLE_1 / SAMPLE_2 order:
-
-```{r}
-pairs_small <- randomize_pair_order(pairs_small, seed = 99)
-```
-
----
-
-# 5. Traits and Prompt Templates
-
-## 5.1 Using a built-in trait
-
-```{r}
+```{r prompt-setup}
 td <- trait_description("overall_quality")
-td
+tmpl <- get_prompt_template("default")
+td$name
 ```
 
-Or define your own:
+You can inspect exactly what the model will receive before paying for a call:
 
-```{r}
-td_custom <- trait_description(
-  custom_name = "Clarity",
-  custom_description = "How clearly and effectively ideas are expressed."
+```{r preview-prompt}
+prompt <- build_prompt(
+  template = tmpl,
+  trait_name = td$name,
+  trait_desc = td$description,
+  text1 = pairs_small$text1[[1]],
+  text2 = pairs_small$text2[[1]]
 )
+cat(substr(prompt, 1, 350))
 ```
 
-## 5.2 Using or customizing prompt templates
+This shows only the beginning; use `cat(prompt)` to read the full prompt locally.
+See [Data Schemas and Prompt Management](data-and-prompts.html) for custom traits,
+file templates, named registration, and required placeholders.
 
-Load default prompt:
+## Collect a small set of new judgments
 
-```{r}
-tmpl <- set_prompt_template()
-cat(substr(tmpl, 1, 300))
+The remaining submission examples make **cloud requests that may incur charges**
+when you run them. They send the prompt and sample text to your chosen provider.
+Review its privacy and retention terms before submitting sensitive data.
+
+### Configure one provider
+
+A **backend** selects the service; `model` selects a model offered by that
+service. This example uses OpenAI. Use an identifier available to your account;
+example identifiers are not a guarantee of current availability. See
+[Backends and Tested Model Configurations](model-compatibility.html) for the
+provider/key table and official catalogs.
+
+For the current R session:
+
+```{r api-key, eval=FALSE}
+Sys.setenv(OPENAI_API_KEY = "your-key-here")
+check_llm_api_keys()
 ```
 
-Placeholders required in custom prompt templates:
+`has_key = TRUE` means R can see a nonempty value; it does not test whether the
+key is valid or the account can access a model. Missing keys for other providers
+are expected. Never put a real key in a shared script or report.
 
-- `{TRAIT_NAME}`
-- `{TRAIT_DESCRIPTION}`
-- `{SAMPLE_1}`
-- `{SAMPLE_2}`
+For persistent local setup, put `OPENAI_API_KEY="your-key-here"` in your
+`~/.Renviron` file and restart R. If you use `usethis`,
+`usethis::edit_r_environ()` opens that file. This is a file you choose to store;
+the package does not save credentials for you. Ollama uses a local server and
+does not require a provider API key.
 
-Load a template from file:
+### Submit the pairs
 
-```{r, eval=FALSE}
-set_prompt_template(file = "my_template.txt")
-```
-
-For named registration, replacement, removal, and the schemas used in later steps, see
-[Data Schemas and Prompt Management](https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.html).
-
----
-
-# 6. Live Pairwise Comparisons
-
-The unified wrapper works for **OpenAI, Anthropic, Gemini Developer API,
-Vertex AI Gemini API, Together.ai, and Ollama**.
-
-It supports **parallel processing** and **incremental output file saving** (resume capability) for **all** supported backends. The function returns a list containing:
-
-- `$results`: observed outcomes only (canonical schema)
-- `$failed_pairs`: scheduled pairs with no observed outcome
-- `$failed_attempts`: attempt-level failures (retries, timeouts, parse errors, invalid winners)
-
-```{r, eval=FALSE}
-# Example using parallel processing and incremental saving
+```{r live-submission, eval=FALSE}
 res_list <- submit_llm_pairs(
-  pairs             = pairs_small,
-  backend           = "openai", # also "anthropic", "gemini", "vertex", "together", "ollama"
-  model             = "gpt-4o",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  # New features:
-  parallel          = TRUE,
-  workers           = 2,
-  save_path         = "live_results.csv"
-)
-```
-
-`service_tier` is provider-specific rather than portable across
-backends. Gemini Developer API and Vertex AI Gemini API currently accept
-the public values `"standard"`, `"flex"`, and `"priority"`, but Vertex is
-live-only and uses a different wire format internally.
-
-```{r, eval=FALSE}
-# Gemini Developer API live request
-res_gemini <- submit_llm_pairs(
-  pairs             = pairs_small,
-  backend           = "gemini",
-  model             = "gemini-3.5-flash-lite",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  service_tier      = "priority"
-)
-
-# Vertex AI Gemini API live request
-res_vertex <- submit_llm_pairs(
-  pairs             = pairs_small,
-  backend           = "vertex",
-  model             = "gemini-3.8-flash",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  service_tier      = "flex"
-)
-```
-
-For OpenAI, `service_tier = "flex"` requests lower-cost, slower Flex
-processing when the selected model supports it. Capacity may be unavailable;
-Flex is not priority routing. Service-tier meanings are provider-specific.
-
-Preview results:
-
-```{r, eval=FALSE}
-# Successes are in the $results tibble
-dplyr::slice_head(res_list$results, 5)
-
-# Failures (if any) are in $failed_pairs
-if (nrow(res_list$failed_pairs) > 0) {
-  print(res_list$failed_pairs)
-}
-
-# Attempt-level failures (if any) are in $failed_attempts
-if (nrow(res_list$failed_attempts) > 0) {
-  print(res_list$failed_attempts)
-}
-```
-
-Each row in `$results` includes:
-- `custom_id` (uses `pair_uid` if supplied; otherwise defaults to `LIVE_<ID1>_vs_<ID2>`)
-- `ID1`, `ID2`
-- parsed `<BETTER_SAMPLE>` tag → `better_sample` and `better_id`
-- canonical aliases/keys: `A_id`, `B_id`, `winner_pos`, `ordered_key`, `unordered_key`, `pair_uid`, `received_at`, `backend`, `model`
-- thoughts (reasoning text, if available) and content (final answer)
-
----
-
-# 7. Preparing Data for BT or Elo Modeling
-
-Convert the LLM output (specifically the `$results` tibble for `submit_llm_pairs()` output) to a 3-column BT dataset:
-
-```{r, eval=FALSE}
-# res_list: output list from submit_llm_pairs()
-# We extract the $results tibble for modeling
-bt_data <- build_bt_data(res_list$results)
-dplyr::slice_head(bt_data, 5)
-```
-
-and/or a dataset for Elo modeling:
-
-```{r, eval=FALSE}
-# res_list: output from submit_llm_pairs()
-elo_data <- build_elo_data(res_list$results)
-```
----
-
-# 8. Bradley–Terry Modeling
-
-Fit model:
-
-```{r, eval=FALSE}
-bt_fit <- fit_bt_model(bt_data)
-```
-
-Summarize results:
-
-```{r, eval=FALSE}
-summarize_bt_fit(bt_fit)
-```
-
-The output includes:
-
-- latent θ ability scores  
-- SEs  
-- reliability (when using `sirt` engine)  
-
----
-
-# 9. Elo Modeling
-
-```{r, eval=FALSE}
-elo_fit <- fit_elo_model(elo_data, runs = 5)
-elo_fit
-```
-
-Outputs:
-
-- Elo ratings for each sample  
-- unweighted and weighted reliability  
-- trial counts  
-
----
-
-# 10. Batch APIs (Large Jobs)
-
-## 10.1 Submit a batch
-
-Batch helpers support `"openai"`, `"anthropic"`, and `"gemini"`.
-`backend = "vertex"` is rejected explicitly because Vertex batch mode is
-not implemented in this series.
-
-```{r, eval=FALSE}
-batch <- llm_submit_pairs_batch(
-  backend            = "gemini",
-  model              = "gemini-3.8-flash",
-  pairs              = pairs_small,
-  trait_name         = td$name,
-  trait_description  = td$description,
-  prompt_template    = tmpl,
-  service_tier       = "priority"
-)
-```
-
-## 10.2 Download results
-
-```{r, eval=FALSE}
-res_batch <- llm_download_batch_results(batch)
-head(res_batch)
-```
-
-## 10.3 Multi‑Batch Jobs
-
-In addition to the standard batch helpers, you can split a large job into multiple
-segments using `llm_submit_pairs_multi_batch()` and then poll all of them with
-`llm_resume_multi_batches()`.  This is particularly useful when you have many
-pairs or want to ensure that you can resume if the session ends.
-
-``` {r, eval=FALSE}
-# Generate a small set of pairs
-pairs_small <- example_writing_samples |>
-  make_pairs() |>
-  sample_pairs(n_pairs = 10, seed = 4321) |>
-  randomize_pair_order(seed = 8765)
-
-td   <- trait_description("overall_quality")
-tmpl <- set_prompt_template()
-
-# Split into two batches and include reasoning/chain-of-thought
-multi_job <- llm_submit_pairs_multi_batch(
-  pairs             = pairs_small,
-  backend           = "openai",
-  model             = "gpt-5.1",
-  trait_name        = td$name,
-  trait_description = td$description,
-  prompt_template   = tmpl,
-  n_segments        = 2,
-  output_dir        = "myjob",
-  write_registry    = TRUE,
-  include_thoughts  = TRUE
-)
-
-# Poll and merge results.  Combined results are written to
-# "myjob/combined_results.csv" or the directory you specify.
-res <- llm_resume_multi_batches(
-  jobs               = multi_job$jobs,
-  interval_seconds   = 30,
-  write_combined_csv = TRUE
-)
-
-head(res$combined)
-```
-
-## 10.4 Estimating cost before you run
-
-For large jobs, it is often useful to estimate token usage and cost before launching a live run or submitting a batch.
-`pairwiseLLM` includes `estimate_llm_pairs_cost()`, which runs a small **pilot** (paid live calls) and then estimates
-the rest of the job by calibrating input tokens from prompt byte length.
-
-The output includes both:
-
-- **Expected cost** (using mean output tokens from usable pilot calls)
-- **Budget cost** (using a high quantile of pilot output tokens, controlled by `budget_quantile`)
-
-If you are running a discounted batch workflow, set `mode = "batch"` and supply a `batch_discount` multiplier.
-
-```{r, eval=FALSE}
-# Create a moderate set of pairs
-pairs_big <- example_writing_samples |>
-  make_pairs() |>
-  sample_pairs(n_pairs = 200, seed = 123) |>
-  randomize_pair_order(seed = 456)
-
-td   <- trait_description("overall_quality")
-tmpl <- set_prompt_template()
-
-est <- estimate_llm_pairs_cost(
-  pairs = pairs_big,
-  backend = "anthropic",                # "openai", "anthropic", "gemini", "together"
-  model = "claude-sonnet-4-5",
+  pairs = pairs_small,
+  backend = "openai",
+  model = "gpt-4o",
   trait_name = td$name,
   trait_description = td$description,
   prompt_template = tmpl,
-  mode = "batch",
-  batch_discount = 0.5,                 # set to 1 for no discount
-  n_test = 10,                          # paid pilot calls (live)
-  budget_quantile = 0.9,                # p90 output tokens
-  cost_per_million_input = 3.0,         # fill in your provider pricing
-  cost_per_million_output = 15.0
+  parallel = FALSE,
+  save_path = "live_results.csv"
 )
-
-est$summary
 ```
 
-### Deterministic calculation example
+The run processes pairs sequentially and saves completed results incrementally.
+Use a distinct file for each study/model/trait configuration. To continue the
+same interrupted run, keep its inputs and saved file and repeat the call;
+matching saved pairs are skipped. Parallel execution is optional and requires
+`future` and `future.apply`; leave it off for a first run.
 
-Suppose a two-pair live pilot records input-token counts of 20 and 40 and
-completion-token counts of 10 and 30. The prompt-byte calibration predicts 60
-and 80 input tokens for the two remaining pairs. With
-`budget_quantile = 0.9`, R's type-7 sample quantile of `c(10, 30)` is 28.
+### Check what succeeded
 
-At input and output prices of 1 currency unit per million tokens and
-`batch_discount = 0.5`, the estimator calculates:
-
-- observed live pilot tokens: 60 input and 40 output;
-- remaining expected tokens: 140 input and `mean(c(10, 30)) * 2 = 40` output;
-- remaining budget output tokens: `28 * 2 = 56`;
-- expected cost: `(60 + 40 + 0.5 * (140 + 40)) / 1e6 = 0.000190`; and
-- budget cost: `(60 + 40 + 0.5 * (140 + 56)) / 1e6 = 0.000198`.
-
-The pilot observations are included once at live prices. They are not averaged
-into the estimated remaining count and are not discounted.
-
-Avoid paying twice: reuse pilot results
-
-The estimator returns the original pilot output object and the pairs not
-included in the pilot (`remaining_pairs`). Use `remaining_pairs` to submit only
-the remaining work after you are satisfied with the estimate. Pilot judgments
-are not automatically merged into the later submission result:
-
-```{r, eval=FALSE}
-remaining_pairs <- est$remaining_pairs
-
-# Example: submit only the remaining pairs as a batch
-
-batch <- llm_submit_pairs_batch(
-          backend = "anthropic",
-          model = "claude-sonnet-4-5",
-          pairs = remaining_pairs,
-          trait_name = td$name,
-          trait_description = td$description,
-          prompt_template = tmpl)
-
-results <- llm_download_batch_results(batch)
+```{r inspect-live, eval=FALSE}
+head(res_list$results)
+res_list$failed_pairs
+res_list$failed_attempts
 ```
 
-Notes:
+| Component | What it tells you |
+| --- | --- |
+| `results` | Comparisons with a valid winner. `better_id` identifies the winning sample. |
+| `failed_pairs` | Scheduled pairs with no valid outcome. |
+| `failed_attempts` | Attempt-level problems, including failures followed by successful retries. |
 
-- The estimator does not require a provider tokenizer; it uses prompt byte length calibrated on the pilot.
-- Ollama is not supported in the estimator (local models do not incur token costs).
-- Reasoning/thinking tokens are treated as output tokens for pricing.
-- Supply current prices for the selected provider, model, endpoint, and mode;
-  the package does not maintain or validate a pricing catalog.
+An HTTP success alone is not a valid judgment. Inspect unresolved pairs before
+analysis; missing winners are not ties. The
+[recovery guide](provider-controls-and-recovery.html) explains retrying failures
+and keeping successful work.
 
----
+Once you have collected an adequate comparison design and inspected failures,
+prepare its successful outcomes with `build_bt_data(res_list$results)` and use
+the same fit-and-inspect steps as the offline example. Do not interpret the
+small submission demonstration as an adequate design for all 20 samples.
 
-# 11. Backend-Specific Tools
+## Choose the next workflow
 
-Most users use the unified interface, but backend helpers are available.
+| Your goal | Guide or function |
+| --- | --- |
+| More control over data and judging instructions | [Data and prompts](data-and-prompts.html) |
+| Estimate token costs with a paid pilot; configure or troubleshoot providers | [Provider controls and recovery](provider-controls-and-recovery.html) |
+| Submit fixed pairs for later retrieval, including resumable large jobs | [Batch workflows](advanced-batch-workflows.html) |
+| Fit Elo ratings instead of BT scores | `build_elo_data()` and `fit_elo_model()` (optional `EloChoice`) |
+| Estimate Bayesian scores and inspect convergence | [Bayesian BTL](bayesian-btl.html) (requires CmdStan) |
+| Let the next pair depend on earlier judgments | [Adaptive pairing](adaptive-pairing.html) (requires CmdStan) |
+| Convert completed Bayesian scores to ordered rubric levels | [Rubric calibration](rubric-calibration.html) |
+| Compare separately evaluated cohorts on a shared scale | [Adaptive linking](adaptive-linking.html) |
+| Check whether presentation order affects judgments | [Prompt bias testing](prompt-template-bias.html) |
 
-### 11.1 OpenAI
-- `submit_openai_pairs_live()`
-- `build_openai_batch_requests()`
-- `run_openai_batch_pipeline()`
-- `parse_openai_batch_output()`
+Live processing is useful for interactive work. Batch processing can suit larger
+fixed-pair jobs when you can wait for completion; support and pricing depend on
+the provider. There is no universal pair-count threshold for choosing between them.
 
-### 11.2 Anthropic
-- `submit_anthropic_pairs_live()`
-- `build_anthropic_batch_requests()`
-- `run_anthropic_batch_pipeline()`
-- `parse_anthropic_batch_output()`
+## Common first-run problems
 
-### 11.3 Google Gemini
-- `submit_gemini_pairs_live()`
-- `build_gemini_batch_requests()`
-- `run_gemini_batch_pipeline()`
-- `parse_gemini_batch_output()`
+| Problem | First check |
+| --- | --- |
+| The offline model says `sirt` is missing | Run `install.packages("sirt")` once, then rerun the fit. |
+| R cannot see my key | Restart R after editing `.Renviron`, then use `check_llm_api_keys()`. |
+| The provider rejects the model or a setting | Check account access and the provider's current catalog; start with minimal controls. |
+| Some comparisons are missing | Inspect `failed_pairs` and `failed_attempts`; keep successful results. |
+| Scores look unlike familiar grades | BT scores are relative estimates; rubric scoring is a separate Bayesian workflow. |
+| A batch is still pending | Poll or resume the existing job; do not submit it again merely because it is unfinished. |
 
-### 11.4 Vertex AI Gemini API (live only)
-- `submit_vertex_pairs_live()`
-- `vertex_compare_pair_live()`
+For a reproducible issue report, include your code with credentials removed, the
+error, provider/model, operating system, and `sessionInfo()` output.
 
-### 11.5 Together.ai  (live only)
-- `together_compare_pair_live()`
-- `submit_together_pairs_live()`
-
-### 11.6 Ollama (local, live only)
-- `ollama_compare_pair_live()`
-- `submit_ollama_pairs_live()`
-- `ensure_only_ollama_model_loaded()`
-
-Reasoning/thinking constraints, partial-result handling, retries, and local-resource guidance are
-covered in
-[Provider Controls and Recovery](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html).
-
----
-
-# 12. Troubleshooting
-
-### Missing API keys  
-```{r}
-check_llm_api_keys()
-```
-
-### Timeouts  
-Use batch APIs for >40 pairs. Split a large job into multiple
-segments using `llm_submit_pairs_multi_batch()` and then poll/download all of 
-them with `llm_resume_multi_batches()`
-
-### Positional bias  
-Use `compute_reverse_consistency()` + `check_positional_bias()`; see
-[Prompt Template Positional Bias Testing](https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html)
-for a full example.
-
----
-
-# 13. Citation
+## Citation
 
 > Mercer, S. H. (2026). *Getting started with pairwiseLLM* [R package vignette]. Comprehensive R
 > Archive Network. https://doi.org/10.32614/CRAN.package.pairwiseLLM

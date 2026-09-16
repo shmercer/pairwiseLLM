@@ -10,7 +10,7 @@ template:
 
 navbar:
   structure:
-    left: [home, get_started, detailed_guides, reference, changelog]
+    left: [get_started, guides, statistical_design, reference, changelog]
     right: [search, github]
 
   components:
@@ -27,8 +27,8 @@ navbar:
       text: "Get Started"
       href: articles/getting-started.html
 
-    detailed_guides:
-      text: "Detailed Guides"
+    guides:
+      text: "Guides"
       menu:
         - text: "Data Schemas and Prompt Management"
           href: articles/data-and-prompts.html
@@ -42,18 +42,22 @@ navbar:
           href: articles/adaptive-pairing.html
         - text: "Guide: Adaptive Warm Start"
           href: articles/adaptive-warm-start.html
-        - text: "Design: Adaptive Pairing"
-          href: articles/within-set-adaptive-design.html
         - text: "Guide: Adaptive Linking"
           href: articles/adaptive-linking.html
-        - text: "Design: Adaptive Linking"
-          href: articles/adaptive-linking-design.html
         - text: "Standalone Bayesian BTL with CmdStan"
           href: articles/bayesian-btl.html
         - text: "Guide: Rubric Calibration"
           href: articles/rubric-calibration.html
         - text: "Prompt Template Positional Bias Testing"
           href: articles/prompt-template-bias.html
+
+    statistical_design:
+      text: "Statistical Design"
+      menu:
+        - text: "Design: Adaptive Pairing"
+          href: articles/within-set-adaptive-design.html
+        - text: "Design: Adaptive Linking"
+          href: articles/adaptive-linking-design.html
 
     changelog:
       text: Changelog
@@ -80,9 +84,7 @@ articles:
     contents:
       - adaptive-pairing
       - adaptive-warm-start
-      - within-set-adaptive-design
       - adaptive-linking
-      - adaptive-linking-design
 
   - title: "Modeling and Bias"
     contents:
@@ -90,14 +92,20 @@ articles:
       - rubric-calibration
       - prompt-template-bias
 
-reference:
-  - title: "Pairing and data"
+  - title: "Statistical Design"
+    desc: "Formal models, assumptions, selection rules, and stopping criteria."
     contents:
-      - example_writing_samples
-      - example_writing_samples1000
-      - example_writing_pairs
-      - example_writing_results
-      - example_openai_batch_output
+      - within-set-adaptive-design
+      - adaptive-linking-design
+
+reference:
+  - title: "Start here"
+    desc: "New users: follow the [Getting Started guide](../articles/getting-started.html) for an offline example and a first collection workflow."
+    contents:
+      - pairwiseLLM
+  - title: "Prepare writing samples and pairs"
+    desc: "Create pair tables locally before making provider requests."
+    contents:
       - read_samples_df
       - read_samples_dir
       - make_pairs
@@ -105,7 +113,7 @@ reference:
       - sample_reverse_pairs
       - randomize_pair_order
       - alternate_pair_order
-  - title: "Prompts and traits"
+  - title: "Choose a trait and prepare prompts"
     contents:
       - trait_description
       - set_prompt_template
@@ -114,11 +122,71 @@ reference:
       - get_prompt_template
       - list_prompt_templates
       - remove_prompt_template
-  - title: "Live backends"
+  - title: "Collect comparisons"
+    desc: "Use the generic helpers first. Cost estimation runs a paid pilot; see [provider controls and recovery](../articles/provider-controls-and-recovery.html)."
     contents:
       - check_llm_api_keys
-      - llm_compare_pair
       - submit_llm_pairs
+      - llm_compare_pair
+      - llm_submit_pairs_batch
+      - llm_download_batch_results
+      - llm_submit_pairs_multi_batch
+      - llm_resume_multi_batches
+      - estimate_llm_pairs_cost
+      - print.pairwiseLLM_cost_estimate
+  - title: "Turn comparisons into rankings"
+    desc: "BT and Elo use recorded winners; Bayesian BTL additionally requires CmdStan."
+    contents:
+      - build_bt_data
+      - fit_bt_model
+      - summarize_bt_fit
+      - build_elo_data
+      - fit_elo_model
+      - build_btl_results_data
+      - fit_bayes_btl_mcmc
+  - title: "Choose comparisons adaptively"
+    desc: "Start with adaptive_rank(); see the [practical guide](../articles/adaptive-pairing.html)."
+    contents:
+      - adaptive_rank
+      - make_adaptive_judge_llm
+  - title: "Inspect rankings and diagnostics"
+    contents:
+      - print.adaptive_state
+      - adaptive_get_logs
+      - adaptive_step_log
+      - adaptive_round_log
+      - adaptive_item_log
+      - adaptive_results_history
+      - summarize_adaptive
+      - summarize_refits
+      - summarize_items
+  - title: "Save and resume adaptive sessions"
+    contents:
+      - save_adaptive_session
+      - validate_session_dir
+      - load_adaptive_session
+  - title: "Convert Bayesian rankings to rubric levels"
+    desc: "Requires completed Bayesian CJ results. See the [rubric guide](../articles/rubric-calibration.html) for human labels and interpretation."
+    contents:
+      - fit_rubric_calibration
+      - predict.pairwiseLLM_rubric_calibration
+      - evaluate_rubric_predictions
+  - title: "Check consistency and position bias"
+    contents:
+      - compute_reverse_consistency
+      - check_positional_bias
+  - title: "Advanced: predictive warm start"
+    contents:
+      - has_concept("adaptive warm start")
+  - title: "Advanced: adaptive lifecycle and replay"
+    contents:
+      - make_adaptive_judge_replay
+      - validate_adaptive_replay
+      - adaptive_rank_start
+      - adaptive_rank_run_live
+      - adaptive_rank_resume
+  - title: "Provider-specific live helpers"
+    contents:
       - openai_compare_pair_live
       - submit_openai_pairs_live
       - anthropic_compare_pair_live
@@ -131,12 +199,8 @@ reference:
       - submit_together_pairs_live
       - ollama_compare_pair_live
       - submit_ollama_pairs_live
-  - title: "Batch backends"
+  - title: "Provider-specific batch helpers"
     contents:
-      - llm_submit_pairs_batch
-      - llm_download_batch_results
-      - llm_submit_pairs_multi_batch
-      - llm_resume_multi_batches
       - build_openai_batch_requests
       - write_openai_batch_file
       - openai_upload_batch_file
@@ -158,63 +222,19 @@ reference:
       - gemini_poll_batch_until_complete
       - gemini_download_batch_results
       - run_gemini_batch_pipeline
-  - title: "Normalization"
+  - title: "Parse downloaded batch output"
     contents:
       - parse_openai_batch_output
       - parse_anthropic_batch_output
       - parse_gemini_batch_output
-  - title: "Cost estimation"
-    contents:
-      - estimate_llm_pairs_cost
-      - print.pairwiseLLM_cost_estimate
-  - title: "Bias and consistency"
-    contents:
-      - compute_reverse_consistency
-      - check_positional_bias
-  - title: "Frequentist models"
-    contents:
-      - build_bt_data
-      - fit_bt_model
-      - summarize_bt_fit
-      - build_elo_data
-      - fit_elo_model
-  - title: "Bayesian models"
-    contents:
-      - build_btl_results_data
-      - fit_bayes_btl_mcmc
-  - title: "Adaptive warm start"
-    contents:
-      - has_concept("adaptive warm start")
-  - title: "Rubric calibration"
-    contents:
-      - fit_rubric_calibration
-      - predict.pairwiseLLM_rubric_calibration
-      - evaluate_rubric_predictions
-  - title: "Adaptive lifecycle"
-    contents:
-      - adaptive_rank
-      - make_adaptive_judge_llm
-      - make_adaptive_judge_replay
-      - validate_adaptive_replay
-      - adaptive_rank_start
-      - adaptive_rank_run_live
-      - adaptive_rank_resume
-  - title: "Adaptive inspection"
-    contents:
-      - print.adaptive_state
-      - adaptive_get_logs
-      - adaptive_step_log
-      - adaptive_round_log
-      - adaptive_item_log
-      - adaptive_results_history
-      - summarize_adaptive
-      - summarize_refits
-      - summarize_items
-  - title: "Adaptive persistence"
-    contents:
-      - save_adaptive_session
-      - validate_session_dir
-      - load_adaptive_session
-  - title: "Ollama resource management"
+  - title: "Manage local Ollama resources"
     contents:
       - ensure_only_ollama_model_loaded
+  - title: "Example data"
+    desc: "Synthetic texts, bundled comparison outcomes, Bayesian input rows, and a parser fixture for offline exploration."
+    contents:
+      - example_writing_samples
+      - example_writing_samples1000
+      - example_writing_pairs
+      - example_writing_results
+      - example_openai_batch_output

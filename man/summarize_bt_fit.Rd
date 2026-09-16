@@ -40,6 +40,13 @@ returns a tibble with one row per object (e.g., writing sample), including:
 \item \code{reliability}: MLE reliability (for \pkg{sirt}) or \code{NA}
 }
 }
+\details{
+Standard errors describe model uncertainty; small differences in estimates
+should not be interpreted without considering that uncertainty. Reliability
+is a study-level summary repeated on each row, not an item-specific score.
+The returned rows retain input order; sort explicitly by \code{rank} or \code{theta}
+when preparing a ranked report.
+}
 \examples{
 # Example using built-in comparison data
 data("example_writing_pairs")

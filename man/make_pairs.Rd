@@ -19,8 +19,14 @@ A tibble with columns:
 \description{
 Given a data frame of samples with columns \code{ID} and \code{text},
 this function generates all unordered pairs (combinations) of samples.
-Each pair appears exactly once, with \code{ID1} < \code{ID2} in
-lexicographic order.
+Each pair appears exactly once. The first and second positions follow the
+input row order; IDs are not sorted lexicographically. This function only
+prepares data and makes no provider requests.
+}
+\details{
+With \code{N} samples there are \code{choose(N, 2)} pairs: 20 samples produce 190
+pairs, while 100 produce 4,950. Use \code{\link[=randomize_pair_order]{randomize_pair_order()}} to vary which
+sample appears first, and plan the comparison budget before submission.
 }
 \examples{
 samples <- tibble::tibble(
@@ -34,7 +40,7 @@ pairs_all
 # Using the built-in example data
 data("example_writing_samples")
 pairs_example <- make_pairs(example_writing_samples)
-nrow(pairs_example) # should be choose(10, 2) = 45
+nrow(pairs_example) # should be choose(20, 2) = 190
 
 }
 \seealso{
