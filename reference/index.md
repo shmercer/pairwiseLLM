@@ -101,6 +101,8 @@
   : Poll an OpenAI batch until it completes or fails
 - [`openai_download_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_output.md)
   : Download the output file for a completed batch
+- [`openai_download_batch_errors()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_errors.md)
+  : Download the error file for an OpenAI batch
 - [`run_openai_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_openai_batch_pipeline.md)
   : Run a full OpenAI batch pipeline for pairwise comparisons
 - [`build_anthropic_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_anthropic_batch_requests.md)

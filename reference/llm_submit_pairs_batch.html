@@ -254,12 +254,18 @@ result (where supported by backends).</p></dd>
 <code>run_*_batch_pipeline()</code> functions. This can include provider-specific
 options such as temperature or batch configuration fields. For OpenAI,
 this may include <code>endpoint</code>, <code>temperature</code>, <code>top_p</code>, <code>logprobs</code>,
-<code>reasoning</code>, <code>service_tier</code>, etc. For Anthropic, this may include <code>reasoning</code>,
+<code>reasoning</code>, <code>store</code>, and Responses-only <code>max_output_tokens</code>. Select
+<code>endpoint = "responses"</code> explicitly for output limits. OpenAI Batch does
+not accept <code>service_tier</code> through this helper. For Anthropic, this may include <code>reasoning</code>,
 <code>max_tokens</code>, <code>temperature</code>, or <code>thinking_budget_tokens</code>. For Gemini, this
 may include <code>thinking_level</code>, <code>temperature</code>, <code>top_p</code>, <code>top_k</code>,
 <code>max_output_tokens</code>, and <code>service_tier</code>.</p>
 <p>Gemini also accepts <code>store = TRUE</code> or <code>FALSE</code> to control logging for each
-request; omission or <code>NULL</code> preserves provider/project defaults.</p></dd>
+request; omission or <code>NULL</code> preserves provider/project defaults.
+OpenAI accepts <code>store</code> on both endpoints; omission or <code>NULL</code> preserves
+provider defaults, including Responses storage for later retrieval.
+<code>store = FALSE</code> does not disable Batch file retention or all data retention.
+Use <code><a href="openai_download_batch_errors.html">openai_download_batch_errors()</a></code> to retrieve OpenAI request failures.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -294,6 +300,7 @@ preserved.</p>
 <code><a href="llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code>,
 <code><a href="llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch()</a></code>,
 <code><a href="openai_create_batch.html">openai_create_batch()</a></code>,
+<code><a href="openai_download_batch_errors.html">openai_download_batch_errors()</a></code>,
 <code><a href="openai_download_batch_output.html">openai_download_batch_output()</a></code>,
 <code><a href="openai_get_batch.html">openai_get_batch()</a></code>,
 <code><a href="openai_poll_batch_until_complete.html">openai_poll_batch_until_complete()</a></code>,
@@ -331,7 +338,9 @@ preserved.</p>
 <span class="r-in"><span>  trait_description <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">description</span>,</span></span>
 <span class="r-in"><span>  prompt_template   <span class="op">=</span> <span class="va">tmpl</span>,</span></span>
 <span class="r-in"><span>  include_thoughts  <span class="op">=</span> <span class="cn">FALSE</span>,</span></span>
-<span class="r-in"><span>  service_tier      <span class="op">=</span> <span class="st">"flex"</span></span></span>
+<span class="r-in"><span>  endpoint          <span class="op">=</span> <span class="st">"responses"</span>,</span></span>
+<span class="r-in"><span>  store             <span class="op">=</span> <span class="cn">FALSE</span>,</span></span>
+<span class="r-in"><span>  max_output_tokens <span class="op">=</span> <span class="fl">1024</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">res_openai</span> <span class="op">&lt;-</span> <span class="fu"><a href="llm_download_batch_results.html">llm_download_batch_results</a></span><span class="op">(</span><span class="va">batch_openai</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>

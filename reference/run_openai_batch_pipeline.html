@@ -192,7 +192,8 @@ testing).</p></dd>
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
 <dd><p>Additional arguments passed through to
 <code><a href="build_openai_batch_requests.html">build_openai_batch_requests()</a></code>, e.g. <code>temperature</code>, <code>top_p</code>, <code>logprobs</code>,
-<code>reasoning</code>.</p></dd>
+<code>reasoning</code>, <code>store</code>, and <code>max_output_tokens</code>. Explicitly select
+<code>endpoint = "responses"</code> when supplying <code>max_output_tokens</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -217,7 +218,15 @@ the <code>"responses"</code> endpoint is used and a default reasoning
 effort of <code>"low"</code> is applied for GPT-5 series models unless
 overridden via <code>reasoning</code>.</p></li>
 <li><p>otherwise, <code>"chat.completions"</code> is used.</p></li>
-</ul></div>
+</ul><p>Omitted or <code>NULL</code> <code>store</code> preserves provider defaults. Responses
+are stored for later retrieval by default; <code>store = FALSE</code> disables that
+response storage, not Batch input/output/error file retention or all data
+retention. See <code><a href="build_openai_batch_requests.html">build_openai_batch_requests()</a></code> for endpoint-specific details.
+Use <code><a href="openai_download_batch_errors.html">openai_download_batch_errors()</a></code> separately to retrieve request failures.
+For an errors-only batch, use <code>poll = FALSE</code>, then <code><a href="openai_get_batch.html">openai_get_batch()</a></code> or
+<code><a href="openai_poll_batch_until_complete.html">openai_poll_batch_until_complete()</a></code> and the error downloader; this pipeline's
+<code>poll = TRUE</code> path still requires an output file.</p>
+    </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="llm_submit_pairs_batch.html">llm_submit_pairs_batch()</a></code>, <code><a href="llm_resume_multi_batches.html">llm_resume_multi_batches()</a></code></p>
@@ -238,6 +247,7 @@ overridden via <code>reasoning</code>.</p></li>
 <code><a href="llm_submit_pairs_batch.html">llm_submit_pairs_batch()</a></code>,
 <code><a href="llm_submit_pairs_multi_batch.html">llm_submit_pairs_multi_batch()</a></code>,
 <code><a href="openai_create_batch.html">openai_create_batch()</a></code>,
+<code><a href="openai_download_batch_errors.html">openai_download_batch_errors()</a></code>,
 <code><a href="openai_download_batch_output.html">openai_download_batch_output()</a></code>,
 <code><a href="openai_get_batch.html">openai_get_batch()</a></code>,
 <code><a href="openai_poll_batch_until_complete.html">openai_poll_batch_until_complete()</a></code>,

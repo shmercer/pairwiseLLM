@@ -135,7 +135,9 @@ run_openai_batch_pipeline(
 
   Additional arguments passed through to
   [`build_openai_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_openai_batch_requests.md),
-  e.g. `temperature`, `top_p`, `logprobs`, `reasoning`.
+  e.g. `temperature`, `top_p`, `logprobs`, `reasoning`, `store`, and
+  `max_output_tokens`. Explicitly select `endpoint = "responses"` when
+  supplying `max_output_tokens`.
 
 ## Value
 
@@ -172,6 +174,21 @@ When `endpoint` is not specified, it is chosen automatically:
 
 - otherwise, `"chat.completions"` is used.
 
+Omitted or `NULL` `store` preserves provider defaults. Responses are
+stored for later retrieval by default; `store = FALSE` disables that
+response storage, not Batch input/output/error file retention or all
+data retention. See
+[`build_openai_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_openai_batch_requests.md)
+for endpoint-specific details. Use
+[`openai_download_batch_errors()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_errors.md)
+separately to retrieve request failures. For an errors-only batch, use
+`poll = FALSE`, then
+[`openai_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_get_batch.md)
+or
+[`openai_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/openai_poll_batch_until_complete.md)
+and the error downloader; this pipeline's `poll = TRUE` path still
+requires an output file.
+
 ## See also
 
 [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md),
@@ -194,6 +211,7 @@ Other batch backends:
 [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md),
 [`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md),
 [`openai_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_create_batch.md),
+[`openai_download_batch_errors()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_errors.md),
 [`openai_download_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_output.md),
 [`openai_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_get_batch.md),
 [`openai_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/openai_poll_batch_until_complete.md),

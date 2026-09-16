@@ -159,11 +159,56 @@ companion vignette:</p>
 <li><a href="https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html">Prompt
 Template Positional Bias Testing</a></li>
 </ul>
+<div class="section level3">
+<h3 id="openai-storage-output-limits-and-error-files">OpenAI storage, output limits, and error files<a class="anchor" aria-label="anchor" href="#openai-storage-output-limits-and-error-files"></a>
+</h3>
+<p>OpenAI Batch accepts <code>store = TRUE</code> or <code>FALSE</code>
+on both endpoints. Omitted or <code>NULL</code> values preserve provider
+defaults: Responses are stored for later API retrieval by default.
+<code>store = FALSE</code> disables that response storage; it does not
+disable Batch input/output/error file retention or imply zero data
+retention. See <a href="https://developers.openai.com/api/docs/guides/your-data" class="external-link">OpenAI
+data controls</a>.</p>
+<p>Select <code>endpoint = "responses"</code> explicitly when setting
+<code>max_output_tokens</code>. The limit includes both visible output
+and reasoning tokens. These controls pass through
+<code><a href="../reference/run_openai_batch_pipeline.html">run_openai_batch_pipeline()</a></code> and
+<code><a href="../reference/llm_submit_pairs_batch.html">llm_submit_pairs_batch()</a></code>.</p>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">job</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/run_openai_batch_pipeline.html">run_openai_batch_pipeline</a></span><span class="op">(</span></span>
+<span>  pairs <span class="op">=</span> <span class="va">pairs</span>,</span>
+<span>  model <span class="op">=</span> <span class="st">"gpt-5.6-terra"</span>,</span>
+<span>  trait_name <span class="op">=</span> <span class="st">"Cohesion"</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="st">"How clearly the ideas connect."</span>,</span>
+<span>  endpoint <span class="op">=</span> <span class="st">"responses"</span>,</span>
+<span>  reasoning <span class="op">=</span> <span class="st">"none"</span>,</span>
+<span>  store <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  max_output_tokens <span class="op">=</span> <span class="fl">64</span>,</span>
+<span>  poll <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/openai_poll_batch_until_complete.html">openai_poll_batch_until_complete</a></span><span class="op">(</span><span class="va">job</span><span class="op">$</span><span class="va">batch</span><span class="op">$</span><span class="va">id</span><span class="op">)</span></span>
+<span><span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">batch</span><span class="op">$</span><span class="va">output_file_id</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nzchar</a></span><span class="op">(</span><span class="va">batch</span><span class="op">$</span><span class="va">output_file_id</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="../reference/openai_download_batch_output.html">openai_download_batch_output</a></span><span class="op">(</span><span class="va">batch</span><span class="op">$</span><span class="va">id</span>, <span class="st">"batch_output.jsonl"</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">batch</span><span class="op">$</span><span class="va">error_file_id</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nzchar</a></span><span class="op">(</span><span class="va">batch</span><span class="op">$</span><span class="va">error_file_id</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="../reference/openai_download_batch_errors.html">openai_download_batch_errors</a></span><span class="op">(</span><span class="va">batch</span><span class="op">$</span><span class="va">id</span>, <span class="st">"batch_errors.jsonl"</span><span class="op">)</span></span>
+<span>  <span class="va">errors</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/readLines.html" class="external-link">readLines</a></span><span class="op">(</span><span class="st">"batch_errors.jsonl"</span><span class="op">)</span>, <span class="fu">jsonlite</span><span class="fu">::</span><span class="va"><a href="https://jeroen.r-universe.dev/jsonlite/reference/fromJSON.html" class="external-link">fromJSON</a></span><span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
+<p>Successful output and request failures are separate files. Reconcile
+both with the submitted requests by <code>custom_id</code>, never line
+order. The error downloader preserves the raw JSONL and works when no
+output file exists. It errors clearly when no error file is available.
+Batch-level validation errors can instead appear in
+<code>batch$errors</code>. The pipeline’s <code>poll = TRUE</code> path
+still expects an output file; the separate steps above also handle
+errors-only batches. See the <a href="https://developers.openai.com/api/docs/guides/batch" class="external-link">OpenAI Batch
+guide</a>.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="setup-and-api-keys">2. Setup and API Keys<a class="anchor" aria-label="anchor" href="#setup-and-api-keys"></a>
 </h2>
-<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/shmercer/pairwiseLLM" class="external-link">pairwiseLLM</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://dplyr.tidyverse.org" class="external-link">dplyr</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://tidyr.tidyverse.org" class="external-link">tidyr</a></span><span class="op">)</span></span>
@@ -197,7 +242,7 @@ requests use a separate <code>VERTEX_API_KEY</code> surface and are
 documented in <a href="https://shmercer.github.io/pairwiseLLM/articles/getting-started.html">Getting
 Started with pairwiseLLM</a>.</p>
 <p>Check which are set:</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; No LLM API keys are currently set for known backends:</span></span>
 <span><span class="co">#&gt;   - OpenAI:         OPENAI_API_KEY</span></span>
@@ -226,7 +271,7 @@ Started with pairwiseLLM</a>.</p>
 </h2>
 <p>We use the built-in writing samples and a single trait
 (<code>overall_quality</code>).</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
@@ -237,7 +282,7 @@ Started with pairwiseLLM</a>.</p>
 <span><span class="co">#&gt; $description</span></span>
 <span><span class="co">#&gt; [1] "Overall quality of the writing, considering how well ideas are expressed,\nhow clearly the writing is organized, and how effective the language and\nconventions are."</span></span></code></pre></div>
 <p>Default prompt template:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/substr.html" class="external-link">substr</a></span><span class="op">(</span><span class="va">tmpl</span>, <span class="fl">1</span>, <span class="fl">400</span><span class="op">)</span>, <span class="st">"...</span></span>
 <span><span class="st">"</span><span class="op">)</span></span>
@@ -258,7 +303,7 @@ Started with pairwiseLLM</a>.</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; 1.  **Advocate for SAMPLE_1**: Mentally list the single strongest point of evidence that makes SAMPLE_1 the  ...</span></span></code></pre></div>
 <p>Construct a modest number of pairs to keep the example light:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">pairs_all</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span> <span class="op">|&gt;</span></span>
@@ -295,7 +340,7 @@ Started with pairwiseLLM</a>.</p>
 <li>Gemini models (with “thinking” enabled)</li>
 </ul>
 <p>Here we define a small grid:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">anthropic_models</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
 <span>  <span class="st">"claude-haiku-4-5-20251001"</span></span>
 <span><span class="op">)</span></span>
@@ -354,7 +399,7 @@ Started with pairwiseLLM</a>.</p>
 <p>We will also imagine multiple prompt templates have been registered.
 For simplicity, we use the same <code>tmpl</code> string, but in
 practice you would substitute different text:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">templates_tbl</span> <span class="op">&lt;-</span> <span class="fu">tibble</span><span class="fu">::</span><span class="fu"><a href="https://tibble.tidyverse.org/reference/tibble.html" class="external-link">tibble</a></span><span class="op">(</span></span>
 <span>  template_id     <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"test1"</span>, <span class="st">"test2"</span>, <span class="st">"test3"</span>, <span class="st">"test4"</span>, <span class="st">"test5"</span><span class="op">)</span>,</span>
 <span>  prompt_template <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">tmpl</span>, <span class="va">tmpl</span>, <span class="va">tmpl</span>, <span class="va">tmpl</span>, <span class="va">tmpl</span><span class="op">)</span></span>
@@ -388,7 +433,7 @@ never collide)</li>
 <div class="section level3">
 <h3 id="create-a-run-plan-and-output-directory">5.1 Create a run plan and output directory<a class="anchor" aria-label="anchor" href="#create-a-run-plan-and-output-directory"></a>
 </h3>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">out_root</span> <span class="op">&lt;-</span> <span class="st">"dev-output/advanced-multi-batch"</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="va">out_root</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
@@ -418,7 +463,7 @@ the example below we:</p>
 <li>Ask providers to include raw outputs in addition to parsed tags
 (helpful for debugging)</li>
 </ul>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">submit_one_run</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">template_id</span>, <span class="va">prompt_template</span>, <span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span>, <span class="va">direction</span>, <span class="va">run_dir</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">pairs_use</span>   <span class="op">&lt;-</span> <span class="fu">get_pairs_for_direction</span><span class="op">(</span><span class="va">direction</span><span class="op">)</span></span>
 <span>  <span class="va">is_thinking</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">thinking</span>, <span class="st">"with_thinking"</span><span class="op">)</span></span>
@@ -505,7 +550,7 @@ If you restart R, you can resume <strong>without</strong> keeping the
 <code>jobs</code> objects in memory by setting <code>jobs = NULL</code>
 and pointing to <code>output_dir</code> (the function will load
 <code>jobs_registry.csv</code>).</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">manifest_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_root</span>, <span class="st">"run_manifest.csv"</span><span class="op">)</span></span>
 <span><span class="va">manifest</span> <span class="op">&lt;-</span> <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/read_delim.html" class="external-link">read_csv</a></span><span class="op">(</span><span class="va">manifest_path</span>, show_col_types <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
@@ -532,7 +577,7 @@ and pointing to <code>output_dir</code> (the function will load
 tibble for that run (i.e., all segments bound together). We can attach
 run metadata (template/provider/model/thinking/direction) and then bind
 all runs into one master table.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">combined_all</span> <span class="op">&lt;-</span> <span class="fu">purrr</span><span class="fu">::</span><span class="fu"><a href="https://purrr.tidyverse.org/reference/map_dfr.html" class="external-link">map2_dfr</a></span><span class="op">(</span></span>
 <span>  <span class="va">polled</span>,</span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">manifest</span><span class="op">)</span><span class="op">)</span>,</span>
@@ -574,7 +619,7 @@ loop</li>
 </ul>
 <p>Example: resume only unfinished runs (based on each run’s
 registry):</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">manifest</span> <span class="op">&lt;-</span> <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/read_delim.html" class="external-link">read_csv</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_root</span>, <span class="st">"run_manifest.csv"</span><span class="op">)</span>, show_col_types <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">needs_poll</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">run_dir</span><span class="op">)</span> <span class="op">{</span></span>

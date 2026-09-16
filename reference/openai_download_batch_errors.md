@@ -1,15 +1,16 @@
-# Download the output file for a completed batch
+# Download the error file for an OpenAI batch
 
-Given a batch ID, retrieves the batch metadata, extracts the
-`output_file_id`, and downloads the corresponding file content to
-`path`. Request failures are stored separately; use
-[`openai_download_batch_errors()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_errors.md)
-to retrieve them and reconcile records by `custom_id`, not line order.
+Retrieves batch metadata and downloads the raw JSONL file identified by
+`error_file_id`. This works even when the batch has no `output_file_id`.
+An error is raised if no valid error file ID is available; the message
+includes the batch ID and status. HTTP and local file-write errors
+propagate. An existing local file is overwritten only after its content
+is downloaded.
 
 ## Usage
 
 ``` r
-openai_download_batch_output(batch_id, path, api_key = NULL)
+openai_download_batch_errors(batch_id, path, api_key = NULL)
 ```
 
 ## Arguments
@@ -20,20 +21,27 @@ openai_download_batch_output(batch_id, path, api_key = NULL)
 
 - path:
 
-  Local file path to write the downloaded `.jsonl` output.
+  Local file path to write the downloaded error `.jsonl` file.
 
 - api_key:
 
-  Optional OpenAI API key.
+  Optional OpenAI API key. Defaults to `Sys.getenv("OPENAI_API_KEY")`.
 
 ## Value
 
 Invisibly, the path to the downloaded file.
 
+## Details
+
+Successful requests are retrieved with
+[`openai_download_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_output.md).
+Reconcile both files against submitted requests by `custom_id`, not line
+order. This helper does not parse errors or retry failed comparisons.
+
 ## See also
 
-[`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md),
-[`llm_download_batch_results()`](https://shmercer.github.io/pairwiseLLM/reference/llm_download_batch_results.md)
+[`openai_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_get_batch.md),
+[`openai_download_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_output.md)
 
 Other batch backends:
 [`anthropic_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/anthropic_create_batch.md),
@@ -52,7 +60,7 @@ Other batch backends:
 [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md),
 [`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md),
 [`openai_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_create_batch.md),
-[`openai_download_batch_errors()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_errors.md),
+[`openai_download_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_output.md),
 [`openai_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_get_batch.md),
 [`openai_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/openai_poll_batch_until_complete.md),
 [`openai_upload_batch_file()`](https://shmercer.github.io/pairwiseLLM/reference/openai_upload_batch_file.md),
@@ -65,12 +73,8 @@ Other batch backends:
 
 ``` r
 if (FALSE) { # \dontrun{
-# Requires OPENAI_API_KEY and a completed batch with an output_file_id.
-
-openai_download_batch_output("batch_abc123", "batch_output.jsonl")
-
-# You can then parse the file
-res <- parse_openai_batch_output("batch_output.jsonl")
-head(res)
+# Requires OPENAI_API_KEY and a batch with an error_file_id.
+openai_download_batch_errors("batch_abc123", "batch_errors.jsonl")
+errors <- lapply(readLines("batch_errors.jsonl"), jsonlite::fromJSON)
 } # }
 ```

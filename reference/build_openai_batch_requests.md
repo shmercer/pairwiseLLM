@@ -19,7 +19,9 @@ build_openai_batch_requests(
   logprobs = NULL,
   reasoning = NULL,
   include_thoughts = FALSE,
-  request_id_prefix = "EXP"
+  request_id_prefix = "EXP",
+  store = NULL,
+  max_output_tokens = NULL
 )
 ```
 
@@ -89,6 +91,18 @@ build_openai_batch_requests(
   String prefix for `custom_id`; the full ID takes the form
   `"<prefix>_<ID1>_vs_<ID2>"`.
 
+- store:
+
+  Optional logical scalar for either endpoint. `TRUE` and `FALSE` are
+  forwarded unchanged; omitted or `NULL` leaves the field absent.
+
+- max_output_tokens:
+
+  Optional positive whole numeric scalar, at most
+  `.Machine$integer.max`, for the Responses endpoint only. Includes
+  visible output and reasoning tokens. Omitted or `NULL` leaves the
+  field absent.
+
 ## Value
 
 A tibble with one row per pair and columns:
@@ -100,6 +114,16 @@ A tibble with one row per pair and columns:
 - `url`: Endpoint path (`"/v1/chat/completions"` or `"/v1/responses"`).
 
 - `body`: List column containing the request body.
+
+## Details
+
+Invalid controls fail even for empty `pairs`. Responses are stored for
+later API retrieval by default; set `store = FALSE` to disable response
+storage. For Chat Completions, `store` controls storage for distillation
+or evaluations. Omitting it preserves that endpoint's provider default.
+This parameter does not control Batch input/output/error file retention
+and does not imply zero data retention. See
+<https://developers.openai.com/api/docs/guides/your-data>.
 
 ## See also
 
@@ -122,6 +146,7 @@ Other batch backends:
 [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md),
 [`llm_submit_pairs_multi_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_multi_batch.md),
 [`openai_create_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_create_batch.md),
+[`openai_download_batch_errors()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_errors.md),
 [`openai_download_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/openai_download_batch_output.md),
 [`openai_get_batch()`](https://shmercer.github.io/pairwiseLLM/reference/openai_get_batch.md),
 [`openai_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/openai_poll_batch_until_complete.md),
@@ -163,7 +188,9 @@ batch_tbl_resp <- build_openai_batch_requests(
   prompt_template = tmpl,
   endpoint = "responses",
   include_thoughts = TRUE, # implies reasoning="low" if not set
-  reasoning = "medium"
+  reasoning = "medium",
+  store = FALSE,
+  max_output_tokens = 1024
 )
 
 batch_tbl_chat
@@ -177,7 +204,7 @@ batch_tbl_resp
 #> # A tibble: 3 × 4
 #>   custom_id      method url           body            
 #>   <chr>          <chr>  <chr>         <list>          
-#> 1 EXP_S17_vs_S12 POST   /v1/responses <named list [3]>
-#> 2 EXP_S19_vs_S15 POST   /v1/responses <named list [3]>
-#> 3 EXP_S01_vs_S15 POST   /v1/responses <named list [3]>
+#> 1 EXP_S17_vs_S12 POST   /v1/responses <named list [5]>
+#> 2 EXP_S19_vs_S15 POST   /v1/responses <named list [5]>
+#> 3 EXP_S01_vs_S15 POST   /v1/responses <named list [5]>
 ```
