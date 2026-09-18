@@ -123,11 +123,13 @@ and storage.</p>
 <div class="section level2">
 <h2 id="install-and-check-cmdstan">Install and check CmdStan<a class="anchor" aria-label="anchor" href="#install-and-check-cmdstan"></a>
 </h2>
-<p>Bayesian refits require the suggested <code>cmdstanr</code> package,
-a working C++ toolchain, and CmdStan. This is a one-time machine setup;
-it does not require an LLM credential.</p>
+<p>Bayesian refits require the suggested <code>cmdstanr</code> and
+<code>parallelly</code> packages, a working C++ toolchain, and CmdStan.
+This is a one-time machine setup; it does not require an LLM
+credential.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"parallelly"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span></span>
 <span>  <span class="st">"cmdstanr"</span>,</span>
 <span>  repos <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"https://stan-dev.r-universe.dev"</span>, <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"repos"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
@@ -148,6 +150,13 @@ compilation. The ranking chunks also require the opt-in flag when
 rendering this document. You can run the displayed R code interactively
 after completing setup. The deterministic judge is local, so the example
 never makes a network request or incurs provider charges.</p>
+<p>MCMC refits use the same CPU allocation rules as standalone Bayesian
+fits. Automatic scheduling uses at most two CPU slots with
+<code>core_fraction = 0.8</code>; explicit parallel-chain requests must
+fit the available chain/thread budget. These settings control execution,
+not total chains or adaptive stopping. See <a href="bayesian-btl.html#chains-and-cpu-allocation">Chains and CPU
+allocation</a> for the controls and resource fields recorded in the
+refit log.</p>
 </div>
 <div class="section level2">
 <h2 id="a-complete-offline-run-with-adaptive_rank">A complete offline run with <code>adaptive_rank()</code><a class="anchor" aria-label="anchor" href="#a-complete-offline-run-with-adaptive_rank"></a>

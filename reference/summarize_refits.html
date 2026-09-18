@@ -145,32 +145,38 @@ view over <code>round_log</code> with no recomputation.</p>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Full per-refit view:</span></span></span>
 <span class="r-in"><span><span class="fu">summarize_refits</span><span class="op">(</span><span class="va">logs</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 2 × 10</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 2 × 14</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   refit_id round_id_at_refit step_id_at_refit new_pairs_since_last_refit</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>                      <span style="color: #949494; font-style: italic;">&lt;int&gt;</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>        1                 1               10                         50</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>        2                 2               20                         50</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 6 more variables: total_pairs_done &lt;int&gt;, divergences &lt;int&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   max_rhat &lt;dbl&gt;, min_ess_bulk &lt;dbl&gt;, stop_decision &lt;lgl&gt;, stop_reason &lt;chr&gt;</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 10 more variables: total_pairs_done &lt;int&gt;, divergences &lt;int&gt;,</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   max_rhat &lt;dbl&gt;, min_ess_bulk &lt;dbl&gt;, stop_decision &lt;lgl&gt;, stop_reason &lt;chr&gt;,</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   mcmc_cores_available &lt;int&gt;, mcmc_parallel_chains_requested &lt;int&gt;,</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   mcmc_concurrency_budget &lt;int&gt;, mcmc_concurrency_used &lt;int&gt;</span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Only the most recent refit row:</span></span></span>
 <span class="r-in"><span><span class="fu">summarize_refits</span><span class="op">(</span><span class="va">logs</span>, last_n <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 1 × 10</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 1 × 14</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   refit_id round_id_at_refit step_id_at_refit new_pairs_since_last_refit</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>                      <span style="color: #949494; font-style: italic;">&lt;int&gt;</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>        2                 2               20                         50</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 6 more variables: total_pairs_done &lt;int&gt;, divergences &lt;int&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   max_rhat &lt;dbl&gt;, min_ess_bulk &lt;dbl&gt;, stop_decision &lt;lgl&gt;, stop_reason &lt;chr&gt;</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 10 more variables: total_pairs_done &lt;int&gt;, divergences &lt;int&gt;,</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   max_rhat &lt;dbl&gt;, min_ess_bulk &lt;dbl&gt;, stop_decision &lt;lgl&gt;, stop_reason &lt;chr&gt;,</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   mcmc_cores_available &lt;int&gt;, mcmc_parallel_chains_requested &lt;int&gt;,</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   mcmc_concurrency_budget &lt;int&gt;, mcmc_concurrency_used &lt;int&gt;</span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Drop optional diagnostics if you want a compact core summary:</span></span></span>
 <span class="r-in"><span><span class="fu">summarize_refits</span><span class="op">(</span><span class="va">logs</span>, include_optional <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 2 × 10</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 2 × 14</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   refit_id round_id_at_refit step_id_at_refit total_pairs_done</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;int&gt;</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>        1                 1               10               50</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>        2                 2               20              100</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 6 more variables: new_pairs_since_last_refit &lt;int&gt;, divergences &lt;int&gt;,</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   max_rhat &lt;dbl&gt;, min_ess_bulk &lt;dbl&gt;, stop_decision &lt;lgl&gt;, stop_reason &lt;chr&gt;</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 10 more variables: new_pairs_since_last_refit &lt;int&gt;, divergences &lt;int&gt;,</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   max_rhat &lt;dbl&gt;, min_ess_bulk &lt;dbl&gt;, stop_decision &lt;lgl&gt;, stop_reason &lt;chr&gt;,</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   mcmc_cores_available &lt;int&gt;, mcmc_parallel_chains_requested &lt;int&gt;,</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   mcmc_concurrency_budget &lt;int&gt;, mcmc_concurrency_used &lt;int&gt;</span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

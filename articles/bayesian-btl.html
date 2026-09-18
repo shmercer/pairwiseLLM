@@ -104,13 +104,15 @@ sufficient sampling budget for your study.</p>
 <div class="section level2">
 <h2 id="prerequisites">Prerequisites<a class="anchor" aria-label="anchor" href="#prerequisites"></a>
 </h2>
-<p>The fit requires the suggested <code>cmdstanr</code> package,
-CmdStan, and a working C++ toolchain. Installation is a machine-level
-setup and does not require provider credentials. Fitting chunks are
-shown but not evaluated during document builds. Run them interactively
-after setup; no provider requests are needed for this example.</p>
+<p>The fit requires the suggested <code>cmdstanr</code> and
+<code>parallelly</code> packages, CmdStan, and a working C++ toolchain.
+Installation is a machine-level setup and does not require provider
+credentials. Fitting chunks are shown but not evaluated during document
+builds. Run them interactively after setup; no provider requests are
+needed for this example.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"parallelly"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span></span>
 <span>  <span class="st">"cmdstanr"</span>,</span>
 <span>  repos <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"https://stan-dev.r-universe.dev"</span>, <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"repos"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
@@ -260,6 +262,41 @@ numerical problems.</td>
 <p>Higher quality locations indicate stronger writing, but adjacent
 ranks can be uncertain. Keep both the item summaries and diagnostic
 table when saving or reporting an analysis.</p>
+</div>
+<div class="section level3">
+<h3 id="chains-and-cpu-allocation">Chains and CPU allocation<a class="anchor" aria-label="anchor" href="#chains-and-cpu-allocation"></a>
+</h3>
+<p><code>chains</code> sets the total number of chains;
+<code>parallel_chains</code> sets how many run at once. Four chains can
+therefore run two at a time. <code>threads_per_chain</code> defaults to
+one; the bundled models do not use within-chain parallel likelihoods, so
+increasing it does not accelerate likelihood evaluation.</p>
+<p>When <code>parallel_chains</code> is omitted, scheduling uses at most
+two available CPU slots and applies <code>core_fraction = 0.8</code>,
+retaining at least one slot. On a two-slot allocation this schedules one
+chain at a time. Detection respects scheduler, container, and check
+constraints without changing the total chains. The historical default
+chain count remains <code>min(8, detected physical cores)</code>, with
+logical-core and one-core fallbacks when hardware detection is
+unavailable. Set <code>chains</code> explicitly when you need the same
+count across machines.</p>
+<p>An explicit <code>parallel_chains</code> request bypasses
+<code>core_fraction</code> and is capped at the total chains. Its
+product with <code>threads_per_chain</code> must fit the available
+allocation; otherwise fitting stops with guidance. For example,
+<code>cmdstan = list(chains = 4L, parallel_chains = 4L)</code> requests
+four CPU slots and prints a resource message when sampling. Active check
+limits still cap the allocation at two. Examples and package checks stay
+within that limit.</p>
+<p>If resource detection fails, fitting warns and uses one CPU slot.
+Independent concurrent fits each see the same allocation, so divide
+resources among them yourself. <code>summarize_refits(fit)</code>
+reports <code>mcmc_cores_available</code>,
+<code>mcmc_parallel_chains_requested</code>,
+<code>mcmc_concurrency_budget</code>, and
+<code>mcmc_concurrency_used</code>. An automatic request is
+<code>NA</code>; historical fits without this metadata also report
+<code>NA</code> for the new fields.</p>
 </div>
 </div>
 <div class="section level2">

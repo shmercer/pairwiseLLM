@@ -39,12 +39,13 @@ studies should be planned around provider cost, refit time, and storage.
 
 ## Install and check CmdStan
 
-Bayesian refits require the suggested `cmdstanr` package, a working C++
-toolchain, and CmdStan. This is a one-time machine setup; it does not
-require an LLM credential.
+Bayesian refits require the suggested `cmdstanr` and `parallelly`
+packages, a working C++ toolchain, and CmdStan. This is a one-time
+machine setup; it does not require an LLM credential.
 
 ``` r
 
+install.packages("parallelly")
 install.packages(
   "cmdstanr",
   repos = c("https://stan-dev.r-universe.dev", getOption("repos"))
@@ -72,6 +73,14 @@ The ranking chunks also require the opt-in flag when rendering this
 document. You can run the displayed R code interactively after
 completing setup. The deterministic judge is local, so the example never
 makes a network request or incurs provider charges.
+
+MCMC refits use the same CPU allocation rules as standalone Bayesian
+fits. Automatic scheduling uses at most two CPU slots with
+`core_fraction = 0.8`; explicit parallel-chain requests must fit the
+available chain/thread budget. These settings control execution, not
+total chains or adaptive stopping. See [Chains and CPU
+allocation](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.html#chains-and-cpu-allocation)
+for the controls and resource fields recorded in the refit log.
 
 ## A complete offline run with `adaptive_rank()`
 

@@ -94,30 +94,36 @@ logs <- list(
 
 # Full per-refit view:
 summarize_refits(logs)
-#> # A tibble: 2 × 10
+#> # A tibble: 2 × 14
 #>   refit_id round_id_at_refit step_id_at_refit new_pairs_since_last_refit
 #>      <int>             <int>            <int>                      <int>
 #> 1        1                 1               10                         50
 #> 2        2                 2               20                         50
-#> # ℹ 6 more variables: total_pairs_done <int>, divergences <int>,
-#> #   max_rhat <dbl>, min_ess_bulk <dbl>, stop_decision <lgl>, stop_reason <chr>
+#> # ℹ 10 more variables: total_pairs_done <int>, divergences <int>,
+#> #   max_rhat <dbl>, min_ess_bulk <dbl>, stop_decision <lgl>, stop_reason <chr>,
+#> #   mcmc_cores_available <int>, mcmc_parallel_chains_requested <int>,
+#> #   mcmc_concurrency_budget <int>, mcmc_concurrency_used <int>
 
 # Only the most recent refit row:
 summarize_refits(logs, last_n = 1)
-#> # A tibble: 1 × 10
+#> # A tibble: 1 × 14
 #>   refit_id round_id_at_refit step_id_at_refit new_pairs_since_last_refit
 #>      <int>             <int>            <int>                      <int>
 #> 1        2                 2               20                         50
-#> # ℹ 6 more variables: total_pairs_done <int>, divergences <int>,
-#> #   max_rhat <dbl>, min_ess_bulk <dbl>, stop_decision <lgl>, stop_reason <chr>
+#> # ℹ 10 more variables: total_pairs_done <int>, divergences <int>,
+#> #   max_rhat <dbl>, min_ess_bulk <dbl>, stop_decision <lgl>, stop_reason <chr>,
+#> #   mcmc_cores_available <int>, mcmc_parallel_chains_requested <int>,
+#> #   mcmc_concurrency_budget <int>, mcmc_concurrency_used <int>
 
 # Drop optional diagnostics if you want a compact core summary:
 summarize_refits(logs, include_optional = FALSE)
-#> # A tibble: 2 × 10
+#> # A tibble: 2 × 14
 #>   refit_id round_id_at_refit step_id_at_refit total_pairs_done
 #>      <int>             <int>            <int>            <int>
 #> 1        1                 1               10               50
 #> 2        2                 2               20              100
-#> # ℹ 6 more variables: new_pairs_since_last_refit <int>, divergences <int>,
-#> #   max_rhat <dbl>, min_ess_bulk <dbl>, stop_decision <lgl>, stop_reason <chr>
+#> # ℹ 10 more variables: new_pairs_since_last_refit <int>, divergences <int>,
+#> #   max_rhat <dbl>, min_ess_bulk <dbl>, stop_decision <lgl>, stop_reason <chr>,
+#> #   mcmc_cores_available <int>, mcmc_parallel_chains_requested <int>,
+#> #   mcmc_concurrency_budget <int>, mcmc_concurrency_used <int>
 ```

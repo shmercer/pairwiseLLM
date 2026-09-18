@@ -82,7 +82,12 @@ Core columns:
 - Refit execution metadata: `mcmc_chains`, `mcmc_parallel_chains`,
   `mcmc_core_fraction`, `mcmc_cores_detected_physical`,
   `mcmc_cores_detected_logical`, `mcmc_threads_per_chain`,
-  `mcmc_cmdstanr_version`.
+  `mcmc_cores_available`, `mcmc_parallel_chains_requested`,
+  `mcmc_concurrency_budget`, `mcmc_concurrency_used`,
+  `mcmc_cmdstanr_version`. Requested parallel chains are `NA` for
+  automatic scheduling; the budget and usage count CPU slots across
+  chains and threads. Historical fits without allocation metadata report
+  `NA` for those fields.
 
 - Stop output: `stop_decision`, `stop_reason`, `max_pairs_after_stop`,
   `pairs_committed_after_stop`.
@@ -106,8 +111,8 @@ Other adaptive logs:
 ``` r
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
 adaptive_round_log(state)
-#> # A tibble: 0 × 117
-#> # ℹ 117 variables: predictive_prior_digest <chr>, refit_id <int>,
+#> # A tibble: 0 × 121
+#> # ℹ 121 variables: predictive_prior_digest <chr>, refit_id <int>,
 #> #   round_id_at_refit <int>, step_id_at_refit <int>, timestamp <dttm>,
 #> #   model_variant <chr>, n_items <int>, total_pairs_done <int>,
 #> #   new_pairs_since_last_refit <int>, new_active_pairs_since_last_refit <int>,

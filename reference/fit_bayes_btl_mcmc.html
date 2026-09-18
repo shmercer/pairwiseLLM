@@ -113,6 +113,17 @@ functions.</p>
 <dd><p>Number of chains (defaults to <code>min(8, physical_cores)</code> via
 internal resolution).</p></dd>
 
+<dt>parallel_chains</dt>
+<dd><p>Maximum concurrent chains. Automatic scheduling uses
+at most two CPU slots within the available allocation and <code>core_fraction</code>.
+An explicit value bypasses that fraction and is capped at <code>chains</code>;
+its product with <code>threads_per_chain</code> must fit the available allocation.</p></dd>
+
+<dt>threads_per_chain</dt>
+<dd><p>Threads per chain (default <code>1</code>). The bundled
+models do not use within-chain parallel likelihoods, so higher values do
+not accelerate their likelihood evaluation.</p></dd>
+
 <dt>iter_warmup</dt>
 <dd><p>Warmup iterations (default <code>1000</code>).</p></dd>
 
@@ -123,13 +134,20 @@ internal resolution).</p></dd>
 <dd><p>Optional integer seed forwarded to CmdStan (default <code>NULL</code>).</p></dd>
 
 <dt>core_fraction</dt>
-<dd><p>Fraction of physical cores for parallelization (default <code>0.8</code>).</p></dd>
+<dd><p>Fraction of available CPU slots for automatic
+parallelization (default <code>0.8</code>); at least one slot is retained.</p></dd>
 
 <dt>output_dir</dt>
 <dd><p>Optional directory for CmdStan output.</p></dd>
 
 
-</dl></dd>
+</dl><p>Sampling requires the suggested <span class="pkg">parallelly</span> package for allocation-aware
+detection. Scheduler, container, and check constraints limit concurrency,
+without changing the number of chains. Explicit requests above two CPU slots
+are reported and permitted within the allocation, except under an active
+<code>_R_CHECK_LIMIT_CORES_</code> constraint. Excessive requests fail with guidance.
+If detection fails, a warning reports the one-slot fallback. When launching
+multiple fits independently, divide the allocation among them yourself.</p></dd>
 
 
 <dt id="arg-pair-counts">pair_counts<a class="anchor" aria-label="anchor" href="#arg-pair-counts"></a></dt>

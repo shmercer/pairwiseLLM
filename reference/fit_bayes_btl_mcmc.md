@@ -54,6 +54,20 @@ fit_bayes_btl_mcmc(
   :   Number of chains (defaults to `min(8, physical_cores)` via
       internal resolution).
 
+  parallel_chains
+
+  :   Maximum concurrent chains. Automatic scheduling uses at most two
+      CPU slots within the available allocation and `core_fraction`. An
+      explicit value bypasses that fraction and is capped at `chains`;
+      its product with `threads_per_chain` must fit the available
+      allocation.
+
+  threads_per_chain
+
+  :   Threads per chain (default `1`). The bundled models do not use
+      within-chain parallel likelihoods, so higher values do not
+      accelerate their likelihood evaluation.
+
   iter_warmup
 
   :   Warmup iterations (default `1000`).
@@ -68,11 +82,21 @@ fit_bayes_btl_mcmc(
 
   core_fraction
 
-  :   Fraction of physical cores for parallelization (default `0.8`).
+  :   Fraction of available CPU slots for automatic parallelization
+      (default `0.8`); at least one slot is retained.
 
   output_dir
 
   :   Optional directory for CmdStan output.
+
+  Sampling requires the suggested parallelly package for
+  allocation-aware detection. Scheduler, container, and check
+  constraints limit concurrency, without changing the number of chains.
+  Explicit requests above two CPU slots are reported and permitted
+  within the allocation, except under an active `_R_CHECK_LIMIT_CORES_`
+  constraint. Excessive requests fail with guidance. If detection fails,
+  a warning reports the one-slot fallback. When launching multiple fits
+  independently, divide the allocation among them yourself.
 
 - pair_counts:
 
