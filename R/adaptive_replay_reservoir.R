@@ -60,7 +60,6 @@
 #' identities are rejected before replay. Do not edit a constructed reservoir.
 #' IDs that make distinct allowed edges collide in the existing colon-separated
 #' adaptive history keys are rejected; use unambiguous panel IDs in that case.
-#'
 #' @inheritParams validate_adaptive_replay
 #' @return A `pairwiseLLM_replay_reservoir` object for `replay_reservoir` in
 #'   [adaptive_rank_start()] or [adaptive_rank()], and for
@@ -75,6 +74,7 @@
 #' state <- adaptive_rank_run_live(state, make_adaptive_judge_replay(reservoir),
 #'   n_steps = 4L, progress = "none")
 #' @family adaptive ranking
+#' @seealso [make_adaptive_judge_replay()], [adaptive_rank_start()], [adaptive_rank_resume()]
 #' @export
 make_adaptive_replay_reservoir <- function(outcomes, item_ids) {
   outcomes <- validate_adaptive_replay(outcomes, item_ids, complete = FALSE)

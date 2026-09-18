@@ -40,7 +40,8 @@ adaptive_rank(
   warm_start_features = NULL,
   warm_start_python = NULL,
   warm_start_prior_sd = NULL,
-  warm_start_mode = NULL
+  warm_start_mode = NULL,
+  replay_reservoir = NULL
 )
 }
 \arguments{
@@ -120,10 +121,10 @@ unchanged. On resume, omit this field or supply the saved strategy; changing
 strategy requires a new session.}
 \item{\code{dup_max_obs_relaxed}}{Hybrid's maximum observations per unordered pair
 under the relaxed near-tie fallback: \code{3L} (historical default) or \code{2L}.
-Use \code{2L} with \code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}} to cap study evidence at the
+For directed-table replay, use \code{2L} with \code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}} for
 two collected orientations. The ordinary ceiling remains two; direct
 strategies already cap at two. Phase B retains its existing ceiling.
-This setting persists with the controller and defaults to three for legacy sessions.}
+This setting persists; sparse reservoirs independently enforce a one-use ceiling.}
 \item{\code{global_identified_reliability_min}}{Global EAP reliability threshold
 used to mark the run as globally identified after a refit. Default is
 \code{0.80}.}
@@ -372,6 +373,12 @@ Request \code{both} explicitly to initialize both models. In TrueSkill-warm mode
 exact item-ID alignment precedes \code{mu = mu0 + sigma0 * prior_mean}, with
 \code{mu0 = 25}, \code{sigma0 = 25/3}, fixed multiplier 1, and unchanged sigma.
 Explicit \code{cold} with predictive input, or a non-cold mode without it, errors.}
+
+\item{replay_reservoir}{Optional \code{\link[=make_adaptive_replay_reservoir]{make_adaptive_replay_reservoir()}} object.
+Requires ordinary within-set mode and a matching reservoir replay judge.
+Uses a seeded spanning-tree bootstrap and at most one committed observation
+per allowed unordered edge, always in its frozen observed orientation.
+On resume, omit this argument or supply the identical reservoir.}
 }
 \value{
 A list with:
@@ -612,6 +619,7 @@ Other adaptive ranking:
 \code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
 \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}},
 \code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}},
+\code{\link[=make_adaptive_replay_reservoir]{make_adaptive_replay_reservoir()}},
 \code{\link[=summarize_adaptive]{summarize_adaptive()}},
 \code{\link[=validate_adaptive_replay]{validate_adaptive_replay()}}
 }

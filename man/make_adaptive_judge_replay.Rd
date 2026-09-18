@@ -12,12 +12,11 @@ make_adaptive_judge_replay(
 )
 }
 \arguments{
-\item{outcomes}{Data frame with character \code{A_id}, character \code{B_id}, and binary
-\code{Y} (one means presented A wins). \code{Y} accepts logical, numeric zero/one, or
-character \code{"0"}/\code{"1"}; factors, missing values, and other values are rejected.}
+\item{outcomes}{A directed outcome data frame (see \code{\link[=validate_adaptive_replay]{validate_adaptive_replay()}})
+or a \code{\link[=make_adaptive_replay_reservoir]{make_adaptive_replay_reservoir()}} object.}
 
-\item{item_ids}{Unique non-blank character IDs for the active panel, with at
-least two items. IDs must match the adaptive state's item IDs.}
+\item{item_ids}{Panel IDs. Required for data-frame input; inferred from a
+reservoir when omitted, or checked for agreement when supplied.}
 
 \item{strict_use}{Logical; reject repeated use of an exact ordered judgment.
 Default \code{TRUE}. \code{FALSE} permits repeated lookups for non-study inspection.}
@@ -39,7 +38,7 @@ complementing the forward result. No provider calls, random draws, or
 step-dependent outcomes are used.
 }
 \details{
-For study runs, set \code{adaptive_config = list(dup_max_obs_relaxed = 2L)} when
+For directed-table studies, set \code{adaptive_config = list(dup_max_obs_relaxed = 2L)} when
 creating the adaptive state. This prevents hybrid's relaxed third observation
 at selection time. Normal presentation balancing and repeat reversal remain
 active. Direct strategies already cap unordered pairs at two observations.
@@ -50,6 +49,15 @@ updated state. The judge is not saved in an adaptive session. To resume, create
 a new judge from the same matrix and pass the loaded state to the runner;
 strict use also rejects keys already present in that state's committed history.
 The matrix and its provenance must be retained separately by the caller.
+
+A \code{\link[=make_adaptive_replay_reservoir]{make_adaptive_replay_reservoir()}} object instead enables sparse,
+single-observation replay. Bind that object through \code{replay_reservoir} when
+creating state. The judge then requires matching reservoir identity, uses
+committed unordered-edge history for consumption, and preserves the stored
+orientation. Discarding an updated state does not consume an observation.
+Recreate a matching judge after loading a session; state contains only the
+outcome-free manifest. \code{complete} applies only to directed data-frame input;
+\code{strict_use = FALSE} is unsupported for reservoirs.
 }
 \examples{
 ids <- c("a", "b", "c")
@@ -70,6 +78,7 @@ Other adaptive ranking:
 \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
 \code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
 \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}},
+\code{\link[=make_adaptive_replay_reservoir]{make_adaptive_replay_reservoir()}},
 \code{\link[=summarize_adaptive]{summarize_adaptive()}},
 \code{\link[=validate_adaptive_replay]{validate_adaptive_replay()}}
 }

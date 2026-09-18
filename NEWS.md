@@ -2,6 +2,12 @@
 
 ## Improvements
 
+- Added sparse adaptive replay reservoirs with one frozen observation per
+  unordered edge. All four within-set pairing strategies respect unused allowed
+  edges and recorded presentation orientation. Reservoir runs use a common
+  seeded spanning-tree bootstrap, validate identity on resume, and distinguish
+  exhaustion from a temporarily unavailable preferred candidate (#257).
+
 - MCMC scheduling now respects available CPU allocations through the suggested
   `parallelly` package, required when sampling. Automatic concurrency retains
   the two-slot ceiling and `core_fraction` headroom. Explicit parallel-chain

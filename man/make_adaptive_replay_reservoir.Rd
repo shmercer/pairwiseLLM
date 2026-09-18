@@ -50,6 +50,8 @@ state <- adaptive_rank_run_live(state, make_adaptive_judge_replay(reservoir),
   n_steps = 4L, progress = "none")
 }
 \seealso{
+\code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}}, \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}}
+
 Other adaptive ranking:
 \code{\link[=adaptive_rank]{adaptive_rank()}},
 \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},

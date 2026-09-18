@@ -37,6 +37,7 @@ Other adaptive ranking:
 \code{\link[=adaptive_rank_start]{adaptive_rank_start()}},
 \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}},
 \code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}},
+\code{\link[=make_adaptive_replay_reservoir]{make_adaptive_replay_reservoir()}},
 \code{\link[=validate_adaptive_replay]{validate_adaptive_replay()}}
 }
 \concept{adaptive ranking}
