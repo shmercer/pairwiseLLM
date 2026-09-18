@@ -73,6 +73,8 @@ as_pairs_tbl <- function(...) {
     "filtered_by_paircount",
     "filtered_by_other_filters",
     "all_eligible_spokes_infeasible",
+    "reservoir_exhausted",
+    "reservoir_constraints_exhausted",
     "unknown"
   )
 }

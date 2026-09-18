@@ -2145,7 +2145,7 @@ adaptive_defaults <- function(N) {
   ids <- as.character(state$trueskill_state$items$item_id)
   candidates <- candidates %||% tibble::tibble(i = character(), j = character())
   filter_counts <- attr(candidates, "candidate_filter_counts", exact = TRUE) %||% list()
-  candidates <- tibble::as_tibble(candidates)
+  candidates <- .adaptive_reservoir_filter(state, tibble::as_tibble(candidates))
 
   n_generated <- nrow(candidates)
   long_gate_pass <- NA
@@ -2240,8 +2240,9 @@ adaptive_defaults <- function(N) {
   cap_count <- ceiling(config$cap_frac * config$W_cap)
   recent_deg <- .adaptive_history_state_recent_deg(history_state, ids, config$W_cap)
   allow_repeats <- identical(stage$dup_policy, "relaxed")
-  dup_max_obs_active <- if (isTRUE(link_phase_b)) 1L else config$dup_max_obs
-  dup_max_obs_relaxed_active <- if (isTRUE(link_phase_b)) 1L else config$dup_max_obs_relaxed
+  one_use <- isTRUE(link_phase_b) || .adaptive_reservoir_active(state)
+  dup_max_obs_active <- if (one_use) 1L else config$dup_max_obs
+  dup_max_obs_relaxed_active <- if (one_use) 1L else config$dup_max_obs_relaxed
 
   .apply_downstream_filters <- function(candidates_in) {
     star_override_used_local <- FALSE
@@ -2799,6 +2800,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     starvation_reason <- as.character(
       starvation_reason_override %||% .starvation_reason_from_counts(last_counts %||% list())
     )
+    if (.adaptive_reservoir_active(state)) starvation_reason <- .adaptive_reservoir_starvation(state)
     list(
       i = NA_integer_,
       j = NA_integer_,
@@ -3069,6 +3071,20 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
           seed_base = seed_base,
           candidates = stage_candidates
         )
+        total_domain <- (attr(stage_candidates, "candidate_filter_counts", exact = TRUE) %||% list())$
+          n_candidates_legal_domain_total %||% 0L
+        if (.adaptive_reservoir_active(state) &&
+          (is.null(stage_out$selected) || nrow(stage_out$selected) == 0L) &&
+          total_domain > nrow(stage_candidates)) {
+          # A bounded sample cannot establish that the legal domain is empty.
+          stage_candidates <- generate_stage_candidates_from_state(state,
+            stage_name = attempt_generation_stage, fallback_name = stage$name,
+            C_max = .Machine$integer.max, seed = stage_seed)
+          stage_out <- .adaptive_select_stage(stage = stage, state = state,
+            config = defaults, controller = controller, generation_stage = attempt_generation_stage,
+            round = round, history_state = history_state, counts = counts,
+            step_id = step_id, seed_base = seed_base, candidates = stage_candidates)
+        }
         if (!is.na(stage_filter_memo_key)) {
           stage_filter_memo[[stage_filter_memo_key]] <- stage_out
         }
@@ -3121,8 +3137,14 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       }
       explore_rate_used <- as.double(explore_rate)
 
-      underrep_set <- .adaptive_underrep_set(counts$deg)
-      min_degree <- min(counts$deg)
+      eligible_ids <- if (.adaptive_reservoir_active(state)) {
+        sort(unique(c(cand$i, cand$j)))
+      } else {
+        ids
+      }
+      eligible_deg <- counts$deg[eligible_ids]
+      underrep_set <- .adaptive_underrep_set(eligible_deg)
+      min_degree <- min(eligible_deg)
       quota_active <- min_degree < 2L
       quota_eps <- defaults$quota_eps
       quota_pick <- FALSE
@@ -3153,9 +3175,9 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       }
 
       if (stage_is_explore) {
-        underrep <- .adaptive_underrep_set(counts$deg)
+        underrep <- .adaptive_underrep_set(eligible_deg)
         if (length(underrep) == 0L) {
-          underrep <- ids
+          underrep <- eligible_ids
         }
 
         nonlocal_seed <- .adaptive_stage_seed(seed_base, step_id, stage$idx, offset = 3L)
@@ -3307,7 +3329,8 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       )
     }
   }
-  order_vals <- .adaptive_assign_order(
+  order_vals <- .adaptive_assign_order_for_state(
+    state,
     selected_pair,
     counts$posA,
     counts$posB,
