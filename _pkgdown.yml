@@ -180,6 +180,7 @@ reference:
       - has_concept("adaptive warm start")
   - title: "Advanced: adaptive lifecycle and replay"
     contents:
+      - make_adaptive_replay_reservoir
       - make_adaptive_judge_replay
       - validate_adaptive_replay
       - adaptive_rank_start

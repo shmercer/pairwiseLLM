@@ -2405,16 +2405,21 @@ generate_stage_candidates_from_state <- function(state,
     ))
   }
 
-  direct_pairs <- .adaptive_within_set_direct_pairs_bounded(
-    ids = ids,
-    anchor_ids = anchor_ids,
-    rank_index = rank_index,
-    stratum_map = stratum_map,
-    stage_name = stage_name,
-    bounds = bounds,
-    C_max = as.integer(C_max),
-    seed = as.integer(seed)
-  )
+  direct_pairs <- if (.adaptive_reservoir_active(state)) {
+    .adaptive_reservoir_stage_pairs(state, ids, anchor_ids, rank_index,
+      stratum_map, stage_name, bounds, as.integer(C_max), as.integer(seed))
+  } else {
+    .adaptive_within_set_direct_pairs_bounded(
+      ids = ids,
+      anchor_ids = anchor_ids,
+      rank_index = rank_index,
+      stratum_map = stratum_map,
+      stage_name = stage_name,
+      bounds = bounds,
+      C_max = as.integer(C_max),
+      seed = as.integer(seed)
+    )
+  }
   cand <- tibble::as_tibble(direct_pairs$candidates)
   n_after_stage_filters <- as.integer(direct_pairs$total_legal)
   if (nrow(cand) < 1L) {

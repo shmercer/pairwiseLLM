@@ -277,7 +277,8 @@ validate_judge_result <- function(result, A_id, B_id) {
   counts <- .adaptive_history_state_counts(history_state, state$item_ids)
   seed_base <- as.integer(state$meta$seed %||% 1L)
 
-  order_vals <- .adaptive_assign_order(
+  order_vals <- .adaptive_assign_order_for_state(
+    state,
     tibble::tibble(i = i_id, j = j_id),
     counts$posA,
     counts$posB,
@@ -291,7 +292,11 @@ validate_judge_result <- function(result, A_id, B_id) {
   names(mu_vals) <- as.character(trueskill_state$items$item_id)
   names(sigma_vals) <- as.character(trueskill_state$items$item_id)
 
-  p_ij <- trueskill_win_probability(i_id, j_id, trueskill_state)
+  p_ij <- if (.adaptive_reservoir_active(state)) {
+    trueskill_win_probability(order_vals[["A_id"]], order_vals[["B_id"]], trueskill_state)
+  } else {
+    trueskill_win_probability(i_id, j_id, trueskill_state)
+  }
   u0_ij <- p_ij * (1 - p_ij)
 
   idx_map <- state$item_index %||% stats::setNames(seq_along(state$item_ids), state$item_ids)
@@ -829,6 +834,7 @@ validate_judge_result <- function(result, A_id, B_id) {
 #' @keywords internal
 #' @noRd
 apply_step_update <- function(state, step) {
+  if (isTRUE(step$is_valid)) .adaptive_reservoir_assert_edge(state, step$A_id, step$B_id)
   out <- state
   if (!all(names(schema_step_log) %in% names(out$step_log))) {
     missing <- setdiff(names(schema_step_log), names(out$step_log))
@@ -1129,6 +1135,9 @@ run_one_step <- function(state, judge, ...) {
     A_item <- state$items[state$items$item_id == A_id, , drop = FALSE]
     B_item <- state$items[state$items$item_id == B_id, , drop = FALSE]
 
+    .adaptive_reservoir_check_mode(state)
+    .adaptive_reservoir_check_judge(state, judge, validate_history = FALSE)
+    .adaptive_reservoir_assert_edge(state, A_id, B_id)
     result <- judge(A_item, B_item, state, ...)
     validated <- validate_judge_result(result, A_id = A_id, B_id = B_id)
     is_valid <- isTRUE(validated$is_valid)

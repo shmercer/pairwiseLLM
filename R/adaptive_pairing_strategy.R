@@ -35,16 +35,25 @@
   seed_base <- as.integer(state$meta$seed %||% 1L)
   # Committed count, not attempted step ID: invalid judgments retry the same policy draw.
   decision_id <- as.integer(history_state$n_pairs + 1L)
-  focal_ids <- ids[counts$deg[ids] == min(counts$deg[ids])]
+  eligible_ids <- ids
+  if (.adaptive_reservoir_active(state)) {
+    unused <- .adaptive_reservoir_unused(state)
+    eligible_ids <- ids[ids %in% c(unused$A_id, unused$B_id)]
+  }
+  focal_ids <- if (length(eligible_ids) == 0L) character() else
+    eligible_ids[counts$deg[eligible_ids] == min(counts$deg[eligible_ids])]
   focal_seed <- .adaptive_stage_seed(seed_base, decision_id, 1L, offset = 301L)
-  focal <- focal_ids[[withr::with_seed(focal_seed, sample.int(length(focal_ids), 1L))]]
-  partners <- setdiff(ids, focal)
+  focal <- if (length(focal_ids) == 0L) NA_character_ else
+    focal_ids[[withr::with_seed(focal_seed, sample.int(length(focal_ids), 1L))]]
+  partners <- if (is.na(focal)) character() else setdiff(eligible_ids, focal)
   candidates <- tibble::tibble(i = rep(focal, length(partners)), j = partners)
+  candidates <- .adaptive_reservoir_filter(state, candidates)
   keys <- make_unordered_key(candidates$i, candidates$j)
   has_order <- .adaptive_repeat_pair_has_order(keys, counts$pair_count[keys], counts$pair_last_order)
   candidates <- candidates[has_order, , drop = FALSE]
   n_hard <- nrow(candidates)
-  candidates <- .adaptive_duplicate_filter(candidates, counts$pair_count, defaults$dup_max_obs)
+  duplicate_limit <- if (.adaptive_reservoir_active(state)) 1L else defaults$dup_max_obs
+  candidates <- .adaptive_duplicate_filter(candidates, counts$pair_count, duplicate_limit)
   n_legal <- nrow(candidates)
 
   # Typed NAs keep inapplicable hybrid diagnostics explicit without inventing stage quotas.
@@ -67,6 +76,7 @@
   out$n_candidates_scored <- if (strategy == "random") 0L else as.integer(n_legal)
   if (n_legal == 0L) {
     out$starvation_reason <- if (n_hard == 0L) "filtered_by_hard_filters" else "filtered_by_duplicates"
+    if (.adaptive_reservoir_active(state)) out$starvation_reason <- .adaptive_reservoir_starvation(state)
     out$hard_filter_collapse_stage <- out$starvation_reason
     return(out)
   }
@@ -84,7 +94,7 @@
   pair <- candidates[picked, , drop = FALSE]
   # Canonical unordered input makes first-presentation ties independent of focal orientation.
   pair <- tibble::tibble(i = pmin(pair$i, pair$j), j = pmax(pair$i, pair$j))
-  presentation <- .adaptive_assign_order(pair, counts$posA, counts$posB,
+  presentation <- .adaptive_assign_order_for_state(state, pair, counts$posA, counts$posB,
     counts$pair_last_order, seed_base = seed_base)
   partner <- candidates$j[[picked]]
   out$i <- as.integer(state$item_index[[focal]])

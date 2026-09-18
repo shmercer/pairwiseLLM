@@ -17,7 +17,8 @@ adaptive_rank_start(
   warm_start_features = NULL,
   warm_start_python = NULL,
   warm_start_prior_sd = NULL,
-  warm_start_mode = NULL
+  warm_start_mode = NULL,
+  replay_reservoir = NULL
 )
 }
 \arguments{
@@ -73,6 +74,12 @@ Request \code{both} explicitly to initialize both models. In TrueSkill-warm mode
 exact item-ID alignment precedes \code{mu = mu0 + sigma0 * prior_mean}, with
 \code{mu0 = 25}, \code{sigma0 = 25/3}, fixed multiplier 1, and unchanged sigma.
 Explicit \code{cold} with predictive input, or a non-cold mode without it, errors.}
+
+\item{replay_reservoir}{Optional \code{\link[=make_adaptive_replay_reservoir]{make_adaptive_replay_reservoir()}} object.
+Requires ordinary within-set mode and a matching reservoir replay judge.
+Uses a seeded spanning-tree bootstrap and at most one committed observation
+per allowed unordered edge, always in its frozen observed orientation.
+On resume, omit this argument or supply the identical reservoir.}
 }
 \value{
 An adaptive state object containing \code{step_log}, \code{round_log}, and
@@ -155,6 +162,7 @@ Other adaptive ranking:
 \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}},
 \code{\link[=make_adaptive_judge_llm]{make_adaptive_judge_llm()}},
 \code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}},
+\code{\link[=make_adaptive_replay_reservoir]{make_adaptive_replay_reservoir()}},
 \code{\link[=summarize_adaptive]{summarize_adaptive()}},
 \code{\link[=validate_adaptive_replay]{validate_adaptive_replay()}}
 }
