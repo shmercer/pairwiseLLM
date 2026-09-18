@@ -39,64 +39,6 @@
   )
 }
 
-.btl_mcmc_resolve_cmdstan_config <- function(cmdstan) {
-  cmdstan <- cmdstan %||% list()
-  if (!is.list(cmdstan)) {
-    rlang::abort("`cmdstan` must be a list.")
-  }
-
-  threads_per_chain <- as.integer(cmdstan$threads_per_chain %||% 1L)
-  if (is.na(threads_per_chain) || threads_per_chain < 1L) {
-    rlang::abort("`cmdstan$threads_per_chain` must be a positive integer.")
-  }
-
-  core_fraction <- cmdstan$core_fraction %||% 0.8
-  if (!is.numeric(core_fraction) || length(core_fraction) != 1L ||
-    !is.finite(core_fraction) || core_fraction <= 0 || core_fraction > 1) {
-    rlang::abort("`cmdstan$core_fraction` must be in (0, 1].")
-  }
-
-  cores <- .btl_mcmc_detect_cores()
-  chains <- as.integer(cmdstan$chains %||% min(8L, cores$effective))
-  if (is.na(chains) || chains < 1L) {
-    return(list(
-      chains = chains,
-      parallel_chains = NA_integer_,
-      core_fraction = as.double(core_fraction),
-      cores_detected_physical = cores$physical,
-      cores_detected_logical = cores$logical,
-      threads_per_chain = as.integer(threads_per_chain),
-      cmdstanr_version = .btl_mcmc_cmdstanr_version()
-    ))
-  }
-
-  parallel_chains <- cmdstan$parallel_chains %||% NULL
-  if (is.null(parallel_chains)) {
-    # Automatic parallelism must remain within CRAN's two-core limit. Callers
-    # can still request a smaller value through `parallel_chains`.
-    core_budget <- min(2L, max(1L, floor(cores$effective * core_fraction)))
-    parallel_chains <- min(chains, core_budget)
-  } else {
-    parallel_chains <- as.integer(parallel_chains)
-    if (is.na(parallel_chains) || parallel_chains < 1L) {
-      rlang::abort("`cmdstan$parallel_chains` must be a positive integer.")
-    }
-  }
-  if (parallel_chains > chains) {
-    parallel_chains <- chains
-  }
-
-  list(
-    chains = chains,
-    parallel_chains = as.integer(parallel_chains),
-    core_fraction = as.double(core_fraction),
-    cores_detected_physical = cores$physical,
-    cores_detected_logical = cores$logical,
-    threads_per_chain = as.integer(threads_per_chain),
-    cmdstanr_version = .btl_mcmc_cmdstanr_version()
-  )
-}
-
 .btl_mcmc_cmdstanr_version <- function() {
   if (!requireNamespace("cmdstanr", quietly = TRUE)) {
     return(NA_character_)
@@ -616,6 +558,7 @@ as_btl_fit_contract_from_mcmc <- function(mcmc_fit, ids) {
     sample_args$output_dir <- output_dir
   }
 
+  .btl_mcmc_resource_message(resolved_cmdstan)
   fit <- do.call(model$sample, sample_args)
 
   vars <- c("theta")

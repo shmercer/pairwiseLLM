@@ -49,6 +49,7 @@ Suggests:
     mgcv (>= 1.9-4),
     mockery,
     ordinal,
+    parallelly,
     pkgload,
     purrr,
     readr,
@@ -108,6 +109,7 @@ Collate:
     'btl_mcmc_fit_contracts.R'
     'btl_mcmc_ingest.R'
     'btl_mcmc_model_variant.R'
+    'btl_mcmc_resources.R'
     'btl_mcmc_state.R'
     'btl_mcmc_stopping.R'
     'btl_mcmc_summaries.R'

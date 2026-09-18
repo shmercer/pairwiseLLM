@@ -231,6 +231,9 @@ test_that("Phase B refuses initialization and malformed linked states and retain
 })
 
 test_that("current fixed and adaptive entry points produce accepted rubric inputs offline", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   withr::local_seed(206)
   fit <- rubric_test_fit()
   testthat::local_mocked_bindings(.fit_bayes_btl_mcmc_adaptive = function(bt_data, config, seed = NULL) {

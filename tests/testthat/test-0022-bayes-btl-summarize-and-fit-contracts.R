@@ -110,6 +110,9 @@ test_that("finalize_adaptive_ranking builds all summary blocks", {
 })
 
 test_that("bayes_btl_mcmc_adaptive helper validators and unpackers work", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   expect_true(pairwiseLLM:::.btl_mcmc_intish_vec(c(1, 2, 3)))
   expect_false(pairwiseLLM:::.btl_mcmc_intish_vec(c(1, 2.1)))
 

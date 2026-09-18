@@ -32,11 +32,12 @@ assessment or a sufficient sampling budget for your study.
 
 ## Prerequisites
 
-The fit requires the suggested `cmdstanr` package, CmdStan, and a working C++ toolchain. Installation
+The fit requires the suggested `cmdstanr` and `parallelly` packages, CmdStan, and a working C++ toolchain. Installation
 is a machine-level setup and does not require provider credentials. Fitting chunks are shown but not evaluated during document builds.
 Run them interactively after setup; no provider requests are needed for this example.
 
 ```{r install, eval=FALSE}
+install.packages("parallelly")
 install.packages(
   "cmdstanr",
   repos = c("https://stan-dev.r-universe.dev", getOption("repos"))
@@ -134,6 +135,35 @@ ranks. A failed diagnostic is not repaired by hiding the warning or reporting on
 Higher quality locations indicate stronger writing, but adjacent ranks can be
 uncertain. Keep both the item summaries and diagnostic table when saving or
 reporting an analysis.
+
+### Chains and CPU allocation
+
+`chains` sets the total number of chains; `parallel_chains` sets how many run at
+once. Four chains can therefore run two at a time. `threads_per_chain` defaults
+to one; the bundled models do not use within-chain parallel likelihoods, so
+increasing it does not accelerate likelihood evaluation.
+
+When `parallel_chains` is omitted, scheduling uses at most two available CPU
+slots and applies `core_fraction = 0.8`, retaining at least one slot. On a
+two-slot allocation this schedules one chain at a time. Detection respects
+scheduler, container, and check constraints without changing the total chains.
+The historical default chain count remains `min(8, detected physical cores)`,
+with logical-core and one-core fallbacks when hardware detection is unavailable.
+Set `chains` explicitly when you need the same count across machines.
+
+An explicit `parallel_chains` request bypasses `core_fraction` and is capped at
+the total chains. Its product with `threads_per_chain` must fit the available
+allocation; otherwise fitting stops with guidance. For example,
+`cmdstan = list(chains = 4L, parallel_chains = 4L)` requests four CPU slots and
+prints a resource message when sampling. Active check limits still cap the
+allocation at two. Examples and package checks stay within that limit.
+
+If resource detection fails, fitting warns and uses one CPU slot. Independent
+concurrent fits each see the same allocation, so divide resources among them
+yourself. `summarize_refits(fit)` reports `mcmc_cores_available`,
+`mcmc_parallel_chains_requested`, `mcmc_concurrency_budget`, and
+`mcmc_concurrency_used`. An automatic request is `NA`; historical fits without
+this metadata also report `NA` for the new fields.
 
 ## Cumulative refits
 

@@ -793,7 +793,12 @@ adaptive_step_log <- function(state) {
 #'   \item Refit execution metadata: \code{mcmc_chains},
 #'   \code{mcmc_parallel_chains}, \code{mcmc_core_fraction},
 #'   \code{mcmc_cores_detected_physical}, \code{mcmc_cores_detected_logical},
-#'   \code{mcmc_threads_per_chain}, \code{mcmc_cmdstanr_version}.
+#'   \code{mcmc_threads_per_chain}, \code{mcmc_cores_available},
+#'   \code{mcmc_parallel_chains_requested}, \code{mcmc_concurrency_budget},
+#'   \code{mcmc_concurrency_used}, \code{mcmc_cmdstanr_version}.
+#'   Requested parallel chains are \code{NA} for automatic scheduling; the budget
+#'   and usage count CPU slots across chains and threads. Historical fits without
+#'   allocation metadata report \code{NA} for those fields.
 #'   \item Stop output: \code{stop_decision}, \code{stop_reason},
 #'   \code{max_pairs_after_stop}, \code{pairs_committed_after_stop}.
 #' }
@@ -824,7 +829,7 @@ adaptive_round_log <- function(state, reconstruct_deferred = FALSE) {
     rlang::abort("`reconstruct_deferred` must be TRUE or FALSE.")
   }
 
-  round_log <- tibble::as_tibble(state$round_log)
+  round_log <- .btl_mcmc_resource_log_defaults(tibble::as_tibble(state$round_log))
   if (!isTRUE(reconstruct_deferred) || nrow(round_log) < 1L) {
     return(round_log)
   }

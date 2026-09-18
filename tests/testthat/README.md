@@ -13,6 +13,7 @@ Rubric calibration reserves 0200–0299 for core/statistical-contract tests and
 before Task 01 of the v1.5.0 series; do not renumber unrelated tests.
 
 - 0000–0999: Core utilities, helpers, and pure functions
+  - 0034: MCMC resource allocation and scheduling contracts
 - 2000–2999: Live / interactive backends (e.g., human, API-based)
 - 3000–3999: Batch workflows, resume logic, persistence
   - 3070: Shared batch retrieval retry and cross-provider recovery regressions

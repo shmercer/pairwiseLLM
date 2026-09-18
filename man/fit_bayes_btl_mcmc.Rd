@@ -33,12 +33,27 @@ fit_bayes_btl_mcmc(
 \describe{
 \item{chains}{Number of chains (defaults to \code{min(8, physical_cores)} via
 internal resolution).}
+\item{parallel_chains}{Maximum concurrent chains. Automatic scheduling uses
+at most two CPU slots within the available allocation and \code{core_fraction}.
+An explicit value bypasses that fraction and is capped at \code{chains};
+its product with \code{threads_per_chain} must fit the available allocation.}
+\item{threads_per_chain}{Threads per chain (default \code{1}). The bundled
+models do not use within-chain parallel likelihoods, so higher values do
+not accelerate their likelihood evaluation.}
 \item{iter_warmup}{Warmup iterations (default \code{1000}).}
 \item{iter_sampling}{Sampling iterations (default \code{1000}).}
 \item{seed}{Optional integer seed forwarded to CmdStan (default \code{NULL}).}
-\item{core_fraction}{Fraction of physical cores for parallelization (default \code{0.8}).}
+\item{core_fraction}{Fraction of available CPU slots for automatic
+parallelization (default \code{0.8}); at least one slot is retained.}
 \item{output_dir}{Optional directory for CmdStan output.}
-}}
+}
+Sampling requires the suggested \pkg{parallelly} package for allocation-aware
+detection. Scheduler, container, and check constraints limit concurrency,
+without changing the number of chains. Explicit requests above two CPU slots
+are reported and permitted within the allocation, except under an active
+\code{_R_CHECK_LIMIT_CORES_} constraint. Excessive requests fail with guidance.
+If detection fails, a warning reports the one-slot fallback. When launching
+multiple fits independently, divide the allocation among them yourself.}
 
 \item{pair_counts}{Optional integer vector of subset sizes (e.g.,
 \code{c(200, 500, 1000)}). When provided, the model is fit once per subset

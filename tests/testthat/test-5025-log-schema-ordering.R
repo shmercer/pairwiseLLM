@@ -65,7 +65,9 @@ test_that("canonical log schemas follow the expected column order", {
     "rho_rank_pass", "rho_rank_pass_scope",
     "mcmc_chains", "mcmc_parallel_chains", "mcmc_core_fraction",
     "mcmc_cores_detected_physical", "mcmc_cores_detected_logical",
-    "mcmc_threads_per_chain", "mcmc_cmdstanr_version",
+    "mcmc_threads_per_chain", "mcmc_cores_available",
+    "mcmc_parallel_chains_requested", "mcmc_concurrency_budget",
+    "mcmc_concurrency_used", "mcmc_cmdstanr_version",
     "stop_decision", "stop_reason", "max_pairs_after_stop", "pairs_committed_after_stop"
   )
   expected_item <- c(
