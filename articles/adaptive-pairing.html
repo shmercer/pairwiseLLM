@@ -320,6 +320,9 @@ BTL.</p>
 comparisons, but it does not guarantee a particular ranking,
 reliability, cost reduction, or improvement over random pairing. Those
 outcomes depend on the items, judge, budget, and model assumptions.</p>
+<p>For sparse reservoir replay, the bootstrap is instead a seeded
+spanning tree of <code>N - 1</code> allowed edges. Its schedule is
+shared by all predictive modes and pairing strategies; see <a href="#replay-a-sparse-reservoir">Replay a sparse reservoir</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="choose-a-post-bootstrap-pairing-strategy">Choose a post-bootstrap pairing strategy<a class="anchor" aria-label="anchor" href="#choose-a-post-bootstrap-pairing-strategy"></a>
@@ -421,6 +424,79 @@ alternative to supplying backend/model arguments to
 <code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code>, and its calls are live, billable, and
 subject to the selected provider’s failure and privacy behavior.</p>
 <div class="section level3">
+<h3 id="replay-a-sparse-reservoir">Replay a sparse reservoir<a class="anchor" aria-label="anchor" href="#replay-a-sparse-reservoir"></a>
+</h3>
+<p>Use <code><a href="../reference/make_adaptive_replay_reservoir.html">make_adaptive_replay_reservoir()</a></code> when each allowed
+unordered pair has one observed judgment with a fixed presentation.
+Supply only the primary observation layer: exclude held-out edges and
+separate reversal-audit observations. Each <code>Y</code> means that the
+recorded <code>A_id</code> wins when it is one. Neither presentation nor
+outcome is inferred for the reverse direction.</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">sparse_ids</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span>, <span class="st">"c"</span>, <span class="st">"d"</span><span class="op">)</span></span>
+<span><span class="va">sparse_outcomes</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  A_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"b"</span>, <span class="st">"a"</span>, <span class="st">"d"</span>, <span class="st">"c"</span><span class="op">)</span>,</span>
+<span>  B_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"c"</span>, <span class="st">"a"</span>, <span class="st">"d"</span><span class="op">)</span>,</span>
+<span>  Y <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1L</span>, <span class="fl">0L</span>, <span class="fl">1L</span>, <span class="fl">1L</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">reservoir</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_adaptive_replay_reservoir.html">make_adaptive_replay_reservoir</a></span><span class="op">(</span><span class="va">sparse_outcomes</span>, <span class="va">sparse_ids</span><span class="op">)</span></span>
+<span><span class="va">sparse_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_start.html">adaptive_rank_start</a></span><span class="op">(</span><span class="va">sparse_ids</span>, seed <span class="op">=</span> <span class="fl">17L</span>,</span>
+<span>  replay_reservoir <span class="op">=</span> <span class="va">reservoir</span>,</span>
+<span>  adaptive_config <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>pairing_strategy <span class="op">=</span> <span class="st">"random"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">sparse_judge</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_adaptive_judge_replay.html">make_adaptive_judge_replay</a></span><span class="op">(</span><span class="va">reservoir</span><span class="op">)</span></span>
+<span><span class="va">sparse_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_run_live.html">adaptive_rank_run_live</a></span><span class="op">(</span><span class="va">sparse_state</span>, <span class="va">sparse_judge</span>,</span>
+<span>  n_steps <span class="op">=</span> <span class="fl">4L</span>, progress <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/adaptive_step_log.html">adaptive_step_log</a></span><span class="op">(</span><span class="va">sparse_state</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"A_id"</span>, <span class="st">"B_id"</span>, <span class="st">"Y"</span>, <span class="st">"pairing_strategy"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 4 × 4</span></span></span>
+<span><span class="co">#&gt;   A_id  B_id      Y pairing_strategy</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>           </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> a     c         0 random          </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> b     a         1 random          </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> c     d         1 random          </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> d     a         1 random</span></span></code></pre></div>
+<p>The allowed graph must connect all items. The seeded bootstrap
+selects a spanning tree, so connected graphs without a chain visiting
+every item are supported. <code>random</code>,
+<code>trueskill_p50</code>, <code>trueskill_pollitt</code>, and
+<code>hybrid</code> then select only unused allowed edges. Direct
+strategies choose a minimum-degree focal item among those with an unused
+legal partner. Hybrid retains its stage, exposure, and stopping rules
+while searching within the reservoir. Its candidate cap cannot alone
+cause starvation: an empty filtered sample triggers a search of the
+remaining domain.</p>
+<p>All committed rows use exactly the stored <code>A_id</code>,
+<code>B_id</code>, and <code>Y</code>, including first-position exposure
+for BTL models with position effects. The reservoir’s one-use ceiling
+applies independently of <code>dup_max_obs_relaxed</code>. Failed calls
+or discarded transactions do not consume an edge; committed history
+does. <code>starvation_reason</code> distinguishes
+<code>reservoir_exhausted</code> from
+<code>reservoir_constraints_exhausted</code>, where unused edges remain
+but current constraints exclude them. Statistical stopping can occur
+before either.</p>
+<p>The same reservoir works with <code>cold</code>,
+<code>btl_only</code>, <code>trueskill_only</code>, and
+<code>both</code>; the bootstrap depends on the seed and allowed edges,
+not the predictive prior. Reservoirs currently require ordinary
+<code>within_set</code> mode.</p>
+<p>Retain the reservoir separately from the session. State stores its
+outcome-free manifest and identity, while the judge holds unconsumed
+outcomes. To continue:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">sparse_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="st">"sparse-replay-"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/save_adaptive_session.html">save_adaptive_session</a></span><span class="op">(</span><span class="va">sparse_state</span>, <span class="va">sparse_dir</span><span class="op">)</span></span>
+<span><span class="va">sparse_restored</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_resume.html">adaptive_rank_resume</a></span><span class="op">(</span><span class="va">sparse_dir</span><span class="op">)</span></span>
+<span><span class="va">sparse_judge</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_adaptive_judge_replay.html">make_adaptive_judge_replay</a></span><span class="op">(</span><span class="va">reservoir</span><span class="op">)</span></span>
+<span><span class="co"># Continue with adaptive_rank_run_live(sparse_restored, sparse_judge, ...).</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span><span class="va">sparse_dir</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<p>Reordered input rows retain identity. Changed edges, orientation,
+panel IDs, or outcomes fail before resumed replay. With
+<code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code>, supply
+<code>replay_reservoir = reservoir</code> and
+<code>judge = make_adaptive_judge_replay(reservoir)</code>; on resume,
+omit the reservoir argument or supply the identical object.</p>
+</div>
+<div class="section level3">
 <h3 id="replay-frozen-directed-judgments">Replay frozen directed judgments<a class="anchor" aria-label="anchor" href="#replay-frozen-directed-judgments"></a>
 </h3>
 <p><code><a href="../reference/validate_adaptive_replay.html">validate_adaptive_replay()</a></code> checks a table with character
@@ -434,7 +510,7 @@ the exact ordered key; it never infers a reverse result from a forward
 judgment and never makes network calls.</p>
 <p>This synthetic example runs both bootstrap and direct steps without a
 Bayesian refit:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">replay_ids</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span>, <span class="st">"c"</span>, <span class="st">"d"</span><span class="op">)</span></span>
 <span><span class="va">frozen</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/expand.grid.html" class="external-link">expand.grid</a></span><span class="op">(</span>A_id <span class="op">=</span> <span class="va">replay_ids</span>, B_id <span class="op">=</span> <span class="va">replay_ids</span>, stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="va">frozen</span> <span class="op">&lt;-</span> <span class="va">frozen</span><span class="op">[</span><span class="va">frozen</span><span class="op">$</span><span class="va">A_id</span> <span class="op">!=</span> <span class="va">frozen</span><span class="op">$</span><span class="va">B_id</span>, <span class="op">]</span></span>
@@ -456,7 +532,7 @@ Bayesian refit:</p>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> b     d         1 trueskill_p50   </span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> a     c         1 trueskill_p50</span></span></code></pre></div>
 <p>Keep <code>strict_use = TRUE</code> and <code>complete = TRUE</code>
-for independent-evidence replay. Set
+for this complete directed design. Set
 <code>adaptive_config$dup_max_obs_relaxed = 2L</code> so hybrid cannot
 request a third observation from the two available orientations. Its
 general default remains 3; direct strategies already cap at two.
@@ -482,7 +558,7 @@ costly. Frequent checkpoints increase disk I/O.</p>
 <p>An abrupt process termination can lose attempts since the most recent
 completed save. After an interrupt, validate what is on disk rather than
 assuming the in-memory state was written.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">session_metadata</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/validate_session_dir.html">validate_session_dir</a></span><span class="op">(</span><span class="va">session_dir</span><span class="op">)</span></span>
 <span><span class="va">session_metadata</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"schema_version"</span>, <span class="st">"package_version"</span>, <span class="st">"n_items"</span>,</span>
 <span>  <span class="st">"warm_start_mode"</span>, <span class="st">"pairing_strategy"</span><span class="op">)</span><span class="op">]</span></span>
@@ -522,7 +598,7 @@ retroactively. Within-set continuation also reuses saved
 <code>btl_config</code> when it is omitted.</p>
 <p>The wrapper handles ordinary saving. For an explicit snapshot outside
 a wrapper call, use the lower-level persistence helpers:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">snapshot_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="st">"pairwisellm-snapshot-"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/save_adaptive_session.html">save_adaptive_session</a></span><span class="op">(</span><span class="va">resumed</span><span class="op">$</span><span class="va">state</span>, <span class="va">snapshot_dir</span>, overwrite <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/validate_session_dir.html">validate_session_dir</a></span><span class="op">(</span><span class="va">snapshot_dir</span><span class="op">)</span></span>
@@ -544,7 +620,7 @@ invalid results and preserves available status, error, token, and raw
 response fields in the step log.</p>
 <p>This small example deliberately rejects its first attempt, then
 accepts the next one:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">invalid_once_judge</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">A</span>, <span class="va">B</span>, <span class="va">state</span>, <span class="va">...</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">state</span><span class="op">$</span><span class="va">step_log</span><span class="op">)</span> <span class="op">==</span> <span class="fl">0L</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
@@ -595,7 +671,7 @@ long run.</p>
 <code>real_samples</code> with a data frame or file containing one row
 per item, a unique ID, and the text to compare. Preserve that input in
 its exact row order for resume.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/shmercer/pairwiseLLM" class="external-link">pairwiseLLM</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nchar.html" class="external-link">nzchar</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"OPENAI_API_KEY"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
@@ -648,7 +724,7 @@ into a real study merely to make it finish sooner.</p>
 </h3>
 <p>Inspect the ranking, diagnostics, and stopping state before reporting
 results:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">live</span><span class="op">$</span><span class="va">summary</span></span>
 <span></span>
 <span><span class="va">live</span><span class="op">$</span><span class="va">items</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
@@ -667,7 +743,7 @@ convergence. Read the latest refit diagnostics and stop reason
 together.</p>
 <p>The step log records each attempted provider call, including
 provenance, validity, errors, and available token counts:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">live_steps</span> <span class="op">&lt;-</span> <span class="va">live</span><span class="op">$</span><span class="va">logs</span><span class="op">$</span><span class="va">step_log</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
 <span>  <span class="st">"step_id"</span>, <span class="st">"pair_id"</span>, <span class="st">"A_id"</span>, <span class="st">"B_id"</span>, <span class="st">"Y"</span>, <span class="st">"status"</span>,</span>
 <span>  <span class="st">"judge_backend"</span>, <span class="st">"judge_model"</span>, <span class="st">"judge_endpoint"</span>, <span class="st">"judge_invalid_reason"</span>,</span>
@@ -697,7 +773,7 @@ appropriate retention policy.</p>
 settings, and session directory. Only <code>n_steps</code>, progress
 display, and checkpoint cadence should normally change between
 calls.</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">live</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank.html">adaptive_rank</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">real_samples</span>,</span>
 <span>  id_col <span class="op">=</span> <span class="st">"ID"</span>,</span>

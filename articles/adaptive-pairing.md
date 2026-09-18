@@ -259,6 +259,11 @@ comparisons, but it does not guarantee a particular ranking,
 reliability, cost reduction, or improvement over random pairing. Those
 outcomes depend on the items, judge, budget, and model assumptions.
 
+For sparse reservoir replay, the bootstrap is instead a seeded spanning
+tree of `N - 1` allowed edges. Its schedule is shared by all predictive
+modes and pairing strategies; see [Replay a sparse
+reservoir](#replay-a-sparse-reservoir).
+
 ## Choose a post-bootstrap pairing strategy
 
 Set `adaptive_config = list(pairing_strategy = "trueskill_p50")`, for
@@ -342,6 +347,85 @@ It is a lower-level alternative to supplying backend/model arguments to
 and its calls are live, billable, and subject to the selected provider’s
 failure and privacy behavior.
 
+### Replay a sparse reservoir
+
+Use
+[`make_adaptive_replay_reservoir()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_replay_reservoir.md)
+when each allowed unordered pair has one observed judgment with a fixed
+presentation. Supply only the primary observation layer: exclude
+held-out edges and separate reversal-audit observations. Each `Y` means
+that the recorded `A_id` wins when it is one. Neither presentation nor
+outcome is inferred for the reverse direction.
+
+``` r
+
+sparse_ids <- c("a", "b", "c", "d")
+sparse_outcomes <- data.frame(
+  A_id = c("b", "a", "d", "c"),
+  B_id = c("a", "c", "a", "d"),
+  Y = c(1L, 0L, 1L, 1L)
+)
+reservoir <- make_adaptive_replay_reservoir(sparse_outcomes, sparse_ids)
+sparse_state <- adaptive_rank_start(sparse_ids, seed = 17L,
+  replay_reservoir = reservoir,
+  adaptive_config = list(pairing_strategy = "random"))
+sparse_judge <- make_adaptive_judge_replay(reservoir)
+sparse_state <- adaptive_rank_run_live(sparse_state, sparse_judge,
+  n_steps = 4L, progress = "none")
+adaptive_step_log(sparse_state)[, c("A_id", "B_id", "Y", "pairing_strategy")]
+#> # A tibble: 4 × 4
+#>   A_id  B_id      Y pairing_strategy
+#>   <chr> <chr> <int> <chr>           
+#> 1 a     c         0 random          
+#> 2 b     a         1 random          
+#> 3 c     d         1 random          
+#> 4 d     a         1 random
+```
+
+The allowed graph must connect all items. The seeded bootstrap selects a
+spanning tree, so connected graphs without a chain visiting every item
+are supported. `random`, `trueskill_p50`, `trueskill_pollitt`, and
+`hybrid` then select only unused allowed edges. Direct strategies choose
+a minimum-degree focal item among those with an unused legal partner.
+Hybrid retains its stage, exposure, and stopping rules while searching
+within the reservoir. Its candidate cap cannot alone cause starvation:
+an empty filtered sample triggers a search of the remaining domain.
+
+All committed rows use exactly the stored `A_id`, `B_id`, and `Y`,
+including first-position exposure for BTL models with position effects.
+The reservoir’s one-use ceiling applies independently of
+`dup_max_obs_relaxed`. Failed calls or discarded transactions do not
+consume an edge; committed history does. `starvation_reason`
+distinguishes `reservoir_exhausted` from
+`reservoir_constraints_exhausted`, where unused edges remain but current
+constraints exclude them. Statistical stopping can occur before either.
+
+The same reservoir works with `cold`, `btl_only`, `trueskill_only`, and
+`both`; the bootstrap depends on the seed and allowed edges, not the
+predictive prior. Reservoirs currently require ordinary `within_set`
+mode.
+
+Retain the reservoir separately from the session. State stores its
+outcome-free manifest and identity, while the judge holds unconsumed
+outcomes. To continue:
+
+``` r
+
+sparse_dir <- tempfile("sparse-replay-")
+save_adaptive_session(sparse_state, sparse_dir)
+sparse_restored <- adaptive_rank_resume(sparse_dir)
+sparse_judge <- make_adaptive_judge_replay(reservoir)
+# Continue with adaptive_rank_run_live(sparse_restored, sparse_judge, ...).
+unlink(sparse_dir, recursive = TRUE)
+```
+
+Reordered input rows retain identity. Changed edges, orientation, panel
+IDs, or outcomes fail before resumed replay. With
+[`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md),
+supply `replay_reservoir = reservoir` and
+`judge = make_adaptive_judge_replay(reservoir)`; on resume, omit the
+reservoir argument or supply the identical object.
+
 ### Replay frozen directed judgments
 
 [`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)
@@ -381,11 +465,11 @@ adaptive_step_log(replay_state)[, c("A_id", "B_id", "Y", "pairing_strategy")]
 #> 5 a     c         1 trueskill_p50
 ```
 
-Keep `strict_use = TRUE` and `complete = TRUE` for independent-evidence
-replay. Set `adaptive_config$dup_max_obs_relaxed = 2L` so hybrid cannot
-request a third observation from the two available orientations. Its
-general default remains 3; direct strategies already cap at two.
-Presentation balancing and repeat reversal remain active.
+Keep `strict_use = TRUE` and `complete = TRUE` for this complete
+directed design. Set `adaptive_config$dup_max_obs_relaxed = 2L` so
+hybrid cannot request a third observation from the two available
+orientations. Its general default remains 3; direct strategies already
+cap at two. Presentation balancing and repeat reversal remain active.
 
 Create a fresh judge for each independent replicate. Strict use tracks
 successful lookups in the judge closure and checks the supplied state’s

@@ -18,7 +18,8 @@ adaptive_rank_start(
   warm_start_features = NULL,
   warm_start_python = NULL,
   warm_start_prior_sd = NULL,
-  warm_start_mode = NULL
+  warm_start_mode = NULL,
+  replay_reservoir = NULL
 )
 ```
 
@@ -106,6 +107,16 @@ adaptive_rank_start(
   fixed multiplier 1, and unchanged sigma. Explicit `cold` with
   predictive input, or a non-cold mode without it, errors.
 
+- replay_reservoir:
+
+  Optional
+  [`make_adaptive_replay_reservoir()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_replay_reservoir.md)
+  object. Requires ordinary within-set mode and a matching reservoir
+  replay judge. Uses a seeded spanning-tree bootstrap and at most one
+  committed observation per allowed unordered edge, always in its frozen
+  observed orientation. On resume, omit this argument or supply the
+  identical reservoir.
+
 ## Value
 
 An adaptive state object containing `step_log`, `round_log`, and
@@ -192,6 +203,7 @@ Other adaptive ranking:
 [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md),
 [`make_adaptive_judge_llm()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_llm.md),
 [`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md),
+[`make_adaptive_replay_reservoir()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_replay_reservoir.md),
 [`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md),
 [`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)
 

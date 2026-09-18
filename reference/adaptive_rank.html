@@ -100,7 +100,8 @@ returns state plus summary outputs.</p>
 <span>  warm_start_features <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  warm_start_python <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  warm_start_prior_sd <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  warm_start_mode <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  warm_start_mode <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  replay_reservoir <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -217,10 +218,10 @@ strategy requires a new session.</p></dd>
 <dt><code>dup_max_obs_relaxed</code></dt>
 <dd><p>Hybrid's maximum observations per unordered pair
 under the relaxed near-tie fallback: <code>3L</code> (historical default) or <code>2L</code>.
-Use <code>2L</code> with <code><a href="make_adaptive_judge_replay.html">make_adaptive_judge_replay()</a></code> to cap study evidence at the
+For directed-table replay, use <code>2L</code> with <code><a href="make_adaptive_judge_replay.html">make_adaptive_judge_replay()</a></code> for
 two collected orientations. The ordinary ceiling remains two; direct
 strategies already cap at two. Phase B retains its existing ceiling.
-This setting persists with the controller and defaults to three for legacy sessions.</p></dd>
+This setting persists; sparse reservoirs independently enforce a one-use ceiling.</p></dd>
 
 <dt><code>global_identified_reliability_min</code></dt>
 <dd><p>Global EAP reliability threshold
@@ -618,6 +619,14 @@ exact item-ID alignment precedes <code>mu = mu0 + sigma0 * prior_mean</code>, wi
 <code>mu0 = 25</code>, <code>sigma0 = 25/3</code>, fixed multiplier 1, and unchanged sigma.
 Explicit <code>cold</code> with predictive input, or a non-cold mode without it, errors.</p></dd>
 
+
+<dt id="arg-replay-reservoir">replay_reservoir<a class="anchor" aria-label="anchor" href="#arg-replay-reservoir"></a></dt>
+<dd><p>Optional <code><a href="make_adaptive_replay_reservoir.html">make_adaptive_replay_reservoir()</a></code> object.
+Requires ordinary within-set mode and a matching reservoir replay judge.
+Uses a seeded spanning-tree bootstrap and at most one committed observation
+per allowed unordered edge, always in its frozen observed orientation.
+On resume, omit this argument or supply the identical reservoir.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -738,6 +747,7 @@ state, mode, strategy, and bootstrap progress; omit all warm-start arguments.</p
 <code><a href="adaptive_rank_start.html">adaptive_rank_start()</a></code>,
 <code><a href="make_adaptive_judge_llm.html">make_adaptive_judge_llm()</a></code>,
 <code><a href="make_adaptive_judge_replay.html">make_adaptive_judge_replay()</a></code>,
+<code><a href="make_adaptive_replay_reservoir.html">make_adaptive_replay_reservoir()</a></code>,
 <code><a href="summarize_adaptive.html">summarize_adaptive()</a></code>,
 <code><a href="validate_adaptive_replay.html">validate_adaptive_replay()</a></code></p></div>
     </div>
@@ -769,10 +779,10 @@ state, mode, strategy, and bootstrap progress; omit all warm-start arguments.</p
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 4 × 99</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-18 <span style="color: #949494;">17:35:15</span>       1     1     4 S01   S04       4     1 S04  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-18 <span style="color: #949494;">17:35:15</span>       2     4     8 S04   S08       8     4 S08  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-18 <span style="color: #949494;">17:35:15</span>       3     8     2 S08   S02       2     8 S02  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-18 <span style="color: #949494;">17:35:15</span>       4     2     6 S02   S06       6     2 S06  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-18 <span style="color: #949494;">20:11:45</span>       1     1     4 S01   S04       4     1 S04  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-18 <span style="color: #949494;">20:11:45</span>       2     4     8 S04   S08       8     4 S08  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-18 <span style="color: #949494;">20:11:45</span>       3     8     2 S08   S02       2     8 S02  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-18 <span style="color: #949494;">20:11:45</span>       4     2     6 S02   S06       6     2 S06  </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 89 more variables: B_id &lt;chr&gt;, unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   Y &lt;int&gt;, status &lt;chr&gt;, judge_backend &lt;chr&gt;, judge_model &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   judge_endpoint &lt;chr&gt;, judge_valid &lt;lgl&gt;, judge_invalid_reason &lt;chr&gt;,</span></span>

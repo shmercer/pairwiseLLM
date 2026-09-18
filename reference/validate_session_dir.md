@@ -65,4 +65,10 @@ validate_session_dir(dir)
 #> $pairing_strategy
 #> [1] "hybrid"
 #> 
+#> $replay_reservoir_digest
+#> NULL
+#> 
+#> $replay_manifest_digest
+#> NULL
+#> 
 ```

@@ -20,15 +20,16 @@ make_adaptive_judge_replay(
 
 - outcomes:
 
-  Data frame with character `A_id`, character `B_id`, and binary `Y`
-  (one means presented A wins). `Y` accepts logical, numeric zero/one,
-  or character `"0"`/`"1"`; factors, missing values, and other values
-  are rejected.
+  A directed outcome data frame (see
+  [`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md))
+  or a
+  [`make_adaptive_replay_reservoir()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_replay_reservoir.md)
+  object.
 
 - item_ids:
 
-  Unique non-blank character IDs for the active panel, with at least two
-  items. IDs must match the adaptive state's item IDs.
+  Panel IDs. Required for data-frame input; inferred from a reservoir
+  when omitted, or checked for agreement when supplied.
 
 - strict_use:
 
@@ -52,11 +53,12 @@ keys and strict reuse raise errors.
 
 ## Details
 
-For study runs, set `adaptive_config = list(dup_max_obs_relaxed = 2L)`
-when creating the adaptive state. This prevents hybrid's relaxed third
-observation at selection time. Normal presentation balancing and repeat
-reversal remain active. Direct strategies already cap unordered pairs at
-two observations.
+For directed-table studies, set
+`adaptive_config = list(dup_max_obs_relaxed = 2L)` when creating the
+adaptive state. This prevents hybrid's relaxed third observation at
+selection time. Normal presentation balancing and repeat reversal remain
+active. Direct strategies already cap unordered pairs at two
+observations.
 
 Create a fresh judge for each independent replicate. Strict use records
 each successful lookup in the closure, even if the caller subsequently
@@ -65,6 +67,17 @@ session. To resume, create a new judge from the same matrix and pass the
 loaded state to the runner; strict use also rejects keys already present
 in that state's committed history. The matrix and its provenance must be
 retained separately by the caller.
+
+A
+[`make_adaptive_replay_reservoir()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_replay_reservoir.md)
+object instead enables sparse, single-observation replay. Bind that
+object through `replay_reservoir` when creating state. The judge then
+requires matching reservoir identity, uses committed unordered-edge
+history for consumption, and preserves the stored orientation.
+Discarding an updated state does not consume an observation. Recreate a
+matching judge after loading a session; state contains only the
+outcome-free manifest. `complete` applies only to directed data-frame
+input; `strict_use = FALSE` is unsupported for reservoirs.
 
 ## See also
 
@@ -77,6 +90,7 @@ Other adaptive ranking:
 [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md),
 [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md),
 [`make_adaptive_judge_llm()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_llm.md),
+[`make_adaptive_replay_reservoir()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_replay_reservoir.md),
 [`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md),
 [`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)
 

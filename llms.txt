@@ -473,6 +473,8 @@ for human labels and interpretation.
 
 ## Advanced: adaptive lifecycle and replay
 
+- [`make_adaptive_replay_reservoir()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_replay_reservoir.md)
+  : Create a sparse frozen adaptive replay reservoir
 - [`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md)
   : Create an offline judge from frozen directed outcomes
 - [`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)

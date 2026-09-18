@@ -44,7 +44,8 @@ adaptive_rank(
   warm_start_features = NULL,
   warm_start_python = NULL,
   warm_start_prior_sd = NULL,
-  warm_start_mode = NULL
+  warm_start_mode = NULL,
+  replay_reservoir = NULL
 )
 ```
 
@@ -179,13 +180,13 @@ adaptive_rank(
   `dup_max_obs_relaxed`
 
   :   Hybrid's maximum observations per unordered pair under the relaxed
-      near-tie fallback: `3L` (historical default) or `2L`. Use `2L`
-      with
+      near-tie fallback: `3L` (historical default) or `2L`. For
+      directed-table replay, use `2L` with
       [`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md)
-      to cap study evidence at the two collected orientations. The
-      ordinary ceiling remains two; direct strategies already cap at
-      two. Phase B retains its existing ceiling. This setting persists
-      with the controller and defaults to three for legacy sessions.
+      for two collected orientations. The ordinary ceiling remains two;
+      direct strategies already cap at two. Phase B retains its existing
+      ceiling. This setting persists; sparse reservoirs independently
+      enforce a one-use ceiling.
 
   `global_identified_reliability_min`
 
@@ -630,6 +631,16 @@ adaptive_rank(
   fixed multiplier 1, and unchanged sigma. Explicit `cold` with
   predictive input, or a non-cold mode without it, errors.
 
+- replay_reservoir:
+
+  Optional
+  [`make_adaptive_replay_reservoir()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_replay_reservoir.md)
+  object. Requires ordinary within-set mode and a matching reservoir
+  replay judge. Uses a seeded spanning-tree bootstrap and at most one
+  committed observation per allowed unordered edge, always in its frozen
+  observed orientation. On resume, omit this argument or supply the
+  identical reservoir.
+
 ## Value
 
 A list with:
@@ -785,6 +796,7 @@ Other adaptive ranking:
 [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md),
 [`make_adaptive_judge_llm()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_llm.md),
 [`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md),
+[`make_adaptive_replay_reservoir()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_replay_reservoir.md),
 [`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md),
 [`validate_adaptive_replay()`](https://shmercer.github.io/pairwiseLLM/reference/validate_adaptive_replay.md)
 
@@ -816,10 +828,10 @@ head(out$logs$step_log)
 #> # A tibble: 4 × 99
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-09-18 17:35:15       1     1     4 S01   S04       4     1 S04  
-#> 2       2 2026-09-18 17:35:15       2     4     8 S04   S08       8     4 S08  
-#> 3       3 2026-09-18 17:35:15       3     8     2 S08   S02       2     8 S02  
-#> 4       4 2026-09-18 17:35:15       4     2     6 S02   S06       6     2 S06  
+#> 1       1 2026-09-18 20:11:45       1     1     4 S01   S04       4     1 S04  
+#> 2       2 2026-09-18 20:11:45       2     4     8 S04   S08       8     4 S08  
+#> 3       3 2026-09-18 20:11:45       3     8     2 S08   S02       2     8 S02  
+#> 4       4 2026-09-18 20:11:45       4     2     6 S02   S06       6     2 S06  
 #> # ℹ 89 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,

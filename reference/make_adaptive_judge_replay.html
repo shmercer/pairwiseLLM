@@ -80,14 +80,13 @@ step-dependent outcomes are used.</p>
 
 
 <dl><dt id="arg-outcomes">outcomes<a class="anchor" aria-label="anchor" href="#arg-outcomes"></a></dt>
-<dd><p>Data frame with character <code>A_id</code>, character <code>B_id</code>, and binary
-<code>Y</code> (one means presented A wins). <code>Y</code> accepts logical, numeric zero/one, or
-character <code>"0"</code>/<code>"1"</code>; factors, missing values, and other values are rejected.</p></dd>
+<dd><p>A directed outcome data frame (see <code><a href="validate_adaptive_replay.html">validate_adaptive_replay()</a></code>)
+or a <code><a href="make_adaptive_replay_reservoir.html">make_adaptive_replay_reservoir()</a></code> object.</p></dd>
 
 
 <dt id="arg-item-ids">item_ids<a class="anchor" aria-label="anchor" href="#arg-item-ids"></a></dt>
-<dd><p>Unique non-blank character IDs for the active panel, with at
-least two items. IDs must match the adaptive state's item IDs.</p></dd>
+<dd><p>Panel IDs. Required for data-frame input; inferred from a
+reservoir when omitted, or checked for agreement when supplied.</p></dd>
 
 
 <dt id="arg-strict-use">strict_use<a class="anchor" aria-label="anchor" href="#arg-strict-use"></a></dt>
@@ -110,7 +109,7 @@ The result contains <code>is_valid = TRUE</code>, integer <code>Y</code>, and
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>For study runs, set <code>adaptive_config = list(dup_max_obs_relaxed = 2L)</code> when
+    <p>For directed-table studies, set <code>adaptive_config = list(dup_max_obs_relaxed = 2L)</code> when
 creating the adaptive state. This prevents hybrid's relaxed third observation
 at selection time. Normal presentation balancing and repeat reversal remain
 active. Direct strategies already cap unordered pairs at two observations.</p>
@@ -120,6 +119,14 @@ updated state. The judge is not saved in an adaptive session. To resume, create
 a new judge from the same matrix and pass the loaded state to the runner;
 strict use also rejects keys already present in that state's committed history.
 The matrix and its provenance must be retained separately by the caller.</p>
+<p>A <code><a href="make_adaptive_replay_reservoir.html">make_adaptive_replay_reservoir()</a></code> object instead enables sparse,
+single-observation replay. Bind that object through <code>replay_reservoir</code> when
+creating state. The judge then requires matching reservoir identity, uses
+committed unordered-edge history for consumption, and preserves the stored
+orientation. Discarding an updated state does not consume an observation.
+Recreate a matching judge after loading a session; state contains only the
+outcome-free manifest. <code>complete</code> applies only to directed data-frame input;
+<code>strict_use = FALSE</code> is unsupported for reservoirs.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -130,6 +137,7 @@ The matrix and its provenance must be retained separately by the caller.</p>
 <code><a href="adaptive_rank_run_live.html">adaptive_rank_run_live()</a></code>,
 <code><a href="adaptive_rank_start.html">adaptive_rank_start()</a></code>,
 <code><a href="make_adaptive_judge_llm.html">make_adaptive_judge_llm()</a></code>,
+<code><a href="make_adaptive_replay_reservoir.html">make_adaptive_replay_reservoir()</a></code>,
 <code><a href="summarize_adaptive.html">summarize_adaptive()</a></code>,
 <code><a href="validate_adaptive_replay.html">validate_adaptive_replay()</a></code></p></div>
     </div>

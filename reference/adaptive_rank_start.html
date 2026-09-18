@@ -71,7 +71,8 @@
 <span>  warm_start_features <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  warm_start_python <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  warm_start_prior_sd <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  warm_start_mode <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  warm_start_mode <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  replay_reservoir <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -157,6 +158,14 @@ exact item-ID alignment precedes <code>mu = mu0 + sigma0 * prior_mean</code>, wi
 <code>mu0 = 25</code>, <code>sigma0 = 25/3</code>, fixed multiplier 1, and unchanged sigma.
 Explicit <code>cold</code> with predictive input, or a non-cold mode without it, errors.</p></dd>
 
+
+<dt id="arg-replay-reservoir">replay_reservoir<a class="anchor" aria-label="anchor" href="#arg-replay-reservoir"></a></dt>
+<dd><p>Optional <code><a href="make_adaptive_replay_reservoir.html">make_adaptive_replay_reservoir()</a></code> object.
+Requires ordinary within-set mode and a matching reservoir replay judge.
+Uses a seeded spanning-tree bootstrap and at most one committed observation
+per allowed unordered edge, always in its frozen observed orientation.
+On resume, omit this argument or supply the identical reservoir.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -226,6 +235,7 @@ state, mode, strategy, and bootstrap progress; omit all warm-start arguments.</p
 <code><a href="adaptive_rank_run_live.html">adaptive_rank_run_live()</a></code>,
 <code><a href="make_adaptive_judge_llm.html">make_adaptive_judge_llm()</a></code>,
 <code><a href="make_adaptive_judge_replay.html">make_adaptive_judge_replay()</a></code>,
+<code><a href="make_adaptive_replay_reservoir.html">make_adaptive_replay_reservoir()</a></code>,
 <code><a href="summarize_adaptive.html">summarize_adaptive()</a></code>,
 <code><a href="validate_adaptive_replay.html">validate_adaptive_replay()</a></code></p></div>
     </div>
