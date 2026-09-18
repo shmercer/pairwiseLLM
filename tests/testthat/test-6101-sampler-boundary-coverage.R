@@ -1,4 +1,7 @@
 test_that("adaptive sampler rejects incomplete engine draws and forwards output paths", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   testthat::local_mocked_bindings(.btl_mcmc_require_cmdstanr = function() NULL,
     .package = "pairwiseLLM")
   results <- build_btl_results_data(data.frame(ID1 = "a", ID2 = "b", better_id = "a"))

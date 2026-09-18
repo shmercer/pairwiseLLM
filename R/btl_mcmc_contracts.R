@@ -339,6 +339,10 @@ round_log_schema <- function() {
     mcmc_cores_detected_physical = integer(),
     mcmc_cores_detected_logical = integer(),
     mcmc_threads_per_chain = integer(),
+    mcmc_cores_available = integer(),
+    mcmc_parallel_chains_requested = integer(),
+    mcmc_concurrency_budget = integer(),
+    mcmc_concurrency_used = integer(),
     mcmc_cmdstanr_version = character()
   )
 }
@@ -820,6 +824,10 @@ build_round_log_row <- function(state,
   threads_per_chain <- mcmc_config_used$threads_per_chain %||%
     config[["cmdstan"]][["threads_per_chain"]] %||% 1L
   row$mcmc_threads_per_chain <- as.integer(threads_per_chain %||% NA_integer_)
+  row$mcmc_cores_available <- as.integer(mcmc_config_used$cores_available %||% NA_integer_)
+  row$mcmc_parallel_chains_requested <- as.integer(mcmc_config_used$parallel_chains_requested %||% NA_integer_)
+  row$mcmc_concurrency_budget <- as.integer(mcmc_config_used$concurrency_budget %||% NA_integer_)
+  row$mcmc_concurrency_used <- as.integer(mcmc_config_used$concurrency_used %||% NA_integer_)
   row$mcmc_cmdstanr_version <- as.character(mcmc_config_used$cmdstanr_version %||% NA_character_)
   row
 }

@@ -12,6 +12,10 @@ test_that("refit round_log records MCMC chain settings from fit output", {
       cores_detected_physical = 8L,
       cores_detected_logical = 16L,
       threads_per_chain = 2L,
+      cores_available = 8L,
+      parallel_chains_requested = 3L,
+      concurrency_budget = 8L,
+      concurrency_used = 6L,
       cmdstanr_version = "test"
     )
   )
@@ -32,4 +36,8 @@ test_that("refit round_log records MCMC chain settings from fit output", {
   expect_equal(round_log$mcmc_parallel_chains[[1L]], 3L)
   expect_equal(round_log$mcmc_core_fraction[[1L]], 0.75)
   expect_equal(round_log$mcmc_threads_per_chain[[1L]], 2L)
+  expect_identical(round_log$mcmc_cores_available, 8L)
+  expect_identical(round_log$mcmc_parallel_chains_requested, 3L)
+  expect_identical(round_log$mcmc_concurrency_budget, 8L)
+  expect_identical(round_log$mcmc_concurrency_used, 6L)
 })

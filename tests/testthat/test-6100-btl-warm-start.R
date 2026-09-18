@@ -17,6 +17,9 @@ warm_btl_sampler <- function(capture) {
 }
 
 test_that("all active samplers receive explicit cold and informative prior vectors", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   testthat::local_mocked_bindings(.btl_mcmc_require_cmdstanr = function() NULL, .package = "pairwiseLLM")
   ids <- c("b", "a", "c")
   prior <- make_warm_start_prior(c(a = 2, b = 4, c = 9))
@@ -55,6 +58,9 @@ test_that("BTL data validation rejects partial or malformed prior fields", {
 })
 
 test_that("standalone fits propagate prior metadata and preserve positional APIs", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   capture <- new.env(parent = emptyenv())
   testthat::local_mocked_bindings(
     .fit_bayes_btl_mcmc_adaptive = function(bt_data, config, seed = NULL) {
@@ -76,6 +82,9 @@ test_that("standalone fits propagate prior metadata and preserve positional APIs
 })
 
 test_that("fit contracts preserve and validate actual raw theta priors", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   capture <- new.env(parent = emptyenv())
   testthat::local_mocked_bindings(.btl_mcmc_require_cmdstanr = function() NULL, .package = "pairwiseLLM")
   prior <- make_warm_start_prior(c(a = 1, b = 3))

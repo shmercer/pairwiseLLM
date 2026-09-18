@@ -207,6 +207,10 @@ na_param_summary <- function() {
     cores_detected_physical = as.integer(mcmc_config_used$cores_detected_physical %||% NA_integer_),
     cores_detected_logical = as.integer(mcmc_config_used$cores_detected_logical %||% NA_integer_),
     threads_per_chain = as.integer(mcmc_config_used$threads_per_chain %||% NA_integer_),
+    cores_available = as.integer(mcmc_config_used$cores_available %||% NA_integer_),
+    parallel_chains_requested = as.integer(mcmc_config_used$parallel_chains_requested %||% NA_integer_),
+    concurrency_budget = as.integer(mcmc_config_used$concurrency_budget %||% NA_integer_),
+    concurrency_used = as.integer(mcmc_config_used$concurrency_used %||% NA_integer_),
     cmdstanr_version = as.character(mcmc_config_used$cmdstanr_version %||% NA_character_)
   )
 }

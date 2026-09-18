@@ -1,5 +1,15 @@
 # pairwiseLLM 1.5.1
 
+## Improvements
+
+- MCMC scheduling now respects available CPU allocations through the suggested
+  `parallelly` package, required when sampling. Automatic concurrency retains
+  the two-slot ceiling and `core_fraction` headroom. Explicit parallel-chain
+  requests remain supported, with joint chain/thread budget validation and
+  clear errors for excessive requests. Fits and logs record requested and
+  effective resource settings without changing total chains or sampling
+  settings (#255).
+
 ## Documentation
 
 - Reworked the README and Getting Started around a runnable offline example,

@@ -47,6 +47,9 @@ make_results_tbl_multi <- function() {
 }
 
 testthat::test_that("fit_bayes_btl_mcmc returns schema-stable outputs across variants", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   results <- make_results_tbl_multi()
   ids <- c("A", "B", "C")
   variants <- c("btl", "btl_e", "btl_b", "btl_e_b")
@@ -77,6 +80,9 @@ testthat::test_that("fit_bayes_btl_mcmc returns schema-stable outputs across var
 })
 
 testthat::test_that("fit_bayes_btl_mcmc subset fitting is deterministic with seed", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   results <- make_results_tbl_multi()
   ids <- c("A", "B", "C")
 

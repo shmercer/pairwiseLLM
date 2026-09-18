@@ -182,6 +182,9 @@ test_that("adaptive mcmc helper functions cover config and diagnostics branches"
 })
 
 test_that("adaptive mcmc config, draw summaries, and contract conversion cover edge branches", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   expect_error(pairwiseLLM:::.btl_mcmc_resolve_cmdstan_config("bad"), "`cmdstan` must be a list")
   expect_error(
     pairwiseLLM:::.btl_mcmc_resolve_cmdstan_config(list(threads_per_chain = 0L)),
@@ -247,6 +250,9 @@ test_that("adaptive mcmc config, draw summaries, and contract conversion cover e
 })
 
 test_that("mcmc core detection, config resolution, and variant inference hit fallback branches", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   cores <- testthat::with_mocked_bindings(
     detectCores = function(logical = FALSE) stop("detect fail"),
     pairwiseLLM:::.btl_mcmc_detect_cores(),
@@ -254,8 +260,8 @@ test_that("mcmc core detection, config resolution, and variant inference hit fal
   )
   expect_identical(cores$effective, 1L)
 
-  cfg_na <- pairwiseLLM:::.btl_mcmc_resolve_cmdstan_config(list(chains = NA_integer_))
-  expect_true(is.na(cfg_na$parallel_chains))
+  expect_error(pairwiseLLM:::.btl_mcmc_resolve_cmdstan_config(list(chains = NA_integer_)),
+    "must be a positive integer")
 
   cfg_clamped <- pairwiseLLM:::.btl_mcmc_resolve_cmdstan_config(list(
     chains = 2L,
@@ -268,7 +274,7 @@ test_that("mcmc core detection, config resolution, and variant inference hit fal
     .btl_mcmc_detect_cores = function() {
       list(physical = 32L, logical = 64L, effective = 32L)
     },
-    pairwiseLLM:::.btl_mcmc_resolve_cmdstan_config(list(chains = 8L)),
+    pairwiseLLM:::.btl_mcmc_resolve_cmdstan_config(list(chains = 8L, core_fraction = 1)),
     .package = "pairwiseLLM"
   )
   expect_identical(cfg_default$parallel_chains, 2L)
@@ -283,6 +289,9 @@ test_that("mcmc core detection, config resolution, and variant inference hit fal
 })
 
 test_that("fit_bayes_btl_mcmc_adaptive succeeds with deterministic model_fn and validates guard rails", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   bt_data <- list(
     A = c(1L, 1L),
     B = c(2L, 2L),
@@ -388,6 +397,9 @@ test_that("fit_bayes_btl_mcmc_adaptive succeeds with deterministic model_fn and 
 })
 
 test_that("fit_bayes_btl_mcmc wrapper executes deterministic multi-refit flow and validates errors", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   results <- tibble::tibble(
     pair_uid = c("A:B#1", "A:B#2"),
     unordered_key = c("A:B", "A:B"),
@@ -670,6 +682,9 @@ test_that("mcmc draw unpacking, diagnostics notes, and fit-contract conversion c
 })
 
 test_that("fit_bayes_btl_mcmc and adaptive fit entrypoints cover input guard rails and compatibility branches", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   results <- tibble::tibble(
     pair_uid = "A:B#1",
     unordered_key = "A:B",
@@ -799,6 +814,9 @@ test_that("fit_bayes_btl_mcmc and adaptive fit entrypoints cover input guard rai
 })
 
 test_that("bayes mcmc helpers cover remaining config, id, data, and summary-state branches", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   expect_error(
     pairwiseLLM:::.btl_mcmc_resolve_cmdstan_config(list(chains = 2L, parallel_chains = 0L)),
     "positive integer"
@@ -868,6 +886,9 @@ test_that("bayes mcmc helpers cover remaining config, id, data, and summary-stat
 })
 
 test_that("adaptive mcmc fit helper covers cmdstan guards and missing-draw branches", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   bt_data <- list(A = 1L, B = 2L, Y = 1L, N = 2L, item_id = c("A", "B"))
 
   cfg_bad_int <- pairwiseLLM:::btl_mcmc_config(2L, list(model_variant = "btl_e_b", cmdstan = list(iter_warmup = 0L)))

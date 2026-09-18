@@ -163,6 +163,10 @@
     "mcmc_chains",
     "mcmc_parallel_chains",
     "mcmc_threads_per_chain",
+    "mcmc_cores_available",
+    "mcmc_parallel_chains_requested",
+    "mcmc_concurrency_budget",
+    "mcmc_concurrency_used",
     "mode"
   )
   keep <- intersect(required, names(schema))
@@ -360,7 +364,7 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
   if (!is.data.frame(log)) {
     log <- tibble::tibble()
   }
-  log <- tibble::as_tibble(log)
+  log <- .btl_mcmc_resource_log_defaults(tibble::as_tibble(log))
 
   if (!is.null(last_n)) {
     log <- utils::tail(log, last_n)
@@ -399,7 +403,11 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
       "stop_reason",
       "mcmc_chains",
       "mcmc_parallel_chains",
-      "mcmc_threads_per_chain"
+      "mcmc_threads_per_chain",
+      "mcmc_cores_available",
+      "mcmc_parallel_chains_requested",
+      "mcmc_concurrency_budget",
+      "mcmc_concurrency_used"
     )
     log <- log |> dplyr::select(dplyr::any_of(required))
   }

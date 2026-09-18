@@ -59,7 +59,9 @@ test_that("legacy prediction cache derives keys while malformed indices rebuild 
 
 test_that("deferred round reporting tolerates absent payloads and respects existing values", {
   state <- task09_link_state()
-  state$round_log <- tibble::tibble(refit_id = 1L)
+  state$round_log <- tibble::tibble(refit_id = 1L,
+    mcmc_cores_available = NA_integer_, mcmc_parallel_chains_requested = NA_integer_,
+    mcmc_concurrency_budget = NA_integer_, mcmc_concurrency_used = NA_integer_)
   expect_equal(adaptive_round_log(state, reconstruct_deferred = TRUE), state$round_log)
   state$refit_meta$round_log_deferred_audit_payloads <- list(`1` = list())
   expect_equal(adaptive_round_log(state, reconstruct_deferred = TRUE), state$round_log)

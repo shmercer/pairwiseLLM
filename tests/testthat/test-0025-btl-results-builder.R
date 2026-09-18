@@ -60,6 +60,9 @@ test_that("build_btl_results_data validates malformed rows", {
 })
 
 test_that("fit_bayes_btl_mcmc accepts converted non-adaptive data", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   build_results <- resolve_build_results_fn()
   mock_fit <- function(bt_data, config, seed = NULL, model_fn = NULL) {
     theta <- matrix(seq_len(2L * bt_data$N), nrow = 2L)

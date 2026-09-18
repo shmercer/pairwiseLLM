@@ -52,6 +52,9 @@ test_that("adaptive canonical entrypoints do not call legacy scaffold constructo
 })
 
 test_that("fit_bayes_btl_mcmc does not call legacy scaffold constructors", {
+  testthat::local_mocked_bindings(
+    .btl_mcmc_available_cores = function() 2L, .package = "pairwiseLLM"
+  )
   original_fit <- pairwiseLLM:::.fit_bayes_btl_mcmc_adaptive
   original_constructor <- pairwiseLLM:::btl_mcmc_state_new
   results <- tibble::tibble(
