@@ -85,6 +85,8 @@ Warm-start blocks are 0100–0199 (schema, extraction, model and prior contracts
 3100–3199 (artifact storage and registry), 5100–5199 (adaptive integration),
 6100–6199 (sampler prior integration), and 9100–9199 (end-to-end/maintainer workflows).
 The 0100 block includes optional extraction/training boundaries alongside pure contracts.
+Sparse replay reserves 5107–5108 for reservoir contracts/selection and 9103 for
+reservoir workflow integration; these prefixes were verified unused for issue 257.
 Keep 0025, 5025, 5027 and 6020 before 6100 when running mock-restoration regressions.
 Existing 4000-series tests retain their compatibility grouping; 6020 is a sampler test.
 

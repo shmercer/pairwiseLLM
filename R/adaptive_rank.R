@@ -923,10 +923,10 @@ make_adaptive_judge_llm <- function(
 #'     strategy requires a new session.}
 #'   \item{`dup_max_obs_relaxed`}{Hybrid's maximum observations per unordered pair
 #'     under the relaxed near-tie fallback: `3L` (historical default) or `2L`.
-#'     Use `2L` with [make_adaptive_judge_replay()] to cap study evidence at the
+#'     For directed-table replay, use `2L` with [make_adaptive_judge_replay()] for
 #'     two collected orientations. The ordinary ceiling remains two; direct
 #'     strategies already cap at two. Phase B retains its existing ceiling.
-#'     This setting persists with the controller and defaults to three for legacy sessions.}
+#'     This setting persists; sparse reservoirs independently enforce a one-use ceiling.}
 #'   \item{`global_identified_reliability_min`}{Global EAP reliability threshold
 #'     used to mark the run as globally identified after a refit. Default is
 #'     `0.80`.}
@@ -1286,6 +1286,11 @@ make_adaptive_judge_llm <- function(
 #' @param warm_start_prior_sd Optional model-derived raw theta prior SD override;
 #'   scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
 #'   Not accepted with `trueskill_only`; never controls TrueSkill sigma.
+#' @param replay_reservoir Optional [make_adaptive_replay_reservoir()] object.
+#'   Requires ordinary within-set mode and a matching reservoir replay judge.
+#'   Uses a seeded spanning-tree bootstrap and at most one committed observation
+#'   per allowed unordered edge, always in its frozen observed orientation.
+#'   On resume, omit this argument or supply the identical reservoir.
 #' @param warm_start_mode Predictive destination: `cold` (neither model), `btl_only`
 #'   (BTL prior), `trueskill_only` (TrueSkill locations), or `both` (both models).
 #'   Omitted/NULL mode defaults to `btl_only` with predictive input, otherwise `cold`.
@@ -1348,7 +1353,8 @@ adaptive_rank <- function(
     warm_start_features = NULL,
     warm_start_python = NULL,
     warm_start_prior_sd = NULL,
-    warm_start_mode = NULL
+    warm_start_mode = NULL,
+    replay_reservoir = NULL
 ) {
   backend <- match.arg(backend)
   if (identical(backend, "openai")) {
@@ -1438,9 +1444,16 @@ adaptive_rank <- function(
       warm_start_features = warm_start_features,
       warm_start_python = warm_start_python,
       warm_start_prior_sd = warm_start_prior_sd,
-      warm_start_mode = warm_start_mode
+      warm_start_mode = warm_start_mode,
+      replay_reservoir = replay_reservoir
     )
   } else {
+    if (!is.null(replay_reservoir)) {
+      supplied <- .adaptive_reservoir_validate(replay_reservoir)
+      if (!identical(supplied$manifest, state$replay_reservoir)) {
+        rlang::abort("Cannot change the replay reservoir on resume.")
+      }
+    }
     .warm_start_resume_inputs(warm_start_model, warm_start_prior, warm_start_features,
       warm_start_python, warm_start_prior_sd, warm_start_mode)
     loaded_ids <- as.character(state$item_ids)

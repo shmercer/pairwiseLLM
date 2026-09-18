@@ -4065,6 +4065,11 @@
 #' @param warm_start_prior_sd Optional model-derived raw theta prior SD override;
 #'   scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
 #'   Not accepted with `trueskill_only`; never controls TrueSkill sigma.
+#' @param replay_reservoir Optional [make_adaptive_replay_reservoir()] object.
+#'   Requires ordinary within-set mode and a matching reservoir replay judge.
+#'   Uses a seeded spanning-tree bootstrap and at most one committed observation
+#'   per allowed unordered edge, always in its frozen observed orientation.
+#'   On resume, omit this argument or supply the identical reservoir.
 #' @param warm_start_mode Predictive destination: `cold` (neither model), `btl_only`
 #'   (BTL prior), `trueskill_only` (TrueSkill locations), or `both` (both models).
 #'   Omitted/NULL mode defaults to `btl_only` with predictive input, otherwise `cold`.
@@ -4103,7 +4108,8 @@ adaptive_rank_start <- function(items,
                                 warm_start_features = NULL,
                                 warm_start_python = NULL,
                                 warm_start_prior_sd = NULL,
-                                warm_start_mode = NULL) {
+                                warm_start_mode = NULL,
+                                replay_reservoir = NULL) {
   dots <- list(...)
   if (length(dots) > 0L) {
     dot_names <- names(dots)
@@ -4131,13 +4137,18 @@ adaptive_rank_start <- function(items,
   seed <- .adaptive_validate_seed(seed)
   now_fn <- dots$now_fn %||% function() Sys.time()
   state <- new_adaptive_state(items, now_fn = now_fn)
+  state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
+  state <- .adaptive_reservoir_bind(state, replay_reservoir)
   state <- .warm_start_adaptive_init(state, warm_start_model, warm_start_prior,
     warm_start_features, warm_start_python, warm_start_prior_sd, warm_start_mode)
   state$meta$seed <- seed
-  state$warm_start_pairs <- .adaptive_build_warm_start_pairs(state$item_ids, seed)
+  state$warm_start_pairs <- if (.adaptive_reservoir_active(state)) {
+    .adaptive_reservoir_bootstrap(state)
+  } else {
+    .adaptive_build_warm_start_pairs(state$item_ids, seed)
+  }
   state$warm_start_idx <- 1L
   state$warm_start_done <- nrow(state$warm_start_pairs) == 0L
-  state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
   state <- .adaptive_phase_a_prepare(state)
   state <- .adaptive_phase_a_finalize_if_ready(state)
@@ -4543,6 +4554,8 @@ adaptive_rank_run_live <- function(state,
     checkpoint_every_steps = checkpoint_every_steps
   )
   .warm_start_adaptive_validate(state)
+  .adaptive_reservoir_validate_state(state)
+  .adaptive_reservoir_check_judge(state, judge)
   resumed_from_session <- .adaptive_is_resumed_session(state)
   state$config$resumed_from_session <- isTRUE(resumed_from_session)
   state$meta$resumed_from_session <- isTRUE(resumed_from_session)
@@ -4560,6 +4573,7 @@ adaptive_rank_run_live <- function(state,
     adaptive_config$pairing_strategy <- NULL
   }
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
+  .adaptive_reservoir_check_mode(state)
   if (isTRUE(resumed_from_session)) {
     state <- .adaptive_validate_probe_state_for_resume(state)
   }

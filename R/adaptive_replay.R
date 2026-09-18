@@ -97,7 +97,7 @@ validate_adaptive_replay <- function(outcomes, item_ids, complete = TRUE) {
 #' complementing the forward result. No provider calls, random draws, or
 #' step-dependent outcomes are used.
 #'
-#' For study runs, set `adaptive_config = list(dup_max_obs_relaxed = 2L)` when
+#' For directed-table studies, set `adaptive_config = list(dup_max_obs_relaxed = 2L)` when
 #' creating the adaptive state. This prevents hybrid's relaxed third observation
 #' at selection time. Normal presentation balancing and repeat reversal remain
 #' active. Direct strategies already cap unordered pairs at two observations.
@@ -109,7 +109,20 @@ validate_adaptive_replay <- function(outcomes, item_ids, complete = TRUE) {
 #' strict use also rejects keys already present in that state's committed history.
 #' The matrix and its provenance must be retained separately by the caller.
 #'
+#' A [make_adaptive_replay_reservoir()] object instead enables sparse,
+#' single-observation replay. Bind that object through `replay_reservoir` when
+#' creating state. The judge then requires matching reservoir identity, uses
+#' committed unordered-edge history for consumption, and preserves the stored
+#' orientation. Discarding an updated state does not consume an observation.
+#' Recreate a matching judge after loading a session; state contains only the
+#' outcome-free manifest. `complete` applies only to directed data-frame input;
+#' `strict_use = FALSE` is unsupported for reservoirs.
+#'
 #' @inheritParams validate_adaptive_replay
+#' @param outcomes A directed outcome data frame (see [validate_adaptive_replay()])
+#'   or a [make_adaptive_replay_reservoir()] object.
+#' @param item_ids Panel IDs. Required for data-frame input; inferred from a
+#'   reservoir when omitted, or checked for agreement when supplied.
 #' @param strict_use Logical; reject repeated use of an exact ordered judgment.
 #'   Default `TRUE`. `FALSE` permits repeated lookups for non-study inspection.
 #' @return A function `judge(A, B, state = NULL, ...)` compatible with
@@ -130,6 +143,10 @@ validate_adaptive_replay <- function(outcomes, item_ids, complete = TRUE) {
 #' @export
 make_adaptive_judge_replay <- function(outcomes, item_ids, strict_use = TRUE, complete = TRUE) {
   .adaptive_replay_flag(strict_use, "strict_use")
+  if (inherits(outcomes, "pairwiseLLM_replay_reservoir")) {
+    if (missing(item_ids)) item_ids <- outcomes$manifest$item_ids
+    return(.adaptive_reservoir_judge(outcomes, item_ids, strict_use))
+  }
   outcomes <- validate_adaptive_replay(outcomes, item_ids, complete = complete)
   # Force the panel binding now, so later caller changes cannot alter a judge.
   item_ids <- as.character(item_ids)

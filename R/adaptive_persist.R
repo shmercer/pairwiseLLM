@@ -430,6 +430,7 @@ read_log <- function(path) {
     rlang::abort("Session `meta` and `controller` must be lists.")
   }
   .warm_start_adaptive_validate(state)
+  .adaptive_reservoir_validate_state(state, metadata)
   # Only absent fields migrate. Never infer initialization from current mu values,
   # or rerun initialization: saved TrueSkill and bootstrap/round state are authoritative.
   mode <- .warm_start_mode(state$meta$warm_start_mode, !is.null(state$predictive_prior))
@@ -1196,6 +1197,10 @@ validate_session_dir <- function(session_dir) {
     }
   }
 
+  if (.adaptive_reservoir_active(state)) {
+    state$step_log <- tibble::as_tibble(step_log)
+    .adaptive_reservoir_validate_state(state, metadata)
+  }
   metadata
 }
 
@@ -1284,7 +1289,9 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
     n_items = as.integer(state$n_items),
     predictive_prior_digest = state$meta$predictive_prior_digest %||% NULL,
     warm_start_mode = state$meta$warm_start_mode,
-    pairing_strategy = state$controller$pairing_strategy
+    pairing_strategy = state$controller$pairing_strategy,
+    replay_reservoir_digest = state$meta$replay_reservoir_digest,
+    replay_manifest_digest = state$replay_reservoir$manifest_digest
   )
 
   write_log(tibble::as_tibble(state$step_log), paths$step_log)
@@ -1396,6 +1403,7 @@ load_adaptive_session <- function(session_dir) {
   state$step_log <- tibble::as_tibble(step_log)
   state$round_log <- tibble::as_tibble(round_log)
   state$link_stage_log <- tibble::as_tibble(link_stage_log)
+  .adaptive_reservoir_validate_state(state, metadata)
   state <- .adaptive_resume_backfill_legacy_linking_defaults(state)
 
   if (file.exists(paths$btl_fit)) {
@@ -1473,5 +1481,11 @@ load_adaptive_session <- function(session_dir) {
   state$meta$resumed_from_session <- TRUE
   state <- .adaptive_phase_a_prepare(state)
   state <- .adaptive_validate_probe_state_for_resume(state)
+  if (.adaptive_reservoir_active(state)) {
+    # Ordinary reservoir histories cannot contain probes. Legacy reconciliation
+    # reconstructs only endpoints; retain the canonical flag on continuation.
+    state$history_pairs$is_probe_step <- rep(FALSE, nrow(state$history_pairs))
+  }
+  .adaptive_reservoir_validate_state(state, metadata)
   state
 }

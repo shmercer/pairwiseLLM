@@ -86,6 +86,8 @@ Collate:
     'adaptive_print.R'
     'adaptive_rank.R'
     'adaptive_replay.R'
+    'adaptive_replay_reservoir.R'
+    'adaptive_replay_selection.R'
     'adaptive_round_candidates.R'
     'adaptive_run.R'
     'adaptive_schemas.R'
