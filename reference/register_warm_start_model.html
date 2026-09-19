@@ -92,6 +92,7 @@ a tibble with name, source, path, version, format_version, schema, target, n,
 calibration, audit_status, size_bytes, metadata, and validation. Metadata and
 validation are list columns; unspecified metadata versions are NA character values.
 Additional columns <code>artifact_type</code> and <code>component_count</code> distinguish ensembles.
+<code>engine</code>, <code>engine_version</code>, and <code>component_engines</code> identify fitting algorithms.
 Ensemble n is NA (no pooled sample size), calibration is component_oof_linear,
 and audit status is full, summary_only, or mixed. Ensemble validation contains
 named component metrics, not ensemble-performance estimates.</p>
@@ -125,6 +126,7 @@ No user models are written into the installed package tree.</p>
 <code><a href="ensemble_warm_start_models.html">ensemble_warm_start_models()</a></code>,
 <code><a href="extract_warm_start_features.html">extract_warm_start_features()</a></code>,
 <code><a href="fit_warm_start_model.html">fit_warm_start_model()</a></code>,
+<code><a href="make_warm_start_cv_plan.html">make_warm_start_cv_plan()</a></code>,
 <code><a href="make_warm_start_prior.html">make_warm_start_prior()</a></code>,
 <code><a href="pairwiseLLM_warm_model.html">pairwiseLLM_warm_model</a></code>,
 <code><a href="predict.pairwiseLLM_warm_ensemble.html">predict.pairwiseLLM_warm_ensemble()</a></code>,

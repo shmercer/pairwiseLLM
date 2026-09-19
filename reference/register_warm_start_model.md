@@ -41,10 +41,11 @@ tibble with name, source, path, version, format_version, schema, target,
 n, calibration, audit_status, size_bytes, metadata, and validation.
 Metadata and validation are list columns; unspecified metadata versions
 are NA character values. Additional columns `artifact_type` and
-`component_count` distinguish ensembles. Ensemble n is NA (no pooled
-sample size), calibration is component_oof_linear, and audit status is
-full, summary_only, or mixed. Ensemble validation contains named
-component metrics, not ensemble-performance estimates.
+`component_count` distinguish ensembles. `engine`, `engine_version`, and
+`component_engines` identify fitting algorithms. Ensemble n is NA (no
+pooled sample size), calibration is component_oof_linear, and audit
+status is full, summary_only, or mixed. Ensemble validation contains
+named component metrics, not ensemble-performance estimates.
 
 ## Details
 
@@ -83,6 +84,7 @@ Other adaptive warm start:
 [`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md),
 [`extract_warm_start_features()`](https://shmercer.github.io/pairwiseLLM/reference/extract_warm_start_features.md),
 [`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md),
+[`make_warm_start_cv_plan()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_cv_plan.md),
 [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md),
 [`pairwiseLLM_warm_model`](https://shmercer.github.io/pairwiseLLM/reference/pairwiseLLM_warm_model.md),
 [`predict.pairwiseLLM_warm_ensemble()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_ensemble.md),

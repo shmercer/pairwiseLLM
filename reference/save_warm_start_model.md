@@ -49,10 +49,11 @@ representation.
 ## Details
 
 Artifacts are compressed RDS objects, without an envelope or serialized
-glmnet engine. Format versions 1 (full audit) and 2 (explicit
-summary-only) are supported, independently of package version. Ensembles
-use their own format 1 and may contain either supported single-model
-format. Use
+glmnet engine. Legacy formats 1 (full audit) and 2 (explicit
+summary-only), and format 3 (explicit full or summary-only audit
+status), are supported independently of package version. Ensembles use
+their own format 1 and may contain any supported single-model format.
+Use
 [`prepare_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_warm_start_model.md)
 to add metadata or explicitly omit audit records before saving. Saving
 never strips records or adds timestamps. Neither loading nor prediction
@@ -83,6 +84,7 @@ Other adaptive warm start:
 [`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md),
 [`extract_warm_start_features()`](https://shmercer.github.io/pairwiseLLM/reference/extract_warm_start_features.md),
 [`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md),
+[`make_warm_start_cv_plan()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_cv_plan.md),
 [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md),
 [`pairwiseLLM_warm_model`](https://shmercer.github.io/pairwiseLLM/reference/pairwiseLLM_warm_model.md),
 [`predict.pairwiseLLM_warm_ensemble()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_ensemble.md),

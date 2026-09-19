@@ -19,7 +19,10 @@ fit_warm_start_model(
   outer_folds = 5L,
   inner_folds = 5L,
   alpha_grid = seq(0, 1, by = 0.025),
-  lambda_rule = c("lambda.1se", "lambda.min")
+  lambda_rule = c("lambda.1se", "lambda.min"),
+  engine = c("glmnet", "pls", "svr_rbf"),
+  cv_plan = NULL,
+  engine_control = NULL
 )
 ```
 
@@ -79,6 +82,24 @@ fit_warm_start_model(
   `"lambda.min"`. The rule applies to outer models and the final model
   alike.
 
+- engine:
+
+  Fitting engine. Default `"glmnet"`; `"pls"` and `"svr_rbf"` are
+  reserved and currently fail explicitly.
+
+- cv_plan:
+
+  Optional
+  [`make_warm_start_cv_plan()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_cv_plan.md)
+  object with exactly matching task, ordered IDs and outcomes. Omitted
+  seed/fold arguments defer to the plan; explicitly conflicting
+  arguments fail. A supplied plan is never regenerated.
+
+- engine_control:
+
+  Reserved engine controls. For glmnet use `alpha_grid` and
+  `lambda_rule`; nonempty engine controls fail.
+
 ## Value
 
 A portable
@@ -92,6 +113,11 @@ hyperparameters and nonzero coefficient count. Final tuning metadata is
 separate from outer validation. No glmnet fit is retained.
 
 ## Details
+
+New public fits use engine-neutral format 3 with explicit full audit
+status, a reusable CV plan, and a numeric deployment payload. Legacy
+formats 1/2 remain supported. Construct a plan once to reuse partitions
+across feature schemas.
 
 Folds balance outcome ranges using consecutive outcome-ranked blocks,
 with randomized ties and distinct randomized fold labels within each
@@ -149,6 +175,7 @@ function never installs software or downloads data.
 Other adaptive warm start:
 [`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md),
 [`extract_warm_start_features()`](https://shmercer.github.io/pairwiseLLM/reference/extract_warm_start_features.md),
+[`make_warm_start_cv_plan()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_cv_plan.md),
 [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md),
 [`pairwiseLLM_warm_model`](https://shmercer.github.io/pairwiseLLM/reference/pairwiseLLM_warm_model.md),
 [`predict.pairwiseLLM_warm_ensemble()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_ensemble.md),

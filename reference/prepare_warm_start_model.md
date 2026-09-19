@@ -43,16 +43,18 @@ verified. Schema identity or a later Python status check is not
 extraction provenance.
 
 Ordinary preparation preserves audit records. Explicit omission creates
-format 2 with summary-only audit status, retaining deployment
-parameters, tuning settings and nested-validation summaries. IDs, OOF
-rows, fold records, tuning traces and contextual warning messages are
-omitted; warning counts remain. Summaries cannot be recomputed without
-the original evidence. An already reduced artifact cannot recover its
-audit through this function.
+format 2 for legacy models; format-3 models remain format 3. Both use
+summary-only audit status, retaining deployment parameters, tuning
+settings and nested-validation summaries. IDs, OOF rows, fold records,
+tuning traces and contextual warning messages are omitted; warning
+counts remain. Format-3 artifacts retain compact CV identity digests,
+not the original plan. Summaries cannot be recomputed without the
+original evidence. An already reduced artifact cannot recover its audit
+through this function.
 
 Ensembles retain ensemble format 1; audit omission recursively reduces
-each component to model format 2, preserving existing component
-metadata. Supplied preparation metadata applies to the ensemble only.
+each component, preserving its format generation and existing metadata.
+Supplied preparation metadata applies to the ensemble only.
 
 No raw texts are added. Review task labels, notes, domain, and
 provenance for restricted information before bundling; this is not a
@@ -69,6 +71,7 @@ Other adaptive warm start:
 [`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md),
 [`extract_warm_start_features()`](https://shmercer.github.io/pairwiseLLM/reference/extract_warm_start_features.md),
 [`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md),
+[`make_warm_start_cv_plan()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_cv_plan.md),
 [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md),
 [`pairwiseLLM_warm_model`](https://shmercer.github.io/pairwiseLLM/reference/pairwiseLLM_warm_model.md),
 [`predict.pairwiseLLM_warm_ensemble()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_ensemble.md),

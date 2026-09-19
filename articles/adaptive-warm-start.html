@@ -328,8 +328,9 @@ unavailable.</p>
 <span><span class="va">features</span> <span class="op">&lt;-</span> <span class="fu">example_features</span><span class="op">(</span><span class="fl">3103</span><span class="op">)</span></span>
 <span><span class="va">theta</span> <span class="op">&lt;-</span> <span class="fl">10</span> <span class="op">+</span> <span class="fl">0.4</span> <span class="op">*</span> <span class="va">features</span><span class="op">$</span><span class="va">n_tokens</span> <span class="op">-</span> <span class="fl">2</span> <span class="op">*</span> <span class="va">features</span><span class="op">$</span><span class="va">token_length_mean</span></span>
 <span><span class="co"># A small alpha grid keeps this example fast; the default has 41 values.</span></span>
+<span><span class="va">plan</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_warm_start_cv_plan.html">make_warm_start_cv_plan</a></span><span class="op">(</span><span class="va">features</span><span class="op">$</span><span class="va">item_id</span>, <span class="va">theta</span>, <span class="st">"synthetic-a"</span><span class="op">)</span></span>
 <span><span class="va">model</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_warm_start_model.html">fit_warm_start_model</a></span><span class="op">(</span><span class="va">features</span><span class="op">$</span><span class="va">item_id</span>, <span class="va">theta</span>, <span class="st">"synthetic-a"</span>,</span>
-<span>  features <span class="op">=</span> <span class="va">features</span>, alpha_grid <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span>  features <span class="op">=</span> <span class="va">features</span>, alpha_grid <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, cv_plan <span class="op">=</span> <span class="va">plan</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">model</span><span class="op">)</span></span>
 <span><span class="co">#&gt; $task_id</span></span>
@@ -376,6 +377,12 @@ unavailable.</p>
 <span><span class="co">#&gt; $audit_status</span></span>
 <span><span class="co">#&gt; [1] "full"</span></span>
 <span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $engine</span></span>
+<span><span class="co">#&gt; [1] "glmnet"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $engine_version</span></span>
+<span><span class="co">#&gt; [1] "5.0"</span></span>
+<span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $validation</span></span>
 <span><span class="co">#&gt; $validation$pearson_r</span></span>
 <span><span class="co">#&gt; [1] 0.9897764</span></span>
@@ -413,6 +420,15 @@ spanning ridge through lasso. The example uses two alphas solely to
 shorten execution. Folds are shared across alpha candidates.
 Insufficient data produces an error; fold counts are not silently
 reduced.</p>
+<p>A reusable CV plan binds the task label, exact ordered IDs and
+outcomes, and all outer/inner partitions. Save it with
+<code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS()</a></code> to reuse those partitions across feature
+representations. A supplied plan is validated before extraction or
+fitting; it is never regenerated or silently realigned. Omitted
+seed/fold arguments defer to the plan, and explicitly conflicting values
+fail. Omitting <code>cv_plan</code> constructs the same partitions
+internally. The current engine is <code>"glmnet"</code>; PLS and RBF-SVR
+names are reserved for later implementation.</p>
 <p>Every applicable training fold learns missingness filtering (&gt;20%
 missing or all missing), median imputation, constant/near-zero-variance
 removal, and sample-SD scaling. Near-zero variance requires unique
@@ -707,11 +723,12 @@ precomputed features only.</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Empty in this release. Future reviewed bundles use the same public prediction path.</span></span>
 <span><span class="fu"><a href="../reference/register_warm_start_model.html">list_warm_start_models</a></span><span class="op">(</span>source <span class="op">=</span> <span class="st">"bundled"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 0 × 15</span></span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 15 variables: name &lt;chr&gt;, source &lt;chr&gt;, path &lt;chr&gt;, version &lt;chr&gt;,</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 0 × 18</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 18 variables: name &lt;chr&gt;, source &lt;chr&gt;, path &lt;chr&gt;, version &lt;chr&gt;,</span></span></span>
 <span><span class="co">#&gt; <span style="color: #949494;">#   format_version &lt;int&gt;, schema &lt;chr&gt;, target &lt;chr&gt;, n &lt;int&gt;,</span></span></span>
 <span><span class="co">#&gt; <span style="color: #949494;">#   calibration &lt;chr&gt;, audit_status &lt;chr&gt;, size_bytes &lt;dbl&gt;,</span></span></span>
-<span><span class="co">#&gt; <span style="color: #949494;">#   artifact_type &lt;chr&gt;, component_count &lt;int&gt;, metadata &lt;list&gt;,</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;">#   artifact_type &lt;chr&gt;, component_count &lt;int&gt;, engine &lt;chr&gt;,</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;">#   engine_version &lt;chr&gt;, component_engines &lt;list&gt;, metadata &lt;list&gt;,</span></span></span>
 <span><span class="co">#&gt; <span style="color: #949494;">#   validation &lt;list&gt;</span></span></span></code></pre></div>
 <p>When bundles become available, load an explicit advertised name with
 <code>load_warm_start_model(name = ..., source = "bundled")</code>.
@@ -812,13 +829,18 @@ fitted preprocessing, named coefficients/intercept, outcome mean/sample
 SD, calibration, training metadata and validation evidence. Prediction
 validates the schema before applying these parameters; no glmnet object
 is required.</p>
-<p>Full-audit model format 1 retains IDs, outcomes, tuning traces and
-fold predictions.
-<code>prepare_warm_start_model(model, omit_audit = TRUE)</code> creates
-model format 2 with summary-only evidence and unchanged numeric
-predictions. Summary metrics cannot be recomputed from reduced
-artifacts. Ensemble format 1 is separate from its component formats, R
-serialization version, package version and manifest version.</p>
+<p>New public fits use model format 3, with explicit
+<code>audit_status = "full"</code>, a reusable CV plan, engine/version
+metadata, and a numeric deployment payload. Full audits retain IDs,
+outcomes, tuning traces and fold predictions.
+<code>prepare_warm_start_model(model, omit_audit = TRUE)</code> retains
+format 3 with summary-only evidence, compact CV identity digests, and
+unchanged numeric predictions. It removes the original plan and
+row-level evidence. Summary metrics cannot be recomputed from reduced
+artifacts. Legacy full format 1 and reduced format 2 continue to load
+and predict with their original meanings. Ensemble format 1 is separate
+from its component formats, R serialization version, package version and
+manifest version.</p>
 <p>Reduction is not anonymization. Task labels, notes, provenance and
 diagnostic prose still need review. Preparation time is not training
 time, and supplied provenance is not verified extraction history. Load

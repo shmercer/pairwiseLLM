@@ -73,7 +73,10 @@ One fitting call represents one assessment; do not pool unlinked BT/BTL scales.<
 <span>  outer_folds <span class="op">=</span> <span class="fl">5L</span>,</span>
 <span>  inner_folds <span class="op">=</span> <span class="fl">5L</span>,</span>
 <span>  alpha_grid <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span>, by <span class="op">=</span> <span class="fl">0.025</span><span class="op">)</span>,</span>
-<span>  lambda_rule <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"lambda.1se"</span>, <span class="st">"lambda.min"</span><span class="op">)</span></span>
+<span>  lambda_rule <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"lambda.1se"</span>, <span class="st">"lambda.min"</span><span class="op">)</span>,</span>
+<span>  engine <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"glmnet"</span>, <span class="st">"pls"</span>, <span class="st">"svr_rbf"</span><span class="op">)</span>,</span>
+<span>  cv_plan <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  engine_control <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -132,6 +135,22 @@ Defaults to 41 values from ridge to lasso in increments of 0.025.</p></dd>
 <dd><p>Deployment rule: <code>"lambda.1se"</code> (default) or expert override
 <code>"lambda.min"</code>. The rule applies to outer models and the final model alike.</p></dd>
 
+
+<dt id="arg-engine">engine<a class="anchor" aria-label="anchor" href="#arg-engine"></a></dt>
+<dd><p>Fitting engine. Default <code>"glmnet"</code>; <code>"pls"</code> and <code>"svr_rbf"</code>
+are reserved and currently fail explicitly.</p></dd>
+
+
+<dt id="arg-cv-plan">cv_plan<a class="anchor" aria-label="anchor" href="#arg-cv-plan"></a></dt>
+<dd><p>Optional <code><a href="make_warm_start_cv_plan.html">make_warm_start_cv_plan()</a></code> object with exactly matching
+task, ordered IDs and outcomes. Omitted seed/fold arguments defer to the plan;
+explicitly conflicting arguments fail. A supplied plan is never regenerated.</p></dd>
+
+
+<dt id="arg-engine-control">engine_control<a class="anchor" aria-label="anchor" href="#arg-engine-control"></a></dt>
+<dd><p>Reserved engine controls. For glmnet use <code>alpha_grid</code>
+and <code>lambda_rule</code>; nonempty engine controls fail.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -145,7 +164,10 @@ metadata is separate from outer validation. No glmnet fit is retained.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>Folds balance outcome ranges using consecutive outcome-ranked blocks, with
+    <p>New public fits use engine-neutral format 3 with explicit full audit status,
+a reusable CV plan, and a numeric deployment payload. Legacy formats 1/2 remain
+supported. Construct a plan once to reuse partitions across feature schemas.</p>
+<p>Folds balance outcome ranges using consecutive outcome-ranked blocks, with
 randomized ties and distinct randomized fold labels within each block.
 Predictor missingness filtering, median imputation, near-zero-variance removal
 and sample-SD scaling are learned separately in every inner training split.
@@ -187,6 +209,7 @@ for the text-input path. This function never installs software or downloads data
 <p>Other adaptive warm start:
 <code><a href="ensemble_warm_start_models.html">ensemble_warm_start_models()</a></code>,
 <code><a href="extract_warm_start_features.html">extract_warm_start_features()</a></code>,
+<code><a href="make_warm_start_cv_plan.html">make_warm_start_cv_plan()</a></code>,
 <code><a href="make_warm_start_prior.html">make_warm_start_prior()</a></code>,
 <code><a href="pairwiseLLM_warm_model.html">pairwiseLLM_warm_model</a></code>,
 <code><a href="predict.pairwiseLLM_warm_ensemble.html">predict.pairwiseLLM_warm_ensemble()</a></code>,

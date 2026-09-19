@@ -440,6 +440,8 @@ for human labels and interpretation.
   : Extract frozen writing features for warm-start prediction
 - [`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md)
   : Train a task-specific warm-start model with nested validation
+- [`make_warm_start_cv_plan()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_cv_plan.md)
+  : Construct reusable warm-start cross-validation partitions
 - [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md)
   : Convert warm-start predictions to Bayesian BTL priors
 - [`summary(`*`<pairwiseLLM_warm_model>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/pairwiseLLM_warm_model.md)

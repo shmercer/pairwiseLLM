@@ -226,8 +226,9 @@ example_features <- function(seed) {
 features <- example_features(3103)
 theta <- 10 + 0.4 * features$n_tokens - 2 * features$token_length_mean
 # A small alpha grid keeps this example fast; the default has 41 values.
+plan <- make_warm_start_cv_plan(features$item_id, theta, "synthetic-a")
 model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
-  features = features, alpha_grid = c(0, 1))
+  features = features, alpha_grid = c(0, 1), cv_plan = plan)
 
 summary(model)
 #> $task_id
@@ -274,6 +275,12 @@ summary(model)
 #> $audit_status
 #> [1] "full"
 #> 
+#> $engine
+#> [1] "glmnet"
+#> 
+#> $engine_version
+#> [1] "5.0"
+#> 
 #> $validation
 #> $validation$pearson_r
 #> [1] 0.9897764
@@ -311,6 +318,16 @@ and 41 alpha candidates `seq(0, 1, by = 0.025)` spanning ridge through
 lasso. The example uses two alphas solely to shorten execution. Folds
 are shared across alpha candidates. Insufficient data produces an error;
 fold counts are not silently reduced.
+
+A reusable CV plan binds the task label, exact ordered IDs and outcomes,
+and all outer/inner partitions. Save it with
+[`saveRDS()`](https://rdrr.io/r/base/readRDS.html) to reuse those
+partitions across feature representations. A supplied plan is validated
+before extraction or fitting; it is never regenerated or silently
+realigned. Omitted seed/fold arguments defer to the plan, and explicitly
+conflicting values fail. Omitting `cv_plan` constructs the same
+partitions internally. The current engine is `"glmnet"`; PLS and RBF-SVR
+names are reserved for later implementation.
 
 Every applicable training fold learns missingness filtering (\>20%
 missing or all missing), median imputation, constant/near-zero-variance
@@ -600,11 +617,12 @@ precomputed features only.
 
 # Empty in this release. Future reviewed bundles use the same public prediction path.
 list_warm_start_models(source = "bundled")
-#> # A tibble: 0 × 15
-#> # ℹ 15 variables: name <chr>, source <chr>, path <chr>, version <chr>,
+#> # A tibble: 0 × 18
+#> # ℹ 18 variables: name <chr>, source <chr>, path <chr>, version <chr>,
 #> #   format_version <int>, schema <chr>, target <chr>, n <int>,
 #> #   calibration <chr>, audit_status <chr>, size_bytes <dbl>,
-#> #   artifact_type <chr>, component_count <int>, metadata <list>,
+#> #   artifact_type <chr>, component_count <int>, engine <chr>,
+#> #   engine_version <chr>, component_engines <list>, metadata <list>,
 #> #   validation <list>
 ```
 
@@ -718,12 +736,18 @@ SD, calibration, training metadata and validation evidence. Prediction
 validates the schema before applying these parameters; no glmnet object
 is required.
 
-Full-audit model format 1 retains IDs, outcomes, tuning traces and fold
-predictions. `prepare_warm_start_model(model, omit_audit = TRUE)`
-creates model format 2 with summary-only evidence and unchanged numeric
-predictions. Summary metrics cannot be recomputed from reduced
-artifacts. Ensemble format 1 is separate from its component formats, R
-serialization version, package version and manifest version.
+New public fits use model format 3, with explicit
+`audit_status = "full"`, a reusable CV plan, engine/version metadata,
+and a numeric deployment payload. Full audits retain IDs, outcomes,
+tuning traces and fold predictions.
+`prepare_warm_start_model(model, omit_audit = TRUE)` retains format 3
+with summary-only evidence, compact CV identity digests, and unchanged
+numeric predictions. It removes the original plan and row-level
+evidence. Summary metrics cannot be recomputed from reduced artifacts.
+Legacy full format 1 and reduced format 2 continue to load and predict
+with their original meanings. Ensemble format 1 is separate from its
+component formats, R serialization version, package version and manifest
+version.
 
 Reduction is not anonymization. Task labels, notes, provenance and
 diagnostic prose still need review. Preparation time is not training

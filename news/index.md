@@ -4,6 +4,13 @@
 
 ### Improvements
 
+- Added reusable task/outcome-bound warm-start CV plans and portable
+  format-3 glmnet models, including full/reduced storage, registries,
+  bundles, and warm priors. Legacy formats 1/2 and frozen v1/glmnet
+  numerical behavior remain supported
+  ([\#259](https://github.com/shmercer/pairwiseLLM/issues/259), Phase
+  2).
+
 - Added sparse adaptive replay reservoirs with one frozen observation
   per unordered edge. All four within-set pairing strategies respect
   unused allowed edges and recorded presentation orientation. Reservoir

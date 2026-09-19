@@ -77,7 +77,15 @@ Format version 1 is an S3 list with these deployment fields:
   outer held-out predictions and metrics, and warning messages. See
   [`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md).
 
-Explicit
+New public fits use format 3, with `audit_status = "full"`, a validated
+`cv_plan`, compact `cv_identity`, and a typed numeric `engine_payload`.
+Linear coefficients/intercept remain checked compatibility views.
+Training also records selected `hyperparameters`. The complete plan
+binds exact ordered IDs, original outcomes and every nested partition.
+No backend fit object is stored. Format-3 audit omission keeps format 3
+and compact identity but removes the plan.
+
+For legacy models,
 [`prepare_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_warm_start_model.md)
 audit omission creates format 2 with `audit_status = "summary_only"`. It
 preserves deployment parameters and validation summaries but omits
@@ -122,6 +130,7 @@ Other adaptive warm start:
 [`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md),
 [`extract_warm_start_features()`](https://shmercer.github.io/pairwiseLLM/reference/extract_warm_start_features.md),
 [`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md),
+[`make_warm_start_cv_plan()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_cv_plan.md),
 [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md),
 [`predict.pairwiseLLM_warm_ensemble()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_ensemble.md),
 [`predict.pairwiseLLM_warm_model()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_model.md),
@@ -166,6 +175,7 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 #> Task-specific warm-start model: synthetic-a 
 #> Target: within-task standardized BT/BTL theta (sample SD)
 #> Training rows: 15 | Retained predictors: 20 | Nonzero coefficients: 2 
+#> Engine: glmnet | Version: 5.0 
 #> Alpha: 1 | Lambda: 0.02274379 
 #> Calibration: oof_linear | Audit: full 
 #> Nested validation: Pearson r = 0.9897764 | RMSE = 0.1600619 | MAE = 0.08329452 
@@ -212,6 +222,12 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 #> 
 #> $audit_status
 #> [1] "full"
+#> 
+#> $engine
+#> [1] "glmnet"
+#> 
+#> $engine_version
+#> [1] "5.0"
 #> 
 #> $validation
 #> $validation$pearson_r
