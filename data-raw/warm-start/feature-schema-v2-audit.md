@@ -39,6 +39,10 @@ Important source distinctions:
 - textstat difficult_words defaults to unique words and threshold two. Spache
   and Dale–Chall v2 use threshold-two occurrences; Fog uses threshold-three
   occurrences plus the easy-word list, so raw polysyllabcount cannot replace it.
+  Unique difficult-word forms preserve case; classification lowercases them.
+  textstat removes hyphens without splitting the resulting word. These wrapper
+  details were clarified in a separate metadata-only follow-up before consumer
+  validation; membership and calculation settings did not change.
 - Linsear–Write uses strict_lower=False and strict_upper=True (first 100 words).
   Short/wordless inputs can yield valid negative scores; never clamp them.
 - Spache precedes Dale–Chall v2 and, with word/sentence counts, recovers its
