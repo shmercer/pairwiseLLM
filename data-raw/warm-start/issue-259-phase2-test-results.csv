@@ -143,3 +143,10 @@ post-lint-prediction,test-0104-warm-start-model-core.R,glmnet boundary rejects m
 post-lint-prediction,test-3107-warm-start-format3-artifacts.R,format-3 full and reduced artifacts deploy without a fitting backend,48,0,FALSE,FALSE,0,48
 post-lint-prediction,test-3107-warm-start-format3-artifacts.R,format-3 registry and verified bundles retain engine and CV metadata,10,0,FALSE,FALSE,0,10
 post-lint-prediction,test-3107-warm-start-format3-artifacts.R,mixed legacy and format-3 cross-task ensembles retain existing semantics,9,0,FALSE,FALSE,0,9
+r47-remediation,test-0114-warm-start-cv-plan.R,plans preserve exact legacy fold draw order and serialize portably,45,0,FALSE,FALSE,0,45
+r47-remediation,test-0114-warm-start-cv-plan.R,plans preserve nondefault RNG kinds and an absent caller seed,6,0,FALSE,FALSE,0,6
+r47-remediation,test-0114-warm-start-cv-plan.R,"plan identities reject task, order, outcome and structural corruption",26,0,FALSE,FALSE,0,26
+r47-remediation,test-0114-warm-start-cv-plan.R,plan and argument mismatches fail before extraction or engine calls,18,0,FALSE,FALSE,0,18
+r47-remediation,test-0114-warm-start-cv-plan.R,supplied plans defer omitted settings and insulate folds from engine RNG,7,0,FALSE,FALSE,0,7
+r47-remediation,test-0114-warm-start-cv-plan.R,"format 3 rejects payload, compatibility view and CV evidence corruption",28,0,FALSE,FALSE,0,28
+r47-remediation,test-0114-warm-start-cv-plan.R,R 4.7 binomial RNG provenance is portable without changing partitions,21,0,FALSE,FALSE,0,21

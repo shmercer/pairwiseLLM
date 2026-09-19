@@ -356,6 +356,62 @@ use study outcomes. Materialize and separately commit the approved source-audite
 Keep the 1.5.1 version until Phase 7. Do not implement PLS/SVR or same-task ensembles
 in Phase 3. No unresolved foundational defect blocks the next phase.
 
+## Phase 2 CI remediation — R-devel RNG provenance (2026-09-19)
+
+The user reported CI failures before final delivery. At PR head
+`735d71e3dcfff362094a5280ccaae51e0ea9d389`, R-devel failed during the warm-start
+vignette build with `Invalid CV plan RNG provenance`; the earlier implementation
+head had the same failure. Evidence:
+[failed R-devel job](https://github.com/shmercer/pairwiseLLM/actions/runs/35474964244/job/105982525762).
+R-devel is R4.7.0 and now reports a fourth RNG kind for binomial generation.
+The original new validator incorrectly required exactly three entries.
+The [R-devel base manual](https://stat.ethz.ch/CRAN/doc/manuals/r-devel/packages/base/refman/base.html)
+and R source confirm `binom.kind` and the `Buggy BTPE`/`BTPE` labels.
+
+Correction: accept validated three- or four-entry provenance, preserve actual
+metadata without padding/rewriting old plans, and validate the optional binomial
+entry. CV still draws only uniform/sample values, so fold construction is
+unchanged. Legacy plan digests remain unchanged. A narrow internal RNG-query
+wrapper allows package-scoped regression mocks without modifying base bindings.
+
+Exact follow-up files: `R/warm_start_cv_plan.R`,
+`tests/testthat/test-0114-warm-start-cv-plan.R`, this handoff,
+`issue-259-phase2-test-results.csv`, `issue-259-phase2-coverage-ledger.csv`.
+All three ignored local handoffs are updated too. No new API, dependency, version,
+R floor, extraction or statistical change. The follow-up commit is identified by
+the final PR/local delivery head, with parent735d71e above.
+
+Validation:
+
+- Initial focused0113/0114/3107 rerun confirmed148 frozen and67 artifact
+  expectations but the new regression attempted to mock an absent package
+  binding for base RNGkind. Added the narrow query wrapper; no base namespace
+  override was used. The first coverage attempt was explicitly stopped before
+  results because it had loaded the pre-wrapper source.
+- Corrected `testthat::test_local(filter = "^0114-", reporter = "summary",
+  stop_on_failure = TRUE, stop_on_warning = TRUE)` passed151 expectations.
+  Tests cover both fourth-entry labels, identical folds, caller RNG preservation,
+  malformed lengths/labels, and full/reduced model/prediction interoperability.
+- `Rscript --vanilla /tmp/issue259-phase2-r47-coverage.R` runs that same0114
+  filter under scoped environment coverage: **7 blocks/151 passed, zero failures,
+  errors, warnings or skips**. Final evidence replaces only CV-plan file entries;
+  all unaffected files retain their already passing coverage. Current CV-plan
+  coverage is **76/79 =96.20253%**; all22 warm R files remain >=95%.
+  Durable results have a separate `r47-remediation` run label. The tracked phase
+  collector can reproduce all focused tests/coverage on the final source.
+- Affected source/test lint and `git diff --check` pass. The changed warm-start
+  vignette rendered again to `/tmp/issue259-phase2-r47-vignette/` with the corrected
+  validator. No Roxygen/generated-document changes were necessary.
+- Independent read-only review found no blocker. Actual R4.7 execution awaits
+  the corrective commit's CI; local R4.6.1 exercises its four-entry metadata via
+  scoped mocks. At the last pre-fix check, pkgdown passed; only R-devel failed,
+  and the other checks were still running.
+
+PR261 is OPEN/ready, targeting master; no merge/publication or Phase3 work.
+No study files were inspected or changed. Corrective delivery and final CI status
+are recorded in the PR and the local handoffs; the Phase3 prompt below requires
+using the verified final head, including this remediation.
+
 ## Next-thread prompt
 
 Start Phase 3 in a new thread using this exact prompt:

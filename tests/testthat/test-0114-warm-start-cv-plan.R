@@ -191,3 +191,39 @@ test_that("format 3 rejects payload, compatibility view and CV evidence corrupti
     expect_error(.validate_warm_start_model(change(model)))
   }
 })
+
+
+test_that("R 4.7 binomial RNG provenance is portable without changing partitions", {
+  original <- base::RNGkind()[1:3]
+  withr::local_seed(37)
+  before <- .Random.seed
+  local_mocked_bindings(.warm_start_rng_kind = function(...) original, .package = "pairwiseLLM")
+  legacy <- make_warm_start_cv_plan(1:20, 1:20, "rng-version")
+  expect_identical(legacy$rng_kind, original)
+  for (binomial in c("Buggy BTPE", "BTPE")) {
+    reported <- c(original, binomial)
+    current <- with_mocked_bindings(
+      make_warm_start_cv_plan(1:20, 1:20, "rng-version"),
+      .warm_start_rng_kind = function(...) reported, .package = "pairwiseLLM")
+    expect_identical(current$rng_kind, reported)
+    expect_identical(current$outer_foldid, legacy$outer_foldid)
+    expect_identical(current$outer_inner_foldid, legacy$outer_inner_foldid)
+    expect_identical(current$full_inner_foldid, legacy$full_inner_foldid)
+    expect_identical(.validate_warm_start_cv_plan(current), current)
+    expect_false(identical(current$digest, legacy$digest))
+    expect_identical(.Random.seed, before)
+  }
+  expect_error(.warm_start_plan_rng(c(original, "invalid")), "RNG provenance")
+  expect_error(.warm_start_plan_rng(c(original, "BTPE", "extra")), "RNG provenance")
+  expect_error(.warm_start_plan_rng(original[1:2]), "RNG provenance")
+  skip_if_not_installed("glmnet")
+  f <- warm_phase2_fixture()
+  model <- with_mocked_bindings({
+    f$plan <- make_warm_start_cv_plan(f$x$item_id, f$theta, "phase2", seed = 259L)
+    warm_phase2_fit(f)
+  }, .warm_start_rng_kind = function(...) c(original, "BTPE"), .package = "pairwiseLLM")
+  expect_identical(model$cv_identity$rng_kind, c(original, "BTPE"))
+  reduced <- prepare_warm_start_model(model, omit_audit = TRUE)
+  expect_identical(reduced$cv_identity, model$cv_identity)
+  expect_identical(predict(reduced, f$x), predict(model, f$x))
+})

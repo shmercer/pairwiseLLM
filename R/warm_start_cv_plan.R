@@ -47,7 +47,7 @@ make_warm_start_cv_plan <- function(ids, theta, task_id, seed = 1L,
     })
     list(format_version = 1L, task_id = task_id, ids = ids, theta = theta,
       outcome = list(definition = "within_task_z", sd_convention = "sample"),
-      seed = as.integer(seed), rng_kind = RNGkind(), outer_folds = as.integer(outer_folds),
+      seed = as.integer(seed), rng_kind = .warm_start_rng_kind(), outer_folds = as.integer(outer_folds),
       inner_folds = as.integer(inner_folds), outer_foldid = stats::setNames(outer, ids),
       outer_inner_foldid = inner,
       full_inner_foldid = stats::setNames(.warm_start_folds(theta, inner_folds), ids))
@@ -57,6 +57,8 @@ make_warm_start_cv_plan <- function(ids, theta, task_id, seed = 1L,
   .validate_warm_start_cv_plan(plan)
   plan
 }
+
+.warm_start_rng_kind <- function() RNGkind()
 
 .warm_start_plan_seed <- function(seed) {
   if (!.warm_start_number(seed, 0, .Machine$integer.max) || seed != floor(seed)) {
@@ -116,12 +118,14 @@ make_warm_start_cv_plan <- function(ids, theta, task_id, seed = 1L,
 }
 
 .warm_start_plan_rng <- function(kind) {
+  # R >= 4.7 adds binom.kind; retain all actual provenance, including on older
+  # runtimes reading a newer plan. CV uses only uniform and sampling generators.
   allowed <- list(c("Wichmann-Hill", "Marsaglia-Multicarry", "Super-Duper", "Mersenne-Twister",
     "Knuth-TAOCP", "user-supplied", "Knuth-TAOCP-2002", "L'Ecuyer-CMRG"),
     c("Buggy Kinderman-Ramage", "Ahrens-Dieter", "Box-Muller", "user-supplied", "Inversion", "Kinderman-Ramage"),
-    c("Rounding", "Rejection"))
-  if (!is.character(kind) || !is.null(attributes(kind)) || length(kind) != 3L || anyNA(kind) ||
-      !all(vapply(seq_len(3L), function(i) kind[i] %in% allowed[[i]], logical(1)))) {
+    c("Rounding", "Rejection"), c("Buggy BTPE", "BTPE"))
+  if (!is.character(kind) || !is.null(attributes(kind)) || !length(kind) %in% c(3L, 4L) || anyNA(kind) ||
+      !all(vapply(seq_along(kind), function(i) kind[i] %in% allowed[[i]], logical(1)))) {
     rlang::abort("Invalid CV plan RNG provenance.")
   }
 }
