@@ -1,0 +1,2 @@
+# The audited schema identity is a byte-level contract on every checkout platform.
+inst/warm-start/feature-schema-writing-v1.csv text eol=lf
