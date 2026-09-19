@@ -61,7 +61,11 @@ predict.pairwiseLLM_warm_model <- function(object, newdata, ...) {
   }
   features <- .validate_warm_start_features(newdata, newdata$item_id, object$schema)
   scaled <- .warm_start_preprocess_apply(as.matrix(features[, -1, drop = FALSE]), object$preprocessing)
-  raw <- as.numeric(object$intercept + scaled %*% object$coefficients)
+  raw <- if (identical(object$format_version, 3L)) {
+    .warm_start_engine_predict(object$engine_payload, scaled)
+  } else {
+    as.numeric(object$intercept + scaled %*% object$coefficients)
+  }
   if (any(!is.finite(raw))) rlang::abort("Warm-start prediction produced nonfinite values.")
   out <- tibble::tibble(item_id = features$item_id, raw_prediction = raw,
     calibrated_prediction = if (object$calibration$status == "oof_linear") {
@@ -73,5 +77,12 @@ predict.pairwiseLLM_warm_model <- function(object, newdata, ...) {
   attr(out, "warm_start_model") <- list(format_version = object$format_version,
     task_id = object$training$task_id, outcome_definition = object$outcome$definition,
     calibration_status = object$calibration$status)
+  if (identical(object$format_version, 3L)) {
+    meta <- attr(out, "warm_start_model")
+    meta$engine <- object$training$engine
+    meta$engine_version <- object$training$engine_version
+    meta$cv_digest <- object$cv_identity$digest
+    attr(out, "warm_start_model") <- meta
+  }
   out
 }

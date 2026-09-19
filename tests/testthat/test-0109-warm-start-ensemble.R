@@ -141,7 +141,8 @@ test_that("failed and misaligned predictions always identify their component", {
 })
 
 test_that("ensemble storage, references, recursive reduction and registry are portable", {
-  f <- ensemble_fixture()
+  legacy <- readRDS(test_path("fixtures", "warm-start-legacy", "baseline-1.5.1.rds"))
+  f <- list(a = legacy$cases$default$model, b = legacy$cases$tied_missing$model, x = legacy$newdata)
   root <- withr::local_tempdir()
   withr::local_envvar(R_USER_DATA_DIR = root)
   local_mocked_bindings(.warm_start_require_glmnet = function() rlang::abort("must not train"),

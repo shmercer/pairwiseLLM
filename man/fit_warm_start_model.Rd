@@ -16,7 +16,10 @@ fit_warm_start_model(
   outer_folds = 5L,
   inner_folds = 5L,
   alpha_grid = seq(0, 1, by = 0.025),
-  lambda_rule = c("lambda.1se", "lambda.min")
+  lambda_rule = c("lambda.1se", "lambda.min"),
+  engine = c("glmnet", "pls", "svr_rbf"),
+  cv_plan = NULL,
+  engine_control = NULL
 )
 }
 \arguments{
@@ -49,6 +52,16 @@ Defaults to 41 values from ridge to lasso in increments of 0.025.}
 
 \item{lambda_rule}{Deployment rule: \code{"lambda.1se"} (default) or expert override
 \code{"lambda.min"}. The rule applies to outer models and the final model alike.}
+
+\item{engine}{Fitting engine. Default \code{"glmnet"}; \code{"pls"} and \code{"svr_rbf"}
+are reserved and currently fail explicitly.}
+
+\item{cv_plan}{Optional \code{\link[=make_warm_start_cv_plan]{make_warm_start_cv_plan()}} object with exactly matching
+task, ordered IDs and outcomes. Omitted seed/fold arguments defer to the plan;
+explicitly conflicting arguments fail. A supplied plan is never regenerated.}
+
+\item{engine_control}{Reserved engine controls. For glmnet use \code{alpha_grid}
+and \code{lambda_rule}; nonempty engine controls fail.}
 }
 \value{
 A portable \link{pairwiseLLM_warm_model} with deployment preprocessing,
@@ -64,6 +77,10 @@ A warm-start model predicts relative writing quality before pairwise comparisons
 One fitting call represents one assessment; do not pool unlinked BT/BTL scales.
 }
 \details{
+New public fits use engine-neutral format 3 with explicit full audit status,
+a reusable CV plan, and a numeric deployment payload. Legacy formats 1/2 remain
+supported. Construct a plan once to reuse partitions across feature schemas.
+
 Folds balance outcome ranges using consecutive outcome-ranked blocks, with
 randomized ties and distinct randomized fold labels within each block.
 Predictor missingness filtering, median imputation, near-zero-variance removal
@@ -138,6 +155,7 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 Other adaptive warm start:
 \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}},
 \code{\link[=extract_warm_start_features]{extract_warm_start_features()}},
+\code{\link[=make_warm_start_cv_plan]{make_warm_start_cv_plan()}},
 \code{\link[=make_warm_start_prior]{make_warm_start_prior()}},
 \code{\link{pairwiseLLM_warm_model}},
 \code{\link[=predict.pairwiseLLM_warm_ensemble]{predict.pairwiseLLM_warm_ensemble()}},

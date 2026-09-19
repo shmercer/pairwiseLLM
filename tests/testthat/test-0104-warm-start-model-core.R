@@ -73,7 +73,7 @@ test_that("model validator rejects unsupported and damaged deployment contracts"
     expect_error(validate(bad), info = field)
   }
   bad <- model
-  bad$format_version <- 3L
+  bad$format_version <- 99L
   expect_error(validate(bad), "format version")
   bad <- model
   bad$features <- rev(bad$features)

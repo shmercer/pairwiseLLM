@@ -62,8 +62,9 @@ test_that("preparation validates metadata and preserves explicit provenance", {
 
 test_that("calibrated storage preserves audits and explicit reduction retains predictions", {
   skip_if_not_installed("glmnet")
-  x <- warm_core_features(15)
-  model <- fit_warm_start_model(x$item_id, warm_core_theta(x), "synthetic audit", features = x, alpha_grid = c(0, 1))
+  case <- readRDS(test_path("fixtures", "warm-start-legacy", "baseline-1.5.1.rds"))$cases$default
+  x <- case$input$features
+  model <- case$model
   path <- tempfile(fileext = ".rds")
   withr::defer(unlink(path))
   save_warm_start_model(model, path)

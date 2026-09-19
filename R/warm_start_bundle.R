@@ -30,12 +30,14 @@
   components <- if (ensemble) model$components else stats::setNames(list(model), name)
   records <- lapply(seq_along(components), function(i) {
     component <- components[[i]]
-    if (component$format_version != 2L || component$calibration$status != "oof_linear") {
+    if (.warm_start_audit_status(component) != "summary_only" || component$calibration$status != "oof_linear") {
       rlang::abort("Bundled components require calibrated summary-only models; retain full audits privately.")
     }
-    list(component_name = names(components)[i], metadata = .warm_start_bundle_metadata(component),
+    record <- list(component_name = names(components)[i], metadata = .warm_start_bundle_metadata(component),
       format_version = component$format_version, training = component$training,
       tuning = component$tuning, validation = component$validation)
+    if (identical(component$format_version, 3L)) record$cv_identity <- component$cv_identity
+    record
   })
   list(name = name, filename = basename(path), metadata = metadata,
     artifact_type = if (ensemble) "ensemble" else "model", format_version = model$format_version,
