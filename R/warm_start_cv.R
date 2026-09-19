@@ -23,7 +23,19 @@
 #' @param lambda_rule Deployment rule: `"lambda.1se"` (default) or expert override
 #'   `"lambda.min"`. The rule applies to outer models and the final model alike.
 #'
+#' @param engine Fitting engine. Default `"glmnet"`; `"pls"` and `"svr_rbf"`
+#'   are reserved and currently fail explicitly.
+#' @param cv_plan Optional [make_warm_start_cv_plan()] object with exactly matching
+#'   task, ordered IDs and outcomes. Omitted seed/fold arguments defer to the plan;
+#'   explicitly conflicting arguments fail. A supplied plan is never regenerated.
+#' @param engine_control Reserved engine controls. For glmnet use `alpha_grid`
+#'   and `lambda_rule`; nonempty engine controls fail.
+#'
 #' @details
+#' New public fits use engine-neutral format 3 with explicit full audit status,
+#' a reusable CV plan, and a numeric deployment payload. Legacy formats 1/2 remain
+#' supported. Construct a plan once to reuse partitions across feature schemas.
+#'
 #' Folds balance outcome ranges using consecutive outcome-ranked blocks, with
 #' randomized ties and distinct randomized fold labels within each block.
 #' Predictor missingness filtering, median imputation, near-zero-variance removal
@@ -105,18 +117,34 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
                                  schema = "writing_features_v1", python = NULL, seed = 1L,
                                  outer_folds = 5L, inner_folds = 5L,
                                  alpha_grid = seq(0, 1, by = 0.025),
-                                 lambda_rule = c("lambda.1se", "lambda.min")) {
+                                 lambda_rule = c("lambda.1se", "lambda.min"),
+                                 engine = c("glmnet", "pls", "svr_rbf"),
+                                 cv_plan = NULL, engine_control = NULL) {
   ids <- .warm_start_ids(ids)
   .warm_start_outcome_values(theta)
   .warm_start_task_id(task_id)
+  engine <- match.arg(engine)
+  .warm_start_engine_control(engine, engine_control)
   warm_start_feature_schema(schema)
   if (length(theta) != length(ids)) rlang::abort("Supply one theta value per ID in the supplied ID order.")
   .warm_start_outcome_fit(theta)
   if (is.null(texts) == is.null(features)) rlang::abort("Supply exactly one of `texts` or `features`.")
   if (!is.null(features) && !is.null(python)) rlang::abort("`python` is only used with `texts`.")
-  if (!.warm_start_number(seed, 0, .Machine$integer.max) || seed != floor(seed)) {
-    rlang::abort("`seed` must be an integer from zero through .Machine$integer.max.")
+  if (!is.null(cv_plan)) {
+    .validate_warm_start_cv_plan(cv_plan, ids, theta, task_id)
+    for (field in c("seed", "outer_folds", "inner_folds")) {
+      explicit <- switch(field, seed = !missing(seed), outer_folds = !missing(outer_folds),
+        inner_folds = !missing(inner_folds))
+      if (explicit && (!.warm_start_number(get(field), 0) ||
+          !identical(as.numeric(get(field)), as.numeric(cv_plan[[field]])))) {
+        rlang::abort(paste0("Explicit `", field, "` conflicts with the supplied CV plan."))
+      }
+    }
+    seed <- cv_plan$seed
+    outer_folds <- cv_plan$outer_folds
+    inner_folds <- cv_plan$inner_folds
   }
+  .warm_start_plan_seed(seed)
   .warm_start_fold_count(outer_folds, length(ids))
   .warm_start_fold_count(inner_folds, length(ids) - ceiling(length(ids) / outer_folds))
   if (!is.numeric(alpha_grid) || is.object(alpha_grid) || !is.null(dim(alpha_grid)) ||
@@ -128,12 +156,15 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
   if (!requireNamespace("withr", quietly = TRUE)) {
     rlang::abort("Model development requires optional package 'withr'. Install it explicitly first.")
   }
+  if (is.null(cv_plan)) {
+    cv_plan <- make_warm_start_cv_plan(ids, theta, task_id, seed, outer_folds, inner_folds)
+  }
   warnings <- character()
   model <- withCallingHandlers(.pairwiseLLM_with_seed(seed, function() {
     if (!is.null(texts)) features <- extract_warm_start_features(ids, texts, schema, python)
     features <- .validate_warm_start_features(features, ids, schema)
     x <- as.matrix(features[, -1, drop = FALSE])
-    outer_id <- .warm_start_folds(theta, outer_folds)
+    outer_id <- unname(cv_plan$outer_foldid)
     records <- vector("list", outer_folds)
     predictions <- data.frame(item_id = ids, fold = outer_id, observed = NA_real_,
       raw_prediction = NA_real_, calibrated_prediction = NA_real_)
@@ -142,11 +173,11 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
         train <- which(outer_id != fold)
         test <- which(outer_id == fold)
         result <- .warm_start_train_cv(x[train, , drop = FALSE], theta[train], inner_folds,
-          alpha_grid, lambda_rule)
+          alpha_grid, lambda_rule, unname(cv_plan$outer_inner_foldid[[fold]]), engine)
         result$train_ids <- ids[train]
         result$test_ids <- ids[test]
         scaled <- .warm_start_preprocess_apply(x[test, , drop = FALSE], result$preprocessing)
-        raw <- as.numeric(result$intercept + scaled %*% result$coefficients)
+        raw <- .warm_start_engine_predict(result$engine_payload, scaled)
         result$predictions <- data.frame(item_id = ids[test],
           observed = .warm_start_outcome_apply(theta[test], result$outcome), raw_prediction = raw,
           calibrated_prediction = .warm_start_calibration_apply(raw, result$calibration))
@@ -158,7 +189,8 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
     }
     metrics <- .warm_start_validation_metrics(predictions$calibrated_prediction, predictions$observed)
     final <- .warm_start_cv_context("Final full-data fit", function() {
-      .warm_start_train_cv(x, theta, inner_folds, alpha_grid, lambda_rule)
+      .warm_start_train_cv(x, theta, inner_folds, alpha_grid, lambda_rule,
+        unname(cv_plan$full_inner_foldid), engine)
     })
     training <- list(task_id = task_id, n = length(ids), alpha = final$tuning$selected$alpha,
       lambda = final$tuning$selected$lambda, n_nonzero = sum(final$coefficients != 0), engine = "glmnet",
@@ -166,11 +198,12 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
       package_version = as.character(utils::packageVersion("pairwiseLLM")))
     final$tuning$ids <- ids
     final$tuning$seed <- as.integer(seed)
-    .new_warm_start_model(schema, final$preprocessing, final$coefficients, final$intercept,
+    fitted <- .new_warm_start_model(schema, final$preprocessing, final$coefficients, final$intercept,
       final$outcome, training, calibration = final$calibration, tuning = final$tuning,
       validation = list(method = "nested_cv", outer_folds = as.integer(outer_folds),
         inner_folds = as.integer(inner_folds), predictions = predictions, folds = records,
         metrics = metrics, warnings = warnings))
+    .warm_start_format3(fitted, cv_plan, final$engine_payload)
   }), warning = function(w) warnings <<- c(warnings, conditionMessage(w)))
   model$validation$warnings <- warnings
   .validate_warm_start_model(model)
@@ -197,17 +230,17 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
   labels
 }
 
-.warm_start_train_cv <- function(x, theta, inner_folds, alpha_grid, lambda_rule) {
+.warm_start_train_cv <- function(x, theta, inner_folds, alpha_grid, lambda_rule,
+                                  foldid = NULL, engine = "glmnet") {
   outcome <- .warm_start_outcome_fit(theta)
   z <- .warm_start_outcome_apply(theta, outcome)
-  foldid <- .warm_start_folds(theta, inner_folds)
-  tuning <- .warm_start_tune(x, z, foldid, alpha_grid, lambda_rule)
+  if (is.null(foldid)) foldid <- .warm_start_folds(theta, inner_folds)
+  tuning <- .warm_start_engine_tune(engine, x, z, foldid, alpha_grid, lambda_rule)
   calibration <- .warm_start_calibration_fit(tuning$selected$oof, z)
   preprocessing <- tuning$reference_preprocessing
-  fit <- .warm_start_glmnet_fit(.warm_start_preprocess_apply(x, preprocessing), z,
-    tuning$selected$alpha, tuning$selected$lambda)
-  coefficients <- as.matrix(fit$beta)[preprocessing$retained, 1]
-  coefficients <- stats::setNames(as.numeric(coefficients), preprocessing$retained)
+  payload <- .warm_start_engine_refit(engine, .warm_start_preprocess_apply(x, preprocessing), z,
+    tuning$selected)
   list(outcome = outcome, tuning = tuning, calibration = calibration, preprocessing = preprocessing,
-    coefficients = coefficients, intercept = unname(fit$a0[1]), n_nonzero = sum(coefficients != 0))
+    coefficients = payload$coefficients, intercept = payload$intercept,
+    n_nonzero = sum(payload$coefficients != 0), engine_payload = payload)
 }

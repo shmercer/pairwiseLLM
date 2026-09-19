@@ -1,0 +1,152 @@
+run,file,test,nb,failed,skipped,error,warning,passed
+focused,test-0031-warm-start-documentation.R,test filenames have unique documented numeric prefixes,3,0,FALSE,FALSE,0,3
+focused,test-0031-warm-start-documentation.R,"public warm-start help topics have examples, family and cross references",51,0,FALSE,FALSE,0,51
+focused,test-0031-warm-start-documentation.R,coefficient documentation states its interpretation and limitations,15,0,FALSE,FALSE,0,15
+focused,test-0031-warm-start-documentation.R,warm-mode tables distinguish destinations and the common bootstrap,14,0,FALSE,FALSE,0,14
+focused,test-0031-warm-start-documentation.R,adaptive documentation assigns model roles and scopes strategies,55,0,FALSE,FALSE,0,55
+focused,test-0031-warm-start-documentation.R,public replay help has navigation and strict evidence contracts,15,0,FALSE,FALSE,0,15
+focused,test-0031-warm-start-documentation.R,numeric warm-start and directed replay vignette examples execute offline,11,0,FALSE,FALSE,0,11
+focused,test-0100-warm-start-feature-schema.R,"writing_features_v1 is ordered, explicit, and independent of Python",16,0,FALSE,FALSE,0,16
+focused,test-0100-warm-start-feature-schema.R,schema lookup rejects malformed and unsupported identifiers,11,0,FALSE,FALSE,0,11
+focused,test-0100-warm-start-feature-schema.R,missing and corrupt installed artifacts give actionable failures,45,0,FALSE,FALSE,0,45
+focused,test-0101-warm-start-python.R,status reports unavailable and available environments without throwing,14,0,FALSE,FALSE,0,14
+focused,test-0101-warm-start-python.R,status handles unreadable installed Python metadata,1,0,FALSE,FALSE,0,1
+focused,test-0101-warm-start-python.R,bridge decodes structured results and restores environment settings,7,0,FALSE,FALSE,0,7
+focused,test-0101-warm-start-python.R,bridge rejects malformed responses and produces concise errors,10,0,FALSE,FALSE,0,10
+focused,test-0101-warm-start-python.R,missing reticulate gives an actionable optional dependency error,1,0,FALSE,FALSE,0,1
+focused,test-0101-warm-start-python.R,interpreter selection detects conflicts without initializing Python,6,0,FALSE,FALSE,0,6
+focused,test-0101-warm-start-python.R,uninitialized interpreter selection uses only existing Python,7,0,FALSE,FALSE,0,7
+focused,test-0101-warm-start-python.R,corrupt Python metadata is an actionable installation error,1,0,FALSE,FALSE,0,1
+focused,test-0102-warm-start-features.R,extraction preserves the canonical fixture contract without Python,10,0,FALSE,FALSE,0,10
+focused,test-0102-warm-start-features.R,invalid inputs fail before crossing the Python boundary,21,0,FALSE,FALSE,0,21
+focused,test-0102-warm-start-features.R,feature validator aligns exact ID sets and ignores extra columns,12,0,FALSE,FALSE,0,12
+focused,test-0102-warm-start-features.R,feature validator rejects invalid values without imputing missingness,17,0,FALSE,FALSE,0,17
+focused,test-0102-warm-start-features.R,"decoder rejects malformed rows, IDs, types and duplicate columns",16,0,FALSE,FALSE,0,16
+focused,test-0102-warm-start-features.R,real Python integration agrees with golden outputs and repeats,1,0,TRUE,FALSE,0,0
+focused,test-0102-warm-start-features.R,decoder ignores noncanonical upstream fields before numeric validation,1,0,FALSE,FALSE,0,1
+focused,test-0103-warm-start-preprocess.R,"preprocessing learns missingness, imputation, NZV and sample scaling in order",10,0,FALSE,FALSE,0,10
+focused,test-0103-warm-start-preprocess.R,NZV unique fraction boundaries and control overrides are explicit,26,0,FALSE,FALSE,0,26
+focused,test-0103-warm-start-preprocess.R,apply uses training parameters without examining held-out distributions,6,0,FALSE,FALSE,0,6
+focused,test-0103-warm-start-preprocess.R,malformed matrices and stored preprocessing fail defensively,25,0,FALSE,FALSE,0,25
+focused,test-0103-warm-start-preprocess.R,outcome scaling is reusable and rejects degenerate or nonfinite values,19,0,FALSE,FALSE,0,19
+focused,test-0104-warm-start-model-core.R,portable models predict and summarize without optional development dependencies,17,0,FALSE,FALSE,0,17
+focused,test-0104-warm-start-model-core.R,prediction validates schema and required fields before preprocessing,13,0,FALSE,FALSE,0,13
+focused,test-0104-warm-start-model-core.R,model validator rejects unsupported and damaged deployment contracts,34,0,FALSE,FALSE,0,34
+focused,test-0104-warm-start-model-core.R,"fixed fits support p below, equal to and substantially above n without screening",29,0,FALSE,FALSE,0,29
+focused,test-0104-warm-start-model-core.R,"manual coefficients match glmnet with imputation, nonzero means and unequal scales",14,0,FALSE,FALSE,0,14
+focused,test-0104-warm-start-model-core.R,one retained predictor uses an excluded column without changing its penalty,12,0,FALSE,FALSE,0,12
+focused,test-0104-warm-start-model-core.R,training boundaries reject invalid inputs before fitting,26,0,FALSE,FALSE,0,26
+focused,test-0104-warm-start-model-core.R,"raw schema validation precedes filtering, with explicit no-survivor failure",3,0,FALSE,FALSE,0,3
+focused,test-0104-warm-start-model-core.R,glmnet boundary handles missing dependency and solver failures explicitly,1,0,FALSE,FALSE,0,1
+focused,test-0104-warm-start-model-core.R,solver control routing supports both glmnet interfaces,2,0,FALSE,FALSE,0,2
+focused,test-0104-warm-start-model-core.R,glmnet boundary rejects malformed fits and convergence failures,8,0,FALSE,FALSE,0,8
+focused,test-0105-warm-start-tuning.R,"weighted CV loss, fold SE and penalty ties follow explicit conventions",16,0,FALSE,FALSE,0,16
+focused,test-0105-warm-start-tuning.R,exact paths match independent scalar fits and support one retained predictor,21,0,FALSE,FALSE,0,21
+focused,test-0105-warm-start-tuning.R,"tuning shares folds, records exact selection and rejects incomplete engine paths",17,0,FALSE,FALSE,0,17
+focused,test-0105-warm-start-tuning.R,numerically tied alpha errors favor smaller alpha,2,0,FALSE,FALSE,0,2
+focused,test-0106-warm-start-calibration.R,OOF calibration learns intercept and slope without clipping,15,0,FALSE,FALSE,0,15
+focused,test-0106-warm-start-calibration.R,degenerate and nonfinite calibration fails explicitly,19,0,FALSE,FALSE,0,19
+focused,test-0106-warm-start-calibration.R,validation metrics use supplied held-out values and label undefined diagnostics,14,0,FALSE,FALSE,0,14
+focused,test-0107-warm-start-validation.R,portable tuning validation rejects missing and inconsistent audit records,35,0,FALSE,FALSE,0,35
+focused,test-0107-warm-start-validation.R,portable model validation rejects inconsistent nested predictions and metadata,34,0,FALSE,FALSE,0,34
+focused,test-0107-warm-start-validation.R,nested validation tolerates near-zero outcome mean reconstruction drift,4,0,FALSE,FALSE,0,4
+focused,test-0107-warm-start-validation.R,warning provenance retains context and fatal errors retain their parent,7,0,FALSE,FALSE,0,7
+focused,test-0108-warm-start-cv.R,"rank-block folds are balanced, reproducible and preserve public RNG state",11,0,FALSE,FALSE,0,11
+focused,test-0108-warm-start-cv.R,nested CV retains outer outcomes and final selected OOF calibration,44,0,FALSE,FALSE,0,44
+focused,test-0108-warm-start-cv.R,outer holdout perturbations cannot change its fitted training pipeline,2,0,FALSE,FALSE,0,2
+focused,test-0108-warm-start-cv.R,each inner preprocessing object excludes its holdout,14,0,FALSE,FALSE,0,14
+focused,test-0108-warm-start-cv.R,public wrapper extracts once or stays Python-free and honors expert controls,11,0,FALSE,FALSE,0,11
+focused,test-0108-warm-start-cv.R,invalid public inputs fail before extraction and insufficient splits never shrink,25,0,FALSE,FALSE,0,25
+focused,test-0108-warm-start-cv.R,schema failures and degenerate calibration have clear public errors,3,0,FALSE,FALSE,0,3
+focused,test-0108-warm-start-cv.R,the optional audited Python stack supports the text-to-model wrapper,1,0,TRUE,FALSE,0,0
+focused,test-0109-warm-start-ensemble.R,ensembles preserve independently scaled components and exact sample arithmetic,53,0,FALSE,FALSE,0,53
+focused,test-0109-warm-start-ensemble.R,failed and misaligned predictions always identify their component,12,0,FALSE,FALSE,0,12
+focused,test-0109-warm-start-ensemble.R,"ensemble storage, references, recursive reduction and registry are portable",44,0,FALSE,FALSE,0,44
+focused,test-0109-warm-start-ensemble.R,negative calibration and permitted missing features retain component semantics,5,0,FALSE,FALSE,0,5
+focused,test-0109-warm-start-ensemble.R,optional audited Python supports ensemble text prediction,1,0,TRUE,FALSE,0,0
+focused,test-0110-warm-start-prior.R,numeric prior conversion aligns IDs and SDs and centers active scopes,11,0,FALSE,FALSE,0,11
+focused,test-0110-warm-start-prior.R,"prior boundaries reject invalid IDs, numbers, SDs and tampering",35,0,FALSE,FALSE,0,35
+focused,test-0110-warm-start-prior.R,calibrated model and ensemble predictions retain compact diagnostics,19,0,FALSE,FALSE,0,19
+focused,test-0110-warm-start-prior.R,predictive integrity hashing uses portable bytes without runtime version words,2,0,FALSE,FALSE,0,2
+focused,test-0111-warm-start-coefficients.R,individual coefficients preserve schema order and distinguish removal from zero,13,0,FALSE,FALSE,0,13
+focused,test-0111-warm-start-coefficients.R,calibration slope controls coefficient sign and zero exactly,2,0,FALSE,FALSE,0,2
+focused,test-0111-warm-start-coefficients.R,reported coefficient matches a one-training-SD prediction change,1,0,FALSE,FALSE,0,1
+focused,test-0111-warm-start-coefficients.R,uncalibrated and malformed models fail through public boundaries,4,0,FALSE,FALSE,0,4
+focused,test-0111-warm-start-coefficients.R,ensemble coefficients preserve component order and component-specific semantics,13,0,FALSE,FALSE,0,13
+focused,test-0111-warm-start-coefficients.R,"full, reduced, and mixed artifacts return deployment-equivalent coefficients",3,0,FALSE,FALSE,0,3
+focused,test-0111-warm-start-coefficients.R,"saved, registered, and bundled artifacts retain coefficient output",3,0,FALSE,FALSE,0,3
+focused,test-0111-warm-start-coefficients.R,coefficient inspection does not initialize optional development dependencies,2,0,FALSE,FALSE,0,2
+focused,test-0112-warm-boundary-coverage.R,tuning rejects nonfinite inner predictions at the engine boundary,1,0,FALSE,FALSE,0,1
+focused,test-0112-warm-boundary-coverage.R,"ensemble validation rejects unnamed, scalar, and incomplete components",5,0,FALSE,FALSE,0,5
+focused,test-0112-warm-boundary-coverage.R,registry ancestry checks distinguish sibling names from descendants,4,0,FALSE,FALSE,0,4
+focused,test-0113-warm-start-legacy-regression.R,frozen v1 schema and historical full/reduced deployment remain compatible,41,0,FALSE,FALSE,0,41
+focused,test-0113-warm-start-legacy-regression.R,historical cross-task arithmetic and repeated components remain compatible,17,0,FALSE,FALSE,0,17
+focused,test-0113-warm-start-legacy-regression.R,"glmnet refits preserve frozen folds, tuning, calibration and validation",90,0,FALSE,FALSE,0,90
+focused,test-0114-warm-start-cv-plan.R,plans preserve exact legacy fold draw order and serialize portably,45,0,FALSE,FALSE,0,45
+focused,test-0114-warm-start-cv-plan.R,plans preserve nondefault RNG kinds and an absent caller seed,6,0,FALSE,FALSE,0,6
+focused,test-0114-warm-start-cv-plan.R,"plan identities reject task, order, outcome and structural corruption",26,0,FALSE,FALSE,0,26
+focused,test-0114-warm-start-cv-plan.R,plan and argument mismatches fail before extraction or engine calls,18,0,FALSE,FALSE,0,18
+focused,test-0114-warm-start-cv-plan.R,supplied plans defer omitted settings and insulate folds from engine RNG,7,0,FALSE,FALSE,0,7
+focused,test-0114-warm-start-cv-plan.R,"format 3 rejects payload, compatibility view and CV evidence corruption",28,0,FALSE,FALSE,0,28
+focused,test-3100-warm-start-model-io.R,lossless public storage preserves portable models and missing-feature preprocessing,15,0,FALSE,FALSE,0,15
+focused,test-3100-warm-start-model-io.R,preparation validates metadata and preserves explicit provenance,27,0,FALSE,FALSE,0,27
+focused,test-3100-warm-start-model-io.R,calibrated storage preserves audits and explicit reduction retains predictions,58,0,FALSE,FALSE,0,58
+focused,test-3100-warm-start-model-io.R,I/O rejects bad paths and artifacts and preserves destinations on failure,26,0,FALSE,FALSE,0,26
+focused,test-3100-warm-start-model-io.R,the constructor accepts the explicit reduced contract without changing core defaults,2,0,FALSE,FALSE,0,2
+focused,test-3101-warm-start-model-registry.R,"user registration is explicit, normalized, lossless and removable",21,0,FALSE,FALSE,0,21
+focused,test-3101-warm-start-model-registry.R,"names, corrupt entries and redirected package roots fail clearly",26,0,FALSE,FALSE,0,26
+focused,test-3101-warm-start-model-registry.R,bundled lookup shares the public load path and ambiguity requires source,14,0,FALSE,FALSE,0,14
+focused,test-3101-warm-start-model-registry.R,registry operations reject escaping and dangling symlinks,11,0,FALSE,FALSE,0,11
+focused,test-3101-warm-start-model-registry.R,failed removal leaves the user model available,2,0,FALSE,FALSE,0,2
+focused,test-3102-warm-start-bundled-models.R,empty installed manifest ships no predictive fixtures,4,0,FALSE,FALSE,0,4
+focused,test-3102-warm-start-bundled-models.R,bundle verification shares single and ensemble deployment paths,14,0,FALSE,FALSE,0,14
+focused,test-3102-warm-start-bundled-models.R,"manifest structure, inventory, checksums, and metadata fail closed",20,0,FALSE,FALSE,0,20
+focused,test-3102-warm-start-bundled-models.R,bundle records require calibrated reduced models and publication metadata,7,0,FALSE,FALSE,0,7
+focused,test-3107-warm-start-format3-artifacts.R,format-3 full and reduced artifacts deploy without a fitting backend,48,0,FALSE,FALSE,0,48
+focused,test-3107-warm-start-format3-artifacts.R,format-3 registry and verified bundles retain engine and CV metadata,10,0,FALSE,FALSE,0,10
+focused,test-3107-warm-start-format3-artifacts.R,mixed legacy and format-3 cross-task ensembles retain existing semantics,9,0,FALSE,FALSE,0,9
+focused,test-5100-warm-start-adaptive.R,adaptive initialization preserves pairing queues and scopes saved priors,7,0,FALSE,FALSE,0,7
+focused,test-5100-warm-start-adaptive.R,model input resolves once with features or one extraction,15,0,FALSE,FALSE,0,15
+focused,test-5100-warm-start-adaptive.R,"saved priors resume without lookup, extraction or fitting and reject changes",13,0,FALSE,FALSE,0,13
+focused,test-5100-warm-start-adaptive.R,legacy sessions backfill predictive log fields and retain cold-start state,5,0,FALSE,FALSE,0,5
+focused,test-5100-warm-start-adaptive.R,Phase A contracts distinguish predictive configurations without changing cold hashes,5,0,FALSE,FALSE,0,5
+focused,test-5100-warm-start-adaptive.R,registry and bundle references persist their verified identity independently,18,0,FALSE,FALSE,0,18
+focused,test-5100-warm-start-adaptive.R,fresh adaptive_rank forwards model settings and persistence detects metadata corruption,2,0,FALSE,FALSE,0,2
+focused,test-5100-warm-start-adaptive.R,real calibrated full and reduced artifacts share prior values,4,0,FALSE,FALSE,0,4
+focused,test-5100-warm-start-adaptive.R,real optional Python text initialization predicts once and persists numeric priors,1,0,TRUE,FALSE,0,0
+focused,test-5101-warm-start-modes.R,warm modes have contextual defaults and reject contradictory inputs,19,0,FALSE,FALSE,0,19
+focused,test-5101-warm-start-modes.R,TrueSkill mapping aligns IDs exactly and preserves constructor sigma,33,0,FALSE,FALSE,0,33
+focused,test-5101-warm-start-modes.R,all modes commit identical bootstrap evidence after invalid retries,43,0,FALSE,FALSE,0,43
+focused,test-5101-warm-start-modes.R,default BTL refits consume predictive evidence only in BTL-warm modes,12,0,FALSE,FALSE,0,12
+focused,test-5101-warm-start-modes.R,model destinations resolve once and wrapper forwards and rejects resume mode,12,0,FALSE,FALSE,0,12
+focused,test-5101-warm-start-modes.R,run-required linking Phase A shares initialization and scoped BTL gating,20,0,FALSE,FALSE,0,20
+focused,test-5105-warm-prior-robustness.R,observed evidence corrects poor priors without excluding prior ranks,3023,0,FALSE,FALSE,0,3023
+focused,test-9100-warm-start-bundle-workflow.R,"recursive publication inspection includes names, values, attributes, and nested components",6,0,FALSE,FALSE,0,6
+focused,test-9100-warm-start-bundle-workflow.R,"public build, deterministic staging, review, promotion, and replacement work",25,0,FALSE,FALSE,0,25
+focused,test-9100-warm-start-bundle-workflow.R,workflow validates configuration and preserves unknown cached provenance,8,0,FALSE,FALSE,0,8
+focused,test-9100-warm-start-bundle-workflow.R,configured text builds capture extraction evidence in the same run,1,0,TRUE,FALSE,0,0
+focused,test-9101-warm-start-end-to-end.R,public training through stored ensemble priors survives artifact removal,12,0,FALSE,FALSE,0,12
+focused,test-9102-matched-warm-replay.R,matched BTL-only and both replay isolate initial TrueSkill state,46,0,FALSE,FALSE,0,46
+focused,test-9102-matched-warm-replay.R,BTL stopping and identifiability remain separate from predictive TS confidence,51,0,FALSE,FALSE,0,51
+focused,test-9104-warm-start-shared-plan.R,"a shared plan survives independent fits, feature alignment and warm-prior deployment",9,0,FALSE,FALSE,0,9
+post-lint-prediction,test-0104-warm-start-model-core.R,portable models predict and summarize without optional development dependencies,17,0,FALSE,FALSE,0,17
+post-lint-prediction,test-0104-warm-start-model-core.R,prediction validates schema and required fields before preprocessing,13,0,FALSE,FALSE,0,13
+post-lint-prediction,test-0104-warm-start-model-core.R,model validator rejects unsupported and damaged deployment contracts,34,0,FALSE,FALSE,0,34
+post-lint-prediction,test-0104-warm-start-model-core.R,"fixed fits support p below, equal to and substantially above n without screening",29,0,FALSE,FALSE,0,29
+post-lint-prediction,test-0104-warm-start-model-core.R,"manual coefficients match glmnet with imputation, nonzero means and unequal scales",14,0,FALSE,FALSE,0,14
+post-lint-prediction,test-0104-warm-start-model-core.R,one retained predictor uses an excluded column without changing its penalty,12,0,FALSE,FALSE,0,12
+post-lint-prediction,test-0104-warm-start-model-core.R,training boundaries reject invalid inputs before fitting,26,0,FALSE,FALSE,0,26
+post-lint-prediction,test-0104-warm-start-model-core.R,"raw schema validation precedes filtering, with explicit no-survivor failure",3,0,FALSE,FALSE,0,3
+post-lint-prediction,test-0104-warm-start-model-core.R,glmnet boundary handles missing dependency and solver failures explicitly,1,0,FALSE,FALSE,0,1
+post-lint-prediction,test-0104-warm-start-model-core.R,solver control routing supports both glmnet interfaces,2,0,FALSE,FALSE,0,2
+post-lint-prediction,test-0104-warm-start-model-core.R,glmnet boundary rejects malformed fits and convergence failures,8,0,FALSE,FALSE,0,8
+post-lint-prediction,test-3107-warm-start-format3-artifacts.R,format-3 full and reduced artifacts deploy without a fitting backend,48,0,FALSE,FALSE,0,48
+post-lint-prediction,test-3107-warm-start-format3-artifacts.R,format-3 registry and verified bundles retain engine and CV metadata,10,0,FALSE,FALSE,0,10
+post-lint-prediction,test-3107-warm-start-format3-artifacts.R,mixed legacy and format-3 cross-task ensembles retain existing semantics,9,0,FALSE,FALSE,0,9
+r47-remediation,test-0114-warm-start-cv-plan.R,plans preserve exact legacy fold draw order and serialize portably,45,0,FALSE,FALSE,0,45
+r47-remediation,test-0114-warm-start-cv-plan.R,plans preserve nondefault RNG kinds and an absent caller seed,6,0,FALSE,FALSE,0,6
+r47-remediation,test-0114-warm-start-cv-plan.R,"plan identities reject task, order, outcome and structural corruption",26,0,FALSE,FALSE,0,26
+r47-remediation,test-0114-warm-start-cv-plan.R,plan and argument mismatches fail before extraction or engine calls,18,0,FALSE,FALSE,0,18
+r47-remediation,test-0114-warm-start-cv-plan.R,supplied plans defer omitted settings and insulate folds from engine RNG,7,0,FALSE,FALSE,0,7
+r47-remediation,test-0114-warm-start-cv-plan.R,"format 3 rejects payload, compatibility view and CV evidence corruption",28,0,FALSE,FALSE,0,28
+r47-remediation,test-0114-warm-start-cv-plan.R,R 4.7 binomial RNG provenance is portable without changing partitions,21,0,FALSE,FALSE,0,21

@@ -57,6 +57,7 @@ Other adaptive warm start:
 \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}},
 \code{\link[=extract_warm_start_features]{extract_warm_start_features()}},
 \code{\link[=fit_warm_start_model]{fit_warm_start_model()}},
+\code{\link[=make_warm_start_cv_plan]{make_warm_start_cv_plan()}},
 \code{\link{pairwiseLLM_warm_model}},
 \code{\link[=predict.pairwiseLLM_warm_ensemble]{predict.pairwiseLLM_warm_ensemble()}},
 \code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}},

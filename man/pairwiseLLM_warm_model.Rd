@@ -54,7 +54,14 @@ alpha/lambda traces, fold preprocessing, OOF calibration inputs, outer
 held-out predictions and metrics, and warning messages. See \code{\link[=fit_warm_start_model]{fit_warm_start_model()}}.
 }
 
-Explicit \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}} audit omission creates format 2 with
+New public fits use format 3, with \code{audit_status = "full"}, a validated
+\code{cv_plan}, compact \code{cv_identity}, and a typed numeric \code{engine_payload}. Linear
+coefficients/intercept remain checked compatibility views. Training also
+records selected \code{hyperparameters}. The complete plan binds exact ordered IDs,
+original outcomes and every nested partition. No backend fit object is stored.
+Format-3 audit omission keeps format 3 and compact identity but removes the plan.
+
+For legacy models, \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}} audit omission creates format 2 with
 \code{audit_status = "summary_only"}. It preserves deployment parameters and
 validation summaries but omits row-level evidence. Those summaries cannot be
 recomputed from the reduced artifact. Format 1 remains fully audited.
@@ -119,6 +126,7 @@ Other adaptive warm start:
 \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}},
 \code{\link[=extract_warm_start_features]{extract_warm_start_features()}},
 \code{\link[=fit_warm_start_model]{fit_warm_start_model()}},
+\code{\link[=make_warm_start_cv_plan]{make_warm_start_cv_plan()}},
 \code{\link[=make_warm_start_prior]{make_warm_start_prior()}},
 \code{\link[=predict.pairwiseLLM_warm_ensemble]{predict.pairwiseLLM_warm_ensemble()}},
 \code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}},

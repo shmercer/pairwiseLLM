@@ -172,6 +172,30 @@ RBF-SVR uses optional `e1071`, epsilon-regression/radial, `scale = FALSE`,
 Weighted MSE/SE follows the shared contract. Minimum-error ties and eligible
 1-SE choices favor lower cost, then lower gamma multiplier. Store complete traces.
 
+### Phase 2 implemented representation
+
+Public fits now emit format 3; internal fixed fits retain legacy format 1.
+`cv_plan` contains the complete `pairwiseLLM_warm_cv_plan` object in full models.
+`cv_identity` stores its format/digest, task/n, exact ordered ID/outcome digest,
+seed, fold counts and RNG kinds. Reduction retains this identity and sets
+`cv_plan = NULL`; it preserves format 3 with `audit_status = "summary_only"`.
+Full validation cross-checks every stored partition and transformation with the
+plan, in addition to the original complete glmnet statistical audit.
+
+`engine_payload = list(type = "linear", coefficients = ..., intercept = ...)`
+is the current deployment boundary. `training$hyperparameters` records selected
+alpha/lambda; legacy top-level views and training fields remain checked.
+PLS/SVR names fail explicitly until their assigned phases. Engine-specific
+numeric payload validation/copy/prediction is isolated from CV orchestration.
+Future payloads must extend that typed boundary, not weaken the legacy validator.
+
+New-format prediction metadata records engine/version and CV digest. Registry
+rows add engine/version and named component-engine metadata. Existing cross-task
+rows still have n=NA and component-only validation. Legacy bundle component
+records retain their original JSON structure; format-3 records additionally
+carry compact CV identity. Neither schema extraction nor publication mechanics
+changed. Test prefixes 0114, 3107 and 9104 are used by this phase.
+
 ## V2 feature contract
 
 V1 CSV SHA-256 remains

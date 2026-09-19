@@ -106,7 +106,7 @@ make_warm_start_prior <- function(predictions, ids = NULL, prior_sd = 0.5) {
     rlang::abort("Prediction metadata requires the within_task_z outcome definition.")
   }
   check_model <- function(m) {
-    if (!is.list(m) || !isTRUE(m$format_version %in% c(1L, 2L)) ||
+    if (!is.list(m) || !isTRUE(m$format_version %in% c(1L, 2L, 3L)) ||
         !identical(m$outcome_definition, "within_task_z") ||
         !identical(m$calibration_status, "oof_linear")) {
       rlang::abort("Model predictions require supported format and learned oof_linear calibration.")

@@ -9,6 +9,7 @@
 #'   calibration, audit_status, size_bytes, metadata, and validation. Metadata and
 #'   validation are list columns; unspecified metadata versions are NA character values.
 #'   Additional columns `artifact_type` and `component_count` distinguish ensembles.
+#'   `engine`, `engine_version`, and `component_engines` identify fitting algorithms.
 #'   Ensemble n is NA (no pooled sample size), calibration is component_oof_linear,
 #'   and audit status is full, summary_only, or mixed. Ensemble validation contains
 #'   named component metrics, not ensemble-performance estimates.
@@ -174,6 +175,10 @@ remove_warm_start_model <- function(name) {
     calibration = if (ensemble) "component_oof_linear" else model$calibration$status,
     audit_status = .warm_start_audit_status(model),
     artifact_type = if (ensemble) "ensemble" else "model",
+    engine = if (ensemble) NA_character_ else model$training$engine,
+    engine_version = if (ensemble) NA_character_ else model$training$engine_version,
+    component_engines = list(if (ensemble) vapply(model$components, function(x) x$training$engine, character(1))
+      else stats::setNames(model$training$engine, "model")),
     component_count = if (ensemble) length(model$components) else 1L,
     size_bytes = unname(file.info(path)$size), metadata = list(metadata),
     validation = list(if (ensemble) lapply(model$components, function(x) x$validation$metrics)
@@ -188,7 +193,8 @@ list_warm_start_models <- function(source = c("all", "user", "bundled")) {
   out <- tibble::tibble(name = character(), source = character(), path = character(),
     version = character(), format_version = integer(), schema = character(), target = character(),
     n = integer(), calibration = character(), audit_status = character(), size_bytes = double(),
-    artifact_type = character(), component_count = integer(), metadata = list(), validation = list())
+    artifact_type = character(), component_count = integer(), engine = character(), engine_version = character(),
+    component_engines = list(), metadata = list(), validation = list())
   for (s in sources) {
     root <- .warm_start_registry_root(s)
     if (!nzchar(root) || !dir.exists(root)) next

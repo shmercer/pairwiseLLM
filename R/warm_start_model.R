@@ -34,7 +34,14 @@
 #'   alpha/lambda traces, fold preprocessing, OOF calibration inputs, outer
 #'   held-out predictions and metrics, and warning messages. See [fit_warm_start_model()].
 #'
-#' Explicit [prepare_warm_start_model()] audit omission creates format 2 with
+#' New public fits use format 3, with `audit_status = "full"`, a validated
+#' `cv_plan`, compact `cv_identity`, and a typed numeric `engine_payload`. Linear
+#' coefficients/intercept remain checked compatibility views. Training also
+#' records selected `hyperparameters`. The complete plan binds exact ordered IDs,
+#' original outcomes and every nested partition. No backend fit object is stored.
+#' Format-3 audit omission keeps format 3 and compact identity but removes the plan.
+#'
+#' For legacy models, [prepare_warm_start_model()] audit omission creates format 2 with
 #' `audit_status = "summary_only"`. It preserves deployment parameters and
 #' validation summaries but omits row-level evidence. Those summaries cannot be
 #' recomputed from the reduced artifact. Format 1 remains fully audited.
@@ -127,8 +134,9 @@ NULL
   if (!inherits(model, "pairwiseLLM_warm_model") || !is.list(model) ||
       anyDuplicated(names(model)) || !all(required %in% names(model)) ||
       !.warm_start_portable(model)) invalid()
+  if (identical(model$format_version, 3L)) return(.validate_warm_start_format3(model))
   if (!identical(model$format_version, 1L) && !identical(model$format_version, 2L)) {
-    rlang::abort(paste0("Unsupported warm-start model format version; supported: 1 and 2. ",
+    rlang::abort(paste0("Unsupported warm-start model format version; supported: 1, 2 and 3. ",
       "Update pairwiseLLM or re-export from a supported version."))
   }
   definition <- warm_start_feature_schema(model$schema)
@@ -261,11 +269,12 @@ summary.pairwiseLLM_warm_model <- function(object, ...) {
   rlang::check_dots_empty()
   .validate_warm_start_model(object)
   list(task_id = object$training$task_id, target = object$outcome, n = object$training$n,
-    schema = object$schema, retained_predictors = length(object$coefficients),
+    schema = object$schema, retained_predictors = length(object$preprocessing$retained),
     removed_predictors = object$preprocessing$removed, nonzero_coefficients = object$training$n_nonzero,
     alpha = object$training$alpha, lambda = object$training$lambda,
     calibration = object$calibration$status,
-    audit_status = if (object$format_version == 2L) "summary_only" else "full",
+    audit_status = .warm_start_audit_status(object),
+    engine = object$training$engine, engine_version = object$training$engine_version,
     validation = if (is.null(object$validation)) "not performed" else object$validation$metrics)
 }
 
@@ -278,6 +287,7 @@ print.pairwiseLLM_warm_model <- function(x, ...) {
   cat("Target: within-task standardized BT/BTL theta (sample SD)\n")
   cat("Training rows:", info$n, "| Retained predictors:", info$retained_predictors,
     "| Nonzero coefficients:", info$nonzero_coefficients, "\n")
+  cat("Engine:", info$engine, "| Version:", info$engine_version, "\n")
   cat("Alpha:", info$alpha, "| Lambda:", info$lambda, "\n")
   cat("Calibration:", info$calibration, "| Audit:", info$audit_status, "\n")
   if (is.list(info$validation)) {

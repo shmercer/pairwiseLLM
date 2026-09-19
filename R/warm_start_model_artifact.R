@@ -63,6 +63,7 @@
 }
 
 .warm_start_reduced <- function(model) {
+  if (identical(model$format_version, 3L)) return(.warm_start_reduced3(model))
   out <- .warm_start_deployment_fields(model)
   out$format_version <- 2L
   out$audit_status <- "summary_only"
@@ -136,14 +137,16 @@
 #' later Python status check is not extraction provenance.
 #'
 #' Ordinary preparation preserves audit records. Explicit omission creates format
-#' 2 with summary-only audit status, retaining deployment parameters, tuning
+#' 2 for legacy models; format-3 models remain format 3. Both use summary-only
+#' audit status, retaining deployment parameters, tuning
 #' settings and nested-validation summaries. IDs, OOF rows, fold records, tuning
 #' traces and contextual warning messages are omitted; warning counts remain.
+#' Format-3 artifacts retain compact CV identity digests, not the original plan.
 #' Summaries cannot be recomputed without the original evidence. An already
 #' reduced artifact cannot recover its audit through this function.
 #'
 #' Ensembles retain ensemble format 1; audit omission recursively reduces each
-#' component to model format 2, preserving existing component metadata. Supplied
+#' component, preserving its format generation and existing metadata. Supplied
 #' preparation metadata applies to the ensemble only.
 #'
 #' No raw texts are added. Review task labels, notes, domain, and provenance for
