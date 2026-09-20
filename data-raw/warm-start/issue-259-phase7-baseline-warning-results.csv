@@ -1,0 +1,12 @@
+"file","test","failed","error","warning","passed"
+"test-3105-adaptive-resume-coverage.R","saved adaptive sessions reject malformed objects and missing artifacts",0,FALSE,3,5
+"test-3105-adaptive-resume-coverage.R","state validation rejects malformed persisted identity and Phase A surfaces",0,FALSE,0,9
+"test-3105-adaptive-resume-coverage.R","item log rewrites trim only obsolete refit artifacts",0,FALSE,0,5
+"test-3105-adaptive-resume-coverage.R","stop boundary backfill counts committed evidence and refuses further replay at the cap",0,FALSE,2,7
+"test-3105-adaptive-resume-coverage.R","refit reconciliation rejects corrupt step boundaries without consuming evidence",0,FALSE,0,6
+"test-9102-matched-warm-replay.R","matched BTL-only and both replay isolate initial TrueSkill state",0,FALSE,0,46
+"test-9102-matched-warm-replay.R","BTL stopping and identifiability remain separate from predictive TS confidence",0,FALSE,8,51
+"test-9103-replay-reservoir-workflow.R","reservoir sessions resume during bootstrap and adaptive selection",0,FALSE,16,112
+"test-9103-replay-reservoir-workflow.R","changed reservoir membership, orientation, or Y cannot resume",0,FALSE,2,6
+"test-9103-replay-reservoir-workflow.R","wrapper binds reservoir once and validates any explicit resume input",0,FALSE,0,13
+"test-9103-replay-reservoir-workflow.R","Bayesian refits receive only committed frozen presentations for all variants",0,FALSE,0,145

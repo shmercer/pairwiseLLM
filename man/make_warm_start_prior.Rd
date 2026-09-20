@@ -51,6 +51,7 @@ prior$prior_mean
 }
 \seealso{
 \code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}}, \code{\link[=predict.pairwiseLLM_warm_ensemble]{predict.pairwiseLLM_warm_ensemble()}},
+\code{\link[=ensemble_warm_start_algorithms]{ensemble_warm_start_algorithms()}},
 \code{\link[=fit_bayes_btl_mcmc]{fit_bayes_btl_mcmc()}}, \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}}
 
 Other adaptive warm start:

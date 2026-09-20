@@ -260,7 +260,7 @@ test_that("release documentation keeps navigation and citation contracts", {
   })
 
   version <- unname(description[1L, "Version"])
-  expect_identical(version, "1.5.1")
+  expect_identical(version, "1.5.2")
   citation <- paste(readLines(file.path(root, "inst", "CITATION")), collapse = "\n")
   codemeta <- jsonlite::fromJSON(file.path(root, "codemeta.json"))
   news <- readLines(file.path(root, "NEWS.md"))

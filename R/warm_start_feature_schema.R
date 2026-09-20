@@ -34,7 +34,7 @@
 #' differs from the filtered `n_tokens` feature. Zero tokens give a missing value.
 #'
 #' Definitions, settings, membership, and ordering are frozen. Changes require
-#' a new schema identifier rather than silently modifying version 1. Optional
+#' a new schema identifier rather than silently modifying an existing schema. Optional
 #' Python software is needed only for extraction, not schema inspection
 #' or prediction from precomputed features.
 #'

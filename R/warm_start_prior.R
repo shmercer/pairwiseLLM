@@ -34,6 +34,7 @@
 #' prior$prior_mean
 #' @family adaptive warm start
 #' @seealso [predict.pairwiseLLM_warm_model()], [predict.pairwiseLLM_warm_ensemble()],
+#'   [ensemble_warm_start_algorithms()],
 #'   [fit_bayes_btl_mcmc()], [adaptive_rank_start()], [adaptive_rank_resume()]
 #' @export
 make_warm_start_prior <- function(predictions, ids = NULL, prior_sd = 0.5) {

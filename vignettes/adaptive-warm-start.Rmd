@@ -19,37 +19,33 @@ library(pairwiseLLM)
 
 Warm start is optional; skip it for your first adaptive run. Return here when
 you have defensible prior scores or a prediction model developed from earlier
-assessments. No default predictive model is bundled. The first numeric-prior
-example runs locally without Python or CmdStan; later sections cover optional
-feature extraction and model training.
+assessments. Start with [Adaptive Pairing](adaptive-pairing.html) for the ranking
+workflow itself.
 
-**You get:** ID-aligned starting information for BTL, TrueSkill, or both. This
-information does not replace observed comparisons or guarantee lower cost.
-Use [Adaptive Pairing](adaptive-pairing.html) to learn the ranking workflow first.
+**You get:** starting scores for Bayesian Bradley–Terry–Luce (BTL), TrueSkill,
+or both. They give the models initial information about relative writing quality.
+Observed comparisons still drive the assessment; a warm start does not guarantee
+better rankings or fewer comparisons.
 
-## What warm-start prediction does
+The first example uses numeric scores and the optional `withr` package. The longer example uses fabricated
+texts, already extracted features, and invented outcomes. It runs locally when
+the optional `glmnet`, `pls`, `e1071`, and `withr` packages are installed. Otherwise,
+its training and dependent chunks are skipped. Python is needed only to repeat
+text extraction; CmdStan is needed for later Bayesian fitting, not initialization.
+No example installs software or contacts a comparison provider.
 
-A **warm-start prediction** estimates relative writing quality before comparisons
-are collected. A **task-specific sub-model** learns from one assessment's texts or
-features and its Bradley–Terry–Luce (BTL) scores. An **ensemble** averages calibrated
-predictions from two or more separately trained task models. **Prior calibration**
-uses out-of-fold (OOF) predictions to map model output to standardized quality;
-`make_warm_start_prior()` then centers those values for predictive initialization.
-The prior SD is a separate, explicitly chosen quantity, defaulting to 0.5.
+**No pretrained predictive model is bundled.** The example data demonstrate the
+workflow, not the accuracy of a model for students or a new assessment.
 
-Each sub-model standardizes its own outcome using its training mean and sample SD.
-Independent BT/BTL scales do not need linking: raw unlinked scores are never pooled.
-Model compatibility cannot establish that training assessments are independent or
-that predictions are valid in a new population. Validate the intended domain.
+## Choose where starting scores are used
 
-Predictive information can initialize Bayesian BTL priors, TrueSkill locations,
-or both. It does not change the initial observed pair schedule. Without predictive
-input, existing cold-start behavior is preserved. **No default predictive model is bundled.** Real
-bundled models remain deferred; the examples below use synthetic user models.
+`make_warm_start_prior()` converts predictions into ID-aligned starting information.
+It centers the scores by subtracting their mean. The **prior standard deviation
+(SD)** is a separate choice: smaller values put more confidence in the starting
+scores. The default of 0.5 controls the raw BTL prior; it is not the uncertainty of the
+final centered scores. It is not learned from model accuracy or disagreement.
 
-## Choose the predictive destination
-
-`warm_start_mode` chooses which model receives the predictive information:
+`warm_start_mode` chooses which model receives this information:
 
 | Mode | BTL predictive prior | TrueSkill predictive `mu` | Connected bootstrap |
 | --- | --- | --- | --- |
@@ -58,15 +54,15 @@ bundled models remain deferred; the examples below use synthetic user models.
 | `trueskill_only` | no | yes | same seeded shuffled chain |
 | `both` | yes | yes | same seeded shuffled chain |
 
-With omitted/`NULL` mode, **no predictive input defaults to `cold`** and
-**predictive input defaults to `btl_only`**. This preserves existing callers.
-Request `warm_start_mode = "both"` explicitly to initialize both models;
-`trueskill_only` initializes TrueSkill while retaining cold BTL priors.
+The bootstrap is the initial connected set of observed comparisons. It is the
+same for all modes when the items and seed are the same. Later pair choices can
+differ as TrueSkill updates from its starting values and the observed judgments.
 
-The following example uses numeric locations only, without Python, glmnet, model
-training, or CmdStan. The names establish exact item-ID alignment.
+With no predictive input, the default mode is `cold`. With predictive input,
+the default is `btl_only`. Request `both` explicitly to initialize both models.
+The names below connect each starting score to its item:
 
-```{r destination-modes}
+```{r destination-modes, eval=requireNamespace("withr", quietly=TRUE)}
 locations <- c(a = -1, b = -0.25, c = 0.25, d = 1)
 numeric_prior <- make_warm_start_prior(locations)
 historical <- adaptive_rank_start(names(locations), seed = 17L,
@@ -77,323 +73,294 @@ historical$meta$warm_start_mode
 warmed$trueskill_state$items[, c("item_id", "mu", "sigma")]
 ```
 
-In `trueskill_only` and `both`, the mapping is
 
-```text
-mu_i = mu0 + sigma0 * centered_predictive_location_i
-mu0 = 25; sigma0 = 25/3; fixed scale multiplier = 1
+The output shows the saved mode and TrueSkill's initial locations (`mu`) and
+uncertainties (`sigma`). TrueSkill maps centered scores to its own scale as
+`25 + (25/3) * prior_mean`. Its initial sigma remains `25/3`; BTL prior SD does
+not set TrueSkill uncertainty. Both models can subsequently learn from judgments.
+
+## A complete example with three algorithms
+
+### Load example texts and inspect the features
+
+A **feature** is a measured property of a text, such as its length or vocabulary.
+`writing_features_v1` has 20 features and remains the default. The expanded
+`writing_features_v2` keeps those 20 first and adds 26, using the same extraction
+software. More features do not by themselves establish better prediction.
+
+The package includes features extracted from fabricated English texts, so you
+can run the rest of this example without Python. The first 40 texts are used for
+training; eight different texts are reserved for prediction. The example's
+`theta` values are invented, not estimates from a BTL analysis.
+
+```{r example-data}
+example <- readRDS(system.file("extdata", "warm-start-example.rds", package = "pairwiseLLM"))
+training <- example$training
+new_items <- example$new_items
+features <- example$training_features
+new_features <- example$new_features
+schema <- "writing_features_v2"
+head(training[c("item_id", "theta")])
+head(warm_start_feature_schema(schema)[c("position", "feature", "family")])
 ```
 
-The centered location is `prior$prior_mean`, aligned by item ID before any location
-changes. TrueSkill sigma is unchanged by predictive initialization; its ordinary
-default is `25/3`. This does not prevent sigma from evolving after observed judgments.
-BTL `prior_sd` controls the Normal prior for raw theta. Ensemble disagreement,
-calibration error, and RMSE are predictive diagnostics; none determines TrueSkill
-sigma. The mapping never restores a training task's raw score units.
+In your own assessment, use one row per item and completed BT/BTL scores from
+that assessment. Keep IDs, texts, and scores aligned. Do not pool raw scores from
+separately ranked assessments. For separate writing traits, develop a model from
+the corresponding trait's scores.
 
-Explicit `cold` with predictive input errors, as does a non-cold mode without input.
-`warm_start_model` and `warm_start_prior` are mutually exclusive. The model-only
-`warm_start_prior_sd` override is a BTL control and is rejected in `trueskill_only`;
-an already resolved prior retains its stored SDs.
+### Extract features when you have Python configured
 
-Every mode keeps the same **connected shuffled bootstrap**: a seeded spanning path
-of `N - 1` valid committed comparisons. Predictive initialization does not replace
-observed connectivity or choose the first pair. With the same items and seed, the
-initial unordered pairs, presentation balancing, and invalid-result retries are
-common; a fixed judge yields the same initial outcomes. TrueSkill can evolve
-differently from those outcomes because its initial locations differ.
-
-After the bootstrap, `adaptive_config$pairing_strategy` selects `hybrid` (default),
-`random`, `trueskill_p50`, or `trueskill_pollitt`. The direct strategies currently
-require ordinary within-set mode. See [Guide: Adaptive Pairing](adaptive-pairing.html)
-for their exact targets and restrictions.
-
-## Optional extraction environment and frozen features
-
-Schema inspection is available without Python:
-
-```{r schema}
-schema <- warm_start_feature_schema()
-schema[c("position", "feature", "family")]
-system.file("python", "README.md", package = "pairwiseLLM")
-```
-
-The installed README gives explicit user-run setup and CMUdict resource verification
-instructions. There is no public installer. Package loading, examples and prediction
-never create environments or download software. A Python installation needs `venv`
-and `pip`/`ensurepip` support; maintainer bootstrap instructions are separate from
-runtime extraction.
-
-The tested stack is Python 3.12.3, TextDescriptives 2.8.4, textstat 0.7.13,
-spaCy 3.7.5 and `en_core_web_lg` 3.7.1. The full lock and resource provenance are
-installed under `python/`. Runtime version/resource checks reject incompatible
-stacks with an actionable message. Linux testing does not establish Windows/macOS
-compatibility.
-
-Select an existing interpreter explicitly before initialization. A conflicting
-`RETICULATE_PYTHON` setting or already initialized interpreter requires correcting
-the configuration or restarting R. A status call can initialize Python and load
-the large language model; it is not a prerequisite for precomputed prediction.
-These commands are shown without execution because they require your environment:
+These calls reproduce the example feature tables. They are shown without
+execution in an ordinary render because they require your existing Python
+environment. Substitute your own aligned texts and IDs when using real data.
 
 ```{r extraction, eval=FALSE}
 python <- "/path/to/venv/bin/python"
-status <- warm_start_python_status(python = python)
+status <- warm_start_python_status(python = python, schema = schema)
 status$problems
 features <- extract_warm_start_features(
-  ids = c("a", "b"), texts = c("First response.", "Another response."), python = python
-)
+  ids = training$item_id, texts = training$text, schema = schema, python = python)
+new_features <- extract_warm_start_features(
+  ids = new_items$item_id, texts = new_items$text, schema = schema, python = python)
 ```
 
-The returned table has character `item_id`, 20 numeric features in frozen order,
-and `attr(features, "warm_start_schema") == "writing_features_v1"`. Missing or
-duplicate IDs, missing required columns, and incompatible schemas fail explicitly.
-Use RDS to preserve attributes. If a cache format drops attributes, restore the
-known schema explicitly after verifying its origin; the attribute alone is not
-verified extraction provenance. Required features are never replaced with zero.
+Each table contains `item_id` and 46 numeric features in a fixed order. Undefined
+values remain missing; the training procedure handles permitted missing values.
+Use `saveRDS()` to cache features without losing the `warm_start_schema` attribute.
+The schema attribute identifies the expected columns; it does not prove where
+cached features came from. Saved v1 models still require v1 features.
 
-The schema is curated from constructs and upstream definitions, not training outcomes.
-See `warm_start_feature_schema()` for each feature's definition and missingness rules.
-In particular, `upstream_entropy_per_token` divides upstream probability-weighted
-entropy by **all** spaCy tokens, including punctuation/whitespace. It is neither
-per-word perplexity nor conventional Shannon entropy, and does not use filtered
-`n_tokens` as its denominator. Tokenization, zero-vector coherence and undefined
-values follow the frozen upstream contract; upgrades cannot silently redefine v1.
+The installed setup instructions are available with:
 
-For the expanded representation, select `schema = "writing_features_v2"` in
-`warm_start_python_status()`, `extract_warm_start_features()` and
-`fit_warm_start_model()`. It retains the 20 v1 fields first and adds 26 audited
-scalar features using the same Python environment. Counts, medians, syllable
-summaries, AUX/DET/PART proportions, second-order coherence and readability
-measures intentionally retain conceptual overlap. Undefined values remain missing
-for training-split preprocessing. Inspect its definitions without Python:
-
-```{r schema-v2}
-schema_v2 <- warm_start_feature_schema("writing_features_v2")
-schema_v2[c("position", "feature", "family")]
+```{r python-instructions}
+system.file("python", "README.md", package = "pairwiseLLM")
 ```
 
-Schema hashes are recorded in the installed `python/schema-writing-v2.json`.
-Keep the schema attribute with cached features and select the same schema when
-fitting. Saved v1 models continue to require v1 features. A reusable CV plan can
-be shared between representations of the same ordered items/outcomes; the plan
-does not select a representation or establish predictive validity.
+Extraction uses the pinned Python 3.12.3, spaCy 3.7.5, TextDescriptives 2.8.4,
+textstat 0.7.13, and English model/resources described there. No environment or
+resource is installed automatically. A status check loads the large language
+model and can take time. If R has already initialized another interpreter,
+restart R before selecting this one. The pinned environment has been tested on
+Linux; Windows/macOS setup paths are not validation of those Python environments.
 
-## Develop one model per assessment
+### Share the same training and validation splits
 
-The following deterministic data are fabricated to illustrate the public interface.
-They are not extracted student features.
-Chunks needing glmnet/withr are skipped when those optional packages are unavailable.
+**Cross-validation (CV)** temporarily holds out some samples, trains on the
+remaining samples, and predicts the held-out ones. Nested CV has two levels:
+inner splits choose model settings; outer splits assess predictions for samples
+kept outside that training and tuning process.
 
-```{r train, eval=requireNamespace("glmnet", quietly=TRUE) && requireNamespace("withr", quietly=TRUE)}
-# Synthetic features illustrate the interface, not predictive validity.
-example_features <- function(seed) {
-  withr::local_seed(seed)
-  fields <- warm_start_feature_schema()$feature
-  x <- as.data.frame(matrix(runif(15 * length(fields)), nrow = 15))
-  names(x) <- fields
-  x$n_tokens <- 11:25
-  x$token_length_mean <- 2 + 10 * x$token_length_mean
-  x$token_length_std <- 0.2 + x$token_length_std
-  x$dale_chall_readability_score <- 5 + 20 * x$dale_chall_readability_score
-  x <- data.frame(item_id = as.character(1:15), x)
-  attr(x, "warm_start_schema") <- "writing_features_v1"
-  x
-}
-features <- example_features(3103)
-theta <- 10 + 0.4 * features$n_tokens - 2 * features$token_length_mean
-# A small alpha grid keeps this example fast; the default has 41 values.
-plan <- make_warm_start_cv_plan(features$item_id, theta, "synthetic-a")
-model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
-  features = features, alpha_grid = c(0, 1), cv_plan = plan)
+Make one plan and reuse it for all three algorithms. This gives each algorithm
+the same training and held-out samples, making their validation results comparable.
+The plan checks the task label, ordered IDs, and outcomes; it cannot be reused
+with different scores or a different order of items.
 
-summary(model)
+```{r shared-plan, eval=requireNamespace("withr", quietly=TRUE)}
+plan <- make_warm_start_cv_plan(training$item_id, training$theta,
+  task_id = "example-assessment", seed = 259L, outer_folds = 5L, inner_folds = 5L)
 ```
 
-For real data, replace the synthetic table and `theta` with aligned item IDs,
-precomputed features, and finite BT/BTL scores from **one** assessment. Alternatively,
-pass `texts` and `python` instead of `features`; extraction runs once before fitting.
-The `task_id` labels assessment provenance, not a registry name or grouping column.
+During fitting, missing-value handling and feature scaling are learned separately
+from each training split. Held-out samples do not determine that preprocessing.
+Scores are standardized using the relevant training set, so held-out predictions
+and observations are compared on the same scale. Too few suitable samples gives
+an error; the requested fold counts are not silently reduced.
 
-Default validation is nested five outer by five inner folds, with seed 1 and
-41 alpha candidates `seq(0, 1, by = 0.025)` spanning ridge through lasso. The example
-uses two alphas solely to shorten execution. Folds are shared across alpha candidates.
-Insufficient data produces an error; fold counts are not silently reduced.
+### Fit the three algorithms
 
-A reusable CV plan binds the task label, exact ordered IDs and outcomes, and all
-outer/inner partitions. Save it with `saveRDS()` to reuse those partitions across
-feature representations. A supplied plan is validated before extraction or
-fitting; it is never regenerated or silently realigned. Omitted seed/fold arguments
-defer to the plan, and explicitly conflicting values fail. Omitting `cv_plan`
-constructs the same partitions internally. Engines `"glmnet"` (default) and
-`"pls"` and `"svr_rbf"` reuse the plan.
+| Algorithm | What it allows | Optional R package |
+| --- | --- | --- |
+| Elastic net | A weighted combination of features, with shrinkage to limit overfitting | `glmnet` |
+| Partial least squares (PLS) | A few combinations of correlated features | `pls` |
+| Radial-basis support-vector regression (RBF-SVR) | Nonlinear relationships between features and scores | `e1071` |
 
-With the optional `pls` package installed, fit PLS on the same synthetic rows
-and partitions. Omit glmnet-only `alpha_grid` and `lambda_rule` arguments.
+The examples use smaller explicit tuning grids to keep execution quick. These
+are demonstration settings, not recommendations selected from the results.
+The default grids and deterministic selection rules are documented in
+`fit_warm_start_model()`.
 
-```{r pls, eval=requireNamespace("pls", quietly=TRUE) && requireNamespace("glmnet", quietly=TRUE) && requireNamespace("withr", quietly=TRUE)}
-pls_model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
-  features = features, engine = "pls", cv_plan = plan)
-pls_model$training$hyperparameters
-pls_model$validation$metrics
-stopifnot(identical(pls_model$cv_identity, model$cv_identity))
-```
-
-PLS uses `kernelpls` with backend scaling and CV disabled. Its default component
-grid starts at one and ends at the smallest centered rank, retained predictor
-count, training-row count minus one, or ten across every inner training split
-and the context refit. Rank uses QR tolerance `1e-7`. To request a smaller grid,
-use `engine_control = list(ncomp = c(1L, 2L))`; every requested count must be legal.
-Weighted MSE/SE and the 1-SE rule favor fewer components. Degenerate fits fail
-with their fold/refit context. Full audits retain candidate OOF predictions,
-losses and rank bounds. Saved PLS coefficients and intercept reproduce backend
-predictions without requiring `pls` for deployment.
-
-RBF-SVR uses the optional `e1071` package. Its default grid is
-`cost = 2^(-2:4)` crossed with `gamma_multiplier = 2^(-2:2)`, with epsilon fixed
-at 0.10. Each fit divides the multiplier by its own retained predictor count.
-Backend scaling, cross-validation, and probability fitting are disabled.
-Weighted MSE/SE and the 1-SE rule favor lower cost, then lower gamma multiplier.
-The smaller explicit grid below keeps this synthetic example quick.
-
-```{r svr, eval=requireNamespace("e1071", quietly=TRUE) && requireNamespace("glmnet", quietly=TRUE) && requireNamespace("withr", quietly=TRUE)}
-svr_model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
-  features = features, engine = "svr_rbf", cv_plan = plan,
+```{r train, eval=all(vapply(c("glmnet", "pls", "e1071", "withr"), requireNamespace, logical(1), quietly=TRUE))}
+model <- fit_warm_start_model(training$item_id, training$theta, "example-assessment",
+  features = features, schema = schema, cv_plan = plan, alpha_grid = c(0, 0.5))
+pls_model <- fit_warm_start_model(training$item_id, training$theta, "example-assessment",
+  features = features, schema = schema, cv_plan = plan, engine = "pls",
+  engine_control = list(ncomp = 1:2))
+svr_model <- fit_warm_start_model(training$item_id, training$theta, "example-assessment",
+  features = features, schema = schema, cv_plan = plan, engine = "svr_rbf",
   engine_control = list(cost = c(0.5, 2), gamma_multiplier = c(0.5, 1)))
-svr_model$training$hyperparameters
-svr_model$validation$metrics
-stopifnot(identical(svr_model$cv_identity, model$cv_identity))
-predict(svr_model, features)
 ```
 
-Full SVR audits retain every candidate's OOF predictions and losses plus each
-split's preprocessing and actual gamma. Full and reduced artifacts predict from
-numeric support vectors, dual coefficients, rho, and gamma without `e1071`.
-Support-vector matrix dimensions and feature order are preserved. These numeric
-vectors remain deployment data after audit omission. `warm_start_coefficients()`
-raises a typed error for SVR or any ensemble containing SVR because
-nonlinear kernel weights are not linear feature coefficients.
+Each model also learns a calibration step from **out-of-fold (OOF)** predictions:
+training-side predictions made without fitting on the corresponding rows.
+Calibration puts the model output onto the standardized quality scale. It is
+learned within the outer training set before predicting its held-out samples.
+The final model uses all training samples only after outer validation is complete.
 
-### Same-task algorithm ensembles
+### Inspect validation before combining models
 
-Use `ensemble_warm_start_algorithms()` to combine algorithms fitted to the same
-ordered rows, exact outcomes, schema and CV plan. The constructor needs full
-format-3 component audits; reduced or legacy models cannot establish this evidence.
-Each explicitly named component keeps its preprocessing and learned OOF calibration.
+```{r validation, eval=all(vapply(c("glmnet", "pls", "e1071", "withr"), requireNamespace, logical(1), quietly=TRUE))}
+models <- list(elastic_net = model, pls = pls_model, svr_rbf = svr_model)
+validation <- do.call(rbind, lapply(models, function(x) {
+  unlist(x$validation$metrics[c("rmse", "mae", "pearson_r", "spearman_rho")])
+}))
+knitr::kable(validation, digits = 3)
+```
 
-```{r algorithm-ensemble, eval=requireNamespace("glmnet", quietly=TRUE) && requireNamespace("pls", quietly=TRUE) && requireNamespace("e1071", quietly=TRUE) && requireNamespace("withr", quietly=TRUE)}
+These metrics describe the outer held-out predictions. Smaller RMSE and MAE mean
+smaller prediction errors; larger Pearson or Spearman correlations mean stronger
+agreement in scores or ordering. Squared Pearson correlation is the square of
+that correlation, not a separate measure of unbiased prediction. Calibration
+intercept/slope describe the validation predictions; they do not apply another
+calibration to the deployed model. Undefined metrics are reported with reasons.
+
+Do not replace these results with predictions on the training samples from the
+final fitted model. The invented example outcomes make the table useful for
+learning the interface only. It does not select an algorithm automatically or
+establish performance on a new population.
+
+### Combine algorithms trained on this assessment
+
+A **same-task algorithm ensemble** averages the calibrated predictions of models
+trained on the same assessment. Supply named, full model objects with matching
+IDs, outcomes, feature schema, and CV plan:
+
+```{r algorithm-ensemble, eval=all(vapply(c("glmnet", "pls", "e1071", "withr"), requireNamespace, logical(1), quietly=TRUE))}
 algorithm_ensemble <- ensemble_warm_start_algorithms(
   elastic_net = model, pls = pls_model, svr_rbf = svr_model)
 summary(algorithm_ensemble)$validation$metrics
-algorithm_predictions <- predict(algorithm_ensemble, features)
-algorithm_prior <- make_warm_start_prior(algorithm_predictions, prior_sd = 0.5)
-stopifnot(identical(algorithm_prior$scores, algorithm_predictions$ensemble_mean))
-algorithm_deployment <- prepare_warm_start_model(algorithm_ensemble, omit_audit = TRUE)
-stopifnot(identical(predict(algorithm_deployment, features)$ensemble_mean,
-  algorithm_predictions$ensemble_mean))
 ```
 
-Deployment is the arithmetic mean **after each component's calibration**. Honest
-ensemble validation instead averages aligned outer-held-out calibrated predictions
-and compares them with matching outer-training-context standardized observations.
-It never averages component metrics or evaluates full-fit predictions as holdouts.
-There are no learned weights, ensemble recalibration or automatic component selection.
-Reported calibration intercept/slope in validation metrics are diagnostics only.
+Each component receives equal weight after its own calibration. There are no
+learned weights or additional ensemble calibration. The ensemble's validation
+averages the aligned outer held-out predictions first, then compares those means
+with the corresponding held-out observations. It does not average the three
+models' error metrics. Legacy or reduced models lack the full shared evidence
+needed to construct a new same-task ensemble.
 
-`ensemble_sd` is between-algorithm disagreement, not Bayesian prior uncertainty;
-`make_warm_start_prior()` controls prior SD. The resulting prior, or the ensemble
-artifact itself via `warm_start_model`, works with existing BTL/TrueSkill modes.
-Prediction, save/load, preparation, registry and bundle metadata support both full
-and reduced artifacts. Reduced summaries retain their honest validation origin but
-cannot reconstruct omitted row evidence. Numeric SVR support vectors remain necessary
-deployment data. Coefficient inspection raises the typed nonlinear error when SVR
-is present. In contrast, `ensemble_warm_start_models()` below retains independently
-sourced cross-task semantics and reports only component validation metrics.
+### Predict new items and initialize an assessment
 
-Every applicable training fold learns missingness filtering (>20% missing or
-all missing), median imputation, constant/near-zero-variance removal, and sample-SD
-scaling. Near-zero variance requires unique fraction <=10% and frequency ratio >19.
-Outcome scaling uses the corresponding outer training set throughout its inner
-fits and held-out scoring. No PCA or univariate screening is introduced when p > n;
-this example has 20 candidate features and 15 observations. See
-`fit_warm_start_model()` for exact reference-path, weighted-loss, SE and tie rules.
-The default lambda is the largest within one SE of the selected alpha's minimum;
-`lambda_rule = "lambda.min"` is an explicit expert override.
-
-OOF calibration learns an intercept/slope from predictions whose coefficient fits
-excluded those rows. These folds also select hyperparameters, so calibration-fit
-statistics are not independent validation. Calibration for an outer holdout uses
-only its outer training data. Final deployment uses full-data OOF calibration and
-an all-row coefficient refit. Degenerate calibration errors; finite negative slopes
-are allowed, and undefined validation diagnostics have NA values with reasons.
-
-```{r validation, eval=requireNamespace("glmnet", quietly=TRUE) && requireNamespace("withr", quietly=TRUE)}
-model$validation$metrics
-head(model$validation$predictions)
-model$training[c("alpha", "lambda", "n_nonzero")]
+```{r algorithm-prediction, eval=all(vapply(c("glmnet", "pls", "e1071", "withr"), requireNamespace, logical(1), quietly=TRUE))}
+algorithm_predictions <- predict(algorithm_ensemble, new_features)
+algorithm_predictions
+algorithm_prior <- make_warm_start_prior(algorithm_predictions,
+  ids = new_items$item_id, prior_sd = 0.5)
+head(data.frame(item_id = algorithm_prior$item_id,
+  mean = algorithm_prior$prior_mean, sd = algorithm_prior$prior_sd))
 ```
 
-Pearson r, squared Pearson r, Spearman rho, RMSE, MAE and diagnostic calibration
-intercept/slope come from outer held-out predictions. Final refit predictions are
-for deployment, not a replacement for those validation results. Outer fold records
-retain their own selected alpha, lambda and nonzero counts.
+`ensemble_mean` is the mean calibrated prediction; `ensemble_sd` describes how
+much the algorithms disagree. That disagreement does **not** set the prior SD.
+Here we explicitly choose 0.5. The prior constructor centers the predictions for
+these new items; it does not restore the old assessment's raw BTL scale.
 
-## Save, register and combine task models
+Initialize any of the three predictive modes using the same resolved prior:
 
-Model use from precomputed features needs neither glmnet nor Python. Store the
-portable object, not a training-engine fit. Explicit saving and registration are
-separate operations; ordinary save/load preserves the complete audit.
+```{r algorithm-initialization, eval=all(vapply(c("glmnet", "pls", "e1071", "withr"), requireNamespace, logical(1), quietly=TRUE))}
+btl_state <- adaptive_rank_start(new_items$item_id, seed = 17L,
+  warm_start_prior = algorithm_prior, warm_start_mode = "btl_only")
+trueskill_state <- adaptive_rank_start(new_items$item_id, seed = 17L,
+  warm_start_prior = algorithm_prior, warm_start_mode = "trueskill_only")
+both_state <- adaptive_rank_start(new_items$item_id, seed = 17L,
+  warm_start_prior = algorithm_prior, warm_start_mode = "both")
+both_state$trueskill_state$items[, c("item_id", "mu", "sigma")]
+```
 
-```{r storage, eval=requireNamespace("glmnet", quietly=TRUE) && requireNamespace("withr", quietly=TRUE)}
-path <- tempfile(fileext = ".rds")
-save_warm_start_model(model, path = path)
-restored <- load_warm_start_model(path = path)
-stopifnot(identical(predict(restored, features), predict(model, features)))
-unlink(path)
+These calls initialize state without collecting judgments or running Bayesian
+sampling. Continue with the judging and running steps in
+[Adaptive Pairing](adaptive-pairing.html). All four Bayesian BTL variants support
+predictive priors. In `trueskill_only`, BTL keeps its cold prior.
 
+## Save a model and resume a session
+
+Prediction from precomputed features needs neither Python nor any fitting engine.
+Ordinary save/load retains the full model and its validation evidence:
+
+```{r storage, eval=all(vapply(c("glmnet", "pls", "e1071", "withr"), requireNamespace, logical(1), quietly=TRUE))}
 local({
-  # Keep this executable example out of the real user registry.
-  withr::local_envvar(c(R_USER_DATA_DIR = withr::local_tempdir()))
-  register_warm_start_model(model, name = "example")
+  directory <- withr::local_tempdir()
+  path <- file.path(directory, "algorithm-ensemble.rds")
+  save_warm_start_model(algorithm_ensemble, path)
+  restored <- load_warm_start_model(path)
+  stopifnot(identical(predict(restored, new_features), algorithm_predictions))
+
+  # This example uses a temporary registry, leaving your own registry alone.
+  withr::local_envvar(c(R_USER_DATA_DIR = directory))
+  register_warm_start_model(restored, "example")
   list_warm_start_models(source = "user")
-  registered <- load_warm_start_model(name = "example", source = "user")
-  remove_warm_start_model("example")
 })
 ```
 
-Real registrations use `tools::R_user_dir("pairwiseLLM", "data")` under `models`.
-Names normalize to lowercase hyphen-separated identifiers; collisions require
-explicit overwrite. Loading positionally always means a path. Same-name user and
-bundled entries require an explicit source. List/remove operations manage obsolete
-entries; no automatic backup history accumulates. Bundles are read-only.
+Registered names are normalized to lowercase with hyphens. If a user model and
+a bundled model share a name, select `source` explicitly. No pretrained models
+are currently listed by `list_warm_start_models(source = "bundled")`.
 
-Fit another independently generated synthetic assessment on its own scale, then
-combine the models with stable component names. Actual training assessments must
-be independent; relabeling the same training data does not establish independence.
+To save an adaptive session, set `session_dir` at initialization. Resume uses the
+saved numeric prior even if the original model file is no longer available:
 
-```{r ensemble, eval=requireNamespace("glmnet", quietly=TRUE) && requireNamespace("withr", quietly=TRUE)}
-features_b <- example_features(3104)
-theta_b <- 30 + features_b$n_tokens - 3 * features_b$token_length_mean
-model_b <- fit_warm_start_model(features_b$item_id, theta_b, "synthetic-b",
-  features = features_b, alpha_grid = c(0, 1))
-ensemble <- ensemble_warm_start_models(assessment_a = model, assessment_b = model_b)
-
-predictions <- predict(ensemble, features)
-predictions
-summary(predictions)
+```{r resume, eval=all(vapply(c("glmnet", "pls", "e1071", "withr"), requireNamespace, logical(1), quietly=TRUE))}
+local({
+  directory <- withr::local_tempdir()
+  state <- adaptive_rank_start(new_items$item_id, session_dir = directory,
+    warm_start_prior = algorithm_prior, warm_start_mode = "both")
+  resumed <- adaptive_rank_resume(directory)
+  stopifnot(identical(resumed$predictive_prior, state$predictive_prior))
+})
 ```
+
+On resume, omit all warm-start arguments, including mode. The session retains its
+prior, mode, TrueSkill state, and progress. To change the starting information,
+start a new session. Model input and prior input are alternatives: do not supply
+both. `warm_start_prior_sd` is available with model input for BTL warming; a
+resolved prior already contains its chosen SDs.
+
+## Combining models from separate assessments
+
+A **cross-task ensemble** has a different purpose: combining calibrated models
+from separately developed assessments. Each model standardizes its own outcome;
+raw unlinked BT/BTL scores are never pooled. Use `ensemble_warm_start_models()`.
+It retains component validation summaries, not a common ensemble validation score.
+
+The following second assessment is entirely fabricated, including its feature
+values. It illustrates the separate API without suggesting that relabeling the
+first assessment would create independent training data.
+
+```{r ensemble, eval=all(vapply(c("glmnet", "pls", "e1071", "withr"), requireNamespace, logical(1), quietly=TRUE))}
+features_b <- local({
+  withr::local_seed(3104L)
+  x <- features
+  # Reuse valid feature ranges, but independently shuffle each column.
+  for (field in warm_start_feature_schema(schema)$feature) x[[field]] <- sample(x[[field]])
+  x$item_id <- paste0("assessment-b-", seq_len(nrow(x)))
+  x
+})
+theta_b <- withr::with_seed(3105L,
+  0.1 * features_b$n_tokens + rnorm(nrow(features_b)))
+model_b <- fit_warm_start_model(features_b$item_id, theta_b, "synthetic-b",
+  features = features_b, schema = schema, alpha_grid = c(0, 0.5))
+ensemble <- ensemble_warm_start_models(assessment_a = model, assessment_b = model_b)
+summary(ensemble)
+```
+
+Components must share a schema and standardized outcome definition and have
+learned calibration. Their preprocessing and CV plans may differ. Repeated models
+and task labels remain accepted for backward compatibility, but do not demonstrate
+independent evidence. Nested ensembles are rejected. Assess whether the training
+assessments and target population justify using their predictions together.
 
 ## Inspect calibrated standardized coefficients
 
 Use `warm_start_coefficients()` to inspect the fitted model weights without
-reconstructing a glmnet fit. Individual models return one row per frozen feature in
+loading the original fitting engine. This applies to elastic net and PLS.
+RBF-SVR has no equivalent linear feature coefficients; requesting them produces
+an informative error, including when it belongs to an ensemble. Individual models return one row per frozen feature in
 schema order:
 
 ```text
 feature | retained | calibrated_std_coefficient
 ```
 
-```{r coefficients, eval=requireNamespace("glmnet", quietly=TRUE) && requireNamespace("withr", quietly=TRUE)}
+```{r coefficients, eval=all(vapply(c("glmnet", "pls", "e1071", "withr"), requireNamespace, logical(1), quietly=TRUE))}
 coef_tbl <- warm_start_coefficients(model)
 coef_tbl
 
@@ -403,7 +370,7 @@ coef_ensemble
 
 The predictors were centered and divided by their training-sample SDs, and the
 fitted target was within-task standardized BT/BTL quality. For a retained feature,
-the reported coefficient is the stored elastic-net coefficient multiplied by the
+the reported coefficient is the stored elastic-net or PLS coefficient multiplied by the
 learned OOF calibration slope. Holding the other included predictors fixed, it is
 therefore the change in calibrated within-task standardized prediction for a
 one-training-SD increase in that feature.
@@ -427,149 +394,46 @@ columns do not share one raw-feature SD. Side-by-side values show fitted directi
 magnitude, and stability across independently trained task models. `NA` and `0`
 retain their component-specific meanings. The table neither estimates an aggregate
 ensemble coefficient nor changes equal-weight prediction averaging. Once a
-portable model exists, this inspection needs neither Python nor glmnet.
+portable model exists, this inspection needs neither Python nor a fitting backend.
 
-For a named list of models, use `do.call(ensemble_warm_start_models, models)`.
-Components must share a frozen schema and standardized outcome definition, and have
-learned calibration. Different preprocessing and full/reduced audit formats are
-supported. Uncalibrated components, nested ensembles and failed components error.
-No automatic stacking or silent component removal occurs.
+## Understand saved models
 
-| Quantity | Meaning |
-| --- | --- |
-| `raw_prediction` | Linear prediction on the standardized target scale |
-| `calibrated_prediction` | Single-model output after its stored OOF calibration |
-| `component_<name>` | Calibrated output from that ensemble component |
-| `ensemble_mean` | Equal-weight mean of calibrated component outputs |
-| `ensemble_sd` | Between-model sample SD, denominator k - 1; diagnostic only |
-| `prior_mean` | Centered predictive location used by the selected destination mode |
-| `prior_sd` | Chosen Normal SD for raw BTL theta, default 0.5; not TrueSkill sigma |
+Full models store their feature schema, preprocessing, calibration, fitting
+settings, and validation evidence. Elastic net and PLS store linear coefficients;
+RBF-SVR stores numeric support vectors and kernel parameters. Prediction uses
+these saved numbers without loading the original fitting engine. A nonlinear
+model does not provide linear feature coefficients.
 
-Complete component prediction tables remain in attributes, including raw predictions.
-Their attributes do not automatically subset with tibble rows. Use explicit ID
-alignment at prior boundaries; do not assume generic slicing updates nested metadata.
-For text input, ensemble prediction extracts once using `texts`, `ids`, and `python`.
-Single-model `predict()` accepts precomputed features only.
+`prepare_warm_start_model(x, omit_audit = TRUE)` makes a smaller deployment
+artifact while retaining the same predictions:
 
-```{r bundles}
-# Empty in this release. Future reviewed bundles use the same public prediction path.
-list_warm_start_models(source = "bundled")
+```{r reduction, eval=all(vapply(c("glmnet", "pls", "e1071", "withr"), requireNamespace, logical(1), quietly=TRUE))}
+deployment <- prepare_warm_start_model(algorithm_ensemble, omit_audit = TRUE)
+stopifnot(identical(predict(deployment, new_features)$ensemble_mean,
+  algorithm_predictions$ensemble_mean))
 ```
 
-When bundles become available, load an explicit advertised name with
-`load_warm_start_model(name = ..., source = "bundled")`. Named lookup verifies
-manifest inventory, containment, size, checksum and metadata agreement. An MD5
-checksum detects changed bytes; it does not authenticate a publisher.
+Reduction removes detailed training and validation rows. The retained summaries
+can no longer be independently recalculated from that reduced object. Keep the
+full evidence separately when an audit is needed. Reduction is not anonymization:
+metadata and, for SVR, support-vector values still need review before sharing.
+Load RDS files only from trusted sources.
 
-## Convert predictions and resume
+Current single models use format 3 in both full and summary-only form. Legacy
+model formats 1 and 2 retain their original meanings. Same-task algorithm
+ensembles have their own format 1 and `artifact_type = "algorithm_ensemble"`;
+cross-task ensembles use `artifact_type = "ensemble"`. These format numbers are
+separate from the package version.
 
-```{r prior, eval=requireNamespace("glmnet", quietly=TRUE) && requireNamespace("withr", quietly=TRUE)}
-prior <- make_warm_start_prior(predictions, ids = features$item_id)
-head(data.frame(item_id = prior$item_id, mean = prior$prior_mean, sd = prior$prior_sd))
-state <- adaptive_rank_start(features$item_id, seed = 1, warm_start_prior = prior)
-```
+For precise model fields, tuning grids, weighted error/selection rules, and
+calibration conventions, see `fit_warm_start_model()` and
+`pairwiseLLM_warm_model`. Feature definitions are in `warm_start_feature_schema()`;
+the installed Python README records extraction setup and schema hashes. In the
+source repository, `data-raw/warm-start/README.md` describes model publication and
+private audit review. None of these examples fits or publishes a production model.
 
-Conversion uses calibrated single predictions or ensemble means and centers them in R.
-Do not inverse-transform to an original training scale or calibrate twice. Expert
-numeric scores require names or explicit IDs. IDs must match exactly; scalar SDs
-recycle, named SDs align by ID, and unnamed vectors follow input order. Invalid
-scores/SDs or missing items error.
-
-The SD is for `theta_raw`. Stan centers raw theta, inducing dependence and changing
-centered-theta marginal SDs. All four active variants (`btl`, `btl_e`, `btl_b`,
-`btl_e_b`) support supplied priors. Adaptive BTL consumes them only in `btl_only`
-and `both`; `cold` and `trueskill_only` retain raw means zero and SDs one.
-Default BTL-warm adaptive refits subset saved scores to the active fitted IDs before centering,
-including fitted items without comparisons. Downstream transform, anchored-joint
-and pooled judge refits retain their existing priors; evidence is not injected twice.
-
-Standalone sampling requires your installed CmdStan toolchain and is not run here:
-
-```{r sampling, eval=FALSE}
-results <- build_btl_results_data(data.frame(ID1 = "1", ID2 = "2", better_id = "1"))
-fit <- fit_bayes_btl_mcmc(results, ids = features$item_id, warm_start_prior = prior)
-```
-
-Instead of supplying a prior, initialize with `warm_start_model = ensemble` and
-`warm_start_features = features`. Model objects, paths and explicit loader reference
-lists are accepted. Without precomputed features, supply assessment texts and select
-`warm_start_python`. Prediction runs once; initialization and resume never train.
-Model-specific feature/Python/SD arguments cannot accompany an already resolved prior.
-Custom BTL fit functions must check `state$meta$warm_start_mode` and consume
-`state$predictive_prior` only in `btl_only` or `both`. The saved prior also exists
-in `trueskill_only`, so presence alone does not mean BTL is warm. Custom-fit
-signatures and the standalone `fit_bayes_btl_mcmc(warm_start_prior = ...)` interface
-are unchanged; standalone BTL has no adaptive four-mode argument.
-
-```{r resume, eval=requireNamespace("glmnet", quietly=TRUE) && requireNamespace("withr", quietly=TRUE)}
-local({
-  directory <- withr::local_tempdir()
-  artifact <- file.path(directory, "ensemble.rds")
-  save_warm_start_model(ensemble, artifact)
-  session <- file.path(directory, "session")
-  state <- adaptive_rank_start(features$item_id, session_dir = session,
-    warm_start_model = artifact, warm_start_features = features)
-  unlink(artifact)
-  resumed <- adaptive_rank_resume(session)
-  stopifnot(identical(resumed$predictive_prior, state$predictive_prior))
-})
-```
-
-Sessions store numeric priors and compact provenance, not trained components or
-nested-CV audits. Resume uses these saved values even if the original artifact is
-removed or replaced, with no Python/glmnet requirement. On resumed `adaptive_rank()`
-calls, omit **all** warm-start arguments, including mode. Saved mode, pairing
-strategy, current TrueSkill values, bootstrap progress, and round state remain
-authoritative. Older sessions with no mode migrate to `cold` without a prior and
-`btl_only` with one; missing strategy becomes `hybrid`. Migration never warms
-TrueSkill retroactively. Omit strategy on resume or supply its saved value;
-changing it requires a new session.
-
-Run-required linking Phase A supports predictive initialization and the common
-per-set bootstrap. Imported artifacts retain their generation identity and are
-not rerun merely because predictive input is supplied. Direct strategies cannot
-run inside linking Phase A, although compatible artifacts from direct within-set
-runs can be imported. Phase B selection and prior rules are unchanged: predictive
-evidence is not injected into transforms, anchored-joint or pooled-judge priors,
-D-optimal selection, or probes.
-See [Guide: Adaptive Pairing](adaptive-pairing.html) for judging and continued runs,
-and [Standalone Bayesian BTL with CmdStan](bayesian-btl.html) for sampling diagnostics.
-
-## Model artifacts and the maintainer workflow
-
-A portable model stores schema/version and original feature order, fitted
-preprocessing, named coefficients/intercept, outcome mean/sample SD, calibration,
-training metadata and validation evidence. Prediction validates the schema before
-applying these parameters; no glmnet object is required.
-
-New public fits use model format 3, with explicit `audit_status = "full"`, a
-reusable CV plan, engine/version metadata, and a numeric deployment payload.
-Full audits retain IDs, outcomes, tuning traces and fold predictions.
-`prepare_warm_start_model(model, omit_audit = TRUE)` retains format 3 with
-summary-only evidence, compact CV identity digests, and unchanged numeric
-predictions. It removes the original plan and row-level evidence. Summary metrics
-cannot be recomputed from reduced artifacts. Legacy full format 1 and reduced
-format 2 continue to load and predict with their original meanings. Ensemble
-format 1 is separate from its component formats, R serialization version, package
-version and manifest version.
-
-Reduction is not anonymization. Task labels, notes, provenance and diagnostic prose
-still need review. Preparation time is not training time, and supplied provenance is
-not verified extraction history. Load only trusted RDS files.
-
-In the source repository, `data-raw/warm-start/README.md` describes the explicit
-maintainer build/review/promotion workflow. It uses the public APIs to train separate
-assessments, keep full audits privately, reduce deployment components, and compare
-predictions before/after storage. Text builds capture extraction versions and lock
-hashes; cached provenance remains supplied or unavailable. Private recursive review
-checks provenance, distribution rights, validation, retained sensitive material and
-compressed size before promotion. Heuristics do not guarantee privacy. Review reports
-can themselves contain restricted material and are not installed.
-
-Only reviewed deployment artifacts and their manifest belong in installed `models`.
-Training texts, full audits, staged files, environments and third-party model binaries
-stay outside the package. No general predictive-performance or size threshold is
-inferred from the synthetic examples or component validation metrics.
+Warm starts do not change Phase B linking or its prior, selection, and stopping
+rules. See [Adaptive Linking](adaptive-linking.html) for that separate workflow.
 
 ## Citation
 

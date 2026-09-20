@@ -1,3 +1,45 @@
+## Release preparation: pairwiseLLM 1.5.2
+
+This release completes issue #259: the additive 46-feature writing_features_v2,
+shared nested-CV plans, optional PLS/RBF-SVR engines, and a distinct equal-weight
+same-task algorithm ensemble. Full/reduced portable artifacts support prediction,
+registries and BTL/TrueSkill initialization without fitting backends. Existing
+v1/glmnet behavior, legacy formats 1/2, cross-task ensembles and prior SD authority
+are preserved. R >= 4.4 remains required; optional engines remain in Suggests.
+
+The warm-start guide now follows a complete offline example with fabricated texts,
+actual precomputed v2 features, and invented outcomes. Extraction can be repeated
+with the existing pinned environment. No production models are fitted or bundled.
+
+### Current Phase 7 evidence
+
+On local R 4.6.1, the final full source suite passed 20,667 expectations with
+zero failures/errors, one in-test historical audit skip, three top-level legacy
+mode skips, and 31 serialization warnings reproduced on unchanged reviewed master.
+The full CRAN-style check reported zero errors/warnings and one environmental NOTE
+(missing HTML Tidy and V8); installed-package tests passed 19,672 expectations with
+49 documented skips. A final archive refresh with --no-tests repeated examples,
+package and vignette checks with the same result while the full source suite ran.
+
+Current whole-package covr line coverage is 97.26398%; all 27 warm-start R files
+meet the >=95% target (minimum 95.23810%). Package lint, Roxygen/Rd validation,
+README and guide renders, full pkgdown build, local links, actual pinned Python
+extraction and fresh-process backend-free deployment checks passed. Runtime R
+expressions are unchanged by this documentation phase. The Phase 7 validation
+report and ledgers record exact candidate SHAs, source/archive identity, dependency
+versions, skips, remaining uncovered lines and the recovered coverage-reporting
+error. Earlier records below are historical and do not validate this candidate.
+
+### Pending release review
+
+Final candidate CI and maintainer review remain pending user-supplied results.
+No merge, tag, CRAN submission, publication or downstream study fitting/replay is
+part of this phase. A later merge SHA is a distinct downstream D042 pin requiring
+identification and revalidation. The existing regular macOS CI fix is retained;
+local Linux checks do not establish cross-platform Python compatibility.
+
+## Historical 1.5.1 preparation
+
 ## Release preparation: pairwiseLLM 1.5.1
 
 This patch fixes ignored `store` values for both OpenAI live endpoints and

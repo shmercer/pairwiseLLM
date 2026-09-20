@@ -26,12 +26,17 @@ task labels cannot establish independence.
 }
 \details{
 Components must have learned OOF calibration and compatible frozen schemas.
-Full-audit model format 1 and summary-only model format 2 can be mixed. Each
+Legacy model formats 1/2 and full or summary-only format-3 models can be mixed. Each
 component keeps its own preprocessing, calibration, and training metadata.
 References are loaded once; prediction uses stored components. Character
 references always mean paths, never implicit registry names. Registry names
 retain existing normalization and source ambiguity rules; component names do
 not use registry normalization. Custom or learned weights are not supported.
+
+Repeated models and task labels remain accepted; neither establishes independent
+training data. Validation reports component metrics only. Use
+\code{\link[=ensemble_warm_start_algorithms]{ensemble_warm_start_algorithms()}} for aligned validation of algorithms trained
+on one assessment.
 
 \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}} can add ensemble metadata or explicitly reduce
 all component audits. Ordinary save/load is lossless. Ensemble format 1 is
@@ -71,6 +76,7 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 }
 \seealso{
 \code{\link[=fit_warm_start_model]{fit_warm_start_model()}}, \code{\link[=predict.pairwiseLLM_warm_ensemble]{predict.pairwiseLLM_warm_ensemble()}},
+\code{\link[=ensemble_warm_start_algorithms]{ensemble_warm_start_algorithms()}},
 \code{\link[=warm_start_coefficients]{warm_start_coefficients()}}, \code{\link[=summary.pairwiseLLM_warm_ensemble]{summary.pairwiseLLM_warm_ensemble()}}
 
 Other adaptive warm start:

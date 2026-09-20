@@ -82,11 +82,11 @@ Install the optional R package explicitly if needed with
 library(pairwiseLLM)
 python <- "/path/to/new/venv/bin/python"
 # Windows: python <- "C:/path/to/new/venv/Scripts/python.exe"
-status <- warm_start_python_status(python = python)
+status <- warm_start_python_status(python = python, schema = "writing_features_v2")
 status[c("available", "problems")]
 features <- extract_warm_start_features(
   ids = c("a", "b"), texts = c("The cat sat down.", "It was sunny outside."),
-  python = python
+  schema = "writing_features_v2", python = python
 )
 ```
 
@@ -134,7 +134,9 @@ retain their original schema; do not relabel saved artifacts as v2.
 `audit-environment.json` and `requirements-warm-start.lock` are exact copies of
 Task 01's `audit-environment.json` and `requirements-audit.lock` from
 `data-raw/warm-start/`. Packaged runtime code does not read that development
-folder. The frozen schema remains in `warm-start/feature-schema-writing-v1.csv`.
+folder. The frozen schemas are `warm-start/feature-schema-writing-v1.csv` and
+`warm-start/feature-schema-writing-v2.csv`. Their format identifiers are independent
+of the package release version.
 Ten synthetic golden cases were promoted from Task 01's `audit-values.json` to
 `tests/testthat/fixtures/warm-start-features/golden.json`, with named columns,
 relative tolerance 1e-7 and absolute tolerance 1e-10. These resources establish

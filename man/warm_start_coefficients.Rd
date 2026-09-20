@@ -59,7 +59,7 @@ linear feature effects.
 Ensemble columns show component coefficients side by side. Each component
 standardized predictors using its own training distribution, so columns do
 not imply one common raw-feature SD. The table exposes fitted direction,
-magnitude, and stability across task models; it neither defines an aggregate
+magnitude, and stability across component models; it neither defines an aggregate
 coefficient nor changes equal prediction weighting. Inspection from an
 existing portable artifact needs neither Python nor a fitting backend.
 }
@@ -86,6 +86,7 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 }
 \seealso{
 \code{\link[=fit_warm_start_model]{fit_warm_start_model()}}, \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}},
+\code{\link[=ensemble_warm_start_algorithms]{ensemble_warm_start_algorithms()}},
 \code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}}
 
 Other adaptive warm start:

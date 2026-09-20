@@ -4,7 +4,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-<!-- README-source-md5: 2fce406899e2947348d57d7ada4b03a8 -->
+<!-- README-source-md5: 17fb66a1a50b3952bfb4beed393c74a5 -->
 
 <img src="man/figures/pairwiseLLM-banner.jpg"
      alt="pairwiseLLM: comparing two writing samples" width="100%">
@@ -46,7 +46,7 @@ for a step-by-step walkthrough using your own data.
 
 ## Installation
 
-Version 1.5.1 requires **R >= 4.4**. Install the CRAN release with:
+Version 1.5.2 requires **R >= 4.4**. Install the CRAN release with:
 
 ```{r install, eval=FALSE}
 install.packages("pairwiseLLM")
@@ -172,8 +172,8 @@ explain the estimators, selection rules, assumptions, and stopping criteria.
 - [Guide: Adaptive Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html) —
   run, inspect, save, and resume an adaptive within-set ranking.
 - [Guide: Adaptive Warm Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html) —
-  train and store models, combine cross-task models or same-task algorithms, and
-  choose predictive BTL/TrueSkill initialization.
+  follow an offline example from writing features through model validation and
+  predictions to BTL/TrueSkill starting scores; compare the two ensemble approaches.
 - [Design: Adaptive Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html) —
   understand the within-set selection, refitting, and stopping design.
 - [Guide: Adaptive Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.html) —
@@ -252,4 +252,4 @@ MIT License. See `LICENSE`.
 
 ## Citation
 
-> Mercer, S. H. (2026). *pairwiseLLM: Pairwise writing quality comparisons with large language models* (Version 1.5.1) [R package; Computer software]. https://github.com/shmercer/pairwiseLLM
+> Mercer, S. H. (2026). *pairwiseLLM: Pairwise writing quality comparisons with large language models* (Version 1.5.2) [R package; Computer software]. https://github.com/shmercer/pairwiseLLM

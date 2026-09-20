@@ -45,7 +45,7 @@
 #' \dontrun{
 #' # Explicitly provision the documented environment first.
 #' extract_warm_start_features(c("a", "b"), c("A short text.", "Another text."),
-#'   python = "/path/to/venv/bin/python")
+#'   schema = "writing_features_v2", python = "/path/to/venv/bin/python")
 #' }
 #' @family adaptive warm start
 #' @seealso [warm_start_python_status()], [warm_start_feature_schema()], [fit_warm_start_model()]

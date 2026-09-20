@@ -350,7 +350,8 @@ when \code{session_dir} is set, otherwise to a temporary file.}
 \code{judge(A, B, state, ...)}. If supplied, model/trait/template options are
 ignored and this function is used directly.}
 
-\item{warm_start_model}{Optional calibrated model/ensemble, path string, or
+\item{warm_start_model}{Optional calibrated model, cross-task or same-task algorithm ensemble,
+path string, or
 loader reference list (\code{name}/\code{source} or \code{path}). Mutually exclusive with
 \code{warm_start_prior}. Resolve and predict once when creating an assessment.}
 
@@ -358,11 +359,12 @@ loader reference list (\code{name}/\code{source} or \code{path}). Mutually exclu
 items. Saved numeric scores are centered within each BTL refit scope.}
 
 \item{warm_start_features}{Optional precomputed feature rows for model input;
-otherwise use item texts. Precomputed prediction needs neither Python nor glmnet.}
+otherwise use item texts. Precomputed prediction needs neither Python
+nor a fitting backend.}
 
 \item{warm_start_python}{Explicit Python interpreter for text extraction only.}
 
-\item{warm_start_prior_sd}{Optional model-derived raw theta prior SD override;
+\item{warm_start_prior_sd}{Optional user-chosen raw theta prior SD for model input;
 scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
 Not accepted with \code{trueskill_only}; never controls TrueSkill sigma.}
 

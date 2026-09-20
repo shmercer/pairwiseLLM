@@ -14,12 +14,12 @@ Do not use study outcomes to choose features, tuning, engines or exceptions.
 | 3 | Audited v2 schema commit, extraction and audit | 03-writing-v2 | master (Phase 2 merged) | Complete; PR #262 merged, all seven checks passed |
 | 4 | PLS backend and portable linear deployment | 04-pls | master (Phase 3 merged) | Complete; PR #263 merged, all seven reviewed-head checks passed |
 | 5 | RBF-SVR backend and portable kernel deployment | 05-svr-rbf | master (Phase 4 merged) | Complete; PR #264 merged, all seven reviewed-head checks passed |
-| 6 | Same-task algorithm ensemble and all consumers | 06-algorithm-ensemble | master (Phase 5 merged) | Local implementation/verification complete; PR/CI handoff follows |
-| 7 | End-to-end docs, full validation, 1.5.2 | 07-docs-quality | Phase 6 branch | Not started |
+| 6 | Same-task algorithm ensemble and all consumers | 06-algorithm-ensemble | master (Phase 5 merged) | Complete; PR #265 merged, reviewed follow-up CI fix #266 merged |
+| 7 | End-to-end docs, full validation, 1.5.2 | 07-docs-quality | master (Phase 6 and CI fix merged) | Local implementation/validation complete; user CI/review pending |
 
 Fetch and verify actual upstream/PR state before each phase. Build a child branch
 from the verified predecessor tip, or its reviewed merge result if already merged.
-Open a draft phase PR after local checks and handoff. For Phases 5 and 6, the user
+Open a draft phase PR after local checks and handoff. For Phases 5, 6 and 7, the user
 explicitly requires ending the turn once the PR is open and waiting for them to
 return CI results; do not poll CI or wait for checks before that handoff. Use small commits
 and Refs #259; only the final completed PR targets master with a closing reference.
@@ -1313,3 +1313,127 @@ All task-owned local verification processes are finished before PR delivery.
 No next phase started. CI and maintainer review await user feedback without polling.
 Use [the exact Phase 7 new-thread prompt](issue-259-phase7-new-thread.md), verifying
 the final reporting head/review fixes or reviewed merge before branching.
+
+## Phase 7 implementation checkpoint — 2026-09-20
+
+Branch `feat/259-07-docs-quality`, base/PR target `master` at
+`9c8383d8875116b7ed49912da964a61b6be9bfb6`. Phase 6 PR #265 merged from final
+reviewed reporting head `8717cabb60f618a34591ecb2203d4e124148e951` as
+`1a91ff9359dd5c9a1bbd1ff37d7c55b489b52594`; trees match. Subsequent reviewed
+PR #266 merged as the current base with the macOS native-installer/zstd fix.
+Local user feedback records all seven checks passing on its final head
+`dbef186c85c8863f0827a5ba42c21b93f71df3a3`. No outstanding inline review comments
+were present. Prior pending-CI snapshots are superseded; no CI polling occurred.
+
+Documentation and focused checks are implemented; full release validation follows.
+Version is now 1.5.2, retaining R >=4.4. All 11 edited runtime R files have identical
+parsed executable expressions to the reviewed base; edits are Roxygen only.
+The main guide now connects actual v2 extraction/precomputed features to shared
+CV, three fits, fair validation, same-task averaging, new-item predictions, prior
+conversion and BTL/TrueSkill/both initialization. The related adaptive-pairing
+section follows the same non-technical tone. Model/Python/registry/reduction help
+and current release metadata are synchronized; historical evidence is preserved.
+
+The 6.7 KB example RDS holds 48 distinct fabricated texts, pinned v2 features,
+and invented training outcomes. It contains no student data or predictor model.
+Its source generator is reproducible, explicit, and refuses overwrite. Original
+v1/v2 golden and legacy fixtures are untouched. A first toy lasso endpoint failed
+to converge; the labeled demonstration grid uses alpha c(0,0.5). Production grids
+are unchanged. Review caught repeated generated texts and a missing optional CV
+plan guard; both were fixed, with a text-identity regression. The existing spaCy/
+Click import deprecation is suppressed only at the test status check, following
+existing extraction tests. Runtime extraction warnings are not broadly suppressed.
+
+Focused command (with PAIRWISELLM_TEST_PYTHON set to the existing pinned interpreter):
+`testthat::test_local(filter="^(0026|0031|9106)-", reporter="summary", stop_on_failure=TRUE, stop_on_warning=TRUE)`.
+Final result: 28 blocks, 736 passed expectations, zero failures/errors/warnings,
+one existing missing historical tasklist export-audit skip. Durable results:
+`issue-259-phase7-focused-results.csv`. New 9106 executes the guide's real chunks,
+checks aligned outer metrics, distinct prediction IDs/texts, authoritative prior SD,
+common bootstrap and TrueSkill initialization, plus actual extraction reproduction.
+
+Roxygen regenerated 11 Rd topics; NAMESPACE unchanged. README and both changed
+guides rendered successfully. Source-hash synchronization and ordinary optional
+dependency guards were corrected before passing focused checks. Package lint
+found one new overlong Roxygen line, now corrected; final targeted runtime/test/
+maintainer script lint is clean. Full final package lint remains in release checks.
+No new/materially changed runtime implementation; current whole-package covr and
+per-file issue #259 coverage are pending and no old percentages are claimed.
+
+Local tasklists are present and remain ignored. Only user-owned untracked
+`data-raw/studies/` is outside task ownership, uninspected and untouched. No production
+models, provider collection, adaptive selection/stopping, Phase B algorithms,
+installation, merge, tag or publication. Full checks and final PR delivery remain
+unfinished at this checkpoint; the completion report below will record results.
+
+
+## Phase 7 completion — 2026-09-20
+
+1. **State:** local implementation and authorized release validation complete;
+   package 1.5.2, R >=4.4. Branch `feat/259-07-docs-quality`, target `master` at
+   reviewed base `9c8383d8875116b7ed49912da964a61b6be9bfb6`. Phase 6 PR #265 and
+   subsequent CI fix #266 are merged; the latest user-reported seven passing
+   checks supersede older pending-CI snapshots. Package-content candidate
+   `93a9142122b1588939796e311c7ac501da822c5f`; main docs implementation
+   `f2acfbbbea7c275f4606d996af6b194f14e4cbf4`. The final reporting/PR head belongs
+   in the PR and local delivery pin below; excluded reporting does not change the
+   verified package-source manifest.
+2. **Files/behavior:** the exact file inventory and current CSV/check ledgers are
+   in `data-raw/warm-start/issue-259-phase7-validation.md`. Changes cover README,
+   NEWS, DESCRIPTION, CITATION, codemeta, pkgdown, model/Python/audit documentation,
+   11 Roxygen/Rd topics, both relevant warm/adaptive guides, fabricated packaged
+   example/generator, test 9106, documentation contracts and the stale runtime
+   version assertion in test 0027. All 11 runtime R expressions match the base;
+   NAMESPACE is unchanged. No production models, frozen fixtures or studies changed.
+3. **Design:** readable offline guide demonstrates v2 extraction, one shared CV
+   plan, glmnet/PLS/RBF-SVR, aligned outer validation, same-task equal-weight means,
+   new items, explicit prior SD, BTL/TrueSkill/both initialization and registry/resume.
+   Cross-task duplicate/component-only semantics remain distinct. Small example
+   grids are labeled; production grids/algorithms and exact audit identities remain
+   frozen. No new scientific decision, required dependency or dependency installation.
+4. **Tests:** focused 0026/0031/9106: 736 passes, zero failures/errors/warnings,
+   one existing missing historical tasklist skip. Corrected 0027: 37 passes, clean.
+   Final unfiltered devtools::test(): 1,686 blocks, 20,667 passes, zero failures/errors,
+   one in-test skip plus three top-level legacy-mode skips, 31 baseline serialization
+   warnings. Unchanged-base tests 3105/9102/9103 reproduce all 31 warnings with
+   405 passes. Actual Python extraction ran. Fresh-process PLS/SVR/algorithm full
+   and reduced deployment passed for both schemas without optional backends loaded.
+5. **Docs:** Roxygen regenerated 11 Rd files, all 121 Rd files parse; no export drift.
+   README/both changed guides and all 13 pkgdown articles build. Offline chunk guards,
+   source hash and distinct fabricated-text regression are checked. Local site
+   links/anchors are clean; desktop/mobile first views are readable. Full warm/adaptive
+   documentation and version audits found no remaining actionable issue.
+6. **Coverage:** current package line coverage 97.26398%; all 27 warm-start files,
+   including all 22 changed in issue #259, range 95.23810%–100%. Documentation-only
+   adaptive_rank/adaptive_run measure 100%/97.30435%. Unchanged adaptive_btl_refit
+   remains 93.45563%; 18 uncovered warm lines are retained in a ledger. Coverage ran
+   on f2acfbb with R sources byte-identical to 93a9142. Instrumented tests passed
+   19,845 expectations, zero failures/warnings, 41 documented skips. A runner edit
+   during collection caused a trailing reporting error after saving; a fresh process
+   rederived and exactly verified the saved results. No instrumentation was fabricated.
+7. **Other checks:** package lint and diff checks clean. Full --as-cran: 0 errors,
+   0 warnings, 1 environment NOTE (missing HTML Tidy/V8); installed tests 19,672 passes,
+   49 skips. Final rebuilt archive refreshed with --as-cran --no-tests, examples and
+   vignettes checked again: same result. Final archive SHA-256
+   `9628d67f13697e5698022742dc8304b7a59ee323c720bf1999f3ab0ac5c6a946`;
+   manifest records all 490 included tracked source files. Dependency/session ledgers
+   record R 4.6.1, glmnet 5.0, pls 2.9.0, e1071 1.7.17 and the other existing tools.
+8. **Findings/limits:** fixed the toy example convergence/grid, repeated-text and
+   optional-guard issues, stale test version, and runner/reporting issues. No unresolved
+   attributable package failure/warning/note. Environmental checks, documented skips,
+   uncovered defensive/Windows paths and actual cross-platform CI remain limits.
+   Current metadata is 1.5.2; dated submission/evidence/fixtures retain real versions.
+9. **Next requirements:** preserve frozen v1/v2 hashes/order/extraction and legacy
+   fixtures, format-3 construction evidence, standalone algorithm_ensemble format1,
+   exact task/ordered ID/outcome/schema/CV identity and outer alignment, weighted
+   MSE/SE/ties, context scales/learned OOF calibration, shared partitions/R4.7 RNG,
+   equal calibrated means, honest summary-only limits, portable SVR shape/order,
+   typed nonlinear errors, backend-free deployment, registry/bundle identity and
+   prior SD authority. Numeric tolerance never relaxes discrete/aligned identity.
+   A later merge SHA is a distinct D042 pin requiring identification and revalidation;
+   follow `issue-259-phase7-ci-next-thread.md`. Do not initiate study fitting/replay.
+10. **User validation:** PR CI/review pending user-supplied results. Commit/push/open
+    the Phase 7 PR, then end without polling. No merge, tag, publication or downstream
+    work is authorized. All validation subprocesses are finished. Untracked
+    `data-raw/studies/` remains user-owned, uninspected and untouched. Ignored tasklists
+    are mirrored locally and recoverable from this tracked report/design.

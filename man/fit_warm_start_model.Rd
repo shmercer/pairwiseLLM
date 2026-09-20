@@ -181,6 +181,7 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 }
 \seealso{
 \code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}}, \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}},
+\code{\link[=ensemble_warm_start_algorithms]{ensemble_warm_start_algorithms()}},
 \code{\link[=save_warm_start_model]{save_warm_start_model()}}
 
 Other adaptive warm start:

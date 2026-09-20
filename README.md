@@ -1,5 +1,5 @@
 
-<!-- README-source-md5: 2fce406899e2947348d57d7ada4b03a8 -->
+<!-- README-source-md5: 17fb66a1a50b3952bfb4beed393c74a5 -->
 
 <img src="man/figures/pairwiseLLM-banner.jpg"
      alt="pairwiseLLM: comparing two writing samples" width="100%">
@@ -34,7 +34,7 @@ for a step-by-step walkthrough using your own data.
 
 ## Installation
 
-Version 1.5.1 requires **R \>= 4.4**. Install the CRAN release with:
+Version 1.5.2 requires **R \>= 4.4**. Install the CRAN release with:
 
 ``` r
 install.packages("pairwiseLLM")
@@ -185,8 +185,9 @@ stopping criteria.
   — run, inspect, save, and resume an adaptive within-set ranking.
 - [Guide: Adaptive Warm
   Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html)
-  — train and store models, combine cross-task models or same-task
-  algorithms, and choose predictive BTL/TrueSkill initialization.
+  — follow an offline example from writing features through model
+  validation and predictions to BTL/TrueSkill starting scores; compare
+  the two ensemble approaches.
 - [Design: Adaptive
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html)
   — understand the within-set selection, refitting, and stopping design.
@@ -270,9 +271,9 @@ MIT License. See `LICENSE`.
 
 ## Package Author and Maintainer
 
-- **Sterett H. Mercer** – *University of British Columbia*  
-  UBC Faculty Profile: <https://ecps.educ.ubc.ca/sterett-h-mercer/>  
-  ResearchGate: <https://www.researchgate.net/profile/Sterett_Mercer>  
+- **Sterett H. Mercer** – *University of British Columbia*
+  UBC Faculty Profile: <https://ecps.educ.ubc.ca/sterett-h-mercer/>
+  ResearchGate: <https://www.researchgate.net/profile/Sterett_Mercer>
   Google Scholar:
   <https://scholar.google.ca/citations?user=YJg4svsAAAAJ&hl=en>
 
@@ -281,5 +282,5 @@ MIT License. See `LICENSE`.
 ## Citation
 
 > Mercer, S. H. (2026). *pairwiseLLM: Pairwise writing quality
-> comparisons with large language models* (Version 1.5.1) \[R package;
+> comparisons with large language models* (Version 1.5.2) \[R package;
 > Computer software\]. <https://github.com/shmercer/pairwiseLLM>

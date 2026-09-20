@@ -115,6 +115,7 @@
 #'   prediction needs no `e1071`. Its linear coefficients/intercept are NULL.
 #' @family adaptive warm start
 #' @seealso [predict.pairwiseLLM_warm_model()], [ensemble_warm_start_models()],
+#'   [ensemble_warm_start_algorithms()],
 #'   [save_warm_start_model()]
 #' @examples
 #' if (requireNamespace("glmnet", quietly = TRUE) &&
