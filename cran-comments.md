@@ -13,12 +13,22 @@ with the existing pinned environment. No production models are fitted or bundled
 
 ### Current Phase 7 evidence
 
-Focused documentation and workflow checks passed on local R 4.6.1, including
-actual pinned Python extraction. One historical tasklist export-audit check skips
-because its original evidence is unavailable. Package runtime expressions are
-unchanged by the Phase 7 documentation edits. Final full test, coverage, CRAN-style
-check, lint and render evidence will be recorded in the Phase 7 release report.
-Earlier records below are historical and do not validate this candidate.
+On local R 4.6.1, the final full source suite passed 20,667 expectations with
+zero failures/errors, one in-test historical audit skip, three top-level legacy
+mode skips, and 31 serialization warnings reproduced on unchanged reviewed master.
+The full CRAN-style check reported zero errors/warnings and one environmental NOTE
+(missing HTML Tidy and V8); installed-package tests passed 19,672 expectations with
+49 documented skips. A final archive refresh with --no-tests repeated examples,
+package and vignette checks with the same result while the full source suite ran.
+
+Current whole-package covr line coverage is 97.26398%; all 27 warm-start R files
+meet the >=95% target (minimum 95.23810%). Package lint, Roxygen/Rd validation,
+README and guide renders, full pkgdown build, local links, actual pinned Python
+extraction and fresh-process backend-free deployment checks passed. Runtime R
+expressions are unchanged by this documentation phase. The Phase 7 validation
+report and ledgers record exact candidate SHAs, source/archive identity, dependency
+versions, skips, remaining uncovered lines and the recovered coverage-reporting
+error. Earlier records below are historical and do not validate this candidate.
 
 ### Pending release review
 

@@ -15,8 +15,10 @@ scoped coverage; `check-issue-259-algorithm-deployment.R` checks full/reduced v1
 same-task algorithm ensembles without glmnet, pls, e1071 or reticulate. These
 checks use synthetic inputs only. The handoff records current evidence and limits.
 
-Phase 7 release evidence is recorded in `issue-259-handoff.md` and the Phase 7
-validation report/ledgers. The full guide uses `inst/extdata/warm-start-example.rds`:
+Phase 7 release evidence is recorded in the [handoff](issue-259-handoff.md) and
+[validation report and ledgers](issue-259-phase7-validation.md). The
+[CI follow-up](issue-259-phase7-ci-next-thread.md) explains candidate and merge
+pinning. The full guide uses `inst/extdata/warm-start-example.rds`:
 48 fabricated texts, actual pinned v2 features, and invented training outcomes.
 `create-vignette-example.R` reproduces it into a new path with an existing Python
 interpreter; it refuses overwrite and does not install anything. It is not a

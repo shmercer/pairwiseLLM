@@ -1,0 +1,39 @@
+Verified saved coverage ledger; package 97.26398 percent; all warm files 95.2381 percent or higher
+                           filename                         functions line
+6156    R/warm_start_coefficients.R .warm_start_ensemble_coefficients  129
+1715         R/warm_start_cv_plan.R           make_warm_start_cv_plan   40
+3932         R/warm_start_cv_plan.R   .validate_warm_start_plan_split   83
+4901         R/warm_start_cv_plan.R      .validate_warm_start_cv_plan  102
+10985             R/warm_start_cv.R              .warm_start_train_cv  284
+98            R/warm_start_engine.R        .warm_start_engine_control    6
+2290          R/warm_start_engine.R        .warm_start_engine_predict   52
+5685        R/warm_start_ensemble.R     .validate_warm_start_ensemble  118
+6583        R/warm_start_ensemble.R     .validate_warm_start_ensemble  140
+5948  R/warm_start_model_registry.R        .warm_start_canonical_path  124
+6212  R/warm_start_model_registry.R                .warm_start_within  130
+6252  R/warm_start_model_registry.R                .warm_start_within  131
+5819  R/warm_start_pls_validation.R  .validate_warm_start_pls_reduced  121
+5983  R/warm_start_pls_validation.R  .validate_warm_start_pls_reduced  125
+5692             R/warm_start_pls.R              .warm_start_pls_tune  118
+312   R/warm_start_svr_validation.R   .validate_warm_start_svr_tuning   11
+544   R/warm_start_svr_validation.R   .validate_warm_start_svr_tuning   16
+878   R/warm_start_svr_validation.R   .validate_warm_start_svr_tuning   23
+      value
+6156      0
+1715      0
+3932      0
+4901      0
+10985     0
+98        0
+2290      0
+5685      0
+6583      0
+5948      0
+6212      0
+6252      0
+5819      0
+5983      0
+5692      0
+312       0
+544       0
+878       0
