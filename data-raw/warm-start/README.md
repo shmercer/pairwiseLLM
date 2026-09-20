@@ -15,6 +15,23 @@ scoped coverage; `check-issue-259-algorithm-deployment.R` checks full/reduced v1
 same-task algorithm ensembles without glmnet, pls, e1071 or reticulate. These
 checks use synthetic inputs only. The handoff records current evidence and limits.
 
+Phase 7 release evidence is recorded in `issue-259-handoff.md` and the Phase 7
+validation report/ledgers. The full guide uses `inst/extdata/warm-start-example.rds`:
+48 fabricated texts, actual pinned v2 features, and invented training outcomes.
+`create-vignette-example.R` reproduces it into a new path with an existing Python
+interpreter; it refuses overwrite and does not install anything. It is not a
+production-model builder. The source script documents the invented outcome rule.
+
+The two ensemble APIs serve different purposes. `ensemble_warm_start_models()`
+combines separately sourced task models and retains component-only validation.
+`ensemble_warm_start_algorithms()` requires full format-3 models with exact shared
+task/ordered ID/outcome/schema/CV identity and aligned outer observations. Its
+validation averages calibrated outer predictions; deployment averages calibrated
+component predictions. Full and summary-only artifacts remain distinct, and no
+summary-only object can reconstruct omitted audit evidence. Nonlinear coefficient
+requests produce `pairwiseLLM_warm_nonlinear_coefficients`; SVR deployment retains
+ordered numeric matrices. See the architecture note for precise audit rules.
+
 The existing feature inventory, audit, frozen environment lock, and explicit setup
 script remain the Task 01 sources of evidence. Installed extraction setup instructions
 are in `inst/python/README.md`. The frozen schema is not re-curated by model building.
@@ -28,7 +45,7 @@ Its `--record` mode refuses to overwrite existing v2 evidence. The historical
 v1 audit and fixtures remain unchanged. The model builder below retains its
 existing v1/glmnet contract.
 
-Task 07 adds `build-bundled-models.R`. Sourcing it only defines functions. It uses public
+The existing `build-bundled-models.R` workflow develops v1/glmnet cross-task models. Sourcing it only defines functions. It uses public
 training, ensemble, preparation, save/load, and prediction APIs. Internal helpers are
 used only for the shared manifest contract and path checks. No workflow runs during
 package load, installation, examples, or checks. `data-raw/` is excluded from packages.
@@ -40,7 +57,7 @@ tests, a successful fit, or successful ensemble construction.
 
 ## Private inputs and configuration
 
-Use an installed/development-loaded version of pairwiseLLM containing Task 07, plus
+Use an installed or development-loaded version of pairwiseLLM, plus
 optional glmnet/withr for training. Text extraction additionally needs the explicitly
 configured supported Python environment. No software is installed automatically.
 

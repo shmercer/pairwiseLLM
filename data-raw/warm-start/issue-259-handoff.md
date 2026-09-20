@@ -1313,3 +1313,55 @@ All task-owned local verification processes are finished before PR delivery.
 No next phase started. CI and maintainer review await user feedback without polling.
 Use [the exact Phase 7 new-thread prompt](issue-259-phase7-new-thread.md), verifying
 the final reporting head/review fixes or reviewed merge before branching.
+
+## Phase 7 implementation checkpoint — 2026-09-20
+
+Branch `feat/259-07-docs-quality`, base/PR target `master` at
+`9c8383d8875116b7ed49912da964a61b6be9bfb6`. Phase 6 PR #265 merged from final
+reviewed reporting head `8717cabb60f618a34591ecb2203d4e124148e951` as
+`1a91ff9359dd5c9a1bbd1ff37d7c55b489b52594`; trees match. Subsequent reviewed
+PR #266 merged as the current base with the macOS native-installer/zstd fix.
+Local user feedback records all seven checks passing on its final head
+`dbef186c85c8863f0827a5ba42c21b93f71df3a3`. No outstanding inline review comments
+were present. Prior pending-CI snapshots are superseded; no CI polling occurred.
+
+Documentation and focused checks are implemented; full release validation follows.
+Version is now 1.5.2, retaining R >=4.4. All 11 edited runtime R files have identical
+parsed executable expressions to the reviewed base; edits are Roxygen only.
+The main guide now connects actual v2 extraction/precomputed features to shared
+CV, three fits, fair validation, same-task averaging, new-item predictions, prior
+conversion and BTL/TrueSkill/both initialization. The related adaptive-pairing
+section follows the same non-technical tone. Model/Python/registry/reduction help
+and current release metadata are synchronized; historical evidence is preserved.
+
+The 6.7 KB example RDS holds 48 distinct fabricated texts, pinned v2 features,
+and invented training outcomes. It contains no student data or predictor model.
+Its source generator is reproducible, explicit, and refuses overwrite. Original
+v1/v2 golden and legacy fixtures are untouched. A first toy lasso endpoint failed
+to converge; the labeled demonstration grid uses alpha c(0,0.5). Production grids
+are unchanged. Review caught repeated generated texts and a missing optional CV
+plan guard; both were fixed, with a text-identity regression. The existing spaCy/
+Click import deprecation is suppressed only at the test status check, following
+existing extraction tests. Runtime extraction warnings are not broadly suppressed.
+
+Focused command (with PAIRWISELLM_TEST_PYTHON set to the existing pinned interpreter):
+`testthat::test_local(filter="^(0026|0031|9106)-", reporter="summary", stop_on_failure=TRUE, stop_on_warning=TRUE)`.
+Final result: 28 blocks, 736 passed expectations, zero failures/errors/warnings,
+one existing missing historical tasklist export-audit skip. Durable results:
+`issue-259-phase7-focused-results.csv`. New 9106 executes the guide's real chunks,
+checks aligned outer metrics, distinct prediction IDs/texts, authoritative prior SD,
+common bootstrap and TrueSkill initialization, plus actual extraction reproduction.
+
+Roxygen regenerated 11 Rd topics; NAMESPACE unchanged. README and both changed
+guides rendered successfully. Source-hash synchronization and ordinary optional
+dependency guards were corrected before passing focused checks. Package lint
+found one new overlong Roxygen line, now corrected; final targeted runtime/test/
+maintainer script lint is clean. Full final package lint remains in release checks.
+No new/materially changed runtime implementation; current whole-package covr and
+per-file issue #259 coverage are pending and no old percentages are claimed.
+
+Local tasklists are present and remain ignored. Only user-owned untracked
+`data-raw/studies/` is outside task ownership, uninspected and untouched. No production
+models, provider collection, adaptive selection/stopping, Phase B algorithms,
+installation, merge, tag or publication. Full checks and final PR delivery remain
+unfinished at this checkpoint; the completion report below will record results.

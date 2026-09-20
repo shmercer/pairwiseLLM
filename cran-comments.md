@@ -1,3 +1,35 @@
+## Release preparation: pairwiseLLM 1.5.2
+
+This release completes issue #259: the additive 46-feature writing_features_v2,
+shared nested-CV plans, optional PLS/RBF-SVR engines, and a distinct equal-weight
+same-task algorithm ensemble. Full/reduced portable artifacts support prediction,
+registries and BTL/TrueSkill initialization without fitting backends. Existing
+v1/glmnet behavior, legacy formats 1/2, cross-task ensembles and prior SD authority
+are preserved. R >= 4.4 remains required; optional engines remain in Suggests.
+
+The warm-start guide now follows a complete offline example with fabricated texts,
+actual precomputed v2 features, and invented outcomes. Extraction can be repeated
+with the existing pinned environment. No production models are fitted or bundled.
+
+### Current Phase 7 evidence
+
+Focused documentation and workflow checks passed on local R 4.6.1, including
+actual pinned Python extraction. One historical tasklist export-audit check skips
+because its original evidence is unavailable. Package runtime expressions are
+unchanged by the Phase 7 documentation edits. Final full test, coverage, CRAN-style
+check, lint and render evidence will be recorded in the Phase 7 release report.
+Earlier records below are historical and do not validate this candidate.
+
+### Pending release review
+
+Final candidate CI and maintainer review remain pending user-supplied results.
+No merge, tag, CRAN submission, publication or downstream study fitting/replay is
+part of this phase. A later merge SHA is a distinct downstream D042 pin requiring
+identification and revalidation. The existing regular macOS CI fix is retained;
+local Linux checks do not establish cross-platform Python compatibility.
+
+## Historical 1.5.1 preparation
+
 ## Release preparation: pairwiseLLM 1.5.1
 
 This patch fixes ignored `store` values for both OpenAI live endpoints and

@@ -27,7 +27,7 @@
 #'
 #' Installed bundled models are read-only `models/<name>.rds` resources. Both
 #' sources use the same model validator and prediction method. Listing reads and
-#' validates artifacts without glmnet or Python; corrupt entries produce errors
+#' validates artifacts without a fitting backend or Python; corrupt entries produce errors
 #' naming their paths. Missing registries return empty results and are not created.
 #' Bundled lookup/listing additionally require manifest version 1, matching file
 #' inventory, MD5 checksum, size, and artifact metadata. Checksums detect changes;

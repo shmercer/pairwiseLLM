@@ -40,7 +40,7 @@ preprocessing and OOF calibration to the same raw feature rows. Original BTL
 scales never enter the average; calibration is not applied a second time.
 Every component must return exactly the input IDs in order and finite numeric
 predictions. A failure names the component; no model or row is dropped.
-Precomputed prediction needs neither Python nor glmnet.
+Precomputed prediction needs neither Python nor a fitting backend.
 
 Ensemble SD measures between-model disagreement. It is diagnostic, not a
 Bayesian prior SD or a calibrated uncertainty estimate. These predictions do

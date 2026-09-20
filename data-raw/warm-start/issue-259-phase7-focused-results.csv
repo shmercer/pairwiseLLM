@@ -1,0 +1,29 @@
+"file","test","failed","skipped","error","warning","passed"
+"test-0026-documentation-contracts.R","model compatibility registry has a stable unique schema",0,FALSE,FALSE,0,6
+"test-0026-documentation-contracts.R","provider smoke matrix covers live and implemented batch surfaces",0,FALSE,FALSE,0,5
+"test-0026-documentation-contracts.R","dated provider smoke evidence is internally consistent",0,FALSE,FALSE,0,8
+"test-0026-documentation-contracts.R","Task 07 export audit and reference grouping cover every export",0,TRUE,FALSE,0,0
+"test-0026-documentation-contracts.R","every exported function has workflow links and family metadata",0,FALSE,FALSE,0,312
+"test-0026-documentation-contracts.R","Task 07 workflow articles retain their public contracts",0,FALSE,FALSE,0,9
+"test-0026-documentation-contracts.R","active documentation excludes retired IDs and removed controls",0,FALSE,FALSE,0,2
+"test-0026-documentation-contracts.R","all R Markdown chunks parse, including unevaluated examples",0,FALSE,FALSE,0,14
+"test-0026-documentation-contracts.R","release documentation keeps navigation and citation contracts",0,FALSE,FALSE,0,26
+"test-0026-documentation-contracts.R","standalone Bayesian BTL vignette uses current summary columns",0,FALSE,FALSE,0,2
+"test-0026-documentation-contracts.R","README output records the current README source hash",0,FALSE,FALSE,0,3
+"test-0026-documentation-contracts.R","README article navigation is portable and uses descriptive labels",0,FALSE,FALSE,0,7
+"test-0026-documentation-contracts.R","corrected documentation examples retain their contracts",0,FALSE,FALSE,0,5
+"test-0026-documentation-contracts.R","Task 06 documentation distinguishes statistics and estimator inputs",0,FALSE,FALSE,0,8
+"test-0026-documentation-contracts.R","practical adaptive vignette keeps the wrapper-first within-set contract",0,FALSE,FALSE,0,22
+"test-0026-documentation-contracts.R","practical linking vignette keeps the wrapper-first public contract",0,FALSE,FALSE,0,16
+"test-0026-documentation-contracts.R","within-set design vignette tracks current adaptive contracts",0,FALSE,FALSE,0,35
+"test-0026-documentation-contracts.R","adaptive-linking design vignette tracks the normative Phase A/B contract",0,FALSE,FALSE,0,33
+"test-0031-warm-start-documentation.R","test filenames have unique documented numeric prefixes",0,FALSE,FALSE,0,3
+"test-0031-warm-start-documentation.R","public warm-start help topics have examples, family and cross references",0,FALSE,FALSE,0,60
+"test-0031-warm-start-documentation.R","coefficient documentation states its interpretation and limitations",0,FALSE,FALSE,0,15
+"test-0031-warm-start-documentation.R","warm-mode tables distinguish destinations and the common bootstrap",0,FALSE,FALSE,0,14
+"test-0031-warm-start-documentation.R","adaptive documentation assigns model roles and scopes strategies",0,FALSE,FALSE,0,55
+"test-0031-warm-start-documentation.R","public replay help has navigation and strict evidence contracts",0,FALSE,FALSE,0,15
+"test-0031-warm-start-documentation.R","numeric warm-start and directed replay vignette examples execute offline",0,FALSE,FALSE,0,11
+"test-9106-warm-start-documentation-workflow.R","packaged warm-start example separates training and prediction items",0,FALSE,FALSE,0,11
+"test-9106-warm-start-documentation-workflow.R","guide chunks carry shared validation into new-item BTL and TrueSkill priors",0,FALSE,FALSE,0,30
+"test-9106-warm-start-documentation-workflow.R","pinned extraction reproduces the guide's precomputed features",0,FALSE,FALSE,0,9

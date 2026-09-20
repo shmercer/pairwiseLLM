@@ -176,6 +176,7 @@ reference:
       - compute_reverse_consistency
       - check_positional_bias
   - title: "Advanced: predictive warm start"
+    desc: "Use the [warm-start guide](../articles/adaptive-warm-start.html) to go from features to validated models and starting scores."
     contents:
       - has_concept("adaptive warm start")
   - title: "Advanced: adaptive lifecycle and replay"

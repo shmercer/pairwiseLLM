@@ -700,20 +700,28 @@ For the within-set algorithm and statistical rationale, see
 
 ## Predictive warm-start priors
 
-At initialization, `adaptive_rank()` accepts either `warm_start_model` or a resolved
-`warm_start_prior`. With model input, precomputed `warm_start_features` avoids Python;
-otherwise `warm_start_python` selects an existing extraction environment. Prediction
-runs once and the session stores numeric priors. On resume, omit all warm-start
-arguments: the saved prior remains usable after the original model is removed.
-`warm_start_mode` selects `cold`, `btl_only`, `trueskill_only`, or `both`.
-Omitted/`NULL` mode defaults to `cold` without predictive input and `btl_only`
-with it. Request `both` explicitly to initialize both models. TrueSkill-warm modes
-use `mu_i = 25 + (25/3) * prior_mean_i`, aligned by item ID with fixed multiplier 1
-and unchanged sigma. BTL prior SD and ensemble diagnostics do not control sigma.
-Explicit `cold` with predictive input, or a non-cold mode without input, errors.
-All modes retain the same seeded connected shuffled bootstrap; subsequent
-TrueSkill-based selections can differ. See
-[Guide: Adaptive Warm Start](adaptive-warm-start.html) for training and prior conversion.
+Warm starts are optional. They give BTL, TrueSkill, or both an initial estimate of
+each item's relative quality. BTL estimates scores and uncertainty; TrueSkill
+provides the fast estimates used to help choose comparisons.
+
+Supply either a fitted `warm_start_model` or a `warm_start_prior` containing
+resolved scores and your chosen prior standard deviations. Models may be single
+predictors, cross-task ensembles from separate assessments, or same-task ensembles
+of several algorithms. The [warm-start guide](adaptive-warm-start.html) walks
+through features, training, validation, prediction, and initialization offline.
+
+Choose `warm_start_mode = "btl_only"`, `"trueskill_only"`, or `"both"` to select
+where predictions are used. With predictive input the default is `btl_only`;
+without it the default is `cold`. TrueSkill's starting uncertainty is unchanged.
+Disagreement between prediction models does not determine either model's prior
+uncertainty. All modes begin with the same seeded connected comparisons; later
+TrueSkill-based choices can differ.
+
+With model input, precomputed `warm_start_features` avoids Python. Otherwise,
+`warm_start_python` selects an already configured extraction environment.
+Prediction runs once and the session stores the numeric prior. On resume, omit
+all warm-start arguments: the saved values remain authoritative even if the
+original model file is removed.
 
 ## Citation
 

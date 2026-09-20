@@ -14,18 +14,24 @@
 #'   `outcome` definition/sample-SD convention, and `weighting = "equal"`.
 #' @details
 #' Components must have learned OOF calibration and compatible frozen schemas.
-#' Full-audit model format 1 and summary-only model format 2 can be mixed. Each
+#' Legacy model formats 1/2 and full or summary-only format-3 models can be mixed. Each
 #' component keeps its own preprocessing, calibration, and training metadata.
 #' References are loaded once; prediction uses stored components. Character
 #' references always mean paths, never implicit registry names. Registry names
 #' retain existing normalization and source ambiguity rules; component names do
 #' not use registry normalization. Custom or learned weights are not supported.
 #'
+#' Repeated models and task labels remain accepted; neither establishes independent
+#' training data. Validation reports component metrics only. Use
+#' [ensemble_warm_start_algorithms()] for aligned validation of algorithms trained
+#' on one assessment.
+#'
 #' [prepare_warm_start_model()] can add ensemble metadata or explicitly reduce
 #' all component audits. Ordinary save/load is lossless. Ensemble format 1 is
 #' independent of component formats and remains 1 after reduction.
 #' @family adaptive warm start
 #' @seealso [fit_warm_start_model()], [predict.pairwiseLLM_warm_ensemble()],
+#'   [ensemble_warm_start_algorithms()],
 #'   [warm_start_coefficients()], [summary.pairwiseLLM_warm_ensemble()]
 #' @examples
 #' if (requireNamespace("glmnet", quietly = TRUE) &&

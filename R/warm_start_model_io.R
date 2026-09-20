@@ -9,8 +9,8 @@
 #' @return Saving invisibly returns the normalized destination path. Loading returns
 #'   the validated model, unchanged from its serialized representation.
 #' @details
-#' Artifacts are compressed RDS objects, without an envelope or serialized glmnet
-#' engine. Legacy formats 1 (full audit) and 2 (explicit summary-only), and format
+#' Artifacts are compressed RDS objects, without an envelope or serialized backend fit.
+#' Legacy formats 1 (full audit) and 2 (explicit summary-only), and format
 #' 3 (explicit full or summary-only audit status), are supported independently of
 #' package version. Cross-task ensembles use their own format 1 and may contain any
 #' supported single-model format. Same-task algorithm ensembles have a distinct
@@ -18,7 +18,7 @@
 #' Use [prepare_warm_start_model()] to add
 #' metadata or explicitly omit audit records before saving. Saving never strips
 #' records or adds timestamps. Neither loading nor prediction from precomputed
-#' features needs glmnet or Python.
+#' features needs a fitting backend or Python.
 #'
 #' Exactly one of `path` or `name` is required for loading. Positional input means
 #' a path; a missing file never falls back to a registry search. Explicit paths

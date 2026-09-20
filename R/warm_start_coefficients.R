@@ -40,12 +40,13 @@
 #' Ensemble columns show component coefficients side by side. Each component
 #' standardized predictors using its own training distribution, so columns do
 #' not imply one common raw-feature SD. The table exposes fitted direction,
-#' magnitude, and stability across task models; it neither defines an aggregate
+#' magnitude, and stability across component models; it neither defines an aggregate
 #' coefficient nor changes equal prediction weighting. Inspection from an
 #' existing portable artifact needs neither Python nor a fitting backend.
 #'
 #' @family adaptive warm start
 #' @seealso [fit_warm_start_model()], [ensemble_warm_start_models()],
+#'   [ensemble_warm_start_algorithms()],
 #'   [predict.pairwiseLLM_warm_model()]
 #' @examples
 #' if (requireNamespace("glmnet", quietly = TRUE) &&
