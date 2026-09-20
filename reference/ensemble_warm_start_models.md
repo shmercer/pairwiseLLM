@@ -33,13 +33,19 @@ standardized `outcome` definition/sample-SD convention, and
 ## Details
 
 Components must have learned OOF calibration and compatible frozen
-schemas. Full-audit model format 1 and summary-only model format 2 can
-be mixed. Each component keeps its own preprocessing, calibration, and
-training metadata. References are loaded once; prediction uses stored
-components. Character references always mean paths, never implicit
-registry names. Registry names retain existing normalization and source
-ambiguity rules; component names do not use registry normalization.
-Custom or learned weights are not supported.
+schemas. Legacy model formats 1/2 and full or summary-only format-3
+models can be mixed. Each component keeps its own preprocessing,
+calibration, and training metadata. References are loaded once;
+prediction uses stored components. Character references always mean
+paths, never implicit registry names. Registry names retain existing
+normalization and source ambiguity rules; component names do not use
+registry normalization. Custom or learned weights are not supported.
+
+Repeated models and task labels remain accepted; neither establishes
+independent training data. Validation reports component metrics only.
+Use
+[`ensemble_warm_start_algorithms()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_algorithms.md)
+for aligned validation of algorithms trained on one assessment.
 
 [`prepare_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_warm_start_model.md)
 can add ensemble metadata or explicitly reduce all component audits.
@@ -50,6 +56,7 @@ component formats and remains 1 after reduction.
 
 [`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md),
 [`predict.pairwiseLLM_warm_ensemble()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_ensemble.md),
+[`ensemble_warm_start_algorithms()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_algorithms.md),
 [`warm_start_coefficients()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_coefficients.md),
 [`summary.pairwiseLLM_warm_ensemble()`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_ensemble.md)
 

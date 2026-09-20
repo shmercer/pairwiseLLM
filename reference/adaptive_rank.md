@@ -593,10 +593,10 @@ adaptive_rank(
 
 - warm_start_model:
 
-  Optional calibrated model/ensemble, path string, or loader reference
-  list (`name`/`source` or `path`). Mutually exclusive with
-  `warm_start_prior`. Resolve and predict once when creating an
-  assessment.
+  Optional calibrated model, cross-task or same-task algorithm ensemble,
+  path string, or loader reference list (`name`/`source` or `path`).
+  Mutually exclusive with `warm_start_prior`. Resolve and predict once
+  when creating an assessment.
 
 - warm_start_prior:
 
@@ -608,7 +608,8 @@ adaptive_rank(
 - warm_start_features:
 
   Optional precomputed feature rows for model input; otherwise use item
-  texts. Precomputed prediction needs neither Python nor glmnet.
+  texts. Precomputed prediction needs neither Python nor a fitting
+  backend.
 
 - warm_start_python:
 
@@ -616,9 +617,9 @@ adaptive_rank(
 
 - warm_start_prior_sd:
 
-  Optional model-derived raw theta prior SD override; scalar or per-item
-  vector, default 0.5. Supplied prior objects retain their SDs. Not
-  accepted with `trueskill_only`; never controls TrueSkill sigma.
+  Optional user-chosen raw theta prior SD for model input; scalar or
+  per-item vector, default 0.5. Supplied prior objects retain their SDs.
+  Not accepted with `trueskill_only`; never controls TrueSkill sigma.
 
 - warm_start_mode:
 
@@ -828,10 +829,10 @@ head(out$logs$step_log)
 #> # A tibble: 4 × 99
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-09-20 14:21:02       1     1     4 S01   S04       4     1 S04  
-#> 2       2 2026-09-20 14:21:02       2     4     8 S04   S08       8     4 S08  
-#> 3       3 2026-09-20 14:21:02       3     8     2 S08   S02       2     8 S02  
-#> 4       4 2026-09-20 14:21:02       4     2     6 S02   S06       6     2 S06  
+#> 1       1 2026-09-20 16:29:35       1     1     4 S01   S04       4     1 S04  
+#> 2       2 2026-09-20 16:29:35       2     4     8 S04   S08       8     4 S08  
+#> 3       3 2026-09-20 16:29:35       3     8     2 S08   S02       2     8 S02  
+#> 4       4 2026-09-20 16:29:35       4     2     6 S02   S06       6     2 S06  
 #> # ℹ 89 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,

@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -124,7 +124,8 @@ ordinary live persistence. If <code>NULL</code>, defaults to <code>100L</code>.<
 
 
 <dt id="arg-warm-start-model">warm_start_model<a class="anchor" aria-label="anchor" href="#arg-warm-start-model"></a></dt>
-<dd><p>Optional calibrated model/ensemble, path string, or
+<dd><p>Optional calibrated model, cross-task or same-task algorithm ensemble,
+path string, or
 loader reference list (<code>name</code>/<code>source</code> or <code>path</code>). Mutually exclusive with
 <code>warm_start_prior</code>. Resolve and predict once when creating an assessment.</p></dd>
 
@@ -136,7 +137,8 @@ items. Saved numeric scores are centered within each BTL refit scope.</p></dd>
 
 <dt id="arg-warm-start-features">warm_start_features<a class="anchor" aria-label="anchor" href="#arg-warm-start-features"></a></dt>
 <dd><p>Optional precomputed feature rows for model input;
-otherwise use item texts. Precomputed prediction needs neither Python nor glmnet.</p></dd>
+otherwise use item texts. Precomputed prediction needs neither Python
+nor a fitting backend.</p></dd>
 
 
 <dt id="arg-warm-start-python">warm_start_python<a class="anchor" aria-label="anchor" href="#arg-warm-start-python"></a></dt>
@@ -144,7 +146,7 @@ otherwise use item texts. Precomputed prediction needs neither Python nor glmnet
 
 
 <dt id="arg-warm-start-prior-sd">warm_start_prior_sd<a class="anchor" aria-label="anchor" href="#arg-warm-start-prior-sd"></a></dt>
-<dd><p>Optional model-derived raw theta prior SD override;
+<dd><p>Optional user-chosen raw theta prior SD for model input;
 scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
 Not accepted with <code>trueskill_only</code>; never controls TrueSkill sigma.</p></dd>
 

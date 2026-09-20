@@ -11,7 +11,7 @@ returns state plus summary outputs."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -585,7 +585,8 @@ ignored and this function is used directly.</p></dd>
 
 
 <dt id="arg-warm-start-model">warm_start_model<a class="anchor" aria-label="anchor" href="#arg-warm-start-model"></a></dt>
-<dd><p>Optional calibrated model/ensemble, path string, or
+<dd><p>Optional calibrated model, cross-task or same-task algorithm ensemble,
+path string, or
 loader reference list (<code>name</code>/<code>source</code> or <code>path</code>). Mutually exclusive with
 <code>warm_start_prior</code>. Resolve and predict once when creating an assessment.</p></dd>
 
@@ -597,7 +598,8 @@ items. Saved numeric scores are centered within each BTL refit scope.</p></dd>
 
 <dt id="arg-warm-start-features">warm_start_features<a class="anchor" aria-label="anchor" href="#arg-warm-start-features"></a></dt>
 <dd><p>Optional precomputed feature rows for model input;
-otherwise use item texts. Precomputed prediction needs neither Python nor glmnet.</p></dd>
+otherwise use item texts. Precomputed prediction needs neither Python
+nor a fitting backend.</p></dd>
 
 
 <dt id="arg-warm-start-python">warm_start_python<a class="anchor" aria-label="anchor" href="#arg-warm-start-python"></a></dt>
@@ -605,7 +607,7 @@ otherwise use item texts. Precomputed prediction needs neither Python nor glmnet
 
 
 <dt id="arg-warm-start-prior-sd">warm_start_prior_sd<a class="anchor" aria-label="anchor" href="#arg-warm-start-prior-sd"></a></dt>
-<dd><p>Optional model-derived raw theta prior SD override;
+<dd><p>Optional user-chosen raw theta prior SD for model input;
 scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
 Not accepted with <code>trueskill_only</code>; never controls TrueSkill sigma.</p></dd>
 
@@ -779,10 +781,10 @@ state, mode, strategy, and bootstrap progress; omit all warm-start arguments.</p
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 4 × 99</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-20 <span style="color: #949494;">14:21:02</span>       1     1     4 S01   S04       4     1 S04  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-20 <span style="color: #949494;">14:21:02</span>       2     4     8 S04   S08       8     4 S08  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-20 <span style="color: #949494;">14:21:02</span>       3     8     2 S08   S02       2     8 S02  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-20 <span style="color: #949494;">14:21:02</span>       4     2     6 S02   S06       6     2 S06  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-20 <span style="color: #949494;">16:29:35</span>       1     1     4 S01   S04       4     1 S04  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-20 <span style="color: #949494;">16:29:35</span>       2     4     8 S04   S08       8     4 S08  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-20 <span style="color: #949494;">16:29:35</span>       3     8     2 S08   S02       2     8 S02  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-20 <span style="color: #949494;">16:29:35</span>       4     2     6 S02   S06       6     2 S06  </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 89 more variables: B_id &lt;chr&gt;, unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   Y &lt;int&gt;, status &lt;chr&gt;, judge_backend &lt;chr&gt;, judge_model &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   judge_endpoint &lt;chr&gt;, judge_valid &lt;lgl&gt;, judge_invalid_reason &lt;chr&gt;,</span></span>

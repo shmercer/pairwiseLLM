@@ -207,6 +207,7 @@ path. This function never installs software or downloads data.
 
 [`predict.pairwiseLLM_warm_model()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_model.md),
 [`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md),
+[`ensemble_warm_start_algorithms()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_algorithms.md),
 [`save_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/save_warm_start_model.md)
 
 Other adaptive warm start:

@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -99,8 +99,8 @@ the validated model, unchanged from its serialized representation.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>Artifacts are compressed RDS objects, without an envelope or serialized glmnet
-engine. Legacy formats 1 (full audit) and 2 (explicit summary-only), and format
+    <p>Artifacts are compressed RDS objects, without an envelope or serialized backend fit.
+Legacy formats 1 (full audit) and 2 (explicit summary-only), and format
 3 (explicit full or summary-only audit status), are supported independently of
 package version. Cross-task ensembles use their own format 1 and may contain any
 supported single-model format. Same-task algorithm ensembles have a distinct
@@ -108,7 +108,7 @@ format-1 contract containing only format-3 components with matching audit status
 Use <code><a href="prepare_warm_start_model.html">prepare_warm_start_model()</a></code> to add
 metadata or explicitly omit audit records before saving. Saving never strips
 records or adds timestamps. Neither loading nor prediction from precomputed
-features needs glmnet or Python.</p>
+features needs a fitting backend or Python.</p>
 <p>Exactly one of <code>path</code> or <code>name</code> is required for loading. Positional input means
 a path; a missing file never falls back to a registry search. Explicit paths
 require <code>source = "auto"</code>. Registry names follow <code><a href="register_warm_start_model.html">register_warm_start_model()</a></code>.

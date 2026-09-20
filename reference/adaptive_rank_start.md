@@ -69,10 +69,10 @@ adaptive_rank_start(
 
 - warm_start_model:
 
-  Optional calibrated model/ensemble, path string, or loader reference
-  list (`name`/`source` or `path`). Mutually exclusive with
-  `warm_start_prior`. Resolve and predict once when creating an
-  assessment.
+  Optional calibrated model, cross-task or same-task algorithm ensemble,
+  path string, or loader reference list (`name`/`source` or `path`).
+  Mutually exclusive with `warm_start_prior`. Resolve and predict once
+  when creating an assessment.
 
 - warm_start_prior:
 
@@ -84,7 +84,8 @@ adaptive_rank_start(
 - warm_start_features:
 
   Optional precomputed feature rows for model input; otherwise use item
-  texts. Precomputed prediction needs neither Python nor glmnet.
+  texts. Precomputed prediction needs neither Python nor a fitting
+  backend.
 
 - warm_start_python:
 
@@ -92,9 +93,9 @@ adaptive_rank_start(
 
 - warm_start_prior_sd:
 
-  Optional model-derived raw theta prior SD override; scalar or per-item
-  vector, default 0.5. Supplied prior objects retain their SDs. Not
-  accepted with `trueskill_only`; never controls TrueSkill sigma.
+  Optional user-chosen raw theta prior SD for model input; scalar or
+  per-item vector, default 0.5. Supplied prior objects retain their SDs.
+  Not accepted with `trueskill_only`; never controls TrueSkill sigma.
 
 - warm_start_mode:
 

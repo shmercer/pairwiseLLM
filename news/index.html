@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -52,15 +52,26 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.5.2" id="pairwisellm-152">pairwiseLLM 1.5.2<a class="anchor" aria-label="anchor" href="#pairwisellm-152"></a></h2>
+<div class="section level3">
+<h3 id="warm-start-prediction-1-5-2">Warm-start prediction<a class="anchor" aria-label="anchor" href="#warm-start-prediction-1-5-2"></a></h3>
+<ul><li><p>Added <code><a href="../reference/ensemble_warm_start_algorithms.html">ensemble_warm_start_algorithms()</a></code> for equal-weight same-task predictions with honest aligned outer-CV validation. Full/reduced portable artifacts work with storage, registries, bundles and BTL/TrueSkill warm starts. Component disagreement remains diagnostic; cross-task ensemble semantics are unchanged (<a href="https://github.com/shmercer/pairwiseLLM/issues/259" class="external-link">#259</a>).</p></li>
+<li><p>Added optional RBF-SVR warm starts with the fixed epsilon/grid conventions, split-specific gamma, weighted nested-CV tuning and deterministic 1-SE selection. Complete format-3 audits and portable numeric support vectors support full/reduced deployment without <code>e1071</code>; nonlinear coefficient requests fail explicitly (<a href="https://github.com/shmercer/pairwiseLLM/issues/259" class="external-link">#259</a>).</p></li>
+<li><p>Added optional PLS warm-start models using explicit kernel PLS, legal common component grids, weighted nested-CV tuning and fewer-component 1-SE selection. Full format-3 audits retain candidate OOF evidence; portable full/reduced models predict and supply warm priors without <code>pls</code> (<a href="https://github.com/shmercer/pairwiseLLM/issues/259" class="external-link">#259</a>).</p></li>
+<li><p>Added explicit <code>writing_features_v2</code> extraction with 46 source-audited features, schema-specific hashes/decoding, and pinned readability/missingness behavior. The default 20-feature v1 schema and Python environment remain unchanged (<a href="https://github.com/shmercer/pairwiseLLM/issues/259" class="external-link">#259</a>).</p></li>
+<li><p>Added reusable task/outcome-bound warm-start CV plans and portable format-3 glmnet models, including full/reduced storage, registries, bundles, and warm priors. Legacy formats 1/2 and frozen v1/glmnet numerical behavior remain supported (<a href="https://github.com/shmercer/pairwiseLLM/issues/259" class="external-link">#259</a>).</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="documentation-1-5-2">Documentation<a class="anchor" aria-label="anchor" href="#documentation-1-5-2"></a></h3>
+<ul><li>Added a complete offline v2 workflow using fabricated texts and outcomes, shared validation splits, three algorithms, and BTL/TrueSkill initialization. Updated warm-start and adaptive-pairing guidance for non-technical readers, distinguishing cross-task and same-task ensembles and user-chosen prior SD.</li>
+<li>Corrected model, reduction, and Python audit documentation; synchronized current package version references. R &gt;= 4.4 and optional fitting dependencies are unchanged.</li>
+</ul></div>
+</div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.5.1" id="pairwisellm-151">pairwiseLLM 1.5.1<a class="anchor" aria-label="anchor" href="#pairwisellm-151"></a></h2>
 <div class="section level3">
 <h3 id="improvements-1-5-1">Improvements<a class="anchor" aria-label="anchor" href="#improvements-1-5-1"></a></h3>
-<ul><li><p>Added <code><a href="../reference/ensemble_warm_start_algorithms.html">ensemble_warm_start_algorithms()</a></code> for equal-weight same-task predictions with honest aligned outer-CV validation. Full/reduced portable artifacts work with storage, registries, bundles and BTL/TrueSkill warm starts. Component disagreement remains diagnostic; cross-task ensemble semantics are unchanged (<a href="https://github.com/shmercer/pairwiseLLM/issues/259" class="external-link">#259</a>, Phase 6).</p></li>
-<li><p>Added optional RBF-SVR warm starts with the fixed epsilon/grid conventions, split-specific gamma, weighted nested-CV tuning and deterministic 1-SE selection. Complete format-3 audits and portable numeric support vectors support full/reduced deployment without <code>e1071</code>; nonlinear coefficient requests fail explicitly (<a href="https://github.com/shmercer/pairwiseLLM/issues/259" class="external-link">#259</a>, Phase 5).</p></li>
-<li><p>Added optional PLS warm-start models using explicit kernel PLS, legal common component grids, weighted nested-CV tuning and fewer-component 1-SE selection. Full format-3 audits retain candidate OOF evidence; portable full/reduced models predict and supply warm priors without <code>pls</code> (<a href="https://github.com/shmercer/pairwiseLLM/issues/259" class="external-link">#259</a>, Phase 4).</p></li>
-<li><p>Added explicit <code>writing_features_v2</code> extraction with 46 source-audited features, schema-specific hashes/decoding, and pinned readability/missingness behavior. The default 20-feature v1 schema and Python environment remain unchanged (<a href="https://github.com/shmercer/pairwiseLLM/issues/259" class="external-link">#259</a>, Phase 3).</p></li>
-<li><p>Added reusable task/outcome-bound warm-start CV plans and portable format-3 glmnet models, including full/reduced storage, registries, bundles, and warm priors. Legacy formats 1/2 and frozen v1/glmnet numerical behavior remain supported (<a href="https://github.com/shmercer/pairwiseLLM/issues/259" class="external-link">#259</a>, Phase 2).</p></li>
-<li><p>Added sparse adaptive replay reservoirs with one frozen observation per unordered edge. All four within-set pairing strategies respect unused allowed edges and recorded presentation orientation. Reservoir runs use a common seeded spanning-tree bootstrap, validate identity on resume, and distinguish exhaustion from a temporarily unavailable preferred candidate (<a href="https://github.com/shmercer/pairwiseLLM/issues/257" class="external-link">#257</a>).</p></li>
+<ul><li><p>Added sparse adaptive replay reservoirs with one frozen observation per unordered edge. All four within-set pairing strategies respect unused allowed edges and recorded presentation orientation. Reservoir runs use a common seeded spanning-tree bootstrap, validate identity on resume, and distinguish exhaustion from a temporarily unavailable preferred candidate (<a href="https://github.com/shmercer/pairwiseLLM/issues/257" class="external-link">#257</a>).</p></li>
 <li><p>MCMC scheduling now respects available CPU allocations through the suggested <code>parallelly</code> package, required when sampling. Automatic concurrency retains the two-slot ceiling and <code>core_fraction</code> headroom. Explicit parallel-chain requests remain supported, with joint chain/thread budget validation and clear errors for excessive requests. Fits and logs record requested and effective resource settings without changing total chains or sampling settings (<a href="https://github.com/shmercer/pairwiseLLM/issues/255" class="external-link">#255</a>).</p></li>
 </ul></div>
 <div class="section level3">

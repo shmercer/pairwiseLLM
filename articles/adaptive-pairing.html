@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -851,26 +851,31 @@ Adaptive Pairing</a>.</p>
 <div class="section level2">
 <h2 id="predictive-warm-start-priors">Predictive warm-start priors<a class="anchor" aria-label="anchor" href="#predictive-warm-start-priors"></a>
 </h2>
-<p>At initialization, <code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code> accepts either
-<code>warm_start_model</code> or a resolved
-<code>warm_start_prior</code>. With model input, precomputed
-<code>warm_start_features</code> avoids Python; otherwise
-<code>warm_start_python</code> selects an existing extraction
-environment. Prediction runs once and the session stores numeric priors.
-On resume, omit all warm-start arguments: the saved prior remains usable
-after the original model is removed. <code>warm_start_mode</code>
-selects <code>cold</code>, <code>btl_only</code>,
-<code>trueskill_only</code>, or <code>both</code>.
-Omitted/<code>NULL</code> mode defaults to <code>cold</code> without
-predictive input and <code>btl_only</code> with it. Request
-<code>both</code> explicitly to initialize both models. TrueSkill-warm
-modes use <code>mu_i = 25 + (25/3) * prior_mean_i</code>, aligned by
-item ID with fixed multiplier 1 and unchanged sigma. BTL prior SD and
-ensemble diagnostics do not control sigma. Explicit <code>cold</code>
-with predictive input, or a non-cold mode without input, errors. All
-modes retain the same seeded connected shuffled bootstrap; subsequent
-TrueSkill-based selections can differ. See <a href="adaptive-warm-start.html">Guide: Adaptive Warm Start</a> for
-training and prior conversion.</p>
+<p>Warm starts are optional. They give BTL, TrueSkill, or both an
+initial estimate of each item’s relative quality. BTL estimates scores
+and uncertainty; TrueSkill provides the fast estimates used to help
+choose comparisons.</p>
+<p>Supply either a fitted <code>warm_start_model</code> or a
+<code>warm_start_prior</code> containing resolved scores and your chosen
+prior standard deviations. Models may be single predictors, cross-task
+ensembles from separate assessments, or same-task ensembles of several
+algorithms. The <a href="adaptive-warm-start.html">warm-start guide</a>
+walks through features, training, validation, prediction, and
+initialization offline.</p>
+<p>Choose <code>warm_start_mode = "btl_only"</code>,
+<code>"trueskill_only"</code>, or <code>"both"</code> to select where
+predictions are used. With predictive input the default is
+<code>btl_only</code>; without it the default is <code>cold</code>.
+TrueSkill’s starting uncertainty is unchanged. Disagreement between
+prediction models does not determine either model’s prior uncertainty.
+All modes begin with the same seeded connected comparisons; later
+TrueSkill-based choices can differ.</p>
+<p>With model input, precomputed <code>warm_start_features</code> avoids
+Python. Otherwise, <code>warm_start_python</code> selects an already
+configured extraction environment. Prediction runs once and the session
+stores the numeric prior. On resume, omit all warm-start arguments: the
+saved values remain authoritative even if the original model file is
+removed.</p>
 </div>
 <div class="section level2">
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>

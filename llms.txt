@@ -15,7 +15,7 @@ for a step-by-step walkthrough using your own data.
 
 ## Installation
 
-Version 1.5.1 requires **R \>= 4.4**. Install the CRAN release with:
+Version 1.5.2 requires **R \>= 4.4**. Install the CRAN release with:
 
 ``` r
 
@@ -170,8 +170,9 @@ stopping criteria.
   — run, inspect, save, and resume an adaptive within-set ranking.
 - [Guide: Adaptive Warm
   Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html)
-  — train and store models, combine cross-task models or same-task
-  algorithms, and choose predictive BTL/TrueSkill initialization.
+  — follow an offline example from writing features through model
+  validation and predictions to BTL/TrueSkill starting scores; compare
+  the two ensemble approaches.
 - [Design: Adaptive
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html)
   — understand the within-set selection, refitting, and stopping design.
@@ -256,10 +257,9 @@ MIT License. See `LICENSE`.
 
 ## Package Author and Maintainer
 
-- **Sterett H. Mercer** – *University of British Columbia*  
-  UBC Faculty Profile: <https://ecps.educ.ubc.ca/sterett-h-mercer/>  
-  ResearchGate: <https://www.researchgate.net/profile/Sterett_Mercer>  
-  Google Scholar:
+- **Sterett H. Mercer** – *University of British Columbia* UBC Faculty
+  Profile: <https://ecps.educ.ubc.ca/sterett-h-mercer/> ResearchGate:
+  <https://www.researchgate.net/profile/Sterett_Mercer> Google Scholar:
   <https://scholar.google.ca/citations?user=YJg4svsAAAAJ&hl=en>
 
 ------------------------------------------------------------------------
@@ -267,7 +267,7 @@ MIT License. See `LICENSE`.
 ## Citation
 
 > Mercer, S. H. (2026). *pairwiseLLM: Pairwise writing quality
-> comparisons with large language models* (Version 1.5.1) \[R package;
+> comparisons with large language models* (Version 1.5.2) \[R package;
 > Computer software\]. <https://github.com/shmercer/pairwiseLLM>
 
 # Package index
@@ -433,6 +433,10 @@ for human labels and interpretation.
   : Check positional preference and bootstrap reversal agreement
 
 ## Advanced: predictive warm start
+
+Use the [warm-start
+guide](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.md)
+to go from features to validated models and starting scores.
 
 - [`ensemble_warm_start_algorithms()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_algorithms.md)
   : Average algorithms trained on the same task

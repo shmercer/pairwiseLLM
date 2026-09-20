@@ -50,7 +50,7 @@ representation.
 ## Details
 
 Artifacts are compressed RDS objects, without an envelope or serialized
-glmnet engine. Legacy formats 1 (full audit) and 2 (explicit
+backend fit. Legacy formats 1 (full audit) and 2 (explicit
 summary-only), and format 3 (explicit full or summary-only audit
 status), are supported independently of package version. Cross-task
 ensembles use their own format 1 and may contain any supported
@@ -60,7 +60,7 @@ audit status. Use
 [`prepare_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_warm_start_model.md)
 to add metadata or explicitly omit audit records before saving. Saving
 never strips records or adds timestamps. Neither loading nor prediction
-from precomputed features needs glmnet or Python.
+from precomputed features needs a fitting backend or Python.
 
 Exactly one of `path` or `name` is required for loading. Positional
 input means a path; a missing file never falls back to a registry

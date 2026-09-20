@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -110,7 +110,7 @@ preprocessing and OOF calibration to the same raw feature rows. Original BTL
 scales never enter the average; calibration is not applied a second time.
 Every component must return exactly the input IDs in order and finite numeric
 predictions. A failure names the component; no model or row is dropped.
-Precomputed prediction needs neither Python nor glmnet.</p>
+Precomputed prediction needs neither Python nor a fitting backend.</p>
 <p>Ensemble SD measures between-model disagreement. It is diagnostic, not a
 Bayesian prior SD or a calibrated uncertainty estimate. These predictions do
 not perform BTL prior conversion. No ensemble validation metric is inferred

@@ -13,7 +13,7 @@ task labels cannot establish independence."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -91,12 +91,16 @@ are rejected. Order and supplied names are preserved. Nested ensembles fail.</p>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>Components must have learned OOF calibration and compatible frozen schemas.
-Full-audit model format 1 and summary-only model format 2 can be mixed. Each
+Legacy model formats 1/2 and full or summary-only format-3 models can be mixed. Each
 component keeps its own preprocessing, calibration, and training metadata.
 References are loaded once; prediction uses stored components. Character
 references always mean paths, never implicit registry names. Registry names
 retain existing normalization and source ambiguity rules; component names do
 not use registry normalization. Custom or learned weights are not supported.</p>
+<p>Repeated models and task labels remain accepted; neither establishes independent
+training data. Validation reports component metrics only. Use
+<code><a href="ensemble_warm_start_algorithms.html">ensemble_warm_start_algorithms()</a></code> for aligned validation of algorithms trained
+on one assessment.</p>
 <p><code><a href="prepare_warm_start_model.html">prepare_warm_start_model()</a></code> can add ensemble metadata or explicitly reduce
 all component audits. Ordinary save/load is lossless. Ensemble format 1 is
 independent of component formats and remains 1 after reduction.</p>
@@ -104,6 +108,7 @@ independent of component formats and remains 1 after reduction.</p>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="fit_warm_start_model.html">fit_warm_start_model()</a></code>, <code><a href="predict.pairwiseLLM_warm_ensemble.html">predict.pairwiseLLM_warm_ensemble()</a></code>,
+<code><a href="ensemble_warm_start_algorithms.html">ensemble_warm_start_algorithms()</a></code>,
 <code><a href="warm_start_coefficients.html">warm_start_coefficients()</a></code>, <code><a href="summary.pairwiseLLM_warm_ensemble.html">summary.pairwiseLLM_warm_ensemble()</a></code></p>
 <p>Other adaptive warm start:
 <code><a href="ensemble_warm_start_algorithms.html">ensemble_warm_start_algorithms()</a></code>,

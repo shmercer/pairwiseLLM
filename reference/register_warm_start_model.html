@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -111,7 +111,7 @@ single hyphens. Dots, path separators, traversal, and escaping symlinks are
 rejected. The normalized name determines collisions and the <code>&lt;name&gt;.rds</code> file.</p>
 <p>Installed bundled models are read-only <code>models/&lt;name&gt;.rds</code> resources. Both
 sources use the same model validator and prediction method. Listing reads and
-validates artifacts without glmnet or Python; corrupt entries produce errors
+validates artifacts without a fitting backend or Python; corrupt entries produce errors
 naming their paths. Missing registries return empty results and are not created.
 Bundled lookup/listing additionally require manifest version 1, matching file
 inventory, MD5 checksum, size, and artifact metadata. Checksums detect changes;

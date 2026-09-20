@@ -1,8 +1,8 @@
 # Changelog
 
-## pairwiseLLM 1.5.1
+## pairwiseLLM 1.5.2
 
-### Improvements
+### Warm-start prediction
 
 - Added
   [`ensemble_warm_start_algorithms()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_algorithms.md)
@@ -11,37 +11,47 @@
   registries, bundles and BTL/TrueSkill warm starts. Component
   disagreement remains diagnostic; cross-task ensemble semantics are
   unchanged
-  ([\#259](https://github.com/shmercer/pairwiseLLM/issues/259), Phase
-  6).
+  ([\#259](https://github.com/shmercer/pairwiseLLM/issues/259)).
 
 - Added optional RBF-SVR warm starts with the fixed epsilon/grid
   conventions, split-specific gamma, weighted nested-CV tuning and
   deterministic 1-SE selection. Complete format-3 audits and portable
   numeric support vectors support full/reduced deployment without
   `e1071`; nonlinear coefficient requests fail explicitly
-  ([\#259](https://github.com/shmercer/pairwiseLLM/issues/259), Phase
-  5).
+  ([\#259](https://github.com/shmercer/pairwiseLLM/issues/259)).
 
 - Added optional PLS warm-start models using explicit kernel PLS, legal
   common component grids, weighted nested-CV tuning and fewer-component
   1-SE selection. Full format-3 audits retain candidate OOF evidence;
   portable full/reduced models predict and supply warm priors without
-  `pls` ([\#259](https://github.com/shmercer/pairwiseLLM/issues/259),
-  Phase 4).
+  `pls` ([\#259](https://github.com/shmercer/pairwiseLLM/issues/259)).
 
 - Added explicit `writing_features_v2` extraction with 46 source-audited
   features, schema-specific hashes/decoding, and pinned
   readability/missingness behavior. The default 20-feature v1 schema and
   Python environment remain unchanged
-  ([\#259](https://github.com/shmercer/pairwiseLLM/issues/259), Phase
-  3).
+  ([\#259](https://github.com/shmercer/pairwiseLLM/issues/259)).
 
 - Added reusable task/outcome-bound warm-start CV plans and portable
   format-3 glmnet models, including full/reduced storage, registries,
   bundles, and warm priors. Legacy formats 1/2 and frozen v1/glmnet
   numerical behavior remain supported
-  ([\#259](https://github.com/shmercer/pairwiseLLM/issues/259), Phase
-  2).
+  ([\#259](https://github.com/shmercer/pairwiseLLM/issues/259)).
+
+### Documentation
+
+- Added a complete offline v2 workflow using fabricated texts and
+  outcomes, shared validation splits, three algorithms, and
+  BTL/TrueSkill initialization. Updated warm-start and adaptive-pairing
+  guidance for non-technical readers, distinguishing cross-task and
+  same-task ensembles and user-chosen prior SD.
+- Corrected model, reduction, and Python audit documentation;
+  synchronized current package version references. R \>= 4.4 and
+  optional fitting dependencies are unchanged.
+
+## pairwiseLLM 1.5.1
+
+### Improvements
 
 - Added sparse adaptive replay reservoirs with one frozen observation
   per unordered edge. All four within-set pairing strategies respect

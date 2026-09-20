@@ -67,7 +67,7 @@ weights, not linear feature effects.
 Ensemble columns show component coefficients side by side. Each
 component standardized predictors using its own training distribution,
 so columns do not imply one common raw-feature SD. The table exposes
-fitted direction, magnitude, and stability across task models; it
+fitted direction, magnitude, and stability across component models; it
 neither defines an aggregate coefficient nor changes equal prediction
 weighting. Inspection from an existing portable artifact needs neither
 Python nor a fitting backend.
@@ -76,6 +76,7 @@ Python nor a fitting backend.
 
 [`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md),
 [`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md),
+[`ensemble_warm_start_algorithms()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_algorithms.md),
 [`predict.pairwiseLLM_warm_model()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_model.md)
 
 Other adaptive warm start:

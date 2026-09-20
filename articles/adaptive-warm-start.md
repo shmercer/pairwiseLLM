@@ -4,44 +4,40 @@
 
 Warm start is optional; skip it for your first adaptive run. Return here
 when you have defensible prior scores or a prediction model developed
-from earlier assessments. No default predictive model is bundled. The
-first numeric-prior example runs locally without Python or CmdStan;
-later sections cover optional feature extraction and model training.
-
-**You get:** ID-aligned starting information for BTL, TrueSkill, or
-both. This information does not replace observed comparisons or
-guarantee lower cost. Use [Adaptive
+from earlier assessments. Start with [Adaptive
 Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md)
-to learn the ranking workflow first.
+for the ranking workflow itself.
 
-## What warm-start prediction does
+**You get:** starting scores for Bayesian Bradley–Terry–Luce (BTL),
+TrueSkill, or both. They give the models initial information about
+relative writing quality. Observed comparisons still drive the
+assessment; a warm start does not guarantee better rankings or fewer
+comparisons.
 
-A **warm-start prediction** estimates relative writing quality before
-comparisons are collected. A **task-specific sub-model** learns from one
-assessment’s texts or features and its Bradley–Terry–Luce (BTL) scores.
-An **ensemble** averages calibrated predictions from two or more
-separately trained task models. **Prior calibration** uses out-of-fold
-(OOF) predictions to map model output to standardized quality;
+The first example uses numeric scores and the optional `withr` package.
+The longer example uses fabricated texts, already extracted features,
+and invented outcomes. It runs locally when the optional `glmnet`,
+`pls`, `e1071`, and `withr` packages are installed. Otherwise, its
+training and dependent chunks are skipped. Python is needed only to
+repeat text extraction; CmdStan is needed for later Bayesian fitting,
+not initialization. No example installs software or contacts a
+comparison provider.
+
+**No pretrained predictive model is bundled.** The example data
+demonstrate the workflow, not the accuracy of a model for students or a
+new assessment.
+
+## Choose where starting scores are used
+
 [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md)
-then centers those values for predictive initialization. The prior SD is
-a separate, explicitly chosen quantity, defaulting to 0.5.
+converts predictions into ID-aligned starting information. It centers
+the scores by subtracting their mean. The **prior standard deviation
+(SD)** is a separate choice: smaller values put more confidence in the
+starting scores. The default of 0.5 controls the raw BTL prior; it is
+not the uncertainty of the final centered scores. It is not learned from
+model accuracy or disagreement.
 
-Each sub-model standardizes its own outcome using its training mean and
-sample SD. Independent BT/BTL scales do not need linking: raw unlinked
-scores are never pooled. Model compatibility cannot establish that
-training assessments are independent or that predictions are valid in a
-new population. Validate the intended domain.
-
-Predictive information can initialize Bayesian BTL priors, TrueSkill
-locations, or both. It does not change the initial observed pair
-schedule. Without predictive input, existing cold-start behavior is
-preserved. **No default predictive model is bundled.** Real bundled
-models remain deferred; the examples below use synthetic user models.
-
-## Choose the predictive destination
-
-`warm_start_mode` chooses which model receives the predictive
-information:
+`warm_start_mode` chooses which model receives this information:
 
 | Mode | BTL predictive prior | TrueSkill predictive `mu` | Connected bootstrap |
 |----|----|----|----|
@@ -50,15 +46,15 @@ information:
 | `trueskill_only` | no | yes | same seeded shuffled chain |
 | `both` | yes | yes | same seeded shuffled chain |
 
-With omitted/`NULL` mode, **no predictive input defaults to `cold`** and
-**predictive input defaults to `btl_only`**. This preserves existing
-callers. Request `warm_start_mode = "both"` explicitly to initialize
-both models; `trueskill_only` initializes TrueSkill while retaining cold
-BTL priors.
+The bootstrap is the initial connected set of observed comparisons. It
+is the same for all modes when the items and seed are the same. Later
+pair choices can differ as TrueSkill updates from its starting values
+and the observed judgments.
 
-The following example uses numeric locations only, without Python,
-glmnet, model training, or CmdStan. The names establish exact item-ID
-alignment.
+With no predictive input, the default mode is `cold`. With predictive
+input, the default is `btl_only`. Request `both` explicitly to
+initialize both models. The names below connect each starting score to
+its item:
 
 ``` r
 
@@ -80,435 +76,197 @@ warmed$trueskill_state$items[, c("item_id", "mu", "sigma")]
 #> 4 d        33.3  8.33
 ```
 
-In `trueskill_only` and `both`, the mapping is
+The output shows the saved mode and TrueSkill’s initial locations (`mu`)
+and uncertainties (`sigma`). TrueSkill maps centered scores to its own
+scale as `25 + (25/3) * prior_mean`. Its initial sigma remains `25/3`;
+BTL prior SD does not set TrueSkill uncertainty. Both models can
+subsequently learn from judgments.
 
-``` text
-mu_i = mu0 + sigma0 * centered_predictive_location_i
-mu0 = 25; sigma0 = 25/3; fixed scale multiplier = 1
-```
+## A complete example with three algorithms
 
-The centered location is `prior$prior_mean`, aligned by item ID before
-any location changes. TrueSkill sigma is unchanged by predictive
-initialization; its ordinary default is `25/3`. This does not prevent
-sigma from evolving after observed judgments. BTL `prior_sd` controls
-the Normal prior for raw theta. Ensemble disagreement, calibration
-error, and RMSE are predictive diagnostics; none determines TrueSkill
-sigma. The mapping never restores a training task’s raw score units.
+### Load example texts and inspect the features
 
-Explicit `cold` with predictive input errors, as does a non-cold mode
-without input. `warm_start_model` and `warm_start_prior` are mutually
-exclusive. The model-only `warm_start_prior_sd` override is a BTL
-control and is rejected in `trueskill_only`; an already resolved prior
-retains its stored SDs.
+A **feature** is a measured property of a text, such as its length or
+vocabulary. `writing_features_v1` has 20 features and remains the
+default. The expanded `writing_features_v2` keeps those 20 first and
+adds 26, using the same extraction software. More features do not by
+themselves establish better prediction.
 
-Every mode keeps the same **connected shuffled bootstrap**: a seeded
-spanning path of `N - 1` valid committed comparisons. Predictive
-initialization does not replace observed connectivity or choose the
-first pair. With the same items and seed, the initial unordered pairs,
-presentation balancing, and invalid-result retries are common; a fixed
-judge yields the same initial outcomes. TrueSkill can evolve differently
-from those outcomes because its initial locations differ.
-
-After the bootstrap, `adaptive_config$pairing_strategy` selects `hybrid`
-(default), `random`, `trueskill_p50`, or `trueskill_pollitt`. The direct
-strategies currently require ordinary within-set mode. See [Guide:
-Adaptive
-Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md)
-for their exact targets and restrictions.
-
-## Optional extraction environment and frozen features
-
-Schema inspection is available without Python:
+The package includes features extracted from fabricated English texts,
+so you can run the rest of this example without Python. The first 40
+texts are used for training; eight different texts are reserved for
+prediction. The example’s `theta` values are invented, not estimates
+from a BTL analysis.
 
 ``` r
 
-schema <- warm_start_feature_schema()
-schema[c("position", "feature", "family")]
-#> # A tibble: 20 × 3
-#>    position feature                                family                       
-#>       <int> <chr>                                  <chr>                        
-#>  1        1 n_tokens                               length_productivity          
-#>  2        2 proportion_unique_tokens               lexical_diversity            
-#>  3        3 token_length_mean                      lexical_surface_complexity   
-#>  4        4 token_length_std                       lexical_surface_complexity   
-#>  5        5 sentence_length_mean                   sentence_syntactic_complexity
-#>  6        6 sentence_length_std                    sentence_syntactic_complexity
-#>  7        7 pos_prop_noun                          pos_composition              
-#>  8        8 pos_prop_verb                          pos_composition              
-#>  9        9 pos_prop_adj                           pos_composition              
-#> 10       10 pos_prop_adv                           pos_composition              
-#> 11       11 pos_prop_pron                          pos_composition              
-#> 12       12 pos_prop_adp                           pos_composition              
-#> 13       13 pos_prop_cconj                         pos_composition              
-#> 14       14 pos_prop_sconj                         pos_composition              
-#> 15       15 dependency_distance_mean               dependency_characteristics   
-#> 16       16 dependency_distance_std                dependency_characteristics   
-#> 17       17 prop_adjacent_dependency_relation_mean dependency_characteristics   
-#> 18       18 upstream_entropy_per_token             information_theory           
-#> 19       19 first_order_coherence                  semantic_coherence           
-#> 20       20 dale_chall_readability_score           readability
-system.file("python", "README.md", package = "pairwiseLLM")
-#> [1] "/home/runner/work/_temp/Library/pairwiseLLM/python/README.md"
+example <- readRDS(system.file("extdata", "warm-start-example.rds", package = "pairwiseLLM"))
+training <- example$training
+new_items <- example$new_items
+features <- example$training_features
+new_features <- example$new_features
+schema <- "writing_features_v2"
+head(training[c("item_id", "theta")])
+#>      item_id     theta
+#> 1 example-01 0.2611090
+#> 2 example-02 0.7246159
+#> 3 example-03 0.9424600
+#> 4 example-04 1.0524932
+#> 5 example-05 1.2741566
+#> 6 example-06 1.7424118
+head(warm_start_feature_schema(schema)[c("position", "feature", "family")])
+#> # A tibble: 6 × 3
+#>   position feature                  family                       
+#>      <int> <chr>                    <chr>                        
+#> 1        1 n_tokens                 length_productivity          
+#> 2        2 proportion_unique_tokens lexical_diversity            
+#> 3        3 token_length_mean        lexical_surface_complexity   
+#> 4        4 token_length_std         lexical_surface_complexity   
+#> 5        5 sentence_length_mean     sentence_syntactic_complexity
+#> 6        6 sentence_length_std      sentence_syntactic_complexity
 ```
 
-The installed README gives explicit user-run setup and CMUdict resource
-verification instructions. There is no public installer. Package
-loading, examples and prediction never create environments or download
-software. A Python installation needs `venv` and `pip`/`ensurepip`
-support; maintainer bootstrap instructions are separate from runtime
-extraction.
+In your own assessment, use one row per item and completed BT/BTL scores
+from that assessment. Keep IDs, texts, and scores aligned. Do not pool
+raw scores from separately ranked assessments. For separate writing
+traits, develop a model from the corresponding trait’s scores.
 
-The tested stack is Python 3.12.3, TextDescriptives 2.8.4, textstat
-0.7.13, spaCy 3.7.5 and `en_core_web_lg` 3.7.1. The full lock and
-resource provenance are installed under `python/`. Runtime
-version/resource checks reject incompatible stacks with an actionable
-message. Linux testing does not establish Windows/macOS compatibility.
+### Extract features when you have Python configured
 
-Select an existing interpreter explicitly before initialization. A
-conflicting `RETICULATE_PYTHON` setting or already initialized
-interpreter requires correcting the configuration or restarting R. A
-status call can initialize Python and load the large language model; it
-is not a prerequisite for precomputed prediction. These commands are
-shown without execution because they require your environment:
+These calls reproduce the example feature tables. They are shown without
+execution in an ordinary render because they require your existing
+Python environment. Substitute your own aligned texts and IDs when using
+real data.
 
 ``` r
 
 python <- "/path/to/venv/bin/python"
-status <- warm_start_python_status(python = python)
+status <- warm_start_python_status(python = python, schema = schema)
 status$problems
 features <- extract_warm_start_features(
-  ids = c("a", "b"), texts = c("First response.", "Another response."), python = python
-)
+  ids = training$item_id, texts = training$text, schema = schema, python = python)
+new_features <- extract_warm_start_features(
+  ids = new_items$item_id, texts = new_items$text, schema = schema, python = python)
 ```
 
-The returned table has character `item_id`, 20 numeric features in
-frozen order, and
-`attr(features, "warm_start_schema") == "writing_features_v1"`. Missing
-or duplicate IDs, missing required columns, and incompatible schemas
-fail explicitly. Use RDS to preserve attributes. If a cache format drops
-attributes, restore the known schema explicitly after verifying its
-origin; the attribute alone is not verified extraction provenance.
-Required features are never replaced with zero.
+Each table contains `item_id` and 46 numeric features in a fixed order.
+Undefined values remain missing; the training procedure handles
+permitted missing values. Use
+[`saveRDS()`](https://rdrr.io/r/base/readRDS.html) to cache features
+without losing the `warm_start_schema` attribute. The schema attribute
+identifies the expected columns; it does not prove where cached features
+came from. Saved v1 models still require v1 features.
 
-The schema is curated from constructs and upstream definitions, not
-training outcomes. See
-[`warm_start_feature_schema()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_feature_schema.md)
-for each feature’s definition and missingness rules. In particular,
-`upstream_entropy_per_token` divides upstream probability-weighted
-entropy by **all** spaCy tokens, including punctuation/whitespace. It is
-neither per-word perplexity nor conventional Shannon entropy, and does
-not use filtered `n_tokens` as its denominator. Tokenization,
-zero-vector coherence and undefined values follow the frozen upstream
-contract; upgrades cannot silently redefine v1.
+The installed setup instructions are available with:
 
-For the expanded representation, select `schema = "writing_features_v2"`
-in
-[`warm_start_python_status()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_python_status.md),
-[`extract_warm_start_features()`](https://shmercer.github.io/pairwiseLLM/reference/extract_warm_start_features.md)
-and
+``` r
+
+system.file("python", "README.md", package = "pairwiseLLM")
+#> [1] "/home/runner/work/_temp/Library/pairwiseLLM/python/README.md"
+```
+
+Extraction uses the pinned Python 3.12.3, spaCy 3.7.5, TextDescriptives
+2.8.4, textstat 0.7.13, and English model/resources described there. No
+environment or resource is installed automatically. A status check loads
+the large language model and can take time. If R has already initialized
+another interpreter, restart R before selecting this one. The pinned
+environment has been tested on Linux; Windows/macOS setup paths are not
+validation of those Python environments.
+
+### Share the same training and validation splits
+
+**Cross-validation (CV)** temporarily holds out some samples, trains on
+the remaining samples, and predicts the held-out ones. Nested CV has two
+levels: inner splits choose model settings; outer splits assess
+predictions for samples kept outside that training and tuning process.
+
+Make one plan and reuse it for all three algorithms. This gives each
+algorithm the same training and held-out samples, making their
+validation results comparable. The plan checks the task label, ordered
+IDs, and outcomes; it cannot be reused with different scores or a
+different order of items.
+
+``` r
+
+plan <- make_warm_start_cv_plan(training$item_id, training$theta,
+  task_id = "example-assessment", seed = 259L, outer_folds = 5L, inner_folds = 5L)
+```
+
+During fitting, missing-value handling and feature scaling are learned
+separately from each training split. Held-out samples do not determine
+that preprocessing. Scores are standardized using the relevant training
+set, so held-out predictions and observations are compared on the same
+scale. Too few suitable samples gives an error; the requested fold
+counts are not silently reduced.
+
+### Fit the three algorithms
+
+| Algorithm | What it allows | Optional R package |
+|----|----|----|
+| Elastic net | A weighted combination of features, with shrinkage to limit overfitting | `glmnet` |
+| Partial least squares (PLS) | A few combinations of correlated features | `pls` |
+| Radial-basis support-vector regression (RBF-SVR) | Nonlinear relationships between features and scores | `e1071` |
+
+The examples use smaller explicit tuning grids to keep execution quick.
+These are demonstration settings, not recommendations selected from the
+results. The default grids and deterministic selection rules are
+documented in
 [`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md).
-It retains the 20 v1 fields first and adds 26 audited scalar features
-using the same Python environment. Counts, medians, syllable summaries,
-AUX/DET/PART proportions, second-order coherence and readability
-measures intentionally retain conceptual overlap. Undefined values
-remain missing for training-split preprocessing. Inspect its definitions
-without Python:
 
 ``` r
 
-schema_v2 <- warm_start_feature_schema("writing_features_v2")
-schema_v2[c("position", "feature", "family")]
-#> # A tibble: 46 × 3
-#>    position feature                  family                       
-#>       <int> <chr>                    <chr>                        
-#>  1        1 n_tokens                 length_productivity          
-#>  2        2 proportion_unique_tokens lexical_diversity            
-#>  3        3 token_length_mean        lexical_surface_complexity   
-#>  4        4 token_length_std         lexical_surface_complexity   
-#>  5        5 sentence_length_mean     sentence_syntactic_complexity
-#>  6        6 sentence_length_std      sentence_syntactic_complexity
-#>  7        7 pos_prop_noun            pos_composition              
-#>  8        8 pos_prop_verb            pos_composition              
-#>  9        9 pos_prop_adj             pos_composition              
-#> 10       10 pos_prop_adv             pos_composition              
-#> # ℹ 36 more rows
-```
-
-Schema hashes are recorded in the installed
-`python/schema-writing-v2.json`. Keep the schema attribute with cached
-features and select the same schema when fitting. Saved v1 models
-continue to require v1 features. A reusable CV plan can be shared
-between representations of the same ordered items/outcomes; the plan
-does not select a representation or establish predictive validity.
-
-## Develop one model per assessment
-
-The following deterministic data are fabricated to illustrate the public
-interface. They are not extracted student features. Chunks needing
-glmnet/withr are skipped when those optional packages are unavailable.
-
-``` r
-
-# Synthetic features illustrate the interface, not predictive validity.
-example_features <- function(seed) {
-  withr::local_seed(seed)
-  fields <- warm_start_feature_schema()$feature
-  x <- as.data.frame(matrix(runif(15 * length(fields)), nrow = 15))
-  names(x) <- fields
-  x$n_tokens <- 11:25
-  x$token_length_mean <- 2 + 10 * x$token_length_mean
-  x$token_length_std <- 0.2 + x$token_length_std
-  x$dale_chall_readability_score <- 5 + 20 * x$dale_chall_readability_score
-  x <- data.frame(item_id = as.character(1:15), x)
-  attr(x, "warm_start_schema") <- "writing_features_v1"
-  x
-}
-features <- example_features(3103)
-theta <- 10 + 0.4 * features$n_tokens - 2 * features$token_length_mean
-# A small alpha grid keeps this example fast; the default has 41 values.
-plan <- make_warm_start_cv_plan(features$item_id, theta, "synthetic-a")
-model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
-  features = features, alpha_grid = c(0, 1), cv_plan = plan)
-
-summary(model)
-#> $task_id
-#> [1] "synthetic-a"
-#> 
-#> $target
-#> $target$definition
-#> [1] "within_task_z"
-#> 
-#> $target$mean
-#> [1] 4.784082
-#> 
-#> $target$sd
-#> [1] 6.397207
-#> 
-#> $target$sd_convention
-#> [1] "sample"
-#> 
-#> 
-#> $n
-#> [1] 15
-#> 
-#> $schema
-#> [1] "writing_features_v1"
-#> 
-#> $retained_predictors
-#> [1] 20
-#> 
-#> $removed_predictors
-#> named character(0)
-#> 
-#> $nonzero_coefficients
-#> [1] 2
-#> 
-#> $alpha
-#> [1] 1
-#> 
-#> $lambda
-#> [1] 0.02274379
-#> 
-#> $calibration
-#> [1] "oof_linear"
-#> 
-#> $audit_status
-#> [1] "full"
-#> 
-#> $engine
-#> [1] "glmnet"
-#> 
-#> $engine_version
-#> [1] "5.0"
-#> 
-#> $validation
-#> $validation$pearson_r
-#> [1] 0.9897764
-#> 
-#> $validation$squared_pearson_r
-#> [1] 0.9796574
-#> 
-#> $validation$spearman_rho
-#> [1] 0.9535714
-#> 
-#> $validation$rmse
-#> [1] 0.1600619
-#> 
-#> $validation$mae
-#> [1] 0.08329452
-#> 
-#> $validation$calibration_intercept
-#> [1] -0.04764372
-#> 
-#> $validation$calibration_slope
-#> [1] 0.9501558
-#> 
-#> $validation$undefined_reasons
-#> character(0)
-```
-
-For real data, replace the synthetic table and `theta` with aligned item
-IDs, precomputed features, and finite BT/BTL scores from **one**
-assessment. Alternatively, pass `texts` and `python` instead of
-`features`; extraction runs once before fitting. The `task_id` labels
-assessment provenance, not a registry name or grouping column.
-
-Default validation is nested five outer by five inner folds, with seed 1
-and 41 alpha candidates `seq(0, 1, by = 0.025)` spanning ridge through
-lasso. The example uses two alphas solely to shorten execution. Folds
-are shared across alpha candidates. Insufficient data produces an error;
-fold counts are not silently reduced.
-
-A reusable CV plan binds the task label, exact ordered IDs and outcomes,
-and all outer/inner partitions. Save it with
-[`saveRDS()`](https://rdrr.io/r/base/readRDS.html) to reuse those
-partitions across feature representations. A supplied plan is validated
-before extraction or fitting; it is never regenerated or silently
-realigned. Omitted seed/fold arguments defer to the plan, and explicitly
-conflicting values fail. Omitting `cv_plan` constructs the same
-partitions internally. Engines `"glmnet"` (default) and `"pls"` and
-`"svr_rbf"` reuse the plan.
-
-With the optional `pls` package installed, fit PLS on the same synthetic
-rows and partitions. Omit glmnet-only `alpha_grid` and `lambda_rule`
-arguments.
-
-``` r
-
-pls_model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
-  features = features, engine = "pls", cv_plan = plan)
-pls_model$training$hyperparameters
-#> $ncomp
-#> [1] 1
-pls_model$validation$metrics
-#> $pearson_r
-#> [1] -0.330691
-#> 
-#> $squared_pearson_r
-#> [1] 0.1093565
-#> 
-#> $spearman_rho
-#> [1] -0.06785714
-#> 
-#> $rmse
-#> [1] 1.268724
-#> 
-#> $mae
-#> [1] 0.9691657
-#> 
-#> $calibration_intercept
-#> [1] 0.1509749
-#> 
-#> $calibration_slope
-#> [1] -0.6901574
-#> 
-#> $undefined_reasons
-#> character(0)
-stopifnot(identical(pls_model$cv_identity, model$cv_identity))
-```
-
-PLS uses `kernelpls` with backend scaling and CV disabled. Its default
-component grid starts at one and ends at the smallest centered rank,
-retained predictor count, training-row count minus one, or ten across
-every inner training split and the context refit. Rank uses QR tolerance
-`1e-7`. To request a smaller grid, use
-`engine_control = list(ncomp = c(1L, 2L))`; every requested count must
-be legal. Weighted MSE/SE and the 1-SE rule favor fewer components.
-Degenerate fits fail with their fold/refit context. Full audits retain
-candidate OOF predictions, losses and rank bounds. Saved PLS
-coefficients and intercept reproduce backend predictions without
-requiring `pls` for deployment.
-
-RBF-SVR uses the optional `e1071` package. Its default grid is
-`cost = 2^(-2:4)` crossed with `gamma_multiplier = 2^(-2:2)`, with
-epsilon fixed at 0.10. Each fit divides the multiplier by its own
-retained predictor count. Backend scaling, cross-validation, and
-probability fitting are disabled. Weighted MSE/SE and the 1-SE rule
-favor lower cost, then lower gamma multiplier. The smaller explicit grid
-below keeps this synthetic example quick.
-
-``` r
-
-svr_model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
-  features = features, engine = "svr_rbf", cv_plan = plan,
+model <- fit_warm_start_model(training$item_id, training$theta, "example-assessment",
+  features = features, schema = schema, cv_plan = plan, alpha_grid = c(0, 0.5))
+pls_model <- fit_warm_start_model(training$item_id, training$theta, "example-assessment",
+  features = features, schema = schema, cv_plan = plan, engine = "pls",
+  engine_control = list(ncomp = 1:2))
+svr_model <- fit_warm_start_model(training$item_id, training$theta, "example-assessment",
+  features = features, schema = schema, cv_plan = plan, engine = "svr_rbf",
   engine_control = list(cost = c(0.5, 2), gamma_multiplier = c(0.5, 1)))
-svr_model$training$hyperparameters
-#> $cost
-#> [1] 0.5
-#> 
-#> $gamma_multiplier
-#> [1] 0.5
-#> 
-#> $epsilon
-#> [1] 0.1
-#> 
-#> $gamma
-#> [1] 0.025
-svr_model$validation$metrics
-#> $pearson_r
-#> [1] -0.2048213
-#> 
-#> $squared_pearson_r
-#> [1] 0.04195175
-#> 
-#> $spearman_rho
-#> [1] -0.007142857
-#> 
-#> $rmse
-#> [1] 1.089379
-#> 
-#> $mae
-#> [1] 0.8337594
-#> 
-#> $calibration_intercept
-#> [1] 0.08717433
-#> 
-#> $calibration_slope
-#> [1] -0.814778
-#> 
-#> $undefined_reasons
-#> character(0)
-stopifnot(identical(svr_model$cv_identity, model$cv_identity))
-predict(svr_model, features)
-#> # A tibble: 15 × 3
-#>    item_id raw_prediction calibrated_prediction
-#>    <chr>            <dbl>                 <dbl>
-#>  1 1               0.411                 0.183 
-#>  2 2               0.213                 0.0492
-#>  3 3               0.205                 0.0436
-#>  4 4              -0.181                -0.218 
-#>  5 5               0.554                 0.280 
-#>  6 6              -0.129                -0.183 
-#>  7 7               0.419                 0.188 
-#>  8 8               0.668                 0.357 
-#>  9 9               0.470                 0.223 
-#> 10 10             -0.483                -0.422 
-#> 11 11             -0.0855               -0.153 
-#> 12 12             -0.0575               -0.134 
-#> 13 13             -0.142                -0.191 
-#> 14 14              0.196                 0.0371
-#> 15 15              0.472                 0.224
 ```
 
-Full SVR audits retain every candidate’s OOF predictions and losses plus
-each split’s preprocessing and actual gamma. Full and reduced artifacts
-predict from numeric support vectors, dual coefficients, rho, and gamma
-without `e1071`. Support-vector matrix dimensions and feature order are
-preserved. These numeric vectors remain deployment data after audit
-omission.
-[`warm_start_coefficients()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_coefficients.md)
-raises a typed error for SVR or any ensemble containing SVR because
-nonlinear kernel weights are not linear feature coefficients.
+Each model also learns a calibration step from **out-of-fold (OOF)**
+predictions: training-side predictions made without fitting on the
+corresponding rows. Calibration puts the model output onto the
+standardized quality scale. It is learned within the outer training set
+before predicting its held-out samples. The final model uses all
+training samples only after outer validation is complete.
 
-### Same-task algorithm ensembles
+### Inspect validation before combining models
 
-Use
-[`ensemble_warm_start_algorithms()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_algorithms.md)
-to combine algorithms fitted to the same ordered rows, exact outcomes,
-schema and CV plan. The constructor needs full format-3 component
-audits; reduced or legacy models cannot establish this evidence. Each
-explicitly named component keeps its preprocessing and learned OOF
-calibration.
+``` r
+
+models <- list(elastic_net = model, pls = pls_model, svr_rbf = svr_model)
+validation <- do.call(rbind, lapply(models, function(x) {
+  unlist(x$validation$metrics[c("rmse", "mae", "pearson_r", "spearman_rho")])
+}))
+knitr::kable(validation, digits = 3)
+```
+
+|             |  rmse |   mae | pearson_r | spearman_rho |
+|:------------|------:|------:|----------:|-------------:|
+| elastic_net | 0.349 | 0.315 |     0.935 |        0.916 |
+| pls         | 0.409 | 0.348 |     0.911 |        0.905 |
+| svr_rbf     | 0.448 | 0.372 |     0.894 |        0.883 |
+
+These metrics describe the outer held-out predictions. Smaller RMSE and
+MAE mean smaller prediction errors; larger Pearson or Spearman
+correlations mean stronger agreement in scores or ordering. Squared
+Pearson correlation is the square of that correlation, not a separate
+measure of unbiased prediction. Calibration intercept/slope describe the
+validation predictions; they do not apply another calibration to the
+deployed model. Undefined metrics are reported with reasons.
+
+Do not replace these results with predictions on the training samples
+from the final fitted model. The invented example outcomes make the
+table useful for learning the interface only. It does not select an
+algorithm automatically or establish performance on a new population.
+
+### Combine algorithms trained on this assessment
+
+A **same-task algorithm ensemble** averages the calibrated predictions
+of models trained on the same assessment. Supply named, full model
+objects with matching IDs, outcomes, feature schema, and CV plan:
 
 ``` r
 
@@ -516,224 +274,397 @@ algorithm_ensemble <- ensemble_warm_start_algorithms(
   elastic_net = model, pls = pls_model, svr_rbf = svr_model)
 summary(algorithm_ensemble)$validation$metrics
 #> $pearson_r
-#> [1] 0.7784944
+#> [1] 0.9182634
 #> 
 #> $squared_pearson_r
-#> [1] 0.6060536
+#> [1] 0.8432077
 #> 
 #> $spearman_rho
-#> [1] 0.7357143
+#> [1] 0.9054409
 #> 
 #> $rmse
-#> [1] 0.7729942
+#> [1] 0.391374
 #> 
 #> $mae
-#> [1] 0.5784689
+#> [1] 0.339891
 #> 
 #> $calibration_intercept
-#> [1] -0.2936553
+#> [1] -0.01665459
 #> 
 #> $calibration_slope
-#> [1] 2.214274
+#> [1] 0.9842066
 #> 
 #> $undefined_reasons
 #> character(0)
-algorithm_predictions <- predict(algorithm_ensemble, features)
-algorithm_prior <- make_warm_start_prior(algorithm_predictions, prior_sd = 0.5)
-stopifnot(identical(algorithm_prior$scores, algorithm_predictions$ensemble_mean))
-algorithm_deployment <- prepare_warm_start_model(algorithm_ensemble, omit_audit = TRUE)
-stopifnot(identical(predict(algorithm_deployment, features)$ensemble_mean,
-  algorithm_predictions$ensemble_mean))
 ```
 
-Deployment is the arithmetic mean **after each component’s
-calibration**. Honest ensemble validation instead averages aligned
-outer-held-out calibrated predictions and compares them with matching
-outer-training-context standardized observations. It never averages
-component metrics or evaluates full-fit predictions as holdouts. There
-are no learned weights, ensemble recalibration or automatic component
-selection. Reported calibration intercept/slope in validation metrics
-are diagnostics only.
+Each component receives equal weight after its own calibration. There
+are no learned weights or additional ensemble calibration. The
+ensemble’s validation averages the aligned outer held-out predictions
+first, then compares those means with the corresponding held-out
+observations. It does not average the three models’ error metrics.
+Legacy or reduced models lack the full shared evidence needed to
+construct a new same-task ensemble.
 
-`ensemble_sd` is between-algorithm disagreement, not Bayesian prior
-uncertainty;
-[`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md)
-controls prior SD. The resulting prior, or the ensemble artifact itself
-via `warm_start_model`, works with existing BTL/TrueSkill modes.
-Prediction, save/load, preparation, registry and bundle metadata support
-both full and reduced artifacts. Reduced summaries retain their honest
-validation origin but cannot reconstruct omitted row evidence. Numeric
-SVR support vectors remain necessary deployment data. Coefficient
-inspection raises the typed nonlinear error when SVR is present. In
-contrast,
-[`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md)
-below retains independently sourced cross-task semantics and reports
-only component validation metrics.
-
-Every applicable training fold learns missingness filtering (\>20%
-missing or all missing), median imputation, constant/near-zero-variance
-removal, and sample-SD scaling. Near-zero variance requires unique
-fraction \<=10% and frequency ratio \>19. Outcome scaling uses the
-corresponding outer training set throughout its inner fits and held-out
-scoring. No PCA or univariate screening is introduced when p \> n; this
-example has 20 candidate features and 15 observations. See
-[`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md)
-for exact reference-path, weighted-loss, SE and tie rules. The default
-lambda is the largest within one SE of the selected alpha’s minimum;
-`lambda_rule = "lambda.min"` is an explicit expert override.
-
-OOF calibration learns an intercept/slope from predictions whose
-coefficient fits excluded those rows. These folds also select
-hyperparameters, so calibration-fit statistics are not independent
-validation. Calibration for an outer holdout uses only its outer
-training data. Final deployment uses full-data OOF calibration and an
-all-row coefficient refit. Degenerate calibration errors; finite
-negative slopes are allowed, and undefined validation diagnostics have
-NA values with reasons.
+### Predict new items and initialize an assessment
 
 ``` r
 
-model$validation$metrics
-#> $pearson_r
-#> [1] 0.9897764
-#> 
-#> $squared_pearson_r
-#> [1] 0.9796574
-#> 
-#> $spearman_rho
-#> [1] 0.9535714
-#> 
-#> $rmse
-#> [1] 0.1600619
-#> 
-#> $mae
-#> [1] 0.08329452
-#> 
-#> $calibration_intercept
-#> [1] -0.04764372
-#> 
-#> $calibration_slope
-#> [1] 0.9501558
-#> 
-#> $undefined_reasons
-#> character(0)
-head(model$validation$predictions)
-#>   item_id fold   observed raw_prediction calibrated_prediction
-#> 1       1    2  0.5053469      0.7107407             1.0870880
-#> 2       2    5  0.1117938      0.1428030             0.1646139
-#> 3       3    3  0.1253086      0.1445398             0.1602008
-#> 4       4    5 -1.8680692     -1.7816206            -1.9146367
-#> 5       5    1  0.7511354      0.7418718             0.7727400
-#> 6       6    2 -1.9762534     -1.2776439            -1.8804273
-model$training[c("alpha", "lambda", "n_nonzero")]
-#> $alpha
-#> [1] 1
-#> 
-#> $lambda
-#> [1] 0.02274379
-#> 
-#> $n_nonzero
-#> [1] 2
+algorithm_predictions <- predict(algorithm_ensemble, new_features)
+algorithm_predictions
+#> Warm-start ensemble predictions; sample SD is diagnostic, not Bayesian prior SD.
+#> # A tibble: 8 × 6
+#>   item_id    component_elastic_net component_pls component_svr_rbf ensemble_mean
+#>   <chr>                      <dbl>         <dbl>             <dbl>         <dbl>
+#> 1 example-41                0.840         0.695              0.969        0.835 
+#> 2 example-42                1.35          1.35               1.36         1.35  
+#> 3 example-43               -1.34         -1.59              -1.64        -1.52  
+#> 4 example-44               -0.803        -0.877             -1.10        -0.926 
+#> 5 example-45               -0.0986        0.0154            -0.190       -0.0912
+#> 6 example-46                0.342         0.349              0.645        0.445 
+#> 7 example-47                0.892         0.756              1.01         0.885 
+#> 8 example-48                1.46          1.52               1.44         1.47  
+#> # ℹ 1 more variable: ensemble_sd <dbl>
+algorithm_prior <- make_warm_start_prior(algorithm_predictions,
+  ids = new_items$item_id, prior_sd = 0.5)
+head(data.frame(item_id = algorithm_prior$item_id,
+  mean = algorithm_prior$prior_mean, sd = algorithm_prior$prior_sd))
+#>      item_id       mean  sd
+#> 1 example-41  0.5289074 0.5
+#> 2 example-42  1.0479329 0.5
+#> 3 example-43 -1.8308708 0.5
+#> 4 example-44 -1.2316579 0.5
+#> 5 example-45 -0.3970813 0.5
+#> 6 example-46  0.1394400 0.5
 ```
 
-Pearson r, squared Pearson r, Spearman rho, RMSE, MAE and diagnostic
-calibration intercept/slope come from outer held-out predictions. Final
-refit predictions are for deployment, not a replacement for those
-validation results. Outer fold records retain their own selected alpha,
-lambda and nonzero counts.
+`ensemble_mean` is the mean calibrated prediction; `ensemble_sd`
+describes how much the algorithms disagree. That disagreement does
+**not** set the prior SD. Here we explicitly choose 0.5. The prior
+constructor centers the predictions for these new items; it does not
+restore the old assessment’s raw BTL scale.
 
-## Save, register and combine task models
-
-Model use from precomputed features needs neither glmnet nor Python.
-Store the portable object, not a training-engine fit. Explicit saving
-and registration are separate operations; ordinary save/load preserves
-the complete audit.
+Initialize any of the three predictive modes using the same resolved
+prior:
 
 ``` r
 
-path <- tempfile(fileext = ".rds")
-save_warm_start_model(model, path = path)
-restored <- load_warm_start_model(path = path)
-stopifnot(identical(predict(restored, features), predict(model, features)))
-unlink(path)
+btl_state <- adaptive_rank_start(new_items$item_id, seed = 17L,
+  warm_start_prior = algorithm_prior, warm_start_mode = "btl_only")
+trueskill_state <- adaptive_rank_start(new_items$item_id, seed = 17L,
+  warm_start_prior = algorithm_prior, warm_start_mode = "trueskill_only")
+both_state <- adaptive_rank_start(new_items$item_id, seed = 17L,
+  warm_start_prior = algorithm_prior, warm_start_mode = "both")
+both_state$trueskill_state$items[, c("item_id", "mu", "sigma")]
+#> # A tibble: 8 × 3
+#>   item_id       mu sigma
+#>   <chr>      <dbl> <dbl>
+#> 1 example-41 29.4   8.33
+#> 2 example-42 33.7   8.33
+#> 3 example-43  9.74  8.33
+#> 4 example-44 14.7   8.33
+#> 5 example-45 21.7   8.33
+#> 6 example-46 26.2   8.33
+#> 7 example-47 29.8   8.33
+#> 8 example-48 34.7   8.33
+```
+
+These calls initialize state without collecting judgments or running
+Bayesian sampling. Continue with the judging and running steps in
+[Adaptive
+Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md).
+All four Bayesian BTL variants support predictive priors. In
+`trueskill_only`, BTL keeps its cold prior.
+
+## Save a model and resume a session
+
+Prediction from precomputed features needs neither Python nor any
+fitting engine. Ordinary save/load retains the full model and its
+validation evidence:
+
+``` r
 
 local({
-  # Keep this executable example out of the real user registry.
-  withr::local_envvar(c(R_USER_DATA_DIR = withr::local_tempdir()))
-  register_warm_start_model(model, name = "example")
+  directory <- withr::local_tempdir()
+  path <- file.path(directory, "algorithm-ensemble.rds")
+  save_warm_start_model(algorithm_ensemble, path)
+  restored <- load_warm_start_model(path)
+  stopifnot(identical(predict(restored, new_features), algorithm_predictions))
+
+  # This example uses a temporary registry, leaving your own registry alone.
+  withr::local_envvar(c(R_USER_DATA_DIR = directory))
+  register_warm_start_model(restored, "example")
   list_warm_start_models(source = "user")
-  registered <- load_warm_start_model(name = "example", source = "user")
-  remove_warm_start_model("example")
+})
+#> # A tibble: 1 × 19
+#>   name    source path     version format_version schema target     n calibration
+#>   <chr>   <chr>  <chr>    <chr>            <int> <chr>  <chr>  <int> <chr>      
+#> 1 example user   /tmp/Rt… NA                   1 writi… withi…    40 component_…
+#> # ℹ 10 more variables: audit_status <chr>, artifact_type <chr>, engine <chr>,
+#> #   engine_version <chr>, component_engines <list>,
+#> #   component_engine_versions <list>, component_count <int>, size_bytes <dbl>,
+#> #   metadata <list>, validation <list>
+```
+
+Registered names are normalized to lowercase with hyphens. If a user
+model and a bundled model share a name, select `source` explicitly. No
+pretrained models are currently listed by
+`list_warm_start_models(source = "bundled")`.
+
+To save an adaptive session, set `session_dir` at initialization. Resume
+uses the saved numeric prior even if the original model file is no
+longer available:
+
+``` r
+
+local({
+  directory <- withr::local_tempdir()
+  state <- adaptive_rank_start(new_items$item_id, session_dir = directory,
+    warm_start_prior = algorithm_prior, warm_start_mode = "both")
+  resumed <- adaptive_rank_resume(directory)
+  stopifnot(identical(resumed$predictive_prior, state$predictive_prior))
 })
 ```
 
-Real registrations use `tools::R_user_dir("pairwiseLLM", "data")` under
-`models`. Names normalize to lowercase hyphen-separated identifiers;
-collisions require explicit overwrite. Loading positionally always means
-a path. Same-name user and bundled entries require an explicit source.
-List/remove operations manage obsolete entries; no automatic backup
-history accumulates. Bundles are read-only.
+On resume, omit all warm-start arguments, including mode. The session
+retains its prior, mode, TrueSkill state, and progress. To change the
+starting information, start a new session. Model input and prior input
+are alternatives: do not supply both. `warm_start_prior_sd` is available
+with model input for BTL warming; a resolved prior already contains its
+chosen SDs.
 
-Fit another independently generated synthetic assessment on its own
-scale, then combine the models with stable component names. Actual
-training assessments must be independent; relabeling the same training
-data does not establish independence.
+## Combining models from separate assessments
+
+A **cross-task ensemble** has a different purpose: combining calibrated
+models from separately developed assessments. Each model standardizes
+its own outcome; raw unlinked BT/BTL scores are never pooled. Use
+[`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md).
+It retains component validation summaries, not a common ensemble
+validation score.
+
+The following second assessment is entirely fabricated, including its
+feature values. It illustrates the separate API without suggesting that
+relabeling the first assessment would create independent training data.
 
 ``` r
 
-features_b <- example_features(3104)
-theta_b <- 30 + features_b$n_tokens - 3 * features_b$token_length_mean
+features_b <- local({
+  withr::local_seed(3104L)
+  x <- features
+  # Reuse valid feature ranges, but independently shuffle each column.
+  for (field in warm_start_feature_schema(schema)$feature) x[[field]] <- sample(x[[field]])
+  x$item_id <- paste0("assessment-b-", seq_len(nrow(x)))
+  x
+})
+theta_b <- withr::with_seed(3105L,
+  0.1 * features_b$n_tokens + rnorm(nrow(features_b)))
 model_b <- fit_warm_start_model(features_b$item_id, theta_b, "synthetic-b",
-  features = features_b, alpha_grid = c(0, 1))
+  features = features_b, schema = schema, alpha_grid = c(0, 0.5))
 ensemble <- ensemble_warm_start_models(assessment_a = model, assessment_b = model_b)
-
-predictions <- predict(ensemble, features)
-predictions
-#> Warm-start ensemble predictions; sample SD is diagnostic, not Bayesian prior SD.
-#> # A tibble: 15 × 5
-#>    item_id component_assessment_a component_assessment_b ensemble_mean
-#>    <chr>                    <dbl>                  <dbl>         <dbl>
-#>  1 1                        0.553                  0.848        0.700 
-#>  2 2                        0.199                  0.563        0.381 
-#>  3 3                        0.134                  0.543        0.338 
-#>  4 4                       -1.73                  -1.13        -1.43  
-#>  5 5                        0.825                  1.26         1.04  
-#>  6 6                       -1.82                  -1.13        -1.48  
-#>  7 7                        0.896                  1.40         1.15  
-#>  8 8                        0.874                  1.43         1.15  
-#>  9 9                        0.961                  1.55         1.25  
-#> 10 10                      -1.25                  -0.446       -0.847 
-#> 11 11                      -0.198                  0.560        0.181 
-#> 12 12                      -0.733                  0.108       -0.313 
-#> 13 13                      -0.354                  0.498        0.0719
-#> 14 14                       0.273                  1.11         0.693 
-#> 15 15                       1.42                   2.21         1.81  
-#> # ℹ 1 more variable: ensemble_sd <dbl>
-summary(predictions)
-#> $n
-#> [1] 15
+summary(ensemble)
+#> $format_version
+#> [1] 1
+#> 
+#> $schema
+#> [1] "writing_features_v2"
+#> 
+#> $target
+#> $target$definition
+#> [1] "within_task_z"
+#> 
+#> $target$sd_convention
+#> [1] "sample"
+#> 
+#> 
+#> $weighting
+#> [1] "equal"
+#> 
+#> $audit_status
+#> [1] "full"
 #> 
 #> $components
-#> [1] "assessment_a" "assessment_b"
+#> $components$assessment_a
+#> $components$assessment_a$task_id
+#> [1] "example-assessment"
 #> 
-#> $ensemble_mean
-#>    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-#> -1.4765 -0.1204  0.3810  0.3140  1.0959  1.8149 
+#> $components$assessment_a$target
+#> $components$assessment_a$target$definition
+#> [1] "within_task_z"
 #> 
-#> $ensemble_sd
-#>    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-#>  0.2085  0.3335  0.4237  0.4391  0.5627  0.6019 
+#> $components$assessment_a$target$mean
+#> [1] 0.965597
+#> 
+#> $components$assessment_a$target$sd
+#> [1] 0.7317642
+#> 
+#> $components$assessment_a$target$sd_convention
+#> [1] "sample"
+#> 
+#> 
+#> $components$assessment_a$n
+#> [1] 40
+#> 
+#> $components$assessment_a$schema
+#> [1] "writing_features_v2"
+#> 
+#> $components$assessment_a$retained_predictors
+#> [1] 45
+#> 
+#> $components$assessment_a$removed_predictors
+#> syllables_per_token_median 
+#>                 "constant" 
+#> 
+#> $components$assessment_a$nonzero_coefficients
+#> [1] 12
+#> 
+#> $components$assessment_a$alpha
+#> [1] 0.5
+#> 
+#> $components$assessment_a$lambda
+#> [1] 0.2609714
+#> 
+#> $components$assessment_a$calibration
+#> [1] "oof_linear"
+#> 
+#> $components$assessment_a$audit_status
+#> [1] "full"
+#> 
+#> $components$assessment_a$engine
+#> [1] "glmnet"
+#> 
+#> $components$assessment_a$engine_version
+#> [1] "5.0"
+#> 
+#> $components$assessment_a$validation
+#> $components$assessment_a$validation$pearson_r
+#> [1] 0.9354842
+#> 
+#> $components$assessment_a$validation$squared_pearson_r
+#> [1] 0.8751307
+#> 
+#> $components$assessment_a$validation$spearman_rho
+#> [1] 0.9161351
+#> 
+#> $components$assessment_a$validation$rmse
+#> [1] 0.349274
+#> 
+#> $components$assessment_a$validation$mae
+#> [1] 0.3146212
+#> 
+#> $components$assessment_a$validation$calibration_intercept
+#> [1] -0.007381862
+#> 
+#> $components$assessment_a$validation$calibration_slope
+#> [1] 1.020659
+#> 
+#> $components$assessment_a$validation$undefined_reasons
+#> character(0)
+#> 
+#> 
+#> 
+#> $components$assessment_b
+#> $components$assessment_b$task_id
+#> [1] "synthetic-b"
+#> 
+#> $components$assessment_b$target
+#> $components$assessment_b$target$definition
+#> [1] "within_task_z"
+#> 
+#> $components$assessment_b$target$mean
+#> [1] 6.046153
+#> 
+#> $components$assessment_b$target$sd
+#> [1] 2.152588
+#> 
+#> $components$assessment_b$target$sd_convention
+#> [1] "sample"
+#> 
+#> 
+#> $components$assessment_b$n
+#> [1] 40
+#> 
+#> $components$assessment_b$schema
+#> [1] "writing_features_v2"
+#> 
+#> $components$assessment_b$retained_predictors
+#> [1] 45
+#> 
+#> $components$assessment_b$removed_predictors
+#> syllables_per_token_median 
+#>                 "constant" 
+#> 
+#> $components$assessment_b$nonzero_coefficients
+#> [1] 4
+#> 
+#> $components$assessment_b$alpha
+#> [1] 0.5
+#> 
+#> $components$assessment_b$lambda
+#> [1] 0.400063
+#> 
+#> $components$assessment_b$calibration
+#> [1] "oof_linear"
+#> 
+#> $components$assessment_b$audit_status
+#> [1] "full"
+#> 
+#> $components$assessment_b$engine
+#> [1] "glmnet"
+#> 
+#> $components$assessment_b$engine_version
+#> [1] "5.0"
+#> 
+#> $components$assessment_b$validation
+#> $components$assessment_b$validation$pearson_r
+#> [1] 0.867912
+#> 
+#> $components$assessment_b$validation$squared_pearson_r
+#> [1] 0.7532712
+#> 
+#> $components$assessment_b$validation$spearman_rho
+#> [1] 0.8827806
+#> 
+#> $components$assessment_b$validation$rmse
+#> [1] 0.4991858
+#> 
+#> $components$assessment_b$validation$mae
+#> [1] 0.3867394
+#> 
+#> $components$assessment_b$validation$calibration_intercept
+#> [1] -0.03326168
+#> 
+#> $components$assessment_b$validation$calibration_slope
+#> [1] 1.060803
+#> 
+#> $components$assessment_b$validation$undefined_reasons
+#> character(0)
+#> 
+#> 
+#> 
+#> 
+#> $metadata
+#> NULL
 #> 
 #> $sd_interpretation
 #> [1] "Between-model sample SD is diagnostic, not Bayesian prior SD."
 ```
 
+Components must share a schema and standardized outcome definition and
+have learned calibration. Their preprocessing and CV plans may differ.
+Repeated models and task labels remain accepted for backward
+compatibility, but do not demonstrate independent evidence. Nested
+ensembles are rejected. Assess whether the training assessments and
+target population justify using their predictions together.
+
 ## Inspect calibrated standardized coefficients
 
 Use
 [`warm_start_coefficients()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_coefficients.md)
-to inspect the fitted model weights without reconstructing a glmnet fit.
-Individual models return one row per frozen feature in schema order:
+to inspect the fitted model weights without loading the original fitting
+engine. This applies to elastic net and PLS. RBF-SVR has no equivalent
+linear feature coefficients; requesting them produces an informative
+error, including when it belongs to an ensemble. Individual models
+return one row per frozen feature in schema order:
 
 ``` text
 feature | retained | calibrated_std_coefficient
@@ -743,64 +674,45 @@ feature | retained | calibrated_std_coefficient
 
 coef_tbl <- warm_start_coefficients(model)
 coef_tbl
-#> # A tibble: 20 × 3
-#>    feature                                retained calibrated_std_coefficient
-#>    <chr>                                  <lgl>                         <dbl>
-#>  1 n_tokens                               TRUE                          0.260
-#>  2 proportion_unique_tokens               TRUE                          0    
-#>  3 token_length_mean                      TRUE                         -1.01 
-#>  4 token_length_std                       TRUE                          0    
-#>  5 sentence_length_mean                   TRUE                          0    
-#>  6 sentence_length_std                    TRUE                          0    
-#>  7 pos_prop_noun                          TRUE                          0    
-#>  8 pos_prop_verb                          TRUE                          0    
-#>  9 pos_prop_adj                           TRUE                          0    
-#> 10 pos_prop_adv                           TRUE                          0    
-#> 11 pos_prop_pron                          TRUE                          0    
-#> 12 pos_prop_adp                           TRUE                          0    
-#> 13 pos_prop_cconj                         TRUE                          0    
-#> 14 pos_prop_sconj                         TRUE                          0    
-#> 15 dependency_distance_mean               TRUE                          0    
-#> 16 dependency_distance_std                TRUE                          0    
-#> 17 prop_adjacent_dependency_relation_mean TRUE                          0    
-#> 18 upstream_entropy_per_token             TRUE                          0    
-#> 19 first_order_coherence                  TRUE                          0    
-#> 20 dale_chall_readability_score           TRUE                          0
+#> # A tibble: 46 × 3
+#>    feature                  retained calibrated_std_coefficient
+#>    <chr>                    <lgl>                         <dbl>
+#>  1 n_tokens                 TRUE                         0.0650
+#>  2 proportion_unique_tokens TRUE                         0     
+#>  3 token_length_mean        TRUE                         0     
+#>  4 token_length_std         TRUE                         0     
+#>  5 sentence_length_mean     TRUE                         0     
+#>  6 sentence_length_std      TRUE                         0     
+#>  7 pos_prop_noun            TRUE                         0     
+#>  8 pos_prop_verb            TRUE                         0     
+#>  9 pos_prop_adj             TRUE                         0     
+#> 10 pos_prop_adv             TRUE                         0     
+#> # ℹ 36 more rows
 
 coef_ensemble <- warm_start_coefficients(ensemble)
 coef_ensemble
-#> # A tibble: 20 × 3
-#>    feature                         assessment_a_std_coe…¹ assessment_b_std_coe…²
-#>    <chr>                                            <dbl>                  <dbl>
-#>  1 n_tokens                                         0.260                  0.420
-#>  2 proportion_unique_tokens                         0                      0    
-#>  3 token_length_mean                               -1.01                  -0.918
-#>  4 token_length_std                                 0                      0    
-#>  5 sentence_length_mean                             0                      0    
-#>  6 sentence_length_std                              0                      0    
-#>  7 pos_prop_noun                                    0                      0    
-#>  8 pos_prop_verb                                    0                      0    
-#>  9 pos_prop_adj                                     0                      0    
-#> 10 pos_prop_adv                                     0                      0    
-#> 11 pos_prop_pron                                    0                      0    
-#> 12 pos_prop_adp                                     0                      0    
-#> 13 pos_prop_cconj                                   0                      0    
-#> 14 pos_prop_sconj                                   0                      0    
-#> 15 dependency_distance_mean                         0                      0    
-#> 16 dependency_distance_std                          0                      0    
-#> 17 prop_adjacent_dependency_relat…                  0                      0    
-#> 18 upstream_entropy_per_token                       0                      0    
-#> 19 first_order_coherence                            0                      0    
-#> 20 dale_chall_readability_score                     0                      0    
-#> # ℹ abbreviated names: ¹​assessment_a_std_coefficient,
-#> #   ²​assessment_b_std_coefficient
+#> # A tibble: 46 × 3
+#>    feature                  assessment_a_std_coefficient assessment_b_std_coef…¹
+#>    <chr>                                           <dbl>                   <dbl>
+#>  1 n_tokens                                       0.0650                   0.858
+#>  2 proportion_unique_tokens                       0                        0    
+#>  3 token_length_mean                              0                        0    
+#>  4 token_length_std                               0                        0    
+#>  5 sentence_length_mean                           0                        0    
+#>  6 sentence_length_std                            0                        0    
+#>  7 pos_prop_noun                                  0                        0    
+#>  8 pos_prop_verb                                  0                        0    
+#>  9 pos_prop_adj                                   0                        0    
+#> 10 pos_prop_adv                                   0                        0    
+#> # ℹ 36 more rows
+#> # ℹ abbreviated name: ¹​assessment_b_std_coefficient
 ```
 
 The predictors were centered and divided by their training-sample SDs,
 and the fitted target was within-task standardized BT/BTL quality. For a
-retained feature, the reported coefficient is the stored elastic-net
-coefficient multiplied by the learned OOF calibration slope. Holding the
-other included predictors fixed, it is therefore the change in
+retained feature, the reported coefficient is the stored elastic-net or
+PLS coefficient multiplied by the learned OOF calibration slope. Holding
+the other included predictors fixed, it is therefore the change in
 calibrated within-task standardized prediction for a one-training-SD
 increase in that feature.
 
@@ -825,192 +737,56 @@ values show fitted direction, magnitude, and stability across
 independently trained task models. `NA` and `0` retain their
 component-specific meanings. The table neither estimates an aggregate
 ensemble coefficient nor changes equal-weight prediction averaging. Once
-a portable model exists, this inspection needs neither Python nor
-glmnet.
+a portable model exists, this inspection needs neither Python nor a
+fitting backend.
 
-For a named list of models, use
-`do.call(ensemble_warm_start_models, models)`. Components must share a
-frozen schema and standardized outcome definition, and have learned
-calibration. Different preprocessing and full/reduced audit formats are
-supported. Uncalibrated components, nested ensembles and failed
-components error. No automatic stacking or silent component removal
-occurs.
+## Understand saved models
 
-| Quantity | Meaning |
-|----|----|
-| `raw_prediction` | Linear prediction on the standardized target scale |
-| `calibrated_prediction` | Single-model output after its stored OOF calibration |
-| `component_<name>` | Calibrated output from that ensemble component |
-| `ensemble_mean` | Equal-weight mean of calibrated component outputs |
-| `ensemble_sd` | Between-model sample SD, denominator k - 1; diagnostic only |
-| `prior_mean` | Centered predictive location used by the selected destination mode |
-| `prior_sd` | Chosen Normal SD for raw BTL theta, default 0.5; not TrueSkill sigma |
+Full models store their feature schema, preprocessing, calibration,
+fitting settings, and validation evidence. Elastic net and PLS store
+linear coefficients; RBF-SVR stores numeric support vectors and kernel
+parameters. Prediction uses these saved numbers without loading the
+original fitting engine. A nonlinear model does not provide linear
+feature coefficients.
 
-Complete component prediction tables remain in attributes, including raw
-predictions. Their attributes do not automatically subset with tibble
-rows. Use explicit ID alignment at prior boundaries; do not assume
-generic slicing updates nested metadata. For text input, ensemble
-prediction extracts once using `texts`, `ids`, and `python`.
-Single-model [`predict()`](https://rdrr.io/r/stats/predict.html) accepts
-precomputed features only.
+`prepare_warm_start_model(x, omit_audit = TRUE)` makes a smaller
+deployment artifact while retaining the same predictions:
 
 ``` r
 
-# Empty in this release. Future reviewed bundles use the same public prediction path.
-list_warm_start_models(source = "bundled")
-#> # A tibble: 0 × 19
-#> # ℹ 19 variables: name <chr>, source <chr>, path <chr>, version <chr>,
-#> #   format_version <int>, schema <chr>, target <chr>, n <int>,
-#> #   calibration <chr>, audit_status <chr>, size_bytes <dbl>,
-#> #   artifact_type <chr>, component_count <int>, engine <chr>,
-#> #   engine_version <chr>, component_engines <list>,
-#> #   component_engine_versions <list>, metadata <list>, validation <list>
+deployment <- prepare_warm_start_model(algorithm_ensemble, omit_audit = TRUE)
+stopifnot(identical(predict(deployment, new_features)$ensemble_mean,
+  algorithm_predictions$ensemble_mean))
 ```
 
-When bundles become available, load an explicit advertised name with
-`load_warm_start_model(name = ..., source = "bundled")`. Named lookup
-verifies manifest inventory, containment, size, checksum and metadata
-agreement. An MD5 checksum detects changed bytes; it does not
-authenticate a publisher.
+Reduction removes detailed training and validation rows. The retained
+summaries can no longer be independently recalculated from that reduced
+object. Keep the full evidence separately when an audit is needed.
+Reduction is not anonymization: metadata and, for SVR, support-vector
+values still need review before sharing. Load RDS files only from
+trusted sources.
 
-## Convert predictions and resume
+Current single models use format 3 in both full and summary-only form.
+Legacy model formats 1 and 2 retain their original meanings. Same-task
+algorithm ensembles have their own format 1 and
+`artifact_type = "algorithm_ensemble"`; cross-task ensembles use
+`artifact_type = "ensemble"`. These format numbers are separate from the
+package version.
 
-``` r
+For precise model fields, tuning grids, weighted error/selection rules,
+and calibration conventions, see
+[`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md)
+and `pairwiseLLM_warm_model`. Feature definitions are in
+[`warm_start_feature_schema()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_feature_schema.md);
+the installed Python README records extraction setup and schema hashes.
+In the source repository, `data-raw/warm-start/README.md` describes
+model publication and private audit review. None of these examples fits
+or publishes a production model.
 
-prior <- make_warm_start_prior(predictions, ids = features$item_id)
-head(data.frame(item_id = prior$item_id, mean = prior$prior_mean, sd = prior$prior_sd))
-#>   item_id        mean  sd
-#> 1       1  0.38643390 0.5
-#> 2       2  0.06693345 0.5
-#> 3       3  0.02421720 0.5
-#> 4       4 -1.74359311 0.5
-#> 5       5  0.72788848 0.5
-#> 6       6 -1.79050843 0.5
-state <- adaptive_rank_start(features$item_id, seed = 1, warm_start_prior = prior)
-```
-
-Conversion uses calibrated single predictions or ensemble means and
-centers them in R. Do not inverse-transform to an original training
-scale or calibrate twice. Expert numeric scores require names or
-explicit IDs. IDs must match exactly; scalar SDs recycle, named SDs
-align by ID, and unnamed vectors follow input order. Invalid scores/SDs
-or missing items error.
-
-The SD is for `theta_raw`. Stan centers raw theta, inducing dependence
-and changing centered-theta marginal SDs. All four active variants
-(`btl`, `btl_e`, `btl_b`, `btl_e_b`) support supplied priors. Adaptive
-BTL consumes them only in `btl_only` and `both`; `cold` and
-`trueskill_only` retain raw means zero and SDs one. Default BTL-warm
-adaptive refits subset saved scores to the active fitted IDs before
-centering, including fitted items without comparisons. Downstream
-transform, anchored-joint and pooled judge refits retain their existing
-priors; evidence is not injected twice.
-
-Standalone sampling requires your installed CmdStan toolchain and is not
-run here:
-
-``` r
-
-results <- build_btl_results_data(data.frame(ID1 = "1", ID2 = "2", better_id = "1"))
-fit <- fit_bayes_btl_mcmc(results, ids = features$item_id, warm_start_prior = prior)
-```
-
-Instead of supplying a prior, initialize with
-`warm_start_model = ensemble` and `warm_start_features = features`.
-Model objects, paths and explicit loader reference lists are accepted.
-Without precomputed features, supply assessment texts and select
-`warm_start_python`. Prediction runs once; initialization and resume
-never train. Model-specific feature/Python/SD arguments cannot accompany
-an already resolved prior. Custom BTL fit functions must check
-`state$meta$warm_start_mode` and consume `state$predictive_prior` only
-in `btl_only` or `both`. The saved prior also exists in
-`trueskill_only`, so presence alone does not mean BTL is warm.
-Custom-fit signatures and the standalone
-`fit_bayes_btl_mcmc(warm_start_prior = ...)` interface are unchanged;
-standalone BTL has no adaptive four-mode argument.
-
-``` r
-
-local({
-  directory <- withr::local_tempdir()
-  artifact <- file.path(directory, "ensemble.rds")
-  save_warm_start_model(ensemble, artifact)
-  session <- file.path(directory, "session")
-  state <- adaptive_rank_start(features$item_id, session_dir = session,
-    warm_start_model = artifact, warm_start_features = features)
-  unlink(artifact)
-  resumed <- adaptive_rank_resume(session)
-  stopifnot(identical(resumed$predictive_prior, state$predictive_prior))
-})
-```
-
-Sessions store numeric priors and compact provenance, not trained
-components or nested-CV audits. Resume uses these saved values even if
-the original artifact is removed or replaced, with no Python/glmnet
-requirement. On resumed
-[`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
-calls, omit **all** warm-start arguments, including mode. Saved mode,
-pairing strategy, current TrueSkill values, bootstrap progress, and
-round state remain authoritative. Older sessions with no mode migrate to
-`cold` without a prior and `btl_only` with one; missing strategy becomes
-`hybrid`. Migration never warms TrueSkill retroactively. Omit strategy
-on resume or supply its saved value; changing it requires a new session.
-
-Run-required linking Phase A supports predictive initialization and the
-common per-set bootstrap. Imported artifacts retain their generation
-identity and are not rerun merely because predictive input is supplied.
-Direct strategies cannot run inside linking Phase A, although compatible
-artifacts from direct within-set runs can be imported. Phase B selection
-and prior rules are unchanged: predictive evidence is not injected into
-transforms, anchored-joint or pooled-judge priors, D-optimal selection,
-or probes. See [Guide: Adaptive
-Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md)
-for judging and continued runs, and [Standalone Bayesian BTL with
-CmdStan](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.md)
-for sampling diagnostics.
-
-## Model artifacts and the maintainer workflow
-
-A portable model stores schema/version and original feature order,
-fitted preprocessing, named coefficients/intercept, outcome mean/sample
-SD, calibration, training metadata and validation evidence. Prediction
-validates the schema before applying these parameters; no glmnet object
-is required.
-
-New public fits use model format 3, with explicit
-`audit_status = "full"`, a reusable CV plan, engine/version metadata,
-and a numeric deployment payload. Full audits retain IDs, outcomes,
-tuning traces and fold predictions.
-`prepare_warm_start_model(model, omit_audit = TRUE)` retains format 3
-with summary-only evidence, compact CV identity digests, and unchanged
-numeric predictions. It removes the original plan and row-level
-evidence. Summary metrics cannot be recomputed from reduced artifacts.
-Legacy full format 1 and reduced format 2 continue to load and predict
-with their original meanings. Ensemble format 1 is separate from its
-component formats, R serialization version, package version and manifest
-version.
-
-Reduction is not anonymization. Task labels, notes, provenance and
-diagnostic prose still need review. Preparation time is not training
-time, and supplied provenance is not verified extraction history. Load
-only trusted RDS files.
-
-In the source repository, `data-raw/warm-start/README.md` describes the
-explicit maintainer build/review/promotion workflow. It uses the public
-APIs to train separate assessments, keep full audits privately, reduce
-deployment components, and compare predictions before/after storage.
-Text builds capture extraction versions and lock hashes; cached
-provenance remains supplied or unavailable. Private recursive review
-checks provenance, distribution rights, validation, retained sensitive
-material and compressed size before promotion. Heuristics do not
-guarantee privacy. Review reports can themselves contain restricted
-material and are not installed.
-
-Only reviewed deployment artifacts and their manifest belong in
-installed `models`. Training texts, full audits, staged files,
-environments and third-party model binaries stay outside the package. No
-general predictive-performance or size threshold is inferred from the
-synthetic examples or component validation metrics.
+Warm starts do not change Phase B linking or its prior, selection, and
+stopping rules. See [Adaptive
+Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.md)
+for that separate workflow.
 
 ## Citation
 

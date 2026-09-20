@@ -162,6 +162,10 @@ for human labels and interpretation.
 
 ## Advanced: predictive warm start
 
+Use the [warm-start
+guide](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.md)
+to go from features to validated models and starting scores.
+
 - [`ensemble_warm_start_algorithms()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_algorithms.md)
   : Average algorithms trained on the same task
 - [`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md)
