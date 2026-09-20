@@ -66,6 +66,17 @@ test_that("glmnet refits preserve frozen folds, tuning, calibration and validati
   before <- .Random.seed
   for (case in f$cases) {
     current <- do.call(fit_warm_start_model, case$input)
+    previous_ceiling <- with_mocked_bindings(
+      do.call(fit_warm_start_model, case$input),
+      .warm_start_glmnet_controls = function(engine = glmnet::glmnet) {
+        controls <- list(thresh = 1e-12, maxit = 100000L)
+        if ("control" %in% names(formals(engine))) return(list(control = controls))
+        controls
+      }, .package = "pairwiseLLM"
+    )
+    # Compare under the same engine/BLAS, with no tolerance or fixture recapture.
+    expect_identical(current, previous_ceiling)
+    expect_identical(predict(current, f$newdata), predict(previous_ceiling, f$newdata))
     old <- case$model
     expect_identical(.Random.seed, before)
     expect_identical(current$features, old$features)

@@ -1,3 +1,36 @@
+test_that("path and fixed fits forward the solver ceiling through both glmnet interfaces", {
+  skip_if_not_installed("glmnet")
+  x <- cbind(a = 1:5, b = (1:5)^2)
+  expected <- list(thresh = 1e-12, maxit = 1000000L)
+  seen <- list()
+  fit_stub <- function(x, lambda = NULL, nlambda = NULL, ...) {
+    if (is.null(lambda)) lambda <- seq(1, 0.01, length.out = nlambda)
+    list(jerr = 0L, lambda = lambda, a0 = rep(0, length(lambda)),
+      beta = matrix(0, ncol(x), length(lambda)))
+  }
+  engines <- list(
+    function(..., control) {
+      seen[[length(seen) + 1L]] <<- control
+      fit_stub(...)
+    },
+    function(..., thresh, maxit) {
+      seen[[length(seen) + 1L]] <<- list(thresh = thresh, maxit = maxit)
+      fit_stub(...)
+    }
+  )
+  for (engine in engines) {
+    with_mocked_bindings({
+      reference <- .warm_start_glmnet_path(x, 1:5, 0.05)
+      expect_length(reference$lambda, 100L)
+      reused <- .warm_start_glmnet_path(x, 1:5, 0.05, reference$lambda)
+      expect_identical(reused$lambda, reference$lambda)
+      fixed <- .warm_start_glmnet_fit(x, 1:5, 0.05, reference$lambda[100L])
+      expect_identical(fixed$lambda, reference$lambda[100L])
+    }, glmnet = engine, .package = "glmnet")
+  }
+  expect_identical(seen, rep(list(expected), 6L))
+})
+
 test_that("weighted CV loss, fold SE and penalty ties follow explicit conventions", {
   loss <- rbind(c(1, 2, 3), c(4, 3, 2))
   sizes <- c(2L, 3L)
@@ -69,6 +102,8 @@ test_that("tuning shares folds, records exact selection and rejects incomplete e
   }
   local_mocked_bindings(glmnet = function(...) list(jerr = -1), .package = "glmnet")
   expect_error(.warm_start_glmnet_path(x, z, 0.5, c(1, 0.1)), "did not converge")
+  local_mocked_bindings(glmnet = function(...) list(jerr = -100L), .package = "glmnet")
+  expect_error(.warm_start_glmnet_path(x, z, 0.05, c(1, 0.1)), "did not converge")
   local_mocked_bindings(glmnet = function(...) list(jerr = 0L, lambda = 1, a0 = 0, beta = matrix(0, 20, 1)),
     .package = "glmnet")
   expect_error(.warm_start_glmnet_path(x, z, 0.5, c(1, 0.1)), "every requested lambda")
