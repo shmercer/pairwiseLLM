@@ -1,5 +1,16 @@
 # Changelog
 
+## pairwiseLLM (development version)
+
+### Bug fixes
+
+- Increased the internal warm-start glmnet iteration ceiling from
+  100,000 to 1,000,000 while preserving the 1e-12 convergence threshold,
+  exact lambda paths, and hard rejection of incomplete paths. This
+  allows valid expanded warm-start folds that need more solver
+  iterations to complete without dropping candidates or changing tuning
+  rules ([\#268](https://github.com/shmercer/pairwiseLLM/issues/268)).
+
 ## pairwiseLLM 1.5.2
 
 ### Warm-start prediction

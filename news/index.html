@@ -52,6 +52,13 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="development version" id="pairwisellm-development-version">pairwiseLLM (development version)<a class="anchor" aria-label="anchor" href="#pairwisellm-development-version"></a></h2>
+<div class="section level3">
+<h3 id="bug-fixes-development-version">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-development-version"></a></h3>
+<ul><li>Increased the internal warm-start glmnet iteration ceiling from 100,000 to 1,000,000 while preserving the 1e-12 convergence threshold, exact lambda paths, and hard rejection of incomplete paths. This allows valid expanded warm-start folds that need more solver iterations to complete without dropping candidates or changing tuning rules (<a href="https://github.com/shmercer/pairwiseLLM/issues/268" class="external-link">#268</a>).</li>
+</ul></div>
+</div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.5.2" id="pairwisellm-152">pairwiseLLM 1.5.2<a class="anchor" aria-label="anchor" href="#pairwisellm-152"></a></h2>
 <div class="section level3">
 <h3 id="warm-start-prediction-1-5-2">Warm-start prediction<a class="anchor" aria-label="anchor" href="#warm-start-prediction-1-5-2"></a></h3>

@@ -122,7 +122,7 @@ fitting; it is never a schema feature or deployment coefficient.
 The internal fixed fit requires at least three observations, explicit
 alpha in `[0, 1]`, and finite lambda greater than or equal to zero. It
 uses Gaussian glmnet with an intercept and `standardize = FALSE`, with
-solver threshold `1e-12` and maximum `100000` iterations, directly at
+solver threshold `1e-12` and maximum `1000000` iterations, directly at
 the requested lambda. Outcomes are standardized before fitting. No PCA
 or feature screening based on outcomes is used, including when
 predictors outnumber observations.
