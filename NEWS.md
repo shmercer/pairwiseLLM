@@ -2,6 +2,11 @@
 
 ## Improvements
 
+- Added optional PLS warm-start models using explicit kernel PLS, legal common
+  component grids, weighted nested-CV tuning and fewer-component 1-SE selection.
+  Full format-3 audits retain candidate OOF evidence; portable full/reduced
+  models predict and supply warm priors without `pls` (#259, Phase 4).
+
 - Added explicit `writing_features_v2` extraction with 46 source-audited features,
   schema-specific hashes/decoding, and pinned readability/missingness behavior.
   The default 20-feature v1 schema and Python environment remain unchanged

@@ -23,13 +23,17 @@
 #' @param lambda_rule Deployment rule: `"lambda.1se"` (default) or expert override
 #'   `"lambda.min"`. The rule applies to outer models and the final model alike.
 #'
-#' @param engine Fitting engine. Default `"glmnet"`; `"pls"` and `"svr_rbf"`
-#'   are reserved and currently fail explicitly.
+#' @param engine Fitting engine: default `"glmnet"` or `"pls"`. `"svr_rbf"`
+#'   remains reserved and fails explicitly. Explicit `alpha_grid` or `lambda_rule`
+#'   arguments are accepted only for glmnet.
 #' @param cv_plan Optional [make_warm_start_cv_plan()] object with exactly matching
 #'   task, ordered IDs and outcomes. Omitted seed/fold arguments defer to the plan;
 #'   explicitly conflicting arguments fail. A supplied plan is never regenerated.
-#' @param engine_control Reserved engine controls. For glmnet use `alpha_grid`
-#'   and `lambda_rule`; nonempty engine controls fail.
+#' @param engine_control For PLS, an optional named list containing `ncomp`, a
+#'   vector of unique positive integer candidate component counts, at most 10.
+#'   Every candidate must be legal in every required inner fit and context refit.
+#'   The default uses all counts from one through the common legal maximum in
+#'   each tuning context. For glmnet use `alpha_grid` and `lambda_rule` instead.
 #'
 #' @details
 #' New public fits use engine-neutral format 3 with explicit full audit status,
@@ -59,6 +63,18 @@
 #' alpha's lambda minimum and favors smaller alpha in a tie. The default selected
 #' penalty is the largest lambda within one SE of that alpha's minimum error.
 #'
+#' PLS uses the optional `pls` package with explicit `method = "kernelpls"`,
+#' `scale = FALSE`, `validation = "none"`, and centering. Preprocessing remains
+#' owned by this package. Each tuning context uses a common component grid bounded
+#' by every inner training matrix and the context refit: centered QR rank at
+#' tolerance 1e-7, retained predictor count, training row count minus one, and 10.
+#' Explicit candidates are never silently dropped. Weighted MSE and SE follow
+#' the rules above; minimum-error ties and eligible 1-SE choices favor fewer
+#' components. Nonfinite or degenerate fits fail with context, without fallback.
+#' All candidate OOF predictions, fold losses, rank bounds and selection evidence
+#' are retained. Stored rank bounds are checked for consistency; recomputing rank
+#' itself requires the original feature table, which is not stored in the model.
+#'
 #' OOF (out-of-fold) predictions are predictions for rows excluded from their
 #' corresponding coefficient fit. Calibration regresses standardized outcomes on
 #' selected-hyperparameter OOF predictions using ordinary least squares. Those same
@@ -72,7 +88,7 @@
 #' After outer validation, full-data tuning and OOF calibration precede the final
 #' all-row coefficient refit. Raw and calibrated predictions use within-task
 #' standardized units, not original BTL units. They are not Bayesian prior SDs.
-#' glmnet and withr are required only for model development; Python is required only
+#' The selected engine package and withr are required only for model development; Python is required only
 #' for the text-input path. This function never installs software or downloads data.
 #'
 #' @return A portable [pairwiseLLM_warm_model] with deployment preprocessing,
@@ -81,7 +97,9 @@
 #'   metrics and warnings. Audit records include item IDs and outcomes but no raw
 #'   training texts. Each outer record includes its tuning, scaling, preprocessing,
 #'   calibration, hyperparameters and nonzero coefficient count. Final tuning
-#'   metadata is separate from outer validation. No glmnet fit is retained.
+#'   metadata is separate from outer validation. No backend fit is retained.
+#'   PLS coefficients and `Ymeans - Xmeans %*% beta` reproduce backend predictions
+#'   on the stored preprocessed predictor scale without requiring `pls` at deployment.
 #' @family adaptive warm start
 #' @seealso [predict.pairwiseLLM_warm_model()], [ensemble_warm_start_models()],
 #'   [save_warm_start_model()]
@@ -124,7 +142,10 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
   .warm_start_outcome_values(theta)
   .warm_start_task_id(task_id)
   engine <- match.arg(engine)
-  .warm_start_engine_control(engine, engine_control)
+  control <- .warm_start_engine_control(engine, engine_control)
+  if (engine != "glmnet" && (!missing(alpha_grid) || !missing(lambda_rule))) {
+    rlang::abort("Explicit `alpha_grid` and `lambda_rule` are glmnet-only controls.")
+  }
   warm_start_feature_schema(schema)
   if (length(theta) != length(ids)) rlang::abort("Supply one theta value per ID in the supplied ID order.")
   .warm_start_outcome_fit(theta)
@@ -152,7 +173,7 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
       anyDuplicated(alpha_grid)) rlang::abort("`alpha_grid` must contain unique finite values in [0, 1].")
   alpha_grid <- sort(as.numeric(alpha_grid))
   lambda_rule <- match.arg(lambda_rule)
-  .warm_start_require_glmnet()
+  if (engine == "glmnet") .warm_start_require_glmnet() else .warm_start_require_pls()
   if (!requireNamespace("withr", quietly = TRUE)) {
     rlang::abort("Model development requires optional package 'withr'. Install it explicitly first.")
   }
@@ -173,7 +194,7 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
         train <- which(outer_id != fold)
         test <- which(outer_id == fold)
         result <- .warm_start_train_cv(x[train, , drop = FALSE], theta[train], inner_folds,
-          alpha_grid, lambda_rule, unname(cv_plan$outer_inner_foldid[[fold]]), engine)
+          alpha_grid, lambda_rule, unname(cv_plan$outer_inner_foldid[[fold]]), engine, control)
         result$train_ids <- ids[train]
         result$test_ids <- ids[test]
         scaled <- .warm_start_preprocess_apply(x[test, , drop = FALSE], result$preprocessing)
@@ -190,20 +211,26 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
     metrics <- .warm_start_validation_metrics(predictions$calibrated_prediction, predictions$observed)
     final <- .warm_start_cv_context("Final full-data fit", function() {
       .warm_start_train_cv(x, theta, inner_folds, alpha_grid, lambda_rule,
-        unname(cv_plan$full_inner_foldid), engine)
+        unname(cv_plan$full_inner_foldid), engine, control)
     })
     training <- list(task_id = task_id, n = length(ids), alpha = final$tuning$selected$alpha,
-      lambda = final$tuning$selected$lambda, n_nonzero = sum(final$coefficients != 0), engine = "glmnet",
-      engine_version = as.character(utils::packageVersion("glmnet")),
+      lambda = final$tuning$selected$lambda, n_nonzero = sum(final$coefficients != 0), engine = engine,
+      engine_version = as.character(utils::packageVersion(engine)),
       package_version = as.character(utils::packageVersion("pairwiseLLM")))
+    if (engine == "pls") {
+      training[c("alpha", "lambda")] <- NULL
+      training$hyperparameters <- list(ncomp = final$tuning$selected$ncomp)
+    }
     final$tuning$ids <- ids
     final$tuning$seed <- as.integer(seed)
     fitted <- .new_warm_start_model(schema, final$preprocessing, final$coefficients, final$intercept,
       final$outcome, training, calibration = final$calibration, tuning = final$tuning,
       validation = list(method = "nested_cv", outer_folds = as.integer(outer_folds),
         inner_folds = as.integer(inner_folds), predictions = predictions, folds = records,
-        metrics = metrics, warnings = warnings))
-    .warm_start_format3(fitted, cv_plan, final$engine_payload)
+        metrics = metrics, warnings = warnings),
+      format_version = if (engine == "glmnet") 1L else 3L,
+      cv_plan = cv_plan, engine_payload = final$engine_payload)
+    if (engine == "glmnet") .warm_start_format3(fitted, cv_plan, final$engine_payload) else fitted
   }), warning = function(w) warnings <<- c(warnings, conditionMessage(w)))
   model$validation$warnings <- warnings
   .validate_warm_start_model(model)
@@ -231,11 +258,11 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
 }
 
 .warm_start_train_cv <- function(x, theta, inner_folds, alpha_grid, lambda_rule,
-                                  foldid = NULL, engine = "glmnet") {
+                                  foldid = NULL, engine = "glmnet", control = NULL) {
   outcome <- .warm_start_outcome_fit(theta)
   z <- .warm_start_outcome_apply(theta, outcome)
   if (is.null(foldid)) foldid <- .warm_start_folds(theta, inner_folds)
-  tuning <- .warm_start_engine_tune(engine, x, z, foldid, alpha_grid, lambda_rule)
+  tuning <- .warm_start_engine_tune(engine, x, z, foldid, alpha_grid, lambda_rule, control)
   calibration <- .warm_start_calibration_fit(tuning$selected$oof, z)
   preprocessing <- tuning$reference_preprocessing
   payload <- .warm_start_engine_refit(engine, .warm_start_preprocess_apply(x, preprocessing), z,

@@ -183,6 +183,12 @@
     },
     {
       "@type": "SoftwareApplication",
+      "identifier": "pls",
+      "name": "pls",
+      "sameAs": "https://CRAN.R-project.org/package=pls"
+    },
+    {
+      "@type": "SoftwareApplication",
       "identifier": "purrr",
       "name": "purrr",
       "provider": {

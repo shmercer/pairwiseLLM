@@ -198,6 +198,38 @@ changed. Test prefixes 0114, 3107 and 9104 are used by this phase.
 
 ## V2 feature contract
 
+### Phase 4 PLS implementation
+
+PLS is now an optional development engine (`pls` in Suggests); the public default
+remains glmnet. Only `engine_control$ncomp` is accepted for PLS. NULL/empty controls
+use the default grid; explicit candidates are sorted unique positive integers
+no greater than ten. Explicit glmnet-only arguments fail on PLS.
+
+`warm_start_pls.R` fits explicit `kernelpls` with `scale=FALSE`,
+`validation="none"`, and centering. Every context stores a common grid bounded
+by its context-refit and all inner-training matrices, using centered non-LAPACK
+QR with tolerance 1e-7, p, n-1 and ten. Failed candidates are never omitted.
+Weighted MSE/SE and numerical ties retain the locked formulas, and the 1-SE
+selection favors fewer components. Shared orchestration still owns context
+outcome scaling, split-local preprocessing, calibration and outer validation.
+
+Full PLS tuning records `ncomp_requested`, `ncomp_grid`, per-fit `bounds`, all
+candidate OOF predictions and fold losses in `traces`, and selected OOF evidence.
+The PLS audit validator reconstructs losses, weighted summaries, choices and
+calibration; shared validation checks every outer record against the CV plan.
+Stored ranks are checked against n/p and grid bounds, but independently
+recomputing ranks requires the original feature table, which is not stored.
+This is an integrity/audit contract, not an authenticity guarantee.
+
+Format 3 records `training$hyperparameters$ncomp` and no invented alpha/lambda.
+The payload remains `type="linear"` with retained-feature-ordered coefficients
+and `Ymeans - Xmeans %*% beta`. Full/reduced validation, prediction and coefficient
+inspection require no PLS namespace. Reduction keeps the final grid/settings,
+compact CV identity, deployment parameters and labeled validation summaries;
+it drops rank records, candidate/selected OOF rows and outer fold evidence.
+The legacy glmnet projection remains unchanged; PLS never impersonates a legacy
+glmnet model to bypass its validation. RBF-SVR remains reserved for Phase 5.
+
 V1 CSV SHA-256 remains
 `1414573759c302dc24e9041cfe2eb084fb4be1fac1fd26440b2011d4f9a736f7`.
 Preserve v1 CSV, inventory, audit evidence, locks and golden fixtures. No new

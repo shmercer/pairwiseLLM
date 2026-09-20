@@ -56,16 +56,18 @@
   invisible(x)
 }
 
-.validate_warm_start_development <- function(model) {
+.validate_warm_start_development <- function(model, engine = "glmnet") {
   invalid <- function() rlang::abort("Invalid warm-start nested validation contract.")
   n <- model$training$n
   t <- model$tuning
-  .validate_warm_start_tuning(t, n)
+  validate_tuning <- if (engine == "glmnet") .validate_warm_start_tuning else .validate_warm_start_pls_tuning
+  validate_tuning(t, n)
   if (!identical(.warm_start_ids(t$ids), t$ids) || length(t$ids) != n ||
       !.warm_start_number(t$seed, 0, .Machine$integer.max) || t$seed != floor(t$seed) ||
       !identical(model$preprocessing, t$reference_preprocessing) ||
-      !identical(model$training$alpha, t$selected$alpha) ||
-      !identical(model$training$lambda, t$selected$lambda) ||
+      (engine == "glmnet" && (!identical(model$training$alpha, t$selected$alpha) ||
+        !identical(model$training$lambda, t$selected$lambda))) ||
+      (engine == "pls" && !identical(model$training$hyperparameters, list(ncomp = t$selected$ncomp))) ||
       !.warm_start_audit_equal(model$calibration,
         .warm_start_calibration_fit(t$oof$raw_prediction, t$oof$observed))) invalid()
   v <- model$validation
@@ -87,13 +89,14 @@
     train <- which(p$fold != fold)
     test <- which(p$fold == fold)
     if (!is.list(record)) invalid()
-    .validate_warm_start_tuning(record$tuning, length(train))
+    validate_tuning(record$tuning, length(train))
     .validate_warm_start_outcome(record$outcome)
     .validate_warm_start_preprocess(record$preprocessing)
     .validate_warm_start_calibration(record$calibration)
     if (!identical(record$train_ids, t$ids[train]) || !identical(record$test_ids, t$ids[test]) ||
-        !identical(record$tuning$alpha_grid, t$alpha_grid) ||
-        !identical(record$tuning$lambda_rule, t$lambda_rule) ||
+        (engine == "glmnet" && (!identical(record$tuning$alpha_grid, t$alpha_grid) ||
+          !identical(record$tuning$lambda_rule, t$lambda_rule))) ||
+        (engine == "pls" && !identical(record$tuning$ncomp_requested, t$ncomp_requested)) ||
         !identical(max(record$tuning$foldid), v$inner_folds) ||
         !identical(record$preprocessing, record$tuning$reference_preprocessing) ||
         !.warm_start_audit_equal(record$outcome, .warm_start_outcome_fit(theta[train])) ||

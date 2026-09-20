@@ -53,15 +53,19 @@ Defaults to 41 values from ridge to lasso in increments of 0.025.}
 \item{lambda_rule}{Deployment rule: \code{"lambda.1se"} (default) or expert override
 \code{"lambda.min"}. The rule applies to outer models and the final model alike.}
 
-\item{engine}{Fitting engine. Default \code{"glmnet"}; \code{"pls"} and \code{"svr_rbf"}
-are reserved and currently fail explicitly.}
+\item{engine}{Fitting engine: default \code{"glmnet"} or \code{"pls"}. \code{"svr_rbf"}
+remains reserved and fails explicitly. Explicit \code{alpha_grid} or \code{lambda_rule}
+arguments are accepted only for glmnet.}
 
 \item{cv_plan}{Optional \code{\link[=make_warm_start_cv_plan]{make_warm_start_cv_plan()}} object with exactly matching
 task, ordered IDs and outcomes. Omitted seed/fold arguments defer to the plan;
 explicitly conflicting arguments fail. A supplied plan is never regenerated.}
 
-\item{engine_control}{Reserved engine controls. For glmnet use \code{alpha_grid}
-and \code{lambda_rule}; nonempty engine controls fail.}
+\item{engine_control}{For PLS, an optional named list containing \code{ncomp}, a
+vector of unique positive integer candidate component counts, at most 10.
+Every candidate must be legal in every required inner fit and context refit.
+The default uses all counts from one through the common legal maximum in
+each tuning context. For glmnet use \code{alpha_grid} and \code{lambda_rule} instead.}
 }
 \value{
 A portable \link{pairwiseLLM_warm_model} with deployment preprocessing,
@@ -70,7 +74,9 @@ outer raw/calibrated predictions, transformed held-out outcomes, validation
 metrics and warnings. Audit records include item IDs and outcomes but no raw
 training texts. Each outer record includes its tuning, scaling, preprocessing,
 calibration, hyperparameters and nonzero coefficient count. Final tuning
-metadata is separate from outer validation. No glmnet fit is retained.
+metadata is separate from outer validation. No backend fit is retained.
+PLS coefficients and \code{Ymeans - Xmeans \%*\% beta} reproduce backend predictions
+on the stored preprocessed predictor scale without requiring \code{pls} at deployment.
 }
 \description{
 A warm-start model predicts relative writing quality before pairwise comparisons.
@@ -104,6 +110,18 @@ ties favor the largest penalty. Alpha selection compares CV error at each
 alpha's lambda minimum and favors smaller alpha in a tie. The default selected
 penalty is the largest lambda within one SE of that alpha's minimum error.
 
+PLS uses the optional \code{pls} package with explicit \code{method = "kernelpls"},
+\code{scale = FALSE}, \code{validation = "none"}, and centering. Preprocessing remains
+owned by this package. Each tuning context uses a common component grid bounded
+by every inner training matrix and the context refit: centered QR rank at
+tolerance 1e-7, retained predictor count, training row count minus one, and 10.
+Explicit candidates are never silently dropped. Weighted MSE and SE follow
+the rules above; minimum-error ties and eligible 1-SE choices favor fewer
+components. Nonfinite or degenerate fits fail with context, without fallback.
+All candidate OOF predictions, fold losses, rank bounds and selection evidence
+are retained. Stored rank bounds are checked for consistency; recomputing rank
+itself requires the original feature table, which is not stored in the model.
+
 OOF (out-of-fold) predictions are predictions for rows excluded from their
 corresponding coefficient fit. Calibration regresses standardized outcomes on
 selected-hyperparameter OOF predictions using ordinary least squares. Those same
@@ -117,7 +135,7 @@ are recorded as NA with reasons, without an identity-calibration fallback.
 After outer validation, full-data tuning and OOF calibration precede the final
 all-row coefficient refit. Raw and calibrated predictions use within-task
 standardized units, not original BTL units. They are not Bayesian prior SDs.
-glmnet and withr are required only for model development; Python is required only
+The selected engine package and withr are required only for model development; Python is required only
 for the text-input path. This function never installs software or downloads data.
 }
 \examples{

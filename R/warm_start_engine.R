@@ -1,18 +1,25 @@
 # Engine boundaries leave shared preprocessing, scales, folds and calibration in
 # the CV orchestrator. New backends must implement these same numeric boundaries.
 .warm_start_engine_control <- function(engine, control) {
+  if (engine == "pls") return(.warm_start_pls_control(control))
   if (engine != "glmnet") rlang::abort(paste0("Engine '", engine, "' is not yet implemented."))
   if (!is.null(control) && (!is.list(control) || length(control))) {
     rlang::abort("glmnet does not accept nonempty `engine_control`; use alpha_grid and lambda_rule.")
   }
 }
 
-.warm_start_engine_tune <- function(engine, x, z, foldid, alpha_grid, lambda_rule) {
+.warm_start_engine_tune <- function(engine, x, z, foldid, alpha_grid, lambda_rule, control = NULL) {
+  if (engine == "pls") return(.warm_start_pls_tune(x, z, foldid, control))
   .warm_start_engine_control(engine, NULL)
   .warm_start_tune(x, z, foldid, alpha_grid, lambda_rule)
 }
 
 .warm_start_engine_refit <- function(engine, x, z, selected) {
+  if (engine == "pls") {
+    return(.warm_start_cv_context(paste("PLS context refit, ncomp", selected$ncomp), function() {
+      .warm_start_pls_payload(.warm_start_pls_fit(x, z, selected$ncomp), selected$ncomp, colnames(x))
+    }))
+  }
   .warm_start_engine_control(engine, NULL)
   fit <- .warm_start_glmnet_fit(x, z, selected$alpha, selected$lambda)
   coefficients <- as.matrix(fit$beta)[colnames(x), 1]
@@ -21,7 +28,7 @@
 }
 
 .validate_warm_start_engine_payload <- function(payload, engine, retained) {
-  if (!identical(engine, "glmnet") || !is.list(payload) ||
+  if (!.warm_start_string(engine) || !engine %in% c("glmnet", "pls") || !is.list(payload) ||
       !identical(names(payload), c("type", "coefficients", "intercept")) ||
       !identical(payload$type, "linear") || !.warm_start_portable(payload) ||
       !.warm_start_named_numeric(payload$coefficients, retained) ||
