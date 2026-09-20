@@ -112,7 +112,8 @@ make_warm_start_prior <- function(predictions, ids = NULL, prior_sd = 0.5) {
       rlang::abort("Model predictions require supported format and learned oof_linear calibration.")
     }
   }
-  if (identical(meta$artifact_type, "ensemble")) {
+  algorithm <- identical(meta$artifact_type, "algorithm_ensemble")
+  if (algorithm || identical(meta$artifact_type, "ensemble")) {
     columns <- attr(x, "component_columns", exact = TRUE)
     if (!identical(meta$format_version, 1L) || !identical(meta$weighting, "equal") ||
         !is.character(columns) || length(columns) < 2L || is.null(names(columns)) ||
@@ -122,6 +123,16 @@ make_warm_start_prior <- function(predictions, ids = NULL, prior_sd = 0.5) {
     }
     .warm_start_component_names(names(columns))
     lapply(meta$components, check_model)
+    if (algorithm) {
+      identity <- meta$cv_identity
+      .validate_warm_start_algorithm_identity(identity)
+      if (!all(vapply(meta$components, function(m) {
+        identical(m$format_version, 3L) && identical(m$task_id, identity$task_id) &&
+          identical(m$cv_digest, identity$digest)
+      }, logical(1)))) {
+        rlang::abort("Algorithm ensemble predictions require shared format-3 task and CV identity.")
+      }
+    }
     lapply(x[, columns, drop = FALSE], .warm_start_prior_numeric, n = nrow(x), label = "components")
     .warm_start_prior_numeric(x$ensemble_mean, nrow(x), "ensemble means")
     .warm_start_prior_numeric(x$ensemble_sd, nrow(x), "ensemble disagreement SDs")

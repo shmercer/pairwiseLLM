@@ -128,7 +128,8 @@
 
 #' Prepare metadata or a summary-only warm-start artifact
 #'
-#' @param model A valid [pairwiseLLM_warm_model] or [ensemble_warm_start_models()] ensemble.
+#' @param model A valid [pairwiseLLM_warm_model], [ensemble_warm_start_models()]
+#'   ensemble, or [ensemble_warm_start_algorithms()] ensemble.
 #' @param metadata Named list with optional scalar character `name`, `version`,
 #'   `domain`, `notes`, `license`, `prepared_at`, `preparation_package_version`,
 #'   and `extraction_provenance` (a named character vector). Supplied fields replace
@@ -154,7 +155,9 @@
 #'
 #' Ensembles retain ensemble format 1; audit omission recursively reduces each
 #' component, preserving its format generation and existing metadata. Supplied
-#' preparation metadata applies to the ensemble only.
+#' preparation metadata applies to the ensemble only. Same-task algorithm ensembles
+#' also retain their common CV identity and honest ensemble validation summaries,
+#' dropping ensemble row evidence and marking the artifact summary-only.
 #'
 #' No raw texts are added. Review task labels, notes, domain, and provenance for
 #' restricted information before bundling; this is not a general anonymizer.
@@ -206,7 +209,9 @@ prepare_warm_start_model <- function(model, metadata = list(), omit_audit = FALS
   existing[absent] <- defaults[absent]
   model$metadata <- existing
   if (omit_audit) {
-    if (inherits(model, "pairwiseLLM_warm_ensemble")) {
+    if (inherits(model, "pairwiseLLM_warm_algorithm_ensemble")) {
+      model <- .warm_start_algorithm_reduced(model)
+    } else if (inherits(model, "pairwiseLLM_warm_ensemble")) {
       model$components <- lapply(model$components, .warm_start_reduced)
     } else {
       model <- .warm_start_reduced(model)

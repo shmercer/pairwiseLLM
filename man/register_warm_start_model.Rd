@@ -13,7 +13,8 @@ remove_warm_start_model(name)
 list_warm_start_models(source = c("all", "user", "bundled"))
 }
 \arguments{
-\item{model}{A valid \link{pairwiseLLM_warm_model} or \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}} ensemble.}
+\item{model}{A valid \link{pairwiseLLM_warm_model}, \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}}
+ensemble, or \code{\link[=ensemble_warm_start_algorithms]{ensemble_warm_start_algorithms()}} ensemble.}
 
 \item{name}{Model registry name, separate from the assessment task ID.}
 
@@ -27,10 +28,13 @@ a tibble with name, source, path, version, format_version, schema, target, n,
 calibration, audit_status, size_bytes, metadata, and validation. Metadata and
 validation are list columns; unspecified metadata versions are NA character values.
 Additional columns \code{artifact_type} and \code{component_count} distinguish ensembles.
-\code{engine}, \code{engine_version}, and \code{component_engines} identify fitting algorithms.
-Ensemble n is NA (no pooled sample size), calibration is component_oof_linear,
+\code{engine}, \code{engine_version}, \code{component_engines}, and \code{component_engine_versions}
+identify fitting algorithms and backend versions. Cross-task ensemble n is NA
+(no pooled sample size), calibration is component_oof_linear,
 and audit status is full, summary_only, or mixed. Ensemble validation contains
-named component metrics, not ensemble-performance estimates.
+named component metrics, not ensemble-performance estimates. Same-task algorithm
+rows have \code{artifact_type = "algorithm_ensemble"}, the common training n, and
+honest ensemble outer-validation metrics. Their audit is full or summary_only.
 }
 \description{
 Register, inspect, or remove user warm-start models
@@ -94,16 +98,19 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 \code{\link[=save_warm_start_model]{save_warm_start_model()}}, \code{\link[=load_warm_start_model]{load_warm_start_model()}}, \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}}
 
 Other adaptive warm start:
+\code{\link[=ensemble_warm_start_algorithms]{ensemble_warm_start_algorithms()}},
 \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}},
 \code{\link[=extract_warm_start_features]{extract_warm_start_features()}},
 \code{\link[=fit_warm_start_model]{fit_warm_start_model()}},
 \code{\link[=make_warm_start_cv_plan]{make_warm_start_cv_plan()}},
 \code{\link[=make_warm_start_prior]{make_warm_start_prior()}},
 \code{\link{pairwiseLLM_warm_model}},
+\code{\link[=predict.pairwiseLLM_warm_algorithm_ensemble]{predict.pairwiseLLM_warm_algorithm_ensemble()}},
 \code{\link[=predict.pairwiseLLM_warm_ensemble]{predict.pairwiseLLM_warm_ensemble()}},
 \code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}},
 \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}},
 \code{\link[=save_warm_start_model]{save_warm_start_model()}},
+\code{\link[=summary.pairwiseLLM_warm_algorithm_ensemble]{summary.pairwiseLLM_warm_algorithm_ensemble()}},
 \code{\link[=summary.pairwiseLLM_warm_ensemble]{summary.pairwiseLLM_warm_ensemble()}},
 \code{\link[=summary.pairwiseLLM_warm_predictions]{summary.pairwiseLLM_warm_predictions()}},
 \code{\link[=warm_start_coefficients]{warm_start_coefficients()}},

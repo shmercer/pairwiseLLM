@@ -26,7 +26,8 @@
   if (!identical(name, metadata$name) || !identical(basename(path), paste0(name, ".rds"))) {
     rlang::abort("Bundled name must be canonical and match the artifact filename.")
   }
-  ensemble <- inherits(model, "pairwiseLLM_warm_ensemble")
+  algorithm <- inherits(model, "pairwiseLLM_warm_algorithm_ensemble")
+  ensemble <- algorithm || inherits(model, "pairwiseLLM_warm_ensemble")
   components <- if (ensemble) model$components else stats::setNames(list(model), name)
   records <- lapply(seq_along(components), function(i) {
     component <- components[[i]]
@@ -39,11 +40,18 @@
     if (identical(component$format_version, 3L)) record$cv_identity <- component$cv_identity
     record
   })
-  list(name = name, filename = basename(path), metadata = metadata,
-    artifact_type = if (ensemble) "ensemble" else "model", format_version = model$format_version,
+  out <- list(name = name, filename = basename(path), metadata = metadata,
+    artifact_type = if (algorithm) "algorithm_ensemble" else if (ensemble) "ensemble" else "model",
+    format_version = model$format_version,
     schema = model$schema, target = model$outcome$definition, built_at = built_at,
     size_bytes = unname(file.info(path)$size),
     checksum = list(algorithm = "md5", value = unname(tools::md5sum(path))), components = records)
+  if (algorithm) {
+    out$cv_identity <- model$cv_identity
+    out$audit_status <- model$audit_status
+    out$validation <- model$validation
+  }
+  out
 }
 
 .warm_start_bundle_manifest <- function(root) {

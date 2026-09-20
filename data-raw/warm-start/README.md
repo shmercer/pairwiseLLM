@@ -10,6 +10,11 @@ scoped coverage; `check-issue-259-svr-deployment.R` checks full/reduced v1/v2 SV
 deployment in a fresh process without fitting backends. These scripts use only
 synthetic data and do not install packages.
 
+For Phase 6 verification, `check-issue-259-phase6.R` collects focused tests and
+scoped coverage; `check-issue-259-algorithm-deployment.R` checks full/reduced v1/v2
+same-task algorithm ensembles without glmnet, pls, e1071 or reticulate. These
+checks use synthetic inputs only. The handoff records current evidence and limits.
+
 The existing feature inventory, audit, frozen environment lock, and explicit setup
 script remain the Task 01 sources of evidence. Installed extraction setup instructions
 are in `inst/python/README.md`. The frozen schema is not re-curated by model building.

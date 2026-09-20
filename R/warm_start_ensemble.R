@@ -137,7 +137,9 @@ ensemble_warm_start_models <- function(...) {
 }
 
 .validate_warm_start_artifact <- function(model) {
-  if (inherits(model, "pairwiseLLM_warm_ensemble")) {
+  if (inherits(model, "pairwiseLLM_warm_algorithm_ensemble")) {
+    .validate_warm_start_algorithm_ensemble(model)
+  } else if (inherits(model, "pairwiseLLM_warm_ensemble")) {
     .validate_warm_start_ensemble(model)
   } else {
     .validate_warm_start_model(model)
@@ -146,6 +148,7 @@ ensemble_warm_start_models <- function(...) {
 }
 
 .warm_start_audit_status <- function(model) {
+  if (inherits(model, "pairwiseLLM_warm_algorithm_ensemble")) return(model$audit_status)
   if (!inherits(model, "pairwiseLLM_warm_ensemble")) {
     if (identical(model$format_version, 3L)) return(model$audit_status)
     return(if (model$format_version == 2L) "summary_only" else "full")

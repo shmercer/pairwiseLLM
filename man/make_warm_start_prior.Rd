@@ -54,16 +54,19 @@ prior$prior_mean
 \code{\link[=fit_bayes_btl_mcmc]{fit_bayes_btl_mcmc()}}, \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}}
 
 Other adaptive warm start:
+\code{\link[=ensemble_warm_start_algorithms]{ensemble_warm_start_algorithms()}},
 \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}},
 \code{\link[=extract_warm_start_features]{extract_warm_start_features()}},
 \code{\link[=fit_warm_start_model]{fit_warm_start_model()}},
 \code{\link[=make_warm_start_cv_plan]{make_warm_start_cv_plan()}},
 \code{\link{pairwiseLLM_warm_model}},
+\code{\link[=predict.pairwiseLLM_warm_algorithm_ensemble]{predict.pairwiseLLM_warm_algorithm_ensemble()}},
 \code{\link[=predict.pairwiseLLM_warm_ensemble]{predict.pairwiseLLM_warm_ensemble()}},
 \code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}},
 \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}},
 \code{\link[=register_warm_start_model]{register_warm_start_model()}},
 \code{\link[=save_warm_start_model]{save_warm_start_model()}},
+\code{\link[=summary.pairwiseLLM_warm_algorithm_ensemble]{summary.pairwiseLLM_warm_algorithm_ensemble()}},
 \code{\link[=summary.pairwiseLLM_warm_ensemble]{summary.pairwiseLLM_warm_ensemble()}},
 \code{\link[=summary.pairwiseLLM_warm_predictions]{summary.pairwiseLLM_warm_predictions()}},
 \code{\link[=warm_start_coefficients]{warm_start_coefficients()}},
