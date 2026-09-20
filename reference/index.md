@@ -162,6 +162,8 @@ for human labels and interpretation.
 
 ## Advanced: predictive warm start
 
+- [`ensemble_warm_start_algorithms()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_algorithms.md)
+  : Average algorithms trained on the same task
 - [`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md)
   : Combine independently trained warm-start models
 - [`extract_warm_start_features()`](https://shmercer.github.io/pairwiseLLM/reference/extract_warm_start_features.md)
@@ -175,6 +177,8 @@ for human labels and interpretation.
 - [`summary(`*`<pairwiseLLM_warm_model>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/pairwiseLLM_warm_model.md)
   [`print(`*`<pairwiseLLM_warm_model>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/pairwiseLLM_warm_model.md)
   : Portable task-specific warm-start models
+- [`predict(`*`<pairwiseLLM_warm_algorithm_ensemble>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_algorithm_ensemble.md)
+  : Predict with a same-task algorithm ensemble
 - [`predict(`*`<pairwiseLLM_warm_ensemble>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_ensemble.md)
   : Predict with an equal-weight warm-start ensemble
 - [`predict(`*`<pairwiseLLM_warm_model>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_model.md)
@@ -188,6 +192,9 @@ for human labels and interpretation.
 - [`save_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/save_warm_start_model.md)
   [`load_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/save_warm_start_model.md)
   : Save or load a portable warm-start model
+- [`summary(`*`<pairwiseLLM_warm_algorithm_ensemble>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_algorithm_ensemble.md)
+  [`print(`*`<pairwiseLLM_warm_algorithm_ensemble>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_algorithm_ensemble.md)
+  : Inspect a same-task algorithm ensemble
 - [`summary(`*`<pairwiseLLM_warm_ensemble>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_ensemble.md)
   [`print(`*`<pairwiseLLM_warm_ensemble>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_ensemble.md)
   : Inspect a warm-start ensemble

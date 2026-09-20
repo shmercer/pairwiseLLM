@@ -497,8 +497,78 @@ without `e1071`. Support-vector matrix dimensions and feature order are
 preserved. These numeric vectors remain deployment data after audit
 omission.
 [`warm_start_coefficients()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_coefficients.md)
-raises a typed error for SVR or a cross-task ensemble containing SVR
-because nonlinear kernel weights are not linear feature coefficients.
+raises a typed error for SVR or any ensemble containing SVR because
+nonlinear kernel weights are not linear feature coefficients.
+
+### Same-task algorithm ensembles
+
+Use
+[`ensemble_warm_start_algorithms()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_algorithms.md)
+to combine algorithms fitted to the same ordered rows, exact outcomes,
+schema and CV plan. The constructor needs full format-3 component
+audits; reduced or legacy models cannot establish this evidence. Each
+explicitly named component keeps its preprocessing and learned OOF
+calibration.
+
+``` r
+
+algorithm_ensemble <- ensemble_warm_start_algorithms(
+  elastic_net = model, pls = pls_model, svr_rbf = svr_model)
+summary(algorithm_ensemble)$validation$metrics
+#> $pearson_r
+#> [1] 0.7784944
+#> 
+#> $squared_pearson_r
+#> [1] 0.6060536
+#> 
+#> $spearman_rho
+#> [1] 0.7357143
+#> 
+#> $rmse
+#> [1] 0.7729942
+#> 
+#> $mae
+#> [1] 0.5784689
+#> 
+#> $calibration_intercept
+#> [1] -0.2936553
+#> 
+#> $calibration_slope
+#> [1] 2.214274
+#> 
+#> $undefined_reasons
+#> character(0)
+algorithm_predictions <- predict(algorithm_ensemble, features)
+algorithm_prior <- make_warm_start_prior(algorithm_predictions, prior_sd = 0.5)
+stopifnot(identical(algorithm_prior$scores, algorithm_predictions$ensemble_mean))
+algorithm_deployment <- prepare_warm_start_model(algorithm_ensemble, omit_audit = TRUE)
+stopifnot(identical(predict(algorithm_deployment, features)$ensemble_mean,
+  algorithm_predictions$ensemble_mean))
+```
+
+Deployment is the arithmetic mean **after each component’s
+calibration**. Honest ensemble validation instead averages aligned
+outer-held-out calibrated predictions and compares them with matching
+outer-training-context standardized observations. It never averages
+component metrics or evaluates full-fit predictions as holdouts. There
+are no learned weights, ensemble recalibration or automatic component
+selection. Reported calibration intercept/slope in validation metrics
+are diagnostics only.
+
+`ensemble_sd` is between-algorithm disagreement, not Bayesian prior
+uncertainty;
+[`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md)
+controls prior SD. The resulting prior, or the ensemble artifact itself
+via `warm_start_model`, works with existing BTL/TrueSkill modes.
+Prediction, save/load, preparation, registry and bundle metadata support
+both full and reduced artifacts. Reduced summaries retain their honest
+validation origin but cannot reconstruct omitted row evidence. Numeric
+SVR support vectors remain necessary deployment data. Coefficient
+inspection raises the typed nonlinear error when SVR is present. In
+contrast,
+[`ensemble_warm_start_models()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_models.md)
+below retains independently sourced cross-task semantics and reports
+only component validation metrics.
 
 Every applicable training fold learns missingness filtering (\>20%
 missing or all missing), median imputation, constant/near-zero-variance
@@ -788,13 +858,13 @@ precomputed features only.
 
 # Empty in this release. Future reviewed bundles use the same public prediction path.
 list_warm_start_models(source = "bundled")
-#> # A tibble: 0 × 18
-#> # ℹ 18 variables: name <chr>, source <chr>, path <chr>, version <chr>,
+#> # A tibble: 0 × 19
+#> # ℹ 19 variables: name <chr>, source <chr>, path <chr>, version <chr>,
 #> #   format_version <int>, schema <chr>, target <chr>, n <int>,
 #> #   calibration <chr>, audit_status <chr>, size_bytes <dbl>,
 #> #   artifact_type <chr>, component_count <int>, engine <chr>,
-#> #   engine_version <chr>, component_engines <list>, metadata <list>,
-#> #   validation <list>
+#> #   engine_version <chr>, component_engines <list>,
+#> #   component_engine_versions <list>, metadata <list>, validation <list>
 ```
 
 When bundles become available, load an explicit advertised name with

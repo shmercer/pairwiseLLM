@@ -170,8 +170,8 @@ stopping criteria.
   — run, inspect, save, and resume an adaptive within-set ranking.
 - [Guide: Adaptive Warm
   Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html)
-  — train, store, ensemble, and choose predictive BTL/TrueSkill
-  initialization.
+  — train and store models, combine cross-task models or same-task
+  algorithms, and choose predictive BTL/TrueSkill initialization.
 - [Design: Adaptive
   Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html)
   — understand the within-set selection, refitting, and stopping design.

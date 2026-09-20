@@ -4,6 +4,16 @@
 
 ### Improvements
 
+- Added
+  [`ensemble_warm_start_algorithms()`](https://shmercer.github.io/pairwiseLLM/reference/ensemble_warm_start_algorithms.md)
+  for equal-weight same-task predictions with honest aligned outer-CV
+  validation. Full/reduced portable artifacts work with storage,
+  registries, bundles and BTL/TrueSkill warm starts. Component
+  disagreement remains diagnostic; cross-task ensemble semantics are
+  unchanged
+  ([\#259](https://github.com/shmercer/pairwiseLLM/issues/259), Phase
+  6).
+
 - Added optional RBF-SVR warm starts with the fixed epsilon/grid
   conventions, split-specific gamma, weighted nested-CV tuning and
   deterministic 1-SE selection. Complete format-3 audits and portable
