@@ -44,13 +44,31 @@ jobs:
           extra-repositories: "https://stan-dev.r-universe.dev"
 
       - uses: r-lib/actions/setup-r-dependencies@v2
+        if: runner.os != 'macOS'
         with:
-          # Work around the distributional macOS binary archive that pak cannot
-          # unpack. Remove the source override once that binary installs again.
-          extra-packages: |
-            any::rcmdcheck
-            ${{ runner.os == 'macOS' && 'distributional=?source' || '' }}
+          extra-packages: any::rcmdcheck
           needs: check
+
+      # pak cannot unpack some Zstandard-compressed Sonoma binaries yet.
+      # R's native installer supports them when the zstd tool is available.
+      - name: Install macOS archive support
+        if: runner.os == 'macOS'
+        run: brew install zstd
+
+      - name: Install macOS dependencies with the native R installer
+        if: runner.os == 'macOS'
+        shell: Rscript {0}
+        env:
+          TAR: /usr/bin/tar
+        run: |
+          options(install.packages.check.source = "no")
+          install.packages(c("remotes", "rcmdcheck", "sessioninfo"), type = "both")
+          remotes::install_deps(
+            dependencies = c("Depends", "Imports", "LinkingTo", "Suggests", "Config/Needs/check"),
+            upgrade = "never",
+            type = "both"
+          )
+          sessioninfo::session_info()
 
       - uses: r-lib/actions/check-r-package@v2
         with:
