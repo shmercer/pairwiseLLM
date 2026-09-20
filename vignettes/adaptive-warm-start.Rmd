@@ -27,7 +27,7 @@ or both. They give the models initial information about relative writing quality
 Observed comparisons still drive the assessment; a warm start does not guarantee
 better rankings or fewer comparisons.
 
-The first example uses only numeric scores. The longer example uses fabricated
+The first example uses numeric scores and the optional `withr` package. The longer example uses fabricated
 texts, already extracted features, and invented outcomes. It runs locally when
 the optional `glmnet`, `pls`, `e1071`, and `withr` packages are installed. Otherwise,
 its training and dependent chunks are skipped. Python is needed only to repeat
@@ -62,7 +62,7 @@ With no predictive input, the default mode is `cold`. With predictive input,
 the default is `btl_only`. Request `both` explicitly to initialize both models.
 The names below connect each starting score to its item:
 
-```{r destination-modes}
+```{r destination-modes, eval=requireNamespace("withr", quietly=TRUE)}
 locations <- c(a = -1, b = -0.25, c = 0.25, d = 1)
 numeric_prior <- make_warm_start_prior(locations)
 historical <- adaptive_rank_start(names(locations), seed = 17L,

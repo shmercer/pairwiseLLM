@@ -266,6 +266,8 @@ testthat::test_that("smoke resume restores authoritative static metadata", {
 
   run_smoke()
   corrupted <- utils::read.csv(output_path, stringsAsFactors = FALSE)
+  runtime_version <- corrupted$package_version
+  testthat::expect_true(all(grepl("^[0-9]+[.][0-9]+[.][0-9]+$", runtime_version)))
   corrupted$package_version <- "03-01-01"
   corrupted$test_date <- "09-05-26"
   corrupted$catalog_checked_on <- "09-05-26"
@@ -273,7 +275,7 @@ testthat::test_that("smoke resume restores authoritative static metadata", {
 
   run_smoke()
   resumed <- utils::read.csv(output_path, stringsAsFactors = FALSE)
-  testthat::expect_true(all(resumed$package_version == "1.3.1"))
+  testthat::expect_identical(resumed$package_version, runtime_version)
   testthat::expect_true(all(grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", resumed$test_date)))
   testthat::expect_true(all(resumed$catalog_checked_on == "2026-09-05"))
 })
