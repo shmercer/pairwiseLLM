@@ -4,8 +4,8 @@
 #' before collecting pairwise comparisons. This function lists the frozen
 #' predictor definitions; it does not extract features or require Python.
 #'
-#' @param schema A single schema identifier. Currently only
-#'   `"writing_features_v1"` is supported.
+#' @param schema A single schema identifier: `"writing_features_v1"` (default,
+#'   20 features) or `"writing_features_v2"` (46 features).
 #'
 #' @return A tibble with one row per feature in fixed predictor order. Columns:
 #'   * `schema`, `position`, `feature`: version, integer order, and canonical name.
@@ -20,6 +20,12 @@
 #' Version 1 describes English writing using TextDescriptives and a supplementary
 #' textstat readability measure. The schema records definitions, not evidence
 #' of predictive validity for any particular writing population.
+#' Version 2 retains all version 1 features first, followed by 26 source-audited
+#' scalar additions in inventory order. It adds counts, medians, syllable
+#' summaries, AUX/DET/PART proportions, dependency variation, second-order
+#' coherence and readability measures using the same pinned Python environment.
+#' Conceptual overlap is intentional; selection did not use training outcomes.
+#' Inspect the installed `python/schema-writing-v2.json` for its CSV SHA-256.
 #'
 #' `upstream_entropy_per_token` divides TextDescriptives' entropy by the number
 #' of all spaCy tokens, including punctuation and whitespace tokens. This is an
@@ -42,10 +48,13 @@ warm_start_feature_schema <- function(schema = "writing_features_v1") {
   if (!is.character(schema) || length(schema) != 1L || is.na(schema) || !nzchar(schema)) {
     rlang::abort("`schema` must be one nonmissing, nonempty character string.")
   }
-  if (!identical(schema, "writing_features_v1")) {
-    rlang::abort(paste0("Unknown feature schema '", schema, "'. Use 'writing_features_v1'."))
+  files <- c(writing_features_v1 = "feature-schema-writing-v1.csv",
+    writing_features_v2 = "feature-schema-writing-v2.csv")
+  if (!schema %in% names(files)) {
+    rlang::abort(paste0("Unknown feature schema '", schema,
+      "'. Use 'writing_features_v1' or 'writing_features_v2'."))
   }
-  path <- system.file("warm-start", "feature-schema-writing-v1.csv", package = "pairwiseLLM")
+  path <- system.file("warm-start", unname(files[[schema]]), package = "pairwiseLLM")
   .read_warm_start_feature_schema(path, schema)
 }
 

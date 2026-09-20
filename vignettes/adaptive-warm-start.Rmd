@@ -160,6 +160,25 @@ per-word perplexity nor conventional Shannon entropy, and does not use filtered
 `n_tokens` as its denominator. Tokenization, zero-vector coherence and undefined
 values follow the frozen upstream contract; upgrades cannot silently redefine v1.
 
+For the expanded representation, select `schema = "writing_features_v2"` in
+`warm_start_python_status()`, `extract_warm_start_features()` and
+`fit_warm_start_model()`. It retains the 20 v1 fields first and adds 26 audited
+scalar features using the same Python environment. Counts, medians, syllable
+summaries, AUX/DET/PART proportions, second-order coherence and readability
+measures intentionally retain conceptual overlap. Undefined values remain missing
+for training-split preprocessing. Inspect its definitions without Python:
+
+```{r schema-v2}
+schema_v2 <- warm_start_feature_schema("writing_features_v2")
+schema_v2[c("position", "feature", "family")]
+```
+
+Schema hashes are recorded in the installed `python/schema-writing-v2.json`.
+Keep the schema attribute with cached features and select the same schema when
+fitting. Saved v1 models continue to require v1 features. A reusable CV plan can
+be shared between representations of the same ordered items/outcomes; the plan
+does not select a representation or establish predictive validity.
+
 ## Develop one model per assessment
 
 The following deterministic data are fabricated to illustrate the public interface.

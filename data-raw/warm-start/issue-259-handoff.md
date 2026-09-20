@@ -10,8 +10,8 @@ Do not use study outcomes to choose features, tuning, engines or exceptions.
 | Phase | Scope | Branch (prefix feat/259-) | PR base | Status |
 |---|---|---|---|---|
 | 1 | Architecture, frozen regression evidence, handoffs | 01-architecture | master | Complete; PR #260 merged to reviewed master |
-| 2 | CV plans, format 3, compatible glmnet and single-model interoperability | 02-cv-engines | master (Phase 1 merged) | Complete; PR #261, review/CI pending |
-| 3 | Audited v2 schema commit, extraction and audit | 03-writing-v2 | Phase 2 branch | Not started |
+| 2 | CV plans, format 3, compatible glmnet and single-model interoperability | 02-cv-engines | master (Phase 1 merged) | Complete; PR #261 merged, all seven checks passed |
+| 3 | Audited v2 schema commit, extraction and audit | 03-writing-v2 | master (Phase 2 merged) | Complete; PR #262, review/CI pending |
 | 4 | PLS backend and portable linear deployment | 04-pls | Phase 3 branch | Not started |
 | 5 | RBF-SVR backend and portable kernel deployment | 05-svr-rbf | Phase 4 branch | Not started |
 | 6 | Same-task algorithm ensemble and all consumers | 06-algorithm-ensemble | Phase 5 branch | Not started |
@@ -412,7 +412,7 @@ No study files were inspected or changed. Corrective delivery and final CI statu
 are recorded in the PR and the local handoffs; the Phase3 prompt below requires
 using the verified final head, including this remediation.
 
-## Next-thread prompt
+## Historical Phase 3 entry prompt
 
 Start Phase 3 in a new thread using this exact prompt:
 
@@ -444,4 +444,245 @@ You are authorized to implement, run focused checks, commit, push, and create/
 update the Phase 3 PR. Do not merge, tag, publish, or start Phase 4. Update durable
 and local handoffs with exact Git/PR state, validation and coverage evidence,
 and provide the exact Phase 4 new-thread prompt before ending.
+```
+
+
+## Phase 3 completion report — 2026-09-19 (Pacific)
+
+Implementation and focused validation complete on `feat/259-03-writing-v2`;
+[PR #262](https://github.com/shmercer/pairwiseLLM/pull/262) targets `master`.
+Verified parent/base is Phase 2's reviewed squash merge
+`a36f518b593120d6a869b3803a6fa3193e84d830`. PR #261 was MERGED at
+2026-09-19T23:41:51Z from `fa141068b9a63a537405ec61df756c2ae33be8e0`, with all
+seven checks SUCCESS and no subsequent review comments/reviews in its PR record.
+Its merge tree equals the verified head exactly. Fetched master remains at that
+merge; Phase 2's final R-devel four-entry RNG-provenance correction is preserved.
+Package remains **1.5.1**, R >=4.4; no dependencies changed.
+
+Schema/inventory-only commit: `8e619881f3d9b2f9eda8c59c082a3e8b78107fac`.
+Metadata wording follow-up: `3509f26623e6d3eaf7f0303da8bebd11973907d4`.
+Implementation commit described by this report:
+`c09d0eae1dd4bef085660aeb643730505dbc1cdf`.
+CI test-only correction: `94202aa897fef7210ea13bd14929592d7ed0b073`.
+This report is a later commit; the final delivery head is recorded in the PR and
+local handoffs. No merge, tag, release, branch deletion or Phase 4 work occurred.
+
+### Behavior, schema and preserved contracts
+
+- Materialized the approved 46-row schema and full 116-candidate inventory before
+  extraction consumers. All v1 rows/definitions appear first with only schema ID
+  changed, then the 26 approved additions in inventory order. CSV LF attributes
+  preserve byte hashes across checkout platforms. No outcome-driven selection.
+- Final schema SHA-256:
+  `d9f271abae50eeac6d06a9ab7304309932174d54193ba8fb26348e9e886b2492`.
+  Inventory SHA-256:
+  `845466af5118606c433595abac277dffc9c390d9d6fdf004cb57830351f522b4`.
+  Both are recorded in installed `inst/python/schema-writing-v2.json`, which
+  references the immutable environment manifest and additionally hashes the
+  textstat public wrapper. All 73 original upstream source hashes match locally.
+- R dispatch selects the explicit v1/v2 CSV; decoding retains requested fields
+  instead of filtering against v1. V2 validates added count types and upstream
+  permitted missingness without imputing. V1 remains the default, with unchanged
+  extraction/validation semantics. Response schema mismatches still fail.
+- Python validates the selected CSV hash, enables TD readability only for v2,
+  and calls each whitelisted textstat method with its pinned defaults. Missing
+  token/syllable/readability summaries and short-document coherence stay missing.
+  Valid zeros and negative Linsear–Write values remain unchanged. No new Python
+  package, resource, network call or installation is introduced.
+- Audited nuances: TD syllables count hyphens in lowercased Pyphen inserted forms;
+  textstat removes hyphens without splitting, and unique difficult-word forms
+  preserve case although classification lowercases. Counts differ from readability
+  occurrences. Character-denominator algebraic exclusions explicitly retain their
+  punctuation-dependent domain; inherited entropy transform exclusions do not
+  claim unconditional reconstruction from normalized entropy. Membership unchanged.
+- Existing CV/statistical code, shared-plan identity, format-3 full/reduced
+  contracts, old formats 1/2 and cross-task ensemble semantics are preserved.
+  Synthetic v2 models reuse exactly the v1 plan and round-trip through prediction,
+  reduction, storage, registry, coefficients and warm-prior construction.
+
+### Exact changed files
+
+The two schema commits and implementation commit contain 25 files:
+
+```text
+.gitattributes
+NEWS.md
+R/warm_start_feature_schema.R
+R/warm_start_features.R
+data-raw/warm-start/README.md
+data-raw/warm-start/audit_feature_schema_v2.py
+data-raw/warm-start/check-issue-259-phase3.R
+data-raw/warm-start/feature-inventory-v2.csv
+data-raw/warm-start/feature-schema-v2-audit.md
+data-raw/warm-start/issue-259-design.md
+data-raw/warm-start/issue-259-phase3-coverage-ledger.csv
+data-raw/warm-start/issue-259-phase3-test-results.csv
+inst/python/README.md
+inst/python/pairwisellm_warm_start.py
+inst/python/schema-writing-v2.json
+inst/warm-start/feature-schema-writing-v2.csv
+man/extract_warm_start_features.Rd
+man/warm_start_feature_schema.Rd
+man/warm_start_python_status.Rd
+tests/testthat/README.md
+tests/testthat/fixtures/warm-start-features-v2/README.md
+tests/testthat/fixtures/warm-start-features-v2/golden.json
+tests/testthat/test-0100-warm-start-feature-schema.R
+tests/testthat/test-0115-warm-start-writing-v2.R
+vignettes/adaptive-warm-start.Rmd
+```
+
+This reporting commit adds this tracked handoff (26 total phase files). Local
+ignored records: `tasklists/issue-259/03-writing-v2.md`,
+`tasklists/issue-259/00-index.md`, `tasklists/00-index.md`. Ignore policy unchanged.
+User-owned untracked `data-raw/studies/` was not inspected or modified. No other
+uncommitted work belongs to this task at delivery; no active foreground process.
+
+### Exact checks and current evidence
+
+- `/home/sterett/.virtualenvs/pairwisellm-writing-v1/bin/python
+  data-raw/warm-start/audit_feature_schema_v2.py --record`: created independent
+  upstream-only evidence for 16 synthetic texts; refuses existing destinations.
+  New fixture SHA-256:
+  `3864d653e0e85c0768c709a2c1d515e9d4fd125949b02d481fefc3bc8fb784d7`.
+  No original golden values were updated.
+- Same interpreter, `data-raw/warm-start/audit_feature_schema_v2.py`:
+  **5 test blocks passed**. Source/schema/inventory hashes, direct upstream
+  agreement, explicit formula/default oracles, missingness, deterministic repeated
+  protocol, exact extracted v1-prefix equality, status and corruption guards.
+- Same interpreter, `tests/testthat/fixtures/warm-start-features/test_backend.py
+  inst/python`: **9 original test blocks passed**, including immutable v1 golden
+  values, resource/download guards and malformed response checks. Both Python
+  suites display the existing spaCy/Click deprecation notice during stack import;
+  no new runtime warning was introduced.
+- Initial `PAIRWISELLM_TEST_PYTHON=/home/sterett/.virtualenvs/pairwisellm-writing-v1/bin/python
+  Rscript --vanilla -e 'testthat::test_local(filter="^0115-", reporter="summary",
+  stop_on_failure=TRUE, stop_on_warning=TRUE)'` passed. The later coverage run
+  includes a strengthened assertion of the stored all-missing removal reason.
+- Final `PAIRWISELLM_TEST_PYTHON=/home/sterett/.virtualenvs/pairwisellm-writing-v1/bin/python
+  Rscript --vanilla data-raw/warm-start/check-issue-259-phase3.R /tmp/issue259-phase3`:
+  explicit filter `^(010[0-3]|011[3-5]|3107|9104)-`, instrumented via
+  `covr::environment_coverage(asNamespace("pairwiseLLM"), ...)`:
+  **9 files, 42 blocks, 992 passed expectations, 0 failures/errors/warnings/skips**.
+  Real pinned extraction was enabled for both schema paths. Per-file totals:
+  0100 72; 0101 47; 0102 122; 0103 86; frozen 0113 148; 0114 151;
+  new 0115 290; 3107 67; 9104 9. Durable CSV ledgers retain exact results.
+- Current scoped whole-file R coverage: `warm_start_feature_schema.R` **36/36
+  (100%)**, `warm_start_features.R` **83/83 (100%)**; additionally exercised
+  unchanged bridge `warm_start_python.R` **77/77 (100%)**. These are current
+  measurements, not inherited percentages or a package-wide coverage claim.
+- `devtools::document(quiet=TRUE)` regenerated exactly the three Rd topics above.
+  NAMESPACE, DESCRIPTION/Collate, dependency/version metadata unchanged. All three
+  topics parsed with `tools::parse_Rd()`; source/generated diffs inspected.
+- `pkgload::load_all(quiet=TRUE); rmarkdown::render(
+  "vignettes/adaptive-warm-start.Rmd", output_dir="/tmp/issue259-phase3-vignette",
+  intermediates_dir="/tmp/issue259-phase3-vignette", quiet=TRUE)` passed.
+  The new schema-inspection example executes offline; existing model examples run.
+- Targeted `lintr::lint()` on both changed R files, both changed/new tests and the
+  new R collector: zero lints. Final `lintr::lint_package()`: zero lints.
+  `git diff --check`, staged diff check, 179 unique numeric test prefixes, and
+  `git check-attr text eol` for all three hashed CSV resources passed.
+- Exact Git comparison with reviewed base confirms unchanged original v1 schema,
+  inventory, environment/value manifests, dependency locks, golden/legacy fixtures
+  and CV/format-3/preprocessing source. V1 CSV SHA remains
+  `1414573759c302dc24e9041cfe2eb084fb4be1fac1fd26440b2011d4f9a736f7`;
+  frozen legacy RDS SHA remains
+  `77fe4871283d7d938334d99438d5d54f0554c85f02d35ff1f6ba7c1a446433dc`.
+
+Temporary supplemental evidence is `/tmp/issue259-v2-{r-tests,python-final,doc-lint}.log`,
+`/tmp/issue259-v1-python.log`, `/tmp/issue259-phase3-{coverage,vignette-lint}.log`,
+plus scoped coverage RDS/line CSV. Durable results above are sufficient if these
+logs disappear. All commands completed before handoff.
+
+Initial findings resolved: source-wording corrections were committed separately
+before consumer validation, without membership/default changes. The first Python
+formula oracle used exact equality for a differently ordered LIX arithmetic
+expression (difference 1.4e-14); replaced formula assertions with 12-decimal
+agreement. Direct backend/upstream equality and repeat identity remain exact.
+No implementation regression or scientific contract redesign was required.
+Independent read-only source audit and implementation/test review found no
+remaining blocker. No full-suite/check/package-wide covr, production fitting,
+provider calls, MCMC, dependency installation or release action was run.
+
+Maintainer review, PR CI completion and eventual Phase 7 full package/platform
+validation remain pending. Real Python validation is Linux x86_64 only; successful
+R CI on other platforms does not attest to those Python stacks. Phase 4 must
+preserve both schema hashes/order, all frozen evidence, explicit CV partitions,
+fold-local preprocessing/outcome scales, weighted tuning/SE/tie rules, OOF
+calibration and format-3 audits. Do not inspect study outcomes or edit study files.
+
+### CI test-dependency correction
+
+Initial PR checks at implementation head `c09d0ea` passed pkgdown and coverage,
+but all five R-CMD-check jobs failed. The inspected
+[Ubuntu release log](https://github.com/shmercer/pairwiseLLM/actions/runs/35477626099/job/105989493863)
+reported exactly one check warning: the new test used undeclared `digest`.
+Its complete package tests passed (18,503 expectations, 47 skips, no test
+failures/warnings); this is CI evidence, not a local full-suite run.
+
+Corrected only test0115 and the durable test ledger in commit
+`94202aa897fef7210ea13bd14929592d7ed0b073`. Use the existing base-R MD5 byte
+check on every supported R, additionally computing SHA-256 through tools when
+available. R added tools::sha256sum in 4.5.0; discover it dynamically to retain
+R4.4 compatibility. The Python runtime/audit always checks actual SHA-256, and
+R independently checks frozen manifest/fixture SHA identities. No dependency
+was added and no hash, fixture, runtime or statistical contract changed.
+
+The focused command with PAIRWISELLM_TEST_PYTHON enabled and
+`testthat::test_local(filter="^0115-", reporter="summary", stop_on_failure=TRUE,
+stop_on_warning=TRUE)` passed **5 blocks/291 expectations**, no failures/errors/
+warnings/skips, followed by zero test-file lints. Test results are appended to
+the CSV under `ci-test-dependency-fix`; original rows carry `phase3-coverage`.
+Coverage remains current because no runtime source changed. Do not add duplicate
+follow-up expectations to the original 992 as though they were distinct tests.
+
+The combined test/reporting command subsequently used the wrong test-directory
+argument for a tools check. Corrected standalone command:
+`x <- tools:::.check_packages_used_in_tests(".", "tests/testthat");
+stopifnot(!any(lengths(x[c("others", "imports", "data", "parse_errors")])),
+!nzchar(x$methods_message))` passed with **zero findings**. An intermediate
+summary assertion had also counted the empty methods-message string as a
+finding; corrected after inspecting the returned structure. These were reporting
+harness errors, not test failures. Logs:
+`/tmp/issue259-phase3-ci-fix.log` and
+`/tmp/issue259-phase3-test-dependencies.log`. Final diff checks passed.
+Replacement CI was triggered by the corrected push; final status is recorded
+in the local delivery handoff and PR. No known unresolved local defect remains.
+
+## Next-thread prompt
+
+Start Phase 4 in a new thread using this exact prompt:
+
+```text
+Implement Phase 4 (PLS) of issue #259 in shmercer/pairwiseLLM.
+
+Phase 3 PR: https://github.com/shmercer/pairwiseLLM/pull/262
+Branch: feat/259-03-writing-v2; base master at a36f518b593120d6a869b3803a6fa3193e84d830.
+Implementation: c09d0eae1dd4bef085660aeb643730505dbc1cdf.
+CI test-dependency correction: 94202aa897fef7210ea13bd14929592d7ed0b073.
+Use the verified final PR head, including its later handoff commit and any review fixes.
+
+Read AGENTS.md, tasklists/00-index.md, tasklists/issue-259/04-pls.md,
+data-raw/warm-start/issue-259-design.md, data-raw/warm-start/issue-259-handoff.md,
+and the complete issue #259. Reconstruct missing ignored tasklists from the
+tracked design/handoff. Verify current Git/PR/CI state and reconcile review fixes.
+Create feat/259-04-pls from the verified Phase 3 head, targeting its branch.
+If Phase 3 has merged, use its reviewed merge and target master instead.
+
+Implement optional pls in Suggests, explicit kernelpls without backend scaling/CV,
+a legal common component grid across every inner fit and context refit bounded
+by rank/p/n-1 and capped at 10 (rank tolerance 1e-7), weighted MSE/SE and 1-SE
+selection favoring fewer components. Preserve complete tuning/OOF/outer audits,
+contextual degeneracy errors and portable linear coefficients/intercept.
+Verify deterministic partitions, leakage boundaries, legal grids, backend
+prediction equivalence, full/reduced artifacts and deployment without pls.
+
+Preserve v1/v2 extraction, hashes/order and frozen fixtures, reusable CV plans,
+format-3 interoperability and every statistical contract. V2 schema SHA-256:
+d9f271abae50eeac6d06a9ab7304309932174d54193ba8fb26348e9e886b2492.
+Do not inspect study outcomes or modify unrelated data-raw/studies/.
+
+You are authorized to implement, test, commit, push, and create/update the Phase 4
+PR. Do not merge, tag, publish, or start Phase 5. Update durable/local handoffs and
+provide the exact Phase 5 new-thread prompt. Package remains 1.5.1 until Phase 7.
 ```

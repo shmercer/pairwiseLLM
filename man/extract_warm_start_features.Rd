@@ -18,7 +18,8 @@ returned as character strings; blank IDs are not allowed.}
 \item{texts}{A nonempty character vector of the same length as \code{ids}, without
 missing values. Empty strings are allowed. Text is never trimmed or normalized.}
 
-\item{schema}{The frozen schema identifier, currently \code{"writing_features_v1"}.}
+\item{schema}{The frozen schema identifier: \code{"writing_features_v1"} (default)
+or \code{"writing_features_v2"}.}
 
 \item{python}{Optional path to an existing Python interpreter. With \code{NULL}, use
 an existing environment selected through reticulate. Automatic environment
@@ -26,7 +27,7 @@ creation is disabled. Conflicting interpreter selections require correction
 or a fresh R session; this function never switches an initialized interpreter.}
 }
 \value{
-A tibble with character \code{item_id} and the 20 numeric features in schema
+A tibble with character \code{item_id} and the 20 (v1) or 46 (v2) numeric features in schema
 order, in the requested ID order. The \code{warm_start_schema} attribute records
 the schema identifier. Document-level undefined values remain \code{NA}.
 }
@@ -50,6 +51,12 @@ is divided by all spaCy tokens, including punctuation and whitespace, rather
 than the filtered \code{n_tokens} feature. Undefined values and valid zeros follow
 \code{\link[=warm_start_feature_schema]{warm_start_feature_schema()}}. Zero-vector coherence preserves upstream values
 and warnings. No feature is imputed or replaced with zero.
+Version 2 enables TextDescriptives readability and preserves undefined
+filtered-token summaries and second-order coherence (fewer than three
+sentences). textstat methods use their audited defaults, including first-100-word
+Linsear--Write and unique difficult-word counts. Valid negative readability
+scores remain unchanged. Model preprocessing learns missing-value handling
+from each training split.
 }
 \examples{
 \dontrun{

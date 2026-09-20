@@ -7,7 +7,8 @@
 warm_start_python_status(schema = "writing_features_v1", python = NULL)
 }
 \arguments{
-\item{schema}{The frozen schema identifier, currently \code{"writing_features_v1"}.}
+\item{schema}{The frozen schema identifier: \code{"writing_features_v1"} (default)
+or \code{"writing_features_v2"}.}
 
 \item{python}{Optional path to an existing Python interpreter. With \code{NULL}, use
 an existing environment selected through reticulate. Automatic environment

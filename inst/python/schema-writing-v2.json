@@ -1,0 +1,9 @@
+{
+  "schema": "writing_features_v2",
+  "schema_sha256": "d9f271abae50eeac6d06a9ab7304309932174d54193ba8fb26348e9e886b2492",
+  "inventory_sha256": "845466af5118606c433595abac277dffc9c390d9d6fdf004cb57830351f522b4",
+  "environment": "audit-environment.json",
+  "source_sha256": {
+    "textstat/textstat.py": "921f36a6fc7ab23c9f13edc3f4933468f79d86f6c5e769b30a98fb34c27a4b98"
+  }
+}

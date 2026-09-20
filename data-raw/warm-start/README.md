@@ -9,6 +9,15 @@ The existing feature inventory, audit, frozen environment lock, and explicit set
 script remain the Task 01 sources of evidence. Installed extraction setup instructions
 are in `inst/python/README.md`. The frozen schema is not re-curated by model building.
 
+The separate [v2 audit](feature-schema-v2-audit.md) and
+`feature-inventory-v2.csv` document all 116 candidate decisions for the approved
+46-feature expansion. With the same pinned interpreter, run
+`python data-raw/warm-start/audit_feature_schema_v2.py` for offline source/hash,
+synthetic value, formula, missingness, dispatch and v1 compatibility checks.
+Its `--record` mode refuses to overwrite existing v2 evidence. The historical
+v1 audit and fixtures remain unchanged. The model builder below retains its
+existing v1/glmnet contract.
+
 Task 07 adds `build-bundled-models.R`. Sourcing it only defines functions. It uses public
 training, ensemble, preparation, save/load, and prediction APIs. Internal helpers are
 used only for the shared manifest contract and path checks. No workflow runs during
