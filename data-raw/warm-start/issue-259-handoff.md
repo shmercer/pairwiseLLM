@@ -13,13 +13,13 @@ Do not use study outcomes to choose features, tuning, engines or exceptions.
 | 2 | CV plans, format 3, compatible glmnet and single-model interoperability | 02-cv-engines | master (Phase 1 merged) | Complete; PR #261 merged, all seven checks passed |
 | 3 | Audited v2 schema commit, extraction and audit | 03-writing-v2 | master (Phase 2 merged) | Complete; PR #262 merged, all seven checks passed |
 | 4 | PLS backend and portable linear deployment | 04-pls | master (Phase 3 merged) | Complete; PR #263 merged, all seven reviewed-head checks passed |
-| 5 | RBF-SVR backend and portable kernel deployment | 05-svr-rbf | master (Phase 4 merged) | Local implementation/verification complete; PR/CI handoff follows |
-| 6 | Same-task algorithm ensemble and all consumers | 06-algorithm-ensemble | Phase 5 branch | Not started |
+| 5 | RBF-SVR backend and portable kernel deployment | 05-svr-rbf | master (Phase 4 merged) | Complete; PR #264 merged, all seven reviewed-head checks passed |
+| 6 | Same-task algorithm ensemble and all consumers | 06-algorithm-ensemble | master (Phase 5 merged) | Local implementation/verification complete; PR/CI handoff follows |
 | 7 | End-to-end docs, full validation, 1.5.2 | 07-docs-quality | Phase 6 branch | Not started |
 
 Fetch and verify actual upstream/PR state before each phase. Build a child branch
 from the verified predecessor tip, or its reviewed merge result if already merged.
-Open a draft phase PR after local checks and handoff. For Phase 5, the user
+Open a draft phase PR after local checks and handoff. For Phases 5 and 6, the user
 explicitly requires ending the turn once the PR is open and waiting for them to
 return CI results; do not poll CI or wait for checks before that handoff. Use small commits
 and Refs #259; only the final completed PR targets master with a closing reference.
@@ -1078,9 +1078,238 @@ full/reduced deployment, typed nonlinear coefficient errors, existing cross-task
 semantics and prior SD authority. The new same-task algorithm ensemble remains
 assigned exclusively to Phase6. The exact prompt follows in the linked file.
 
-## Next-thread prompt
+## Historical Phase 6 entry prompt
 
 Use [the exact Phase 6 new-thread prompt](issue-259-phase6-new-thread.md), after
 reconciling the latest user-supplied Phase5 CI/review results. It identifies this
 implementation SHA and requires the verified final reporting head or reviewed
 merge, preserving subsequent fixes. No Phase6 work has started in this thread.
+
+## Phase 6 completion report — 2026-09-19 Pacific
+
+Implementation and focused local verification complete on
+`feat/259-06-algorithm-ensemble`, targeting `master`.
+Implementation commit: `007d297e370f1818a5ebf17fc2732e335ecd8aa0`.
+Base: reviewed Phase 5 merge `73dc4aedecbb8db9b9bc2a0110babcc7d724996e`.
+Package remains **1.5.1**, R **>=4.4**. The reporting commit follows this
+implementation; final reporting head belongs in PR/local records, not its own
+tracked content.
+
+### Predecessor reconciliation and scope
+
+PR #264 is MERGED from final Phase 5 head
+`00593a31faa05a7a2212c5b098637656066fb8c3`, including implementation `5f9eb32` and
+reporting commit. Its merge and final-head trees are identical. Local handoffs
+record the user's CI-success feedback, all seven successful reviewed-head checks,
+explicit merge authorization, and Phase 5 branch cleanup. These records supersede
+the earlier tracked pending-CI snapshot. No later review/inline/general comments
+or corrective commit were present. Local/remote master matched the reviewed merge
+before branching and before delivery. No CI polling was performed in Phase 6.
+
+The existing ignored tasklists were present; reconstruction was unnecessary.
+Their Phase 6 boilerplate about readiness after checks is superseded by the
+current user's instruction to stop immediately once the PR is open. Open a draft
+PR as the final external action after checks, handoffs and reporting push; return
+its URL and final head without polling. CI and maintainer review remain pending.
+No merge, tag, publication, version bump or Phase 7 work is included.
+
+### Delivered behavior and decisions
+
+- New exported `ensemble_warm_start_algorithms(...)` and standalone
+  `pairwiseLLM_warm_algorithm_ensemble`, format 1,
+  `artifact_type="algorithm_ensemble"`. Constructor accepts at least two explicit,
+  unique, nonblank named model objects; load references before construction.
+  Names/order are retained. Distinct engine labels are not required.
+- Constructor accepts only fully audited format-3 models with learned OOF-linear
+  calibration, exact task/ordered ID/outcome/schema/CV-plan identity, and matching
+  outer IDs/folds/observations. Full component validators remain authoritative.
+  Nested, legacy, reduced and incompatible inputs fail contextually.
+- Deployment is the equal arithmetic mean of each component's calibrated
+  prediction. Honest validation independently averages aligned calibrated outer
+  holdouts against their matching outer-context observed outcomes; it is not an
+  average of component metrics or an evaluation of full-fit predictions.
+  `method="nested_cv"` and `source="aligned_outer_calibrated"` label its origin.
+  Full validators reconstruct ensemble means/metrics. Exact IDs/folds/observed
+  rows remain exact; recomputed means/metrics use existing numeric audit tolerance
+  for floating-point portability. Validation calibration slope/intercept are
+  diagnostics, not applied ensemble recalibration.
+- Summary-only reduction preserves compact identity and labeled validation
+  summaries while omitting row/plan evidence. Components reduce individually;
+  typed copying preserves SVR support-vector dimensions and feature order.
+  Mixed audit states and promotion/reconstruction from reduced evidence fail.
+  Support vectors are deployment data, not an anonymization guarantee.
+- Prediction/print/summary/coefficients, lossless storage, preparation, registry,
+  bundles and prior/adaptive initialization interoperate. Linear coefficient
+  inspection is component-wise; SVR raises
+  `pairwiseLLM_warm_nonlinear_coefficients` naming the component. Registry rows
+  expose common n, honest ensemble metrics and named engine/version information;
+  bundle records add ensemble identity/summary only for the new artifact type.
+- Prior parsing validates compact identity and component metadata, uses the
+  calibrated mean, and preserves prior centering/SD authority. SD across
+  components remains diagnostic. BTL/TrueSkill/both initialization and saved-prior
+  resume authority work through existing generic consumers; adaptive algorithms
+  were not modified.
+- Cross-task duplicate/component-only semantics, legacy formats 1/2, all three
+  engines, locked grids/weighted losses/SE/ties, context scales, OOF calibration,
+  shared partitions and three/four-entry R4.7 RNG provenance remain unchanged.
+  No fitting dependency, extraction/schema, frozen fixture, provider, Phase B,
+  production model or study data change is included.
+
+### Exact changed files
+
+The implementation commit contains these 45 files:
+
+```text
+DESCRIPTION
+NAMESPACE
+NEWS.md
+R/warm_start_algorithm_ensemble.R
+R/warm_start_bundle.R
+R/warm_start_coefficients.R
+R/warm_start_ensemble.R
+R/warm_start_model_artifact.R
+R/warm_start_model_io.R
+R/warm_start_model_registry.R
+R/warm_start_predictions.R
+R/warm_start_prior.R
+README.Rmd
+README.md
+data-raw/warm-start/README.md
+data-raw/warm-start/check-issue-259-algorithm-deployment.R
+data-raw/warm-start/check-issue-259-phase6.R
+data-raw/warm-start/issue-259-design.md
+data-raw/warm-start/issue-259-phase6-coverage-ledger.csv
+data-raw/warm-start/issue-259-phase6-test-results.csv
+man/ensemble_warm_start_algorithms.Rd
+man/ensemble_warm_start_models.Rd
+man/extract_warm_start_features.Rd
+man/fit_warm_start_model.Rd
+man/make_warm_start_cv_plan.Rd
+man/make_warm_start_prior.Rd
+man/pairwiseLLM_warm_model.Rd
+man/predict.pairwiseLLM_warm_algorithm_ensemble.Rd
+man/predict.pairwiseLLM_warm_ensemble.Rd
+man/predict.pairwiseLLM_warm_model.Rd
+man/prepare_warm_start_model.Rd
+man/register_warm_start_model.Rd
+man/save_warm_start_model.Rd
+man/summary.pairwiseLLM_warm_algorithm_ensemble.Rd
+man/summary.pairwiseLLM_warm_ensemble.Rd
+man/summary.pairwiseLLM_warm_predictions.Rd
+man/warm_start_coefficients.Rd
+man/warm_start_feature_schema.Rd
+man/warm_start_python_status.Rd
+tests/testthat/README.md
+tests/testthat/helper-warm-start-algorithm.R
+tests/testthat/test-0118-warm-start-algorithm-ensemble.R
+tests/testthat/test-3108-warm-start-algorithm-artifacts.R
+tests/testthat/test-9105-warm-start-algorithm-workflow.R
+vignettes/adaptive-warm-start.Rmd
+```
+
+This report additionally updates the tracked handoff and adds the exact
+`data-raw/warm-start/issue-259-phase7-new-thread.md` prompt. Ignored local Phase 6,
+issue index and main index are updated; ignore policy is unchanged. The only
+user-owned untracked content is `data-raw/studies/`, neither inspected nor modified.
+
+### Focused verification and current coverage
+
+Environment: R4.6.1, glmnet5.0, pls2.9.0, e1071 1.7.17, withr3.0.3,
+testthat3.3.2, covr3.6.5, pkgload1.5.3, lintr3.4.0, roxygen2 8.1.0,
+rmarkdown2.32. No package installation/download was needed.
+
+Final scoped command:
+
+```sh
+PAIRWISELLM_TEST_PYTHON=/home/sterett/.virtualenvs/pairwisellm-writing-v1/bin/python Rscript --vanilla data-raw/warm-start/check-issue-259-phase6.R /tmp/issue259-phase6-final
+```
+
+Explicit filter `^(0031|010[0-9]|011[0-8]|310[0-278]|510[015]|910[0-245])-`,
+under `covr::environment_coverage(asNamespace("pairwiseLLM"), ...)`:
+**33 files, 168 blocks, 6,653 passed expectations; zero failures/errors/warnings/skips**. Both pinned Python extraction paths ran. Results come from
+this one completed final run, not a sum of repeated attempts. Durable per-test and
+per-file CSVs accompany this report.
+
+All 27 measured warm-start R files exceed 95% scoped line coverage. Current
+new/materially affected runtime files:
+
+| File | Covered lines | Percent |
+|---|---:|---:|
+| `R/warm_start_algorithm_ensemble.R` | 117/117 | 100.00% |
+| `R/warm_start_bundle.R` | 76/76 | 100.00% |
+| `R/warm_start_coefficients.R` | 35/36 | 97.22% |
+| `R/warm_start_ensemble.R` | 85/87 | 97.70% |
+| `R/warm_start_model_artifact.R` | 111/111 | 100.00% |
+| `R/warm_start_model_registry.R` | 94/97 | 96.91% |
+| `R/warm_start_predictions.R` | 54/54 | 100.00% |
+| `R/warm_start_prior.R` | 133/139 | 95.68% |
+
+The new ensemble file is 117/117 = 100% line coverage. This is scoped whole-file
+coverage, not package-wide or 100% branch coverage. The committed ledger retains
+all measured files; unchanged defensive paths account for remaining uncovered
+lines in existing files. Documentation-only model I/O also measured 37/37.
+
+
+Additional checks:
+
+- `testthat::test_local(filter="^(0118|3108|9105)-", reporter="summary", stop_on_failure=TRUE, stop_on_warning=TRUE)`:
+  focused new core/artifact/workflow checks passed after correcting test mock scope;
+  final expanded assertions are included in the scoped run above.
+- Same `test_local` command with `filter="^0031-"`: passed after adding public
+  examples to the three new topics. With `filter="^0026-"`: documentation/README
+  contracts passed; one existing historical-tasklist export-audit skip because
+  its old tasklist evidence is unavailable. This separate skip is not hidden in
+  the scoped run's totals.
+- `Rscript --vanilla data-raw/warm-start/check-issue-259-algorithm-deployment.R`:
+  current full/reduced v1/v2 ensembles round-tripped, predicted, registered and
+  produced priors in a fresh process with glmnet/pls/e1071/reticulate unavailable
+  and unloaded. SVR matrix payloads and typed coefficient errors passed. This is
+  Linux library-isolation evidence, not a cross-platform isolation claim.
+- `devtools::document(quiet=TRUE)`: generated new API/method topics, updated affected
+  topics and family links, NAMESPACE and DESCRIPTION Collate. Generated diffs
+  inspected; Rd parses passed. The new public example extracted with
+  `tools::Rd2ex()` executed successfully. Optional engine guards remain in examples.
+- `pkgload::load_all(quiet=TRUE); rmarkdown::render("vignettes/adaptive-warm-start.Rmd", output_dir="/tmp/issue259-phase6-vignette", intermediates_dir="/tmp/issue259-phase6-vignette", quiet=TRUE)`:
+  passed with the guarded synthetic algorithm-ensemble example executed.
+- `pkgload::load_all(quiet=TRUE); rmarkdown::render("README.Rmd", output_options=list(html_preview=FALSE), quiet=TRUE)`:
+  passed; source hash updated and unrelated generated whitespace normalized back
+  to existing output. Source/output contracts passed.
+- `lintr::lint_package()`: zero lints after corrections; final changed validator/
+  regression lint also clean. `tools:::.check_packages_used_in_tests(".", "tests/testthat")`:
+  no findings. Version/R-floor and 184 unique test-prefix checks passed.
+  `git diff --check` and staged diff checks passed.
+- Exact Git comparisons preserve schemas/Python/frozen fixtures and CV/PLS/SVR
+  implementation/auditors. V1 SHA-256:
+  `1414573759c302dc24e9041cfe2eb084fb4be1fac1fd26440b2011d4f9a736f7`;
+  v2: `d9f271abae50eeac6d06a9ab7304309932174d54193ba8fb26348e9e886b2492`;
+  legacyRDS: `77fe4871283d7d938334d99438d5d54f0554c85f02d35ff1f6ba7c1a446433dc`.
+
+### Findings, limits and next-phase requirements
+
+The first focused artifact test left a backend-blocking mock active into its next
+fixture fit; changed the test to a scoped `with_mocked_bindings()` block. An initial
+coverage collection found three missing-example documentation assertions; examples
+were added and verified. A subsequent collection was stopped for the independently
+reviewed portability refinement before the completed final collection above. Only
+final current CSVs support the reported totals/coverage. Roxygen initially noted
+new cross-references before their topics were generated; subsequent regeneration
+was clean. A quoting error in the new isolated-deployment harness and lint findings
+were fixed before successful checks.
+
+Independent read-only reviews found no remaining blocker. They prompted compact
+identity validation for prior provenance, explicit registry engine-version tests,
+README source/output synchronization, and tolerance for recomputed floating means
+without weakening exact identity/observed evidence. No locked scientific decision
+was changed, and there is no known unresolved implementation defect.
+
+No unfiltered devtools::test/check/package_coverage, CRAN release check, real MCMC,
+provider work, study fitting or replay was run. Synthetic evidence establishes
+implementation/compatibility, not predictive validity. Phase 7 owns full release
+checks, documentation completion and the approved version1.5.2 change. Preserve
+all scientific/artifact/legacy contracts and exact frozen hashes above; never use
+study outcomes to choose features, tuning, components or exceptions.
+
+All task-owned local verification processes are finished before PR delivery.
+No next phase started. CI and maintainer review await user feedback without polling.
+Use [the exact Phase 7 new-thread prompt](issue-259-phase7-new-thread.md), verifying
+the final reporting head/review fixes or reviewed merge before branching.
