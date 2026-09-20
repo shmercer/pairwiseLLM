@@ -379,6 +379,28 @@ cross-task semantics and component-only validation, and continues accepting
 same task labels/repeated models as current tests require. Do not reconfigure
 the existing v1/glmnet maintainer model builder or fit production study models.
 
+### Phase 6 implemented representation
+
+Same-task ensembles store `artifact_type="algorithm_ensemble"`, ensemble format 1,
+`audit_status`, named ordered components, schema/features, common outcome and
+`cv_identity`, `weighting="equal"`, and validation. Full validation stores ordered
+item IDs/folds/outer-context observed values and averaged calibrated predictions;
+`method="nested_cv"`, `source="aligned_outer_calibrated"` label its origin. The
+validator rederives predictions and metrics after complete component audits.
+IDs/folds/observed rows remain exact; reconstructed means and metrics use the
+existing numeric audit tolerance to permit portable floating-point roundoff.
+Constructor arguments are model objects only; load references explicitly first.
+Component names must be explicit/unique; distinct engine labels are not required.
+
+Reduced ensembles contain only summary-only format-3 components and labeled
+ensemble validation summaries. They cannot be promoted or used as components of a
+new ensemble. Shared prediction tables retain the existing ensemble mean/SD shape
+and add compact common identity to algorithm-ensemble metadata. Prior parsing
+checks this identity structurally and against component task/CV metadata, without
+claiming to reconstruct missing row evidence. Registry rows expose common n and
+honest ensemble metrics; named component-engine versions supplement engine names.
+Legacy/cross-task record meanings and bundle JSON shapes remain unchanged.
+
 ## Verification, phase delivery and handoff
 
 See [the execution ledger](issue-259-handoff.md) for branch/PR/task status,

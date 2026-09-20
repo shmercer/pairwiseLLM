@@ -5,7 +5,7 @@
 #' calibrated warm-start models and equal-weight warm-start ensembles.
 #'
 #' @param object A calibrated `pairwiseLLM_warm_model` or
-#'   `pairwiseLLM_warm_ensemble` object.
+#'   `pairwiseLLM_warm_ensemble` or `pairwiseLLM_warm_algorithm_ensemble` object.
 #' @param ... Reserved for future extensions; must be empty.
 #'
 #' @return For an individual model, a tibble with exactly `feature`, `retained`,
@@ -109,6 +109,18 @@ warm_start_coefficients.pairwiseLLM_warm_model <- function(object, ...) {
 warm_start_coefficients.pairwiseLLM_warm_ensemble <- function(object, ...) {
   rlang::check_dots_empty()
   .validate_warm_start_ensemble(object)
+  .warm_start_ensemble_coefficients(object)
+}
+
+#' @rdname warm_start_coefficients
+#' @export
+warm_start_coefficients.pairwiseLLM_warm_algorithm_ensemble <- function(object, ...) {
+  rlang::check_dots_empty()
+  .validate_warm_start_algorithm_ensemble(object)
+  .warm_start_ensemble_coefficients(object)
+}
+
+.warm_start_ensemble_coefficients <- function(object) {
   out <- tibble::tibble(feature = object$features)
   for (name in names(object$components)) {
     component <- .warm_start_model_coefficients(object$components[[name]], component = name)

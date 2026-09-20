@@ -4,7 +4,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-<!-- README-source-md5: 6cd3feae1ffbf07c9513983d1d4ee5b2 -->
+<!-- README-source-md5: 2fce406899e2947348d57d7ada4b03a8 -->
 
 <img src="man/figures/pairwiseLLM-banner.jpg"
      alt="pairwiseLLM: comparing two writing samples" width="100%">
@@ -172,7 +172,8 @@ explain the estimators, selection rules, assumptions, and stopping criteria.
 - [Guide: Adaptive Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html) —
   run, inspect, save, and resume an adaptive within-set ranking.
 - [Guide: Adaptive Warm Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html) —
-  train, store, ensemble, and choose predictive BTL/TrueSkill initialization.
+  train and store models, combine cross-task models or same-task algorithms, and
+  choose predictive BTL/TrueSkill initialization.
 - [Design: Adaptive Pairing](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html) —
   understand the within-set selection, refitting, and stopping design.
 - [Guide: Adaptive Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.html) —

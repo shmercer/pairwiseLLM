@@ -1,6 +1,7 @@
 #' Save or load a portable warm-start model
 #'
-#' @param model A valid [pairwiseLLM_warm_model] or [ensemble_warm_start_models()] ensemble.
+#' @param model A valid [pairwiseLLM_warm_model], [ensemble_warm_start_models()]
+#'   ensemble, or [ensemble_warm_start_algorithms()] ensemble.
 #' @param path Explicit file path. Its parent must already exist when saving.
 #' @param overwrite Allow replacement of an existing artifact. Default FALSE.
 #' @param name Registered model name, mutually exclusive with `path`.
@@ -11,8 +12,10 @@
 #' Artifacts are compressed RDS objects, without an envelope or serialized glmnet
 #' engine. Legacy formats 1 (full audit) and 2 (explicit summary-only), and format
 #' 3 (explicit full or summary-only audit status), are supported independently of
-#' package version. Ensembles use their own format 1 and may contain any supported
-#' single-model format. Use [prepare_warm_start_model()] to add
+#' package version. Cross-task ensembles use their own format 1 and may contain any
+#' supported single-model format. Same-task algorithm ensembles have a distinct
+#' format-1 contract containing only format-3 components with matching audit status.
+#' Use [prepare_warm_start_model()] to add
 #' metadata or explicitly omit audit records before saving. Saving never strips
 #' records or adds timestamps. Neither loading nor prediction from precomputed
 #' features needs glmnet or Python.

@@ -7,7 +7,8 @@
 prepare_warm_start_model(model, metadata = list(), omit_audit = FALSE)
 }
 \arguments{
-\item{model}{A valid \link{pairwiseLLM_warm_model} or \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}} ensemble.}
+\item{model}{A valid \link{pairwiseLLM_warm_model}, \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}}
+ensemble, or \code{\link[=ensemble_warm_start_algorithms]{ensemble_warm_start_algorithms()}} ensemble.}
 
 \item{metadata}{Named list with optional scalar character \code{name}, \code{version},
 \code{domain}, \code{notes}, \code{license}, \code{prepared_at}, \code{preparation_package_version},
@@ -41,7 +42,9 @@ deployment data; audit omission does not anonymize them.
 
 Ensembles retain ensemble format 1; audit omission recursively reduces each
 component, preserving its format generation and existing metadata. Supplied
-preparation metadata applies to the ensemble only.
+preparation metadata applies to the ensemble only. Same-task algorithm ensembles
+also retain their common CV identity and honest ensemble validation summaries,
+dropping ensemble row evidence and marking the artifact summary-only.
 
 No raw texts are added. Review task labels, notes, domain, and provenance for
 restricted information before bundling; this is not a general anonymizer.
@@ -82,16 +85,19 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 \code{\link[=save_warm_start_model]{save_warm_start_model()}}, \code{\link[=register_warm_start_model]{register_warm_start_model()}}
 
 Other adaptive warm start:
+\code{\link[=ensemble_warm_start_algorithms]{ensemble_warm_start_algorithms()}},
 \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}},
 \code{\link[=extract_warm_start_features]{extract_warm_start_features()}},
 \code{\link[=fit_warm_start_model]{fit_warm_start_model()}},
 \code{\link[=make_warm_start_cv_plan]{make_warm_start_cv_plan()}},
 \code{\link[=make_warm_start_prior]{make_warm_start_prior()}},
 \code{\link{pairwiseLLM_warm_model}},
+\code{\link[=predict.pairwiseLLM_warm_algorithm_ensemble]{predict.pairwiseLLM_warm_algorithm_ensemble()}},
 \code{\link[=predict.pairwiseLLM_warm_ensemble]{predict.pairwiseLLM_warm_ensemble()}},
 \code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}},
 \code{\link[=register_warm_start_model]{register_warm_start_model()}},
 \code{\link[=save_warm_start_model]{save_warm_start_model()}},
+\code{\link[=summary.pairwiseLLM_warm_algorithm_ensemble]{summary.pairwiseLLM_warm_algorithm_ensemble()}},
 \code{\link[=summary.pairwiseLLM_warm_ensemble]{summary.pairwiseLLM_warm_ensemble()}},
 \code{\link[=summary.pairwiseLLM_warm_predictions]{summary.pairwiseLLM_warm_predictions()}},
 \code{\link[=warm_start_coefficients]{warm_start_coefficients()}},

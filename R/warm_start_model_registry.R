@@ -1,6 +1,7 @@
 #' Register, inspect, or remove user warm-start models
 #'
-#' @param model A valid [pairwiseLLM_warm_model] or [ensemble_warm_start_models()] ensemble.
+#' @param model A valid [pairwiseLLM_warm_model], [ensemble_warm_start_models()]
+#'   ensemble, or [ensemble_warm_start_algorithms()] ensemble.
 #' @param name Model registry name, separate from the assessment task ID.
 #' @param overwrite Explicitly replace an existing user entry. Default FALSE.
 #' @param source Which registries to list.
@@ -9,10 +10,13 @@
 #'   calibration, audit_status, size_bytes, metadata, and validation. Metadata and
 #'   validation are list columns; unspecified metadata versions are NA character values.
 #'   Additional columns `artifact_type` and `component_count` distinguish ensembles.
-#'   `engine`, `engine_version`, and `component_engines` identify fitting algorithms.
-#'   Ensemble n is NA (no pooled sample size), calibration is component_oof_linear,
+#'   `engine`, `engine_version`, `component_engines`, and `component_engine_versions`
+#'   identify fitting algorithms and backend versions. Cross-task ensemble n is NA
+#'   (no pooled sample size), calibration is component_oof_linear,
 #'   and audit status is full, summary_only, or mixed. Ensemble validation contains
-#'   named component metrics, not ensemble-performance estimates.
+#'   named component metrics, not ensemble-performance estimates. Same-task algorithm
+#'   rows have `artifact_type = "algorithm_ensemble"`, the common training n, and
+#'   honest ensemble outer-validation metrics. Their audit is full or summary_only.
 #' @details
 #' User models live in the `models` subdirectory of
 #' `tools::R_user_dir("pairwiseLLM", "data")`. Only explicit registration creates
@@ -168,21 +172,26 @@ remove_warm_start_model <- function(name) {
     else .warm_start_read_model(path)
   metadata <- model$metadata
   version <- if (is.null(metadata$version)) NA_character_ else metadata$version
-  ensemble <- inherits(model, "pairwiseLLM_warm_ensemble")
+  algorithm <- inherits(model, "pairwiseLLM_warm_algorithm_ensemble")
+  ensemble <- algorithm || inherits(model, "pairwiseLLM_warm_ensemble")
+  validation <- model$validation$metrics
+  if (ensemble && !algorithm) validation <- lapply(model$components, function(x) x$validation$metrics)
   tibble::tibble(name = name, source = source, path = path, version = version,
     format_version = model$format_version, schema = model$schema, target = model$outcome$definition,
-    n = if (ensemble) NA_integer_ else model$training$n,
+    n = if (algorithm) model$cv_identity$n else if (ensemble) NA_integer_ else model$training$n,
     calibration = if (ensemble) "component_oof_linear" else model$calibration$status,
     audit_status = .warm_start_audit_status(model),
-    artifact_type = if (ensemble) "ensemble" else "model",
+    artifact_type = if (algorithm) "algorithm_ensemble" else if (ensemble) "ensemble" else "model",
     engine = if (ensemble) NA_character_ else model$training$engine,
     engine_version = if (ensemble) NA_character_ else model$training$engine_version,
     component_engines = list(if (ensemble) vapply(model$components, function(x) x$training$engine, character(1))
       else stats::setNames(model$training$engine, "model")),
+    component_engine_versions = list(if (ensemble)
+      vapply(model$components, function(x) x$training$engine_version, character(1))
+      else stats::setNames(model$training$engine_version, "model")),
     component_count = if (ensemble) length(model$components) else 1L,
     size_bytes = unname(file.info(path)$size), metadata = list(metadata),
-    validation = list(if (ensemble) lapply(model$components, function(x) x$validation$metrics)
-      else model$validation$metrics))
+    validation = list(validation))
 }
 
 #' @rdname register_warm_start_model
@@ -194,7 +203,7 @@ list_warm_start_models <- function(source = c("all", "user", "bundled")) {
     version = character(), format_version = integer(), schema = character(), target = character(),
     n = integer(), calibration = character(), audit_status = character(), size_bytes = double(),
     artifact_type = character(), component_count = integer(), engine = character(), engine_version = character(),
-    component_engines = list(), metadata = list(), validation = list())
+    component_engines = list(), component_engine_versions = list(), metadata = list(), validation = list())
   for (s in sources) {
     root <- .warm_start_registry_root(s)
     if (!nzchar(root) || !dir.exists(root)) next

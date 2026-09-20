@@ -99,6 +99,8 @@ Phase 4 uses 0116 for PLS components, fitting and audit contracts, and extends
 3107/9104 for PLS artifacts, shared partitions and deployment.
 Phase 5 uses 0117 for RBF-SVR fitting, tuning and audit contracts, and extends
 3107/9104 for portable kernel artifacts, shared plans and deployment.
+Phase 6 uses 0118 for same-task algorithm ensembles, 3108 for their full/reduced
+artifacts and registry/bundles, and 9105 for prior/adaptive deployment.
 Keep 0025, 5025, 5027 and 6020 before 6100 when running mock-restoration regressions.
 Existing 4000-series tests retain their compatibility grouping; 6020 is a sampler test.
 

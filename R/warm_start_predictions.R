@@ -67,6 +67,10 @@ predict.pairwiseLLM_warm_ensemble <- function(object, newdata = NULL, ..., texts
                                              ids = NULL, python = NULL) {
   rlang::check_dots_empty()
   .validate_warm_start_ensemble(object)
+  .warm_start_ensemble_predict(object, newdata, texts, ids, python, "ensemble")
+}
+
+.warm_start_ensemble_predict <- function(object, newdata, texts, ids, python, artifact_type) {
   if (is.null(newdata) == is.null(texts)) rlang::abort("Supply exactly one of newdata or texts.")
   if (!is.null(texts)) {
     if (is.null(ids)) rlang::abort("Text prediction requires explicit ids.")
@@ -102,9 +106,14 @@ predict.pairwiseLLM_warm_ensemble <- function(object, newdata = NULL, ..., texts
   out$ensemble_mean <- means
   out$ensemble_sd <- sds
   attr(out, "warm_start_schema") <- object$schema
-  attr(out, "warm_start_model") <- list(artifact_type = "ensemble", format_version = object$format_version,
+  attr(out, "warm_start_model") <- list(artifact_type = artifact_type, format_version = object$format_version,
     outcome_definition = object$outcome$definition, weighting = object$weighting, metadata = object$metadata,
     components = lapply(results, attr, which = "warm_start_model"))
+  if (identical(artifact_type, "algorithm_ensemble")) {
+    meta <- attr(out, "warm_start_model")
+    meta$cv_identity <- object$cv_identity
+    attr(out, "warm_start_model") <- meta
+  }
   attr(out, "component_columns") <- columns
   attr(out, "component_predictions") <- results
   class(out) <- c("pairwiseLLM_warm_predictions", class(out))

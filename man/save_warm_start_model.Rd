@@ -14,7 +14,8 @@ load_warm_start_model(
 )
 }
 \arguments{
-\item{model}{A valid \link{pairwiseLLM_warm_model} or \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}} ensemble.}
+\item{model}{A valid \link{pairwiseLLM_warm_model}, \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}}
+ensemble, or \code{\link[=ensemble_warm_start_algorithms]{ensemble_warm_start_algorithms()}} ensemble.}
 
 \item{path}{Explicit file path. Its parent must already exist when saving.}
 
@@ -35,8 +36,10 @@ Save or load a portable warm-start model
 Artifacts are compressed RDS objects, without an envelope or serialized glmnet
 engine. Legacy formats 1 (full audit) and 2 (explicit summary-only), and format
 3 (explicit full or summary-only audit status), are supported independently of
-package version. Ensembles use their own format 1 and may contain any supported
-single-model format. Use \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}} to add
+package version. Cross-task ensembles use their own format 1 and may contain any
+supported single-model format. Same-task algorithm ensembles have a distinct
+format-1 contract containing only format-3 components with matching audit status.
+Use \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}} to add
 metadata or explicitly omit audit records before saving. Saving never strips
 records or adds timestamps. Neither loading nor prediction from precomputed
 features needs glmnet or Python.
@@ -88,16 +91,19 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}}, \code{\link[=register_warm_start_model]{register_warm_start_model()}}, \code{\link[=list_warm_start_models]{list_warm_start_models()}}
 
 Other adaptive warm start:
+\code{\link[=ensemble_warm_start_algorithms]{ensemble_warm_start_algorithms()}},
 \code{\link[=ensemble_warm_start_models]{ensemble_warm_start_models()}},
 \code{\link[=extract_warm_start_features]{extract_warm_start_features()}},
 \code{\link[=fit_warm_start_model]{fit_warm_start_model()}},
 \code{\link[=make_warm_start_cv_plan]{make_warm_start_cv_plan()}},
 \code{\link[=make_warm_start_prior]{make_warm_start_prior()}},
 \code{\link{pairwiseLLM_warm_model}},
+\code{\link[=predict.pairwiseLLM_warm_algorithm_ensemble]{predict.pairwiseLLM_warm_algorithm_ensemble()}},
 \code{\link[=predict.pairwiseLLM_warm_ensemble]{predict.pairwiseLLM_warm_ensemble()}},
 \code{\link[=predict.pairwiseLLM_warm_model]{predict.pairwiseLLM_warm_model()}},
 \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}},
 \code{\link[=register_warm_start_model]{register_warm_start_model()}},
+\code{\link[=summary.pairwiseLLM_warm_algorithm_ensemble]{summary.pairwiseLLM_warm_algorithm_ensemble()}},
 \code{\link[=summary.pairwiseLLM_warm_ensemble]{summary.pairwiseLLM_warm_ensemble()}},
 \code{\link[=summary.pairwiseLLM_warm_predictions]{summary.pairwiseLLM_warm_predictions()}},
 \code{\link[=warm_start_coefficients]{warm_start_coefficients()}},
