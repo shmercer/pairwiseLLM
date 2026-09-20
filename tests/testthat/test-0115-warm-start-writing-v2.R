@@ -21,9 +21,13 @@ test_that("v2 schema is a frozen additive inventory with an exact byte identity"
   expect_identical(v2[1:20, -1], v1[, -1])
   expect_identical(unique(v2$schema), "writing_features_v2")
   expect_false(anyNA(v2))
-  checksum <- digest::digest(file = system.file("warm-start", "feature-schema-writing-v2.csv",
-    package = "pairwiseLLM"), algo = "sha256")
-  expect_identical(checksum, "d9f271abae50eeac6d06a9ab7304309932174d54193ba8fb26348e9e886b2492")
+  path <- system.file("warm-start", "feature-schema-writing-v2.csv", package = "pairwiseLLM")
+  checksum <- "d9f271abae50eeac6d06a9ab7304309932174d54193ba8fb26348e9e886b2492"
+  # R 4.4 has MD5; R >=4.5 additionally supplies SHA-256 without a dependency.
+  # Python runtime/audits always verify the SHA-256, including on R 4.4.
+  expect_identical(unname(tools::md5sum(path)), "b8776dd57e77d3dd6b9e9efa1029a419")
+  sha256 <- get0("sha256sum", envir = asNamespace("tools"), inherits = FALSE)
+  if (!is.null(sha256)) expect_identical(unname(sha256(path)), checksum)
   manifest <- jsonlite::read_json(system.file("python", "schema-writing-v2.json", package = "pairwiseLLM"))
   expect_identical(manifest$schema_sha256, checksum)
   expect_identical(warm_v2_fixture()$schema_sha256, checksum)
