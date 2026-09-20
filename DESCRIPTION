@@ -51,6 +51,7 @@ Suggests:
     ordinal,
     parallelly,
     pkgload,
+    pls,
     purrr,
     readr,
     rmarkdown,
@@ -169,6 +170,8 @@ Collate:
     'warm_start_model_artifact.R'
     'warm_start_model_io.R'
     'warm_start_model_registry.R'
+    'warm_start_pls.R'
+    'warm_start_pls_validation.R'
     'warm_start_predict.R'
     'warm_start_predictions.R'
     'warm_start_preprocess.R'

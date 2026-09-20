@@ -6,7 +6,9 @@
   model$cv_plan <- plan
   model$cv_identity <- .warm_start_cv_identity(plan)
   model$engine_payload <- payload
-  model$training$hyperparameters <- list(alpha = model$training$alpha, lambda = model$training$lambda)
+  if (model$training$engine == "glmnet") {
+    model$training$hyperparameters <- list(alpha = model$training$alpha, lambda = model$training$lambda)
+  }
   .validate_warm_start_model(model)
   model
 }
@@ -27,14 +29,18 @@
   if (!all(required %in% names(model)) ||
       !identical(class(model), "pairwiseLLM_warm_model") ||
       !.warm_start_string(model$audit_status) || !model$audit_status %in% c("full", "summary_only") ||
-      !identical(model$training$engine, "glmnet") ||
-      !identical(model$training$hyperparameters,
-        list(alpha = model$training$alpha, lambda = model$training$lambda)) ||
+      !.warm_start_string(model$training$engine) || !model$training$engine %in% c("glmnet", "pls") ||
       !identical(model$calibration$status, "oof_linear")) invalid()
   .validate_warm_start_engine_payload(model$engine_payload, model$training$engine, model$preprocessing$retained)
   if (!identical(model$coefficients, model$engine_payload$coefficients) ||
       !identical(model$intercept, model$engine_payload$intercept)) invalid()
-  .validate_warm_start_model(.warm_start_legacy_view(model))
+  if (model$training$engine == "glmnet") {
+    if (!identical(model$training$hyperparameters,
+        list(alpha = model$training$alpha, lambda = model$training$lambda))) invalid()
+    .validate_warm_start_model(.warm_start_legacy_view(model))
+  } else {
+    .validate_warm_start_pls_model(model)
+  }
   identity <- model$cv_identity
   fields <- c("format_version", "digest", "task_id", "n", "outcome_digest", "seed",
     "outer_folds", "inner_folds", "rng_kind")
@@ -77,6 +83,7 @@
 }
 
 .warm_start_reduced3 <- function(model) {
+  if (identical(model$training$engine, "pls")) return(.warm_start_pls_reduced(model))
   out <- .warm_start_reduced(.warm_start_legacy_view(model))
   out$format_version <- 3L
   out["cv_plan"] <- list(NULL)

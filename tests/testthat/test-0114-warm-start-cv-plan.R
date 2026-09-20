@@ -98,7 +98,7 @@ test_that("plan and argument mismatches fail before extraction or engine calls",
   expect_error(warm_phase2_fit(f), "engine boundary")
   expect_error(warm_phase2_fit(f, engine_control = list(alpha = 1)), "engine_control")
   expect_error(warm_phase2_fit(f, engine_control = 1), "engine_control")
-  expect_error(warm_phase2_fit(f, engine = "pls"), "not yet implemented")
+  expect_error(warm_phase2_fit(f, engine = "pls"), "glmnet-only")
   expect_error(warm_phase2_fit(f, engine = "svr_rbf"), "not yet implemented")
 })
 

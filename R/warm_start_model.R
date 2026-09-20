@@ -40,6 +40,10 @@
 #' records selected `hyperparameters`. The complete plan binds exact ordered IDs,
 #' original outcomes and every nested partition. No backend fit object is stored.
 #' Format-3 audit omission keeps format 3 and compact identity but removes the plan.
+#' PLS models record `training$hyperparameters$ncomp`, with complete component-grid,
+#' rank-bound, fold-loss and candidate OOF evidence in full models. Reduced PLS
+#' artifacts retain the selected count and tuning settings, but omit row evidence.
+#' `summary()` and `print()` report components for PLS and alpha/lambda for glmnet.
 #'
 #' For legacy models, [prepare_warm_start_model()] audit omission creates format 2 with
 #' `audit_status = "summary_only"`. It preserves deployment parameters and
@@ -65,8 +69,8 @@
 #' on outcomes is used, including when predictors outnumber observations.
 #'
 #' Prediction uses only the stored preprocessing and linear coefficients, never
-#' a serialized glmnet object. Python is optional for extraction, and glmnet is
-#' optional for development; neither is needed to inspect or predict from a
+#' a serialized backend object. Python is optional for extraction; glmnet and pls
+#' are optional development engines. None is needed to inspect or predict from a
 #' deployment object with precomputed features. Schema metadata is an input
 #' contract, not verified extraction provenance or evidence of predictive validity.
 #'
@@ -179,7 +183,8 @@ NULL
 .new_warm_start_model <- function(schema, preprocessing, coefficients, intercept, outcome, training,
                                    calibration = list(status = "uncalibrated", intercept = NULL, slope = NULL),
                                    tuning = NULL, validation = NULL, format_version = 1L,
-                                   audit_status = NULL, metadata = NULL) {
+                                   audit_status = NULL, metadata = NULL,
+                                   cv_plan = NULL, engine_payload = NULL) {
   model <- structure(list(format_version = format_version, schema = schema,
     features = warm_start_feature_schema(schema)$feature, preprocessing = preprocessing,
     coefficients = coefficients, intercept = intercept, outcome = outcome,
@@ -187,6 +192,7 @@ NULL
     class = "pairwiseLLM_warm_model")
   if (!is.null(audit_status)) model$audit_status <- audit_status
   if (!is.null(metadata)) model$metadata <- metadata
+  if (identical(format_version, 3L)) return(.warm_start_format3(model, cv_plan, engine_payload))
   .validate_warm_start_model(model)
   model
 }
@@ -268,7 +274,7 @@ NULL
 summary.pairwiseLLM_warm_model <- function(object, ...) {
   rlang::check_dots_empty()
   .validate_warm_start_model(object)
-  list(task_id = object$training$task_id, target = object$outcome, n = object$training$n,
+  out <- list(task_id = object$training$task_id, target = object$outcome, n = object$training$n,
     schema = object$schema, retained_predictors = length(object$preprocessing$retained),
     removed_predictors = object$preprocessing$removed, nonzero_coefficients = object$training$n_nonzero,
     alpha = object$training$alpha, lambda = object$training$lambda,
@@ -276,6 +282,11 @@ summary.pairwiseLLM_warm_model <- function(object, ...) {
     audit_status = .warm_start_audit_status(object),
     engine = object$training$engine, engine_version = object$training$engine_version,
     validation = if (is.null(object$validation)) "not performed" else object$validation$metrics)
+  if (object$training$engine == "pls") {
+    out[c("alpha", "lambda")] <- NULL
+    out$ncomp <- object$training$hyperparameters$ncomp
+  }
+  out
 }
 
 #' @rdname pairwiseLLM_warm_model
@@ -288,7 +299,11 @@ print.pairwiseLLM_warm_model <- function(x, ...) {
   cat("Training rows:", info$n, "| Retained predictors:", info$retained_predictors,
     "| Nonzero coefficients:", info$nonzero_coefficients, "\n")
   cat("Engine:", info$engine, "| Version:", info$engine_version, "\n")
-  cat("Alpha:", info$alpha, "| Lambda:", info$lambda, "\n")
+  if (info$engine == "pls") {
+    cat("Components:", info$ncomp, "\n")
+  } else {
+    cat("Alpha:", info$alpha, "| Lambda:", info$lambda, "\n")
+  }
   cat("Calibration:", info$calibration, "| Audit:", info$audit_status, "\n")
   if (is.list(info$validation)) {
     cat("Nested validation: Pearson r =", info$validation$pearson_r,

@@ -104,3 +104,90 @@ test_that("mixed legacy and format-3 cross-task ensembles retain existing semant
   expect_equal(prior$prior_mean, expected - mean(expected))
   expect_identical(prior$prior_sd, rep(0.5, nrow(f$x)))
 })
+
+test_that("PLS full and reduced artifacts preserve both schemas and deploy without backend calls", {
+  skip_if_not_installed("pls")
+  root <- withr::local_tempdir()
+  withr::local_envvar(R_USER_DATA_DIR = root)
+  for (schema in c("writing_features_v1", "writing_features_v2")) {
+    f <- warm_pls_fixture(schema)
+    model <- warm_pls_fit(f, engine_control = list(ncomp = c(1, 2)))
+    model$private_text <- "must disappear"
+    model$training$private_ids <- f$x$item_id
+    reduced <- prepare_warm_start_model(model, warm_bundle_metadata("pls"), omit_audit = TRUE)
+    expect_identical(reduced$format_version, 3L)
+    expect_identical(reduced$audit_status, "summary_only")
+    expect_null(reduced$cv_plan)
+    expect_null(reduced$tuning$ids)
+    expect_null(reduced$tuning$traces)
+    expect_null(reduced$private_text)
+    expect_null(reduced$training$private_ids)
+    expect_null(reduced$validation$predictions)
+    expect_identical(reduced$cv_identity, model$cv_identity)
+    expect_identical(reduced$engine_payload, model$engine_payload)
+    expect_identical(reduced$training$hyperparameters, model$training$hyperparameters)
+    expect_identical(reduced$validation$metrics, model$validation$metrics)
+    expect_identical(prepare_warm_start_model(reduced, omit_audit = TRUE), reduced)
+    expect_identical(summary(reduced)$ncomp, model$tuning$selected$ncomp)
+    expect_output(print(reduced), "Components:")
+    with_mocked_bindings({
+      for (artifact in list(model, reduced)) {
+        path <- file.path(root, "pls.rds")
+        save_warm_start_model(artifact, path, overwrite = TRUE)
+        expect_identical(load_warm_start_model(path), artifact)
+        actual <- predict(load_warm_start_model(path), f$x)
+        expect_identical(actual$calibrated_prediction, predict(model, f$x)$calibrated_prediction)
+        expect_identical(warm_start_coefficients(artifact), warm_start_coefficients(model))
+        prior <- make_warm_start_prior(actual)
+        expect_identical(prior$provenance$model$engine, "pls")
+        expect_identical(prior$provenance$model$cv_digest, model$cv_identity$digest)
+        expect_equal(prior$prior_mean, actual$calibrated_prediction - mean(actual$calibrated_prediction))
+        expect_identical(prior$prior_sd, rep(0.5, nrow(f$x)))
+      }
+      register_warm_start_model(reduced, "pls", overwrite = TRUE)
+      expect_identical(load_warm_start_model(name = "pls", source = "user"), reduced)
+      rows <- list_warm_start_models("user")
+      expect_identical(rows$engine, "pls")
+      expect_identical(rows$schema, schema)
+      bundle <- file.path(root, schema)
+      dir.create(bundle)
+      record <- warm_bundle_write(bundle, reduced)$artifacts[[1]]
+      expect_identical(record$components[[1]]$cv_identity, model$cv_identity)
+      expect_identical(.warm_start_bundle_model(bundle, "pls"), reduced)
+    }, .warm_start_require_pls = function() stop("unexpected pls"),
+      .warm_start_require_glmnet = function() stop("unexpected glmnet"),
+      .warm_start_python_request = function(...) stop("unexpected Python"), .package = "pairwiseLLM")
+  }
+})
+
+test_that("PLS reduced contracts reject corruption and mix with legacy cross-task components", {
+  skip_if_not_installed("pls")
+  f <- warm_pls_fixture()
+  model <- warm_pls_fit(f)
+  reduced <- prepare_warm_start_model(model, omit_audit = TRUE)
+  for (field in setdiff(names(reduced), "cv_plan")) {
+    bad <- reduced
+    bad[field] <- list(NULL)
+    expect_error(.validate_warm_start_model(bad), info = field)
+  }
+  changes <- list(
+    list(c("tuning", "ncomp_grid"), c(1L, 10L)),
+    list(c("tuning", "ncomp_requested"), c(1L, 2L)),
+    list(c("training", "hyperparameters", "ncomp"), 11L),
+    list(c("validation", "warning_count"), -1L),
+    list(c("validation", "metrics", "rmse"), -1),
+    list(c("extra"), "unlisted field")
+  )
+  for (change in changes) {
+    bad <- reduced
+    bad[[change[[1]]]] <- change[[2]]
+    expect_error(.validate_warm_start_model(bad), info = paste(change[[1]], collapse = "$"))
+  }
+  legacy <- readRDS(test_path("fixtures", "warm-start-legacy", "baseline-1.5.1.rds"))$cases$default$model
+  mixed <- ensemble_warm_start_models(legacy = legacy, pls = model, repeated = model)
+  expected <- (predict(legacy, f$x)$calibrated_prediction + 2 * predict(model, f$x)$calibrated_prediction) / 3
+  expect_equal(predict(mixed, f$x)$ensemble_mean, expected)
+  expect_equal(predict(prepare_warm_start_model(mixed, omit_audit = TRUE), f$x)$ensemble_mean, expected)
+  expect_identical(names(warm_start_coefficients(mixed)),
+    c("feature", "legacy_std_coefficient", "pls_std_coefficient", "repeated_std_coefficient"))
+})

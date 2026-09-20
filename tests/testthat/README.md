@@ -95,6 +95,8 @@ algorithm-ensemble, and deployment workflows. All were verified unused on
 Phase 2 uses 0114 for CV-plan/format-3 core contracts, 3107 for format-3 artifact
 interoperability, and 9104 for shared-plan deployment workflows.
 Phase 3 uses 0115 for v2 schema, extraction, missingness and format-3 interoperability.
+Phase 4 uses 0116 for PLS components, fitting and audit contracts, and extends
+3107/9104 for PLS artifacts, shared partitions and deployment.
 Keep 0025, 5025, 5027 and 6020 before 6100 when running mock-restoration regressions.
 Existing 4000-series tests retain their compatibility grouping; 6020 is a sampler test.
 

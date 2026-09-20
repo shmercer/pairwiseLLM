@@ -103,7 +103,12 @@
     upper <- if (field == "warning_count") Inf else model$training$n
     if (!.warm_start_number(value, lower, upper) || value != floor(value)) invalid()
   }
-  m <- v$metrics
+  .validate_warm_start_summary_metrics(v$metrics)
+  invisible(model)
+}
+
+.validate_warm_start_summary_metrics <- function(m) {
+  invalid <- function() rlang::abort("Invalid summary-only warm-start validation metrics.")
   if (!is.list(m) || !is.character(m$undefined_reasons) || anyNA(m$undefined_reasons)) invalid()
   for (field in c("rmse", "mae")) {
     if (!.warm_start_number(m[[field]], 0)) invalid()
@@ -118,7 +123,7 @@
         (missing && !length(m$undefined_reasons))) invalid()
   }
   if (!.warm_start_audit_equal(m$squared_pearson_r, m$pearson_r^2)) invalid()
-  invisible(model)
+  invisible(m)
 }
 
 #' Prepare metadata or a summary-only warm-start artifact

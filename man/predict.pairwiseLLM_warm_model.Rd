@@ -32,7 +32,7 @@ Predict relative quality from a portable warm-start model
 \details{
 Prediction applies training medians, centers, and sample SDs, followed by the
 stored intercept and coefficients. It does not recompute preprocessing, train
-a model, load glmnet, initialize Python, or check a Python environment.
+a model, load glmnet or pls, initialize Python, or check a Python environment.
 Predictions are not calibrated Bayesian prior means or prior standard
 deviations. See \link{pairwiseLLM_warm_model} for the portable model contract.
 }

@@ -1,6 +1,6 @@
 #' Inspect calibrated standardized warm-start coefficients
 #'
-#' `warm_start_coefficients()` reports the fitted elastic-net coefficients after
+#' `warm_start_coefficients()` reports fitted elastic-net or PLS coefficients after
 #' applying the model's learned OOF linear calibration. It supports individual
 #' calibrated warm-start models and equal-weight warm-start ensembles.
 #'
@@ -16,7 +16,7 @@
 #' @details
 #' Predictors use each component model's fitted training medians, centers, and
 #' sample SDs. The fitted target is within-task standardized BT/BTL quality. For
-#' each retained feature, the reported value is the stored elastic-net
+#' each retained feature, the reported value is the stored elastic-net or PLS
 #' coefficient multiplied by the learned OOF calibration slope. Thus, holding
 #' the other included predictors fixed, it is the change in calibrated
 #' within-task standardized prediction for a one-training-SD increase in that
@@ -24,8 +24,8 @@
 #'
 #' `retained = FALSE` with an `NA` coefficient means preprocessing removed the
 #' feature and no fitted standardized coefficient exists. `retained = TRUE`
-#' with coefficient zero means the feature survived preprocessing but elastic
-#' net assigned it zero calibrated weight at the selected alpha and lambda.
+#' with coefficient zero means the feature survived preprocessing but has zero
+#' calibrated weight at the selected engine hyperparameters.
 #'
 #' Positive and negative signs describe fitted direction conditional on the
 #' other included predictors. Correlated predictors can share or trade fitted
@@ -37,7 +37,7 @@
 #' not imply one common raw-feature SD. The table exposes fitted direction,
 #' magnitude, and stability across task models; it neither defines an aggregate
 #' coefficient nor changes equal prediction weighting. Inspection from an
-#' existing portable artifact needs neither Python nor glmnet.
+#' existing portable artifact needs neither Python nor a fitting backend.
 #'
 #' @family adaptive warm start
 #' @seealso [fit_warm_start_model()], [ensemble_warm_start_models()],
