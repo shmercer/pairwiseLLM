@@ -12,14 +12,16 @@ Do not use study outcomes to choose features, tuning, engines or exceptions.
 | 1 | Architecture, frozen regression evidence, handoffs | 01-architecture | master | Complete; PR #260 merged to reviewed master |
 | 2 | CV plans, format 3, compatible glmnet and single-model interoperability | 02-cv-engines | master (Phase 1 merged) | Complete; PR #261 merged, all seven checks passed |
 | 3 | Audited v2 schema commit, extraction and audit | 03-writing-v2 | master (Phase 2 merged) | Complete; PR #262 merged, all seven checks passed |
-| 4 | PLS backend and portable linear deployment | 04-pls | master (Phase 3 merged) | Complete locally; PR #263, CI/review pending |
-| 5 | RBF-SVR backend and portable kernel deployment | 05-svr-rbf | Phase 4 branch | Not started |
+| 4 | PLS backend and portable linear deployment | 04-pls | master (Phase 3 merged) | Complete; PR #263 merged, all seven reviewed-head checks passed |
+| 5 | RBF-SVR backend and portable kernel deployment | 05-svr-rbf | master (Phase 4 merged) | Local implementation/verification complete; PR/CI handoff follows |
 | 6 | Same-task algorithm ensemble and all consumers | 06-algorithm-ensemble | Phase 5 branch | Not started |
 | 7 | End-to-end docs, full validation, 1.5.2 | 07-docs-quality | Phase 6 branch | Not started |
 
 Fetch and verify actual upstream/PR state before each phase. Build a child branch
 from the verified predecessor tip, or its reviewed merge result if already merged.
-Open a draft phase PR, then mark ready after checks and handoff. Use small commits
+Open a draft phase PR after local checks and handoff. For Phase 5, the user
+explicitly requires ending the turn once the PR is open and waiting for them to
+return CI results; do not poll CI or wait for checks before that handoff. Use small commits
 and Refs #259; only the final completed PR targets master with a closing reference.
 Normal pending review does not block the next stacked phase. Scientific-contract
 conflicts or unresolved foundational defects do.
@@ -850,7 +852,7 @@ weighted tuning/ties, OOF calibration, strict full/reduced format3 audits and PL
 portable deployment. It adds only the frozen RBF-SVR engine, leaving algorithm
 ensembles to Phase6. No merge/tag/publication or Phase5 work has occurred.
 
-## Next-thread prompt
+## Historical Phase 5 entry prompt
 
 Start Phase5 in a new thread using this exact prompt (verify the latest PR head,
 including the reporting commit, before branching):
@@ -898,3 +900,187 @@ Phase 5 PR. Do not merge, tag, publish, or start Phase 6. Update durable/local
 handoffs and provide the exact Phase 6 new-thread prompt.
 Package remains 1.5.1 until Phase 7.
 ```
+
+
+## Phase 5 completion report — 2026-09-19 Pacific
+
+Implementation and focused local verification complete on `feat/259-05-svr-rbf`;
+PR target is `master`. Implementation commit: `5f9eb32fa60745f2a0512d6e41514b9fc6a4055e`.
+Base: reviewed Phase 4 merge `eb570463e1da636ee5b6670231e012b0dba7bfbb`.
+Package remains **1.5.1**, R **>=4.4**. This report describes the implementation
+commit; the final reporting/delivery head belongs in the PR and local records,
+not a self-referential tracked commit identifier.
+
+Phase 4 reconciliation: PR #263 is MERGED from reviewed head
+`aecfc0522df557b87efff439ebb702f696ccf04f`; all seven reviewed-head checks SUCCESS.
+Reviewed and merged trees match exactly. Local/remote master matched the merge
+before branching and again before delivery; no subsequent reviewed fixes or
+review/inline/general PR comments were present. Phase 4 branches remain retained.
+Merge-triggered workflows are distinct from reviewed-head validation; at planning
+pkgdown passed and six merge checks were running. Those workflows were not polled.
+Issue #259 was already CLOSED; Phase 5 uses `Refs #259` without changing issue state.
+The user's explicit master target supersedes the stale local stacked-PR instruction.
+
+The user specifically requested ending the turn once the Phase 5 PR is open and
+waiting for them to supply CI results. Accordingly PR creation is the final
+external action after the reporting push. CI is **pending user feedback**, with
+no CI polling or readiness claim. Final URL/head is delivered in the response;
+maintainer review and Phase 7 full release/platform validation remain pending.
+
+### Exact changed files
+
+Implementation commit contains 32 tracked files:
+
+```text
+DESCRIPTION
+NEWS.md
+R/warm_start_coefficients.R
+R/warm_start_cv.R
+R/warm_start_engine.R
+R/warm_start_format3.R
+R/warm_start_model.R
+R/warm_start_model_artifact.R
+R/warm_start_predict.R
+R/warm_start_svr.R
+R/warm_start_svr_validation.R
+R/warm_start_validation.R
+codemeta.json
+data-raw/warm-start/README.md
+data-raw/warm-start/check-issue-259-phase5.R
+data-raw/warm-start/check-issue-259-svr-deployment.R
+data-raw/warm-start/issue-259-design.md
+data-raw/warm-start/issue-259-handoff.md
+data-raw/warm-start/issue-259-phase5-coverage-ledger.csv
+data-raw/warm-start/issue-259-phase5-test-results.csv
+man/fit_warm_start_model.Rd
+man/pairwiseLLM_warm_model.Rd
+man/predict.pairwiseLLM_warm_model.Rd
+man/prepare_warm_start_model.Rd
+man/warm_start_coefficients.Rd
+tests/testthat/README.md
+tests/testthat/helper-warm-start-svr.R
+tests/testthat/test-0114-warm-start-cv-plan.R
+tests/testthat/test-0117-warm-start-svr.R
+tests/testthat/test-3107-warm-start-format3-artifacts.R
+tests/testthat/test-9104-warm-start-shared-plan.R
+vignettes/adaptive-warm-start.Rmd
+```
+
+This report also adds `data-raw/warm-start/issue-259-phase6-new-thread.md` (33 total
+phase files). Local ignored Phase 5 task, issue index and main index are updated;
+ignore policy remains intact. The existing untracked `data-raw/studies/` directory
+is user-owned and was neither inspected nor modified. No other task-owned work
+or local verification process remains unfinished at final delivery.
+
+### Behavior and locked decisions
+
+Optional e1071/Suggests and codemeta entry, explicit epsilon-regression/radial,
+scale=FALSE/cross=0/probability=FALSE. Default costs2^(-2:4), multipliers2^(-2:2),
+fixed epsilon0.10, each fit's actual gamma=multiplier/retained_p. Controls accept
+only sorted unique finite positive cost/multiplier vectors; omitted grids default
+independently. Backend dependency/version mapping uses e1071, not svr_rbf.
+
+Shared context outcome scaling, split-local preprocessing, CV RNG/partitions,
+weighted MSE/SE, numerical ties, OOF calibration and untouched outer validation
+are unchanged. Minimum-error ties and eligible 1-SE choices favor lower cost then
+lower multiplier. Complete grid/OOF/loss/preprocessing/p/gamma evidence is retained
+and reconstructed. Selected candidate identities are exact; reconstructed loss
+summaries retain existing numerical tolerance. Failed fits remain contextual
+errors, without dropping candidates or substituting estimators.
+
+Numeric payload: type=rbf_svr, retained-feature-ordered support_vectors matrix,
+dual vector, rho, positive actual gamma. Direct coordinate squared differences
+avoid cancellation; kernel product minus rho reproduces the backend. Full/reduced
+validation/prediction require no e1071. Matrix shape/order survive typed copying;
+unknown attributes/row names are removed during reduction. No opaque backend fit
+or raw text is retained. Support vectors remain necessary numeric deployment data.
+
+Linear coefficients/intercept are NULL and nonzero counts are absent for SVR.
+Training/summary report cost, multiplier, epsilon, actual gamma and support-vector
+count where appropriate. `pairwiseLLM_warm_nonlinear_coefficients` errors identify
+SVR and an offending named ensemble component. Storage, registry, bundles, prior
+creation and old cross-task ensembles work for full/reduced models. No new export,
+algorithm ensemble, version/R-floor, provider, adaptive-selection or Phase B change.
+
+### Exact verification and current coverage
+
+Environment: R4.6.1, e1071 1.7.17, pls2.9.0, glmnet5.0, withr3.0.3,
+covr3.6.5, testthat3.3.2, pkgload1.5.3, lintr3.4.0. No installation required.
+
+Final scoped command:
+
+```sh
+PAIRWISELLM_TEST_PYTHON=/home/sterett/.virtualenvs/pairwisellm-writing-v1/bin/python Rscript --vanilla data-raw/warm-start/check-issue-259-phase5.R /tmp/issue259-phase5
+```
+
+Explicit filter `^(0031|010[0-9]|011[0-7]|310[0-27]|510[015]|910[0-24])-`,
+under `covr::environment_coverage(asNamespace("pairwiseLLM"), ...)`:
+**30 files, 158 test blocks, 6,373 passed expectations; zero failures/errors/
+warnings/skips**. Both real pinned Python extraction paths ran. Frozen0113=148,
+PLS0116=398, newSVR0117=245, artifacts3107=264, shared-plan9104=55. Durable
+per-test and per-file CSVs are beside this report. Counts are from this one final
+run; earlier repeated checks are not added as distinct tests.
+
+All26 measured warm-start R files exceed95% scoped line coverage. New SVR file
+**111/111=100%**; new SVR validator **123/126=97.61905%**. Materially affected
+existing runtime files: coefficients31/32=96.875%; CV119/121=98.34711%;
+engine40/42=95.23810%; format3 77/77, model149/149, validation112/112 all100%.
+Prediction/model-artifact edits are documentation-only and their unchanged
+runtime measured29/29 and109/109. Full ledger retains every measured file.
+Three new tuning-audit rejection lines remain unexercised; no100% branch coverage
+or package-wide coverage claim is made.
+
+Additional completed checks:
+
+- `Rscript --vanilla -e 'testthat::test_local(filter="^0117-", reporter="summary", stop_on_failure=TRUE, stop_on_warning=TRUE)'`: initial run identified the e1071 singleton-name behavior; corrected before the subsequent focused run.
+- Same command with `filter="^(0114|0117|3107|9104)-"`: core, CV and prior workflows passed; two bundle test-fixture metadata errors were corrected before final scoped collection.
+- `Rscript --vanilla data-raw/warm-start/check-issue-259-svr-deployment.R`:
+  full/reduced v1/v2 models saved/loaded, predicted, inspected and registered with
+  prior generation in a fresh process where e1071/pls/glmnet/reticulate were all
+  unavailable and remained unloaded. Typed nonlinear coefficient errors passed.
+  Library isolation was tested on Linux; no cross-platform isolation claim.
+- `devtools::document(quiet=TRUE)`: exactly five changed Rd topics listed above,
+  generated diffs inspected; NAMESPACE unchanged. All five `tools::parse_Rd()`
+  calls passed. `tools:::.check_packages_used_in_tests(".", "tests/testthat")`
+  reported no undeclared dependency/import/data/parse/method findings.
+- `pkgload::load_all(quiet=TRUE); rmarkdown::render("vignettes/adaptive-warm-start.Rmd", output_dir="/tmp/issue259-phase5-vignette", intermediates_dir="/tmp/issue259-phase5-vignette", quiet=TRUE)` passed; guarded synthetic SVR example executed.
+- `lintr::lint_package()` found three new line-length findings. Corrected all;
+  targeted final lint on affected files and new sources/tests/helpers/scripts
+  returned zero. A final cosmetic SVR test filename/mock-message correction
+  changed no assertions or runtime source; file lint passed, no redundant rerun.
+- 181 unique numeric test prefixes; JSON/dependency/version checks and Git
+  diff/staged checks passed. Actual v2 SHA-256 remains
+  `d9f271abae50eeac6d06a9ab7304309932174d54193ba8fb26348e9e886b2492`;
+  v1 `1414573759c302dc24e9041cfe2eb084fb4be1fac1fd26440b2011d4f9a736f7`;
+  legacyRDS `77fe4871283d7d938334d99438d5d54f0554c85f02d35ff1f6ba7c1a446433dc`.
+  Git comparisons confirm unchanged schemas/Python/fixtures, CV-plan and PLS source.
+
+### Findings, limits and next-phase requirements
+
+The first backend test exposed e1071 dropping column names for one-predictor
+fits; restore that single known feature from input order, preserving p=1 matrix
+shape. Independent review found tolerant selected-cost validation accepted a
+1e-11 off-grid mutation; enforce exact candidate identity and retain its regression.
+Bundle tests initially used a noncanonical underscore name and omitted component
+publication metadata; fixed fixtures, preserving existing bundle validation.
+Independent final read-only review found no remaining blocker.
+
+No scientific-contract conflict, production/study fitting, provider/MCMC activity,
+full local test/check/package_coverage, merge, tag, publication or Phase6 work.
+Current validation is synthetic compatibility/implementation evidence, not model
+predictive validity. Final CI and maintainer review await user feedback.
+
+Phase6 must preserve all three engines, fixed grids/epsilon, split-specific gamma,
+weighted tuning/ties, context scales, OOF calibration, unchanged reusable plans
+including R4.7 provenance, schemas/hashes/order/frozen fixtures and strict legacy/
+format3 audits. Preserve numeric support-vector matrix dimensions and backend-free
+full/reduced deployment, typed nonlinear coefficient errors, existing cross-task
+semantics and prior SD authority. The new same-task algorithm ensemble remains
+assigned exclusively to Phase6. The exact prompt follows in the linked file.
+
+## Next-thread prompt
+
+Use [the exact Phase 6 new-thread prompt](issue-259-phase6-new-thread.md), after
+reconciling the latest user-supplied Phase5 CI/review results. It identifies this
+implementation SHA and requires the verified final reporting head or reviewed
+merge, preserving subsequent fixes. No Phase6 work has started in this thread.

@@ -48,6 +48,11 @@ other included predictors. Correlated predictors can share or trade fitted
 weight, so coefficient magnitude is not a unique measure of predictive
 importance, causal influence, or explained variance.
 
+Nonlinear SVR models have no linear feature coefficients. Requests raise
+\code{pairwiseLLM_warm_nonlinear_coefficients}, also naming the nonlinear component
+when an ensemble contains SVR. Dual coefficients are kernel weights, not
+linear feature effects.
+
 Ensemble columns show component coefficients side by side. Each component
 standardized predictors using its own training distribution, so columns do
 not imply one common raw-feature SD. The table exposes fitted direction,

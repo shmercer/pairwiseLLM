@@ -226,7 +226,7 @@ feature representations. A supplied plan is validated before extraction or
 fitting; it is never regenerated or silently realigned. Omitted seed/fold arguments
 defer to the plan, and explicitly conflicting values fail. Omitting `cv_plan`
 constructs the same partitions internally. Engines `"glmnet"` (default) and
-`"pls"` reuse the plan; RBF-SVR remains reserved for later implementation.
+`"pls"` and `"svr_rbf"` reuse the plan.
 
 With the optional `pls` package installed, fit PLS on the same synthetic rows
 and partitions. Omit glmnet-only `alpha_grid` and `lambda_rule` arguments.
@@ -248,6 +248,31 @@ Weighted MSE/SE and the 1-SE rule favor fewer components. Degenerate fits fail
 with their fold/refit context. Full audits retain candidate OOF predictions,
 losses and rank bounds. Saved PLS coefficients and intercept reproduce backend
 predictions without requiring `pls` for deployment.
+
+RBF-SVR uses the optional `e1071` package. Its default grid is
+`cost = 2^(-2:4)` crossed with `gamma_multiplier = 2^(-2:2)`, with epsilon fixed
+at 0.10. Each fit divides the multiplier by its own retained predictor count.
+Backend scaling, cross-validation, and probability fitting are disabled.
+Weighted MSE/SE and the 1-SE rule favor lower cost, then lower gamma multiplier.
+The smaller explicit grid below keeps this synthetic example quick.
+
+```{r svr, eval=requireNamespace("e1071", quietly=TRUE) && requireNamespace("glmnet", quietly=TRUE) && requireNamespace("withr", quietly=TRUE)}
+svr_model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
+  features = features, engine = "svr_rbf", cv_plan = plan,
+  engine_control = list(cost = c(0.5, 2), gamma_multiplier = c(0.5, 1)))
+svr_model$training$hyperparameters
+svr_model$validation$metrics
+stopifnot(identical(svr_model$cv_identity, model$cv_identity))
+predict(svr_model, features)
+```
+
+Full SVR audits retain every candidate's OOF predictions and losses plus each
+split's preprocessing and actual gamma. Full and reduced artifacts predict from
+numeric support vectors, dual coefficients, rho, and gamma without `e1071`.
+Support-vector matrix dimensions and feature order are preserved. These numeric
+vectors remain deployment data after audit omission. `warm_start_coefficients()`
+raises a typed error for SVR or a cross-task ensemble containing SVR because
+nonlinear kernel weights are not linear feature coefficients.
 
 Every applicable training fold learns missingness filtering (>20% missing or
 all missing), median imputation, constant/near-zero-variance removal, and sample-SD

@@ -53,8 +53,8 @@ Defaults to 41 values from ridge to lasso in increments of 0.025.}
 \item{lambda_rule}{Deployment rule: \code{"lambda.1se"} (default) or expert override
 \code{"lambda.min"}. The rule applies to outer models and the final model alike.}
 
-\item{engine}{Fitting engine: default \code{"glmnet"} or \code{"pls"}. \code{"svr_rbf"}
-remains reserved and fails explicitly. Explicit \code{alpha_grid} or \code{lambda_rule}
+\item{engine}{Fitting engine: \code{"glmnet"} (default), \code{"pls"}, or \code{"svr_rbf"}.
+Explicit \code{alpha_grid} or \code{lambda_rule}
 arguments are accepted only for glmnet.}
 
 \item{cv_plan}{Optional \code{\link[=make_warm_start_cv_plan]{make_warm_start_cv_plan()}} object with exactly matching
@@ -65,18 +65,23 @@ explicitly conflicting arguments fail. A supplied plan is never regenerated.}
 vector of unique positive integer candidate component counts, at most 10.
 Every candidate must be legal in every required inner fit and context refit.
 The default uses all counts from one through the common legal maximum in
-each tuning context. For glmnet use \code{alpha_grid} and \code{lambda_rule} instead.}
+each tuning context. For SVR, only \code{cost} and \code{gamma_multiplier} are accepted:
+unique finite positive candidate vectors, defaulting independently to
+\code{2^(-2:4)} and \code{2^(-2:2)}. Epsilon is fixed at 0.10. Unknown controls fail.
+For glmnet use \code{alpha_grid} and \code{lambda_rule} instead.}
 }
 \value{
 A portable \link{pairwiseLLM_warm_model} with deployment preprocessing,
-coefficients and OOF calibration, plus tuning traces, fold assignments,
+numeric engine parameters and OOF calibration, plus tuning traces, fold assignments,
 outer raw/calibrated predictions, transformed held-out outcomes, validation
 metrics and warnings. Audit records include item IDs and outcomes but no raw
 training texts. Each outer record includes its tuning, scaling, preprocessing,
-calibration, hyperparameters and nonzero coefficient count. Final tuning
+calibration and hyperparameters (linear models also record nonzero counts). Final tuning
 metadata is separate from outer validation. No backend fit is retained.
 PLS coefficients and \code{Ymeans - Xmeans \%*\% beta} reproduce backend predictions
 on the stored preprocessed predictor scale without requiring \code{pls} at deployment.
+SVR stores numeric support vectors, dual coefficients, rho and actual gamma;
+prediction needs no \code{e1071}. Its linear coefficients/intercept are NULL.
 }
 \description{
 A warm-start model predicts relative writing quality before pairwise comparisons.
@@ -122,8 +127,16 @@ All candidate OOF predictions, fold losses, rank bounds and selection evidence
 are retained. Stored rank bounds are checked for consistency; recomputing rank
 itself requires the original feature table, which is not stored in the model.
 
+RBF-SVR uses optional \code{e1071}, with \code{type = "eps-regression"}, \code{kernel = "radial"},
+\code{scale = FALSE}, \code{cross = 0}, \code{probability = FALSE}, and fixed \code{epsilon = 0.10}.
+Every fit divides its gamma multiplier by its own retained predictor count.
+The complete Cartesian grid is tuned with the weighted MSE/SE above. Both
+minimum-error ties and eligible 1-SE choices favor lower cost, then lower
+gamma multiplier. Full audits retain candidate OOF values, fold losses,
+retained counts and actual gammas. Failed candidates are never omitted.
+
 OOF (out-of-fold) predictions are predictions for rows excluded from their
-corresponding coefficient fit. Calibration regresses standardized outcomes on
+corresponding engine fit. Calibration regresses standardized outcomes on
 selected-hyperparameter OOF predictions using ordinary least squares. Those same
 folds select hyperparameters: calibration fit statistics are not independent
 performance estimates. Only untouched outer predictions define validation metrics.
@@ -133,7 +146,7 @@ error. Finite negative slopes are allowed. Undefined validation diagnostics
 are recorded as NA with reasons, without an identity-calibration fallback.
 
 After outer validation, full-data tuning and OOF calibration precede the final
-all-row coefficient refit. Raw and calibrated predictions use within-task
+all-row engine refit. Raw and calibrated predictions use within-task
 standardized units, not original BTL units. They are not Bayesian prior SDs.
 The selected engine package and withr are required only for model development; Python is required only
 for the text-input path. This function never installs software or downloads data.

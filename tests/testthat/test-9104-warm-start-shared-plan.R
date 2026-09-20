@@ -61,3 +61,33 @@ test_that("PLS and glmnet reuse exact evaluation partitions and PLS initializes 
     expect_identical(resumed$trueskill_state, state$trueskill_state)
   }
 })
+
+test_that("SVR and glmnet reuse exact evaluation partitions and SVR initializes adaptive priors", {
+  skip_if_not_installed("e1071")
+  skip_if_not_installed("glmnet")
+  f <- warm_svr_fixture()
+  svr <- warm_svr_fit(f, engine_control = list(cost = c(0.5, 2), gamma_multiplier = c(0.5, 1)))
+  en <- fit_warm_start_model(f$x$item_id, f$theta, "phase5", features = f$x,
+    alpha_grid = c(0, 1), cv_plan = f$plan)
+  expect_identical(svr$cv_plan, en$cv_plan)
+  expect_identical(svr$cv_identity, en$cv_identity)
+  expect_identical(svr$tuning$foldid, en$tuning$foldid)
+  expect_identical(svr$validation$predictions$fold, en$validation$predictions$fold)
+  for (fold in 1:5) {
+    expect_identical(svr$validation$folds[[fold]]$tuning$foldid, en$validation$folds[[fold]]$tuning$foldid)
+    expect_identical(svr$validation$folds[[fold]]$outcome, en$validation$folds[[fold]]$outcome)
+  }
+  root <- withr::local_tempdir()
+  path <- file.path(root, "svr.rds")
+  save_warm_start_model(prepare_warm_start_model(svr, omit_audit = TRUE), path)
+  local_mocked_bindings(.warm_start_require_svr = function() stop("must not fit"), .package = "pairwiseLLM")
+  for (mode in c("btl_only", "trueskill_only", "both")) {
+    session <- file.path(root, mode)
+    state <- adaptive_rank_start(f$x$item_id, warm_start_mode = mode,
+      warm_start_model = path, warm_start_features = f$x, session_dir = session)
+    resumed <- adaptive_rank_resume(session)
+    expect_identical(resumed$predictive_prior, state$predictive_prior)
+    expect_identical(resumed$warm_start_pairs, state$warm_start_pairs)
+    expect_identical(resumed$trueskill_state, state$trueskill_state)
+  }
+})

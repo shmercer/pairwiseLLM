@@ -23,8 +23,8 @@
 #' @param lambda_rule Deployment rule: `"lambda.1se"` (default) or expert override
 #'   `"lambda.min"`. The rule applies to outer models and the final model alike.
 #'
-#' @param engine Fitting engine: default `"glmnet"` or `"pls"`. `"svr_rbf"`
-#'   remains reserved and fails explicitly. Explicit `alpha_grid` or `lambda_rule`
+#' @param engine Fitting engine: `"glmnet"` (default), `"pls"`, or `"svr_rbf"`.
+#'   Explicit `alpha_grid` or `lambda_rule`
 #'   arguments are accepted only for glmnet.
 #' @param cv_plan Optional [make_warm_start_cv_plan()] object with exactly matching
 #'   task, ordered IDs and outcomes. Omitted seed/fold arguments defer to the plan;
@@ -33,7 +33,10 @@
 #'   vector of unique positive integer candidate component counts, at most 10.
 #'   Every candidate must be legal in every required inner fit and context refit.
 #'   The default uses all counts from one through the common legal maximum in
-#'   each tuning context. For glmnet use `alpha_grid` and `lambda_rule` instead.
+#'   each tuning context. For SVR, only `cost` and `gamma_multiplier` are accepted:
+#'   unique finite positive candidate vectors, defaulting independently to
+#'   `2^(-2:4)` and `2^(-2:2)`. Epsilon is fixed at 0.10. Unknown controls fail.
+#'   For glmnet use `alpha_grid` and `lambda_rule` instead.
 #'
 #' @details
 #' New public fits use engine-neutral format 3 with explicit full audit status,
@@ -75,8 +78,16 @@
 #' are retained. Stored rank bounds are checked for consistency; recomputing rank
 #' itself requires the original feature table, which is not stored in the model.
 #'
+#' RBF-SVR uses optional `e1071`, with `type = "eps-regression"`, `kernel = "radial"`,
+#' `scale = FALSE`, `cross = 0`, `probability = FALSE`, and fixed `epsilon = 0.10`.
+#' Every fit divides its gamma multiplier by its own retained predictor count.
+#' The complete Cartesian grid is tuned with the weighted MSE/SE above. Both
+#' minimum-error ties and eligible 1-SE choices favor lower cost, then lower
+#' gamma multiplier. Full audits retain candidate OOF values, fold losses,
+#' retained counts and actual gammas. Failed candidates are never omitted.
+#'
 #' OOF (out-of-fold) predictions are predictions for rows excluded from their
-#' corresponding coefficient fit. Calibration regresses standardized outcomes on
+#' corresponding engine fit. Calibration regresses standardized outcomes on
 #' selected-hyperparameter OOF predictions using ordinary least squares. Those same
 #' folds select hyperparameters: calibration fit statistics are not independent
 #' performance estimates. Only untouched outer predictions define validation metrics.
@@ -86,20 +97,22 @@
 #' are recorded as NA with reasons, without an identity-calibration fallback.
 #'
 #' After outer validation, full-data tuning and OOF calibration precede the final
-#' all-row coefficient refit. Raw and calibrated predictions use within-task
+#' all-row engine refit. Raw and calibrated predictions use within-task
 #' standardized units, not original BTL units. They are not Bayesian prior SDs.
 #' The selected engine package and withr are required only for model development; Python is required only
 #' for the text-input path. This function never installs software or downloads data.
 #'
 #' @return A portable [pairwiseLLM_warm_model] with deployment preprocessing,
-#'   coefficients and OOF calibration, plus tuning traces, fold assignments,
+#'   numeric engine parameters and OOF calibration, plus tuning traces, fold assignments,
 #'   outer raw/calibrated predictions, transformed held-out outcomes, validation
 #'   metrics and warnings. Audit records include item IDs and outcomes but no raw
 #'   training texts. Each outer record includes its tuning, scaling, preprocessing,
-#'   calibration, hyperparameters and nonzero coefficient count. Final tuning
+#'   calibration and hyperparameters (linear models also record nonzero counts). Final tuning
 #'   metadata is separate from outer validation. No backend fit is retained.
 #'   PLS coefficients and `Ymeans - Xmeans %*% beta` reproduce backend predictions
 #'   on the stored preprocessed predictor scale without requiring `pls` at deployment.
+#'   SVR stores numeric support vectors, dual coefficients, rho and actual gamma;
+#'   prediction needs no `e1071`. Its linear coefficients/intercept are NULL.
 #' @family adaptive warm start
 #' @seealso [predict.pairwiseLLM_warm_model()], [ensemble_warm_start_models()],
 #'   [save_warm_start_model()]
@@ -173,7 +186,8 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
       anyDuplicated(alpha_grid)) rlang::abort("`alpha_grid` must contain unique finite values in [0, 1].")
   alpha_grid <- sort(as.numeric(alpha_grid))
   lambda_rule <- match.arg(lambda_rule)
-  if (engine == "glmnet") .warm_start_require_glmnet() else .warm_start_require_pls()
+  switch(engine, glmnet = .warm_start_require_glmnet(), pls = .warm_start_require_pls(),
+    svr_rbf = .warm_start_require_svr())
   if (!requireNamespace("withr", quietly = TRUE)) {
     rlang::abort("Model development requires optional package 'withr'. Install it explicitly first.")
   }
@@ -215,11 +229,16 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
     })
     training <- list(task_id = task_id, n = length(ids), alpha = final$tuning$selected$alpha,
       lambda = final$tuning$selected$lambda, n_nonzero = sum(final$coefficients != 0), engine = engine,
-      engine_version = as.character(utils::packageVersion(engine)),
+      engine_version = as.character(utils::packageVersion(if (engine == "svr_rbf") "e1071" else engine)),
       package_version = as.character(utils::packageVersion("pairwiseLLM")))
     if (engine == "pls") {
       training[c("alpha", "lambda")] <- NULL
       training$hyperparameters <- list(ncomp = final$tuning$selected$ncomp)
+    }
+    if (engine == "svr_rbf") {
+      training[c("alpha", "lambda", "n_nonzero")] <- NULL
+      training$hyperparameters <- .warm_start_svr_hyperparameters(final$tuning$selected,
+        length(final$preprocessing$retained))
     }
     final$tuning$ids <- ids
     final$tuning$seed <- as.integer(seed)
@@ -267,7 +286,9 @@ fit_warm_start_model <- function(ids, theta, task_id, texts = NULL, features = N
   preprocessing <- tuning$reference_preprocessing
   payload <- .warm_start_engine_refit(engine, .warm_start_preprocess_apply(x, preprocessing), z,
     tuning$selected)
-  list(outcome = outcome, tuning = tuning, calibration = calibration, preprocessing = preprocessing,
+  out <- list(outcome = outcome, tuning = tuning, calibration = calibration, preprocessing = preprocessing,
     coefficients = payload$coefficients, intercept = payload$intercept,
     n_nonzero = sum(payload$coefficients != 0), engine_payload = payload)
+  if (engine == "svr_rbf") out$n_nonzero <- NULL
+  out
 }

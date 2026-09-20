@@ -183,6 +183,12 @@
     },
     {
       "@type": "SoftwareApplication",
+      "identifier": "e1071",
+      "name": "e1071",
+      "sameAs": "https://CRAN.R-project.org/package=e1071"
+    },
+    {
+      "@type": "SoftwareApplication",
       "identifier": "pls",
       "name": "pls",
       "sameAs": "https://CRAN.R-project.org/package=pls"
