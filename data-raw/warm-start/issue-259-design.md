@@ -196,8 +196,6 @@ records retain their original JSON structure; format-3 records additionally
 carry compact CV identity. Neither schema extraction nor publication mechanics
 changed. Test prefixes 0114, 3107 and 9104 are used by this phase.
 
-## V2 feature contract
-
 ### Phase 4 PLS implementation
 
 PLS is now an optional development engine (`pls` in Suggests); the public default
@@ -229,6 +227,8 @@ compact CV identity, deployment parameters and labeled validation summaries;
 it drops rank records, candidate/selected OOF rows and outer fold evidence.
 The legacy glmnet projection remains unchanged; PLS never impersonates a legacy
 glmnet model to bypass its validation. RBF-SVR remains reserved for Phase 5.
+
+## V2 feature contract
 
 V1 CSV SHA-256 remains
 `1414573759c302dc24e9041cfe2eb084fb4be1fac1fd26440b2011d4f9a736f7`.

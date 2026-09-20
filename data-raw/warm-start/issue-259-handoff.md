@@ -11,8 +11,8 @@ Do not use study outcomes to choose features, tuning, engines or exceptions.
 |---|---|---|---|---|
 | 1 | Architecture, frozen regression evidence, handoffs | 01-architecture | master | Complete; PR #260 merged to reviewed master |
 | 2 | CV plans, format 3, compatible glmnet and single-model interoperability | 02-cv-engines | master (Phase 1 merged) | Complete; PR #261 merged, all seven checks passed |
-| 3 | Audited v2 schema commit, extraction and audit | 03-writing-v2 | master (Phase 2 merged) | Complete; PR #262, review/CI pending |
-| 4 | PLS backend and portable linear deployment | 04-pls | Phase 3 branch | Not started |
+| 3 | Audited v2 schema commit, extraction and audit | 03-writing-v2 | master (Phase 2 merged) | Complete; PR #262 merged, all seven checks passed |
+| 4 | PLS backend and portable linear deployment | 04-pls | master (Phase 3 merged) | Complete locally; PR #263, CI/review pending |
 | 5 | RBF-SVR backend and portable kernel deployment | 05-svr-rbf | Phase 4 branch | Not started |
 | 6 | Same-task algorithm ensemble and all consumers | 06-algorithm-ensemble | Phase 5 branch | Not started |
 | 7 | End-to-end docs, full validation, 1.5.2 | 07-docs-quality | Phase 6 branch | Not started |
@@ -649,7 +649,7 @@ harness errors, not test failures. Logs:
 Replacement CI was triggered by the corrected push; final status is recorded
 in the local delivery handoff and PR. No known unresolved local defect remains.
 
-## Next-thread prompt
+## Phase 3 next-thread prompt (historical)
 
 Start Phase 4 in a new thread using this exact prompt:
 
@@ -685,4 +685,216 @@ Do not inspect study outcomes or modify unrelated data-raw/studies/.
 You are authorized to implement, test, commit, push, and create/update the Phase 4
 PR. Do not merge, tag, publish, or start Phase 5. Update durable/local handoffs and
 provide the exact Phase 5 new-thread prompt. Package remains 1.5.1 until Phase 7.
+```
+
+
+## Phase 4 completion report — 2026-09-19 Pacific
+
+Implementation and focused local verification complete on `feat/259-04-pls`;
+[PR #263](https://github.com/shmercer/pairwiseLLM/pull/263) targets `master`.
+Implementation commit: `d810f2430eedcefb3c90f59b57bfcf6cd03873a4`.
+Base: reviewed Phase 3 squash merge `9867bf18a3e017623235c6040ebb61d960c46573`.
+Package remains **1.5.1**, R **>=4.4**. This report describes the implementation
+commit; final reporting head/readiness and CI state are recorded in the PR/local
+handoff after delivery, avoiding a self-referential commit identifier.
+
+Phase 3 reconciliation: PR #262 merged at 2026-09-20T01:24:09Z, from reviewed
+head `16f9d4181e0ba0291faad2f06b84c30999c9a6ce`, with all seven checks SUCCESS.
+Its reviewed and merged trees match. Local/remote master match the merge;
+Phase 3 branches were already deleted. No inline review comments were present.
+Preserved its test-dependency correction and Phase 2 R4.7 RNG-kind correction.
+Issue #259 was already CLOSED when read; issue state was not changed and this PR
+uses `Refs #259`. The user explicitly authorized Phase 4 commits/push/PR, not merge.
+
+### Exact files changed
+
+- `DESCRIPTION`
+- `NEWS.md`
+- `R/warm_start_coefficients.R`
+- `R/warm_start_cv.R`
+- `R/warm_start_engine.R`
+- `R/warm_start_format3.R`
+- `R/warm_start_model.R`
+- `R/warm_start_model_artifact.R`
+- `R/warm_start_pls.R`
+- `R/warm_start_pls_validation.R`
+- `R/warm_start_predict.R`
+- `R/warm_start_validation.R`
+- `codemeta.json`
+- `data-raw/warm-start/check-issue-259-phase4.R`
+- `data-raw/warm-start/check-issue-259-pls-deployment.R`
+- `data-raw/warm-start/issue-259-design.md`
+- `data-raw/warm-start/issue-259-handoff.md`
+- `data-raw/warm-start/issue-259-phase4-coverage-ledger.csv`
+- `data-raw/warm-start/issue-259-phase4-test-results.csv`
+- `man/fit_warm_start_model.Rd`
+- `man/pairwiseLLM_warm_model.Rd`
+- `man/predict.pairwiseLLM_warm_model.Rd`
+- `man/warm_start_coefficients.Rd`
+- `tests/testthat/README.md`
+- `tests/testthat/helper-warm-start-pls.R`
+- `tests/testthat/test-0114-warm-start-cv-plan.R`
+- `tests/testthat/test-0116-warm-start-pls.R`
+- `tests/testthat/test-3107-warm-start-format3-artifacts.R`
+- `tests/testthat/test-9104-warm-start-shared-plan.R`
+- `vignettes/adaptive-warm-start.Rmd`
+
+Ignored local files also updated: `tasklists/issue-259/04-pls.md`,
+`tasklists/issue-259/00-index.md`, and `tasklists/00-index.md`. They remain ignored.
+User-owned untracked `data-raw/studies/` was neither inspected nor modified.
+No provider, adaptive-selection, Phase B, Python backend, schema, golden fixture,
+production model, release version or minimum-R change.
+
+### Behavior and locked decisions
+
+- Optional `pls` in Suggests (also reflected in codemeta), guarded only for fitting.
+  Explicit `kernelpls`, no backend scaling/CV, centering enabled. Only PLS `ncomp`
+  controls; explicit glmnet-only controls fail. Public defaults remain glmnet/v1.
+- Common per-context component grid includes every inner-training matrix and
+  context refit; centered non-LAPACK QR tolerance1e-7, rank/p/n-1 limits, cap10.
+  Default1:limit; all explicit sorted positive integer candidates must be legal.
+  No failed-candidate omission, algorithm fallback or automatic engine selection.
+- Existing split-local preprocessing, context outcome mean/sample SD, weighted
+  MSE/SE, numerical tie tolerance, OOF calibration and outer-validation ordering
+  preserved. Minimum-error/1-SE choices favor fewer components. Degenerate/nonfinite
+  fits fail with context; finite negative calibration slopes remain legal.
+- Full format3 stores all candidate OOF predictions, fold losses, rank/dimension
+  bounds and complete selections/calibration/outer records. Validators reconstruct
+  losses, weighted summaries, choices, calibration and validation metrics, and bind
+  partitions/scales to the unchanged CV plan. Original feature tables are not
+  retained; recorded rank consistency is checked, but rank recomputation needs
+  those original inputs. This does not imply authenticity of an artifact.
+- Portable ordered beta and `Ymeans - Xmeans %*% beta`; selected ncomp in training
+  hyperparameters, no fabricated alpha/lambda. PLS uses its own validator alongside
+  the strict existing glmnet/legacy path. Full/reduced artifacts, coefficients,
+  storage/registry/bundles, old cross-task ensembles and priors work without pls.
+  Reduced artifacts retain explicit summaries and omit row/outer/rank evidence.
+
+### Focused verification and coverage
+
+Environment: R4.6.1, pls2.9.0, glmnet5.0, withr3.0.3, covr3.6.5, testthat3.3.2.
+No package installation or download was needed.
+
+Final scoped command:
+
+```sh
+PAIRWISELLM_TEST_PYTHON=/home/sterett/.virtualenvs/pairwisellm-writing-v1/bin/python Rscript --vanilla data-raw/warm-start/check-issue-259-phase4.R /tmp/issue259-phase4
+```
+
+Explicit filter `^(0031|010[0-9]|011[0-6]|310[0-27]|510[015]|910[0-24])-`;
+`covr::environment_coverage(asNamespace("pairwiseLLM"), ...)`:
+**29 files, 147 test blocks, 6,000 passed expectations; 0 failures/errors/warnings/skips**.
+Both real pinned Python extraction paths ran. Frozen0113:148 passed; new0116:398
+passed. See committed test-results CSV for per-file/block results. Follow-up
+expectations below are not added to this total as distinct coverage evidence.
+
+All24 measured warm-start R files exceed95% line coverage. Current materially
+changed runtime files: PLS97/98=98.98%; PLSvalidation114/116=98.28%; CV111/113=98.23%;
+engine27/28=96.43%; format3 74/74=100%; model140/140=100%; model-artifact109/109=100%;
+validation107/107=100%. Documentation-only changed runtime files: coefficients
+27/28=96.43%, predict29/29=100%. The committed coverage ledger includes every
+measured file; this is scoped whole-file coverage, not package-wide coverage.
+Uncovered new-file branches are the defensive nonfinite inner-prediction error
+and two reduced-grid corruption checks. No claim of100% branch coverage.
+
+Additional completed checks:
+
+- `Rscript --vanilla -e 'testthat::test_local(filter="^(0031|0116|3107|9104)-", reporter="summary", stop_on_failure=TRUE, stop_on_warning=TRUE)'`: all four files passed.
+- `Rscript --vanilla data-raw/warm-start/check-issue-259-pls-deployment.R`: full/reduced
+  artifacts for both schemas passed in a fresh process whose library excludes
+  pls/glmnet/reticulate; required namespaces were verified unavailable/unloaded.
+- `devtools::document(quiet=TRUE)`: exactly four changed Rd topics listed above;
+  no NAMESPACE/export change. Generated diffs inspected; all four parsed with
+  `tools::parse_Rd()`.
+- `pkgload::load_all(quiet=TRUE); rmarkdown::render("vignettes/adaptive-warm-start.Rmd",
+  output_dir="/tmp/issue259-phase4-vignette", intermediates_dir="/tmp/issue259-phase4-vignette",
+  quiet=TRUE)`: passed with the guarded synthetic shared-plan PLS example executed.
+- Targeted lint plus final `lintr::lint_package()`: zero lints.
+  `tools:::.check_packages_used_in_tests(".", "tests/testthat")`: zero undeclared
+  dependency/import/data/parse/method findings. `git diff --check` and staged
+  checks passed; 180 unique numeric prefixes, new0116 reservation documented.
+- Exact Git comparisons: no changes to frozen schema/extraction/inventory/locks/
+  fixtures. SHA-256 v1:1414573759c302dc24e9041cfe2eb084fb4be1fac1fd26440b2011d4f9a736f7;
+  v2:d9f271abae50eeac6d06a9ab7304309932174d54193ba8fb26348e9e886b2492;
+  legacyRDS:77fe4871283d7d938334d99438d5d54f0554c85f02d35ff1f6ba7c1a446433dc.
+- Independent read-only statistical/source and final test/documentation reviews
+  found no blocker. Local metadata consistency suggestion (codemeta pls) applied.
+
+Resolved development findings: the first rank-grid test accidentally crossed the
+existing missingness threshold; corrected synthetic missingness without changing
+preprocessing. An artifact test referenced a helper scoped to0113; replaced it
+with a direct frozen-fixture read. A documentation assertion expected “stored
+elastic-net”; expanded source wording to “stored elastic-net or PLS”. The first
+coverage collection was interrupted after that known assertion failure; only the
+completed final collection above supplies current counts/coverage. Brace/quote
+lint findings were corrected before final verification. No statistical-contract
+change was needed.
+
+Temporary supplemental evidence: `/tmp/issue259-phase4-{coverage,focused-final,
+engine-artifacts,isolated,vignette,lint-clean,dependency-audit}.log`, plus coverage
+RDS/line CSV. Durable result CSVs and this report remain when temporary logs expire.
+No unfiltered local devtools::test/check/package_coverage, production/study fitting,
+provider calls or MCMC was run. CI performs its configured checks independently.
+
+### Delivery and next-phase invariants
+
+At implementation head, pkgdown SUCCESS; the other six CI checks are running.
+Final-head CI/readiness is recorded in the PR/local handoff after the reporting
+push. Maintainer review and Phase7 full local release/platform validation remain
+pending. No known unresolved local defect. Isolated-library execution was Linux;
+no cross-platform Python/backend-free library-isolation claim is made.
+
+Phase5 must preserve both schemas/hashes/order, all frozen evidence, reusable
+CV plans and R4.7 RNG provenance, split-local preprocessing/context outcome scales,
+weighted tuning/ties, OOF calibration, strict full/reduced format3 audits and PLS
+portable deployment. It adds only the frozen RBF-SVR engine, leaving algorithm
+ensembles to Phase6. No merge/tag/publication or Phase5 work has occurred.
+
+## Next-thread prompt
+
+Start Phase5 in a new thread using this exact prompt (verify the latest PR head,
+including the reporting commit, before branching):
+
+```text
+Implement Phase 5 (RBF-SVR) of issue #259 in shmercer/pairwiseLLM.
+
+Phase 4 PR: https://github.com/shmercer/pairwiseLLM/pull/263
+Branch: feat/259-04-pls
+Implementation commit: d810f2430eedcefb3c90f59b57bfcf6cd03873a4
+Base: master at 9867bf18a3e017623235c6040ebb61d960c46573
+Use the verified final PR head, including its reporting commit and later review fixes.
+
+Read AGENTS.md, tasklists/00-index.md, tasklists/issue-259/05-svr-rbf.md,
+data-raw/warm-start/issue-259-design.md, data-raw/warm-start/issue-259-handoff.md,
+and the complete issue #259. Reconstruct missing ignored tasklists from the
+tracked design/handoff. Verify current Git/PR/CI state and reconcile review fixes.
+Create feat/259-05-svr-rbf from the verified Phase 4 head, targeting its branch.
+If Phase 4 has merged, use its reviewed merge and target master instead.
+
+Implement optional e1071 in Suggests, epsilon-regression with radial kernel,
+scale=FALSE, cross=0, and probability=FALSE. Defaults are cost=2^(-2:4),
+gamma_multiplier=2^(-2:2), and fixed epsilon=0.10. Each fit uses actual
+gamma=gamma_multiplier/its retained predictor count. Use the locked weighted
+MSE/SE rules; minimum-error ties and eligible 1-SE choices favor lower cost,
+then lower gamma multiplier. Preserve complete tuning/OOF/outer audits,
+contextual errors, deterministic shared partitions and leakage boundaries.
+
+Store only portable numeric support vectors, dual coefficients, rho and actual
+gamma, preserving feature order and matrix dimensions. Prediction is
+exp(-gamma*squared_distance) %*% dual - rho, without e1071. Verify backend
+prediction equivalence, full/reduced artifacts, storage/registry/bundle/prior
+interoperability and deployment without e1071. Nonlinear coefficient requests
+must produce informative typed errors rather than fabricated linear weights.
+Do not store opaque backend fits.
+
+Preserve PLS, legacy glmnet behavior, v1/v2 extraction, hashes/order, frozen
+fixtures, reusable CV plans including R4.7 RNG provenance, format-3 audits,
+and every statistical contract. V2 schema SHA-256:
+d9f271abae50eeac6d06a9ab7304309932174d54193ba8fb26348e9e886b2492
+Do not inspect study outcomes or modify unrelated data-raw/studies/.
+
+You are authorized to implement, test, commit, push, and create/update the
+Phase 5 PR. Do not merge, tag, publish, or start Phase 6. Update durable/local
+handoffs and provide the exact Phase 6 new-thread prompt.
+Package remains 1.5.1 until Phase 7.
 ```
