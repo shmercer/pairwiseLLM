@@ -92,7 +92,7 @@ it is never a schema feature or deployment coefficient.
 The internal fixed fit requires at least three observations, explicit alpha
 in \verb{[0, 1]}, and finite lambda greater than or equal to zero. It uses Gaussian
 glmnet with an intercept and \code{standardize = FALSE}, with solver threshold
-\code{1e-12} and maximum \code{100000} iterations, directly at the requested lambda.
+\code{1e-12} and maximum \code{1000000} iterations, directly at the requested lambda.
 Outcomes are standardized before fitting. No PCA or feature screening based
 on outcomes is used, including when predictors outnumber observations.
 
