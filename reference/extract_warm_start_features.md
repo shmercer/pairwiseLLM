@@ -31,7 +31,8 @@ extract_warm_start_features(
 
 - schema:
 
-  The frozen schema identifier, currently `"writing_features_v1"`.
+  The frozen schema identifier: `"writing_features_v1"` (default) or
+  `"writing_features_v2"`.
 
 - python:
 
@@ -43,10 +44,10 @@ extract_warm_start_features(
 
 ## Value
 
-A tibble with character `item_id` and the 20 numeric features in schema
-order, in the requested ID order. The `warm_start_schema` attribute
-records the schema identifier. Document-level undefined values remain
-`NA`.
+A tibble with character `item_id` and the 20 (v1) or 46 (v2) numeric
+features in schema order, in the requested ID order. The
+`warm_start_schema` attribute records the schema identifier.
+Document-level undefined values remain `NA`.
 
 ## Details
 
@@ -68,7 +69,13 @@ whitespace, rather than the filtered `n_tokens` feature. Undefined
 values and valid zeros follow
 [`warm_start_feature_schema()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_feature_schema.md).
 Zero-vector coherence preserves upstream values and warnings. No feature
-is imputed or replaced with zero.
+is imputed or replaced with zero. Version 2 enables TextDescriptives
+readability and preserves undefined filtered-token summaries and
+second-order coherence (fewer than three sentences). textstat methods
+use their audited defaults, including first-100-word Linsear–Write and
+unique difficult-word counts. Valid negative readability scores remain
+unchanged. Model preprocessing learns missing-value handling from each
+training split.
 
 ## See also
 

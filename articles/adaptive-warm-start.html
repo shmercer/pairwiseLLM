@@ -302,6 +302,39 @@ conventional Shannon entropy, and does not use filtered
 <code>n_tokens</code> as its denominator. Tokenization, zero-vector
 coherence and undefined values follow the frozen upstream contract;
 upgrades cannot silently redefine v1.</p>
+<p>For the expanded representation, select
+<code>schema = "writing_features_v2"</code> in
+<code><a href="../reference/warm_start_python_status.html">warm_start_python_status()</a></code>,
+<code><a href="../reference/extract_warm_start_features.html">extract_warm_start_features()</a></code> and
+<code><a href="../reference/fit_warm_start_model.html">fit_warm_start_model()</a></code>. It retains the 20 v1 fields first
+and adds 26 audited scalar features using the same Python environment.
+Counts, medians, syllable summaries, AUX/DET/PART proportions,
+second-order coherence and readability measures intentionally retain
+conceptual overlap. Undefined values remain missing for training-split
+preprocessing. Inspect its definitions without Python:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">schema_v2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/warm_start_feature_schema.html">warm_start_feature_schema</a></span><span class="op">(</span><span class="st">"writing_features_v2"</span><span class="op">)</span></span>
+<span><span class="va">schema_v2</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"position"</span>, <span class="st">"feature"</span>, <span class="st">"family"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 46 × 3</span></span></span>
+<span><span class="co">#&gt;    position feature                  family                       </span></span>
+<span><span class="co">#&gt;       <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                        </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span>        1 n_tokens                 length_productivity          </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span>        2 proportion_unique_tokens lexical_diversity            </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span>        3 token_length_mean        lexical_surface_complexity   </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span>        4 token_length_std         lexical_surface_complexity   </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span>        5 sentence_length_mean     sentence_syntactic_complexity</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span>        6 sentence_length_std      sentence_syntactic_complexity</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span>        7 pos_prop_noun            pos_composition              </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span>        8 pos_prop_verb            pos_composition              </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span>        9 pos_prop_adj             pos_composition              </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span>       10 pos_prop_adv             pos_composition              </span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 36 more rows</span></span></span></code></pre></div>
+<p>Schema hashes are recorded in the installed
+<code>python/schema-writing-v2.json</code>. Keep the schema attribute
+with cached features and select the same schema when fitting. Saved v1
+models continue to require v1 features. A reusable CV plan can be shared
+between representations of the same ordered items/outcomes; the plan
+does not select a representation or establish predictive validity.</p>
 </div>
 <div class="section level2">
 <h2 id="develop-one-model-per-assessment">Develop one model per assessment<a class="anchor" aria-label="anchor" href="#develop-one-model-per-assessment"></a>
@@ -310,7 +343,7 @@ upgrades cannot silently redefine v1.</p>
 public interface. They are not extracted student features. Chunks
 needing glmnet/withr are skipped when those optional packages are
 unavailable.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Synthetic features illustrate the interface, not predictive validity.</span></span>
 <span><span class="va">example_features</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">seed</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu">withr</span><span class="fu">::</span><span class="fu"><a href="https://withr.r-lib.org/reference/with_seed.html" class="external-link">local_seed</a></span><span class="op">(</span><span class="va">seed</span><span class="op">)</span></span>
@@ -449,7 +482,7 @@ training data. Final deployment uses full-data OOF calibration and an
 all-row coefficient refit. Degenerate calibration errors; finite
 negative slopes are allowed, and undefined validation diagnostics have
 NA values with reasons.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">model</span><span class="op">$</span><span class="va">validation</span><span class="op">$</span><span class="va">metrics</span></span>
 <span><span class="co">#&gt; $pearson_r</span></span>
 <span><span class="co">#&gt; [1] 0.9897764</span></span>
@@ -504,7 +537,7 @@ lambda and nonzero counts.</p>
 Store the portable object, not a training-engine fit. Explicit saving
 and registration are separate operations; ordinary save/load preserves
 the complete audit.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".rds"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/save_warm_start_model.html">save_warm_start_model</a></span><span class="op">(</span><span class="va">model</span>, path <span class="op">=</span> <span class="va">path</span><span class="op">)</span></span>
 <span><span class="va">restored</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/save_warm_start_model.html">load_warm_start_model</a></span><span class="op">(</span>path <span class="op">=</span> <span class="va">path</span><span class="op">)</span></span>
@@ -530,7 +563,7 @@ automatic backup history accumulates. Bundles are read-only.</p>
 scale, then combine the models with stable component names. Actual
 training assessments must be independent; relabeling the same training
 data does not establish independence.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">features_b</span> <span class="op">&lt;-</span> <span class="fu">example_features</span><span class="op">(</span><span class="fl">3104</span><span class="op">)</span></span>
 <span><span class="va">theta_b</span> <span class="op">&lt;-</span> <span class="fl">30</span> <span class="op">+</span> <span class="va">features_b</span><span class="op">$</span><span class="va">n_tokens</span> <span class="op">-</span> <span class="fl">3</span> <span class="op">*</span> <span class="va">features_b</span><span class="op">$</span><span class="va">token_length_mean</span></span>
 <span><span class="va">model_b</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_warm_start_model.html">fit_warm_start_model</a></span><span class="op">(</span><span class="va">features_b</span><span class="op">$</span><span class="va">item_id</span>, <span class="va">theta_b</span>, <span class="st">"synthetic-b"</span>,</span>
@@ -584,7 +617,7 @@ data does not establish independence.</p>
 model weights without reconstructing a glmnet fit. Individual models
 return one row per frozen feature in schema order:</p>
 <pre class="text"><code><span><span class="va">feature</span> <span class="op">|</span> <span class="va">retained</span> <span class="op">|</span> <span class="va">calibrated_std_coefficient</span></span></code></pre>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">coef_tbl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/warm_start_coefficients.html">warm_start_coefficients</a></span><span class="op">(</span><span class="va">model</span><span class="op">)</span></span>
 <span><span class="va">coef_tbl</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 20 × 3</span></span></span>
@@ -720,7 +753,7 @@ assume generic slicing updates nested metadata. For text input, ensemble
 prediction extracts once using <code>texts</code>, <code>ids</code>, and
 <code>python</code>. Single-model <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code> accepts
 precomputed features only.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Empty in this release. Future reviewed bundles use the same public prediction path.</span></span>
 <span><span class="fu"><a href="../reference/register_warm_start_model.html">list_warm_start_models</a></span><span class="op">(</span>source <span class="op">=</span> <span class="st">"bundled"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 0 × 18</span></span></span>
@@ -739,7 +772,7 @@ not authenticate a publisher.</p>
 <div class="section level2">
 <h2 id="convert-predictions-and-resume">Convert predictions and resume<a class="anchor" aria-label="anchor" href="#convert-predictions-and-resume"></a>
 </h2>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">prior</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_warm_start_prior.html">make_warm_start_prior</a></span><span class="op">(</span><span class="va">predictions</span>, ids <span class="op">=</span> <span class="va">features</span><span class="op">$</span><span class="va">item_id</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>item_id <span class="op">=</span> <span class="va">prior</span><span class="op">$</span><span class="va">item_id</span>, mean <span class="op">=</span> <span class="va">prior</span><span class="op">$</span><span class="va">prior_mean</span>, sd <span class="op">=</span> <span class="va">prior</span><span class="op">$</span><span class="va">prior_sd</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   item_id        mean  sd</span></span>
@@ -769,7 +802,7 @@ and pooled judge refits retain their existing priors; evidence is not
 injected twice.</p>
 <p>Standalone sampling requires your installed CmdStan toolchain and is
 not run here:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/build_btl_results_data.html">build_btl_results_data</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>ID1 <span class="op">=</span> <span class="st">"1"</span>, ID2 <span class="op">=</span> <span class="st">"2"</span>, better_id <span class="op">=</span> <span class="st">"1"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_bayes_btl_mcmc.html">fit_bayes_btl_mcmc</a></span><span class="op">(</span><span class="va">results</span>, ids <span class="op">=</span> <span class="va">features</span><span class="op">$</span><span class="va">item_id</span>, warm_start_prior <span class="op">=</span> <span class="va">prior</span><span class="op">)</span></span></code></pre></div>
 <p>Instead of supplying a prior, initialize with
@@ -787,7 +820,7 @@ accompany an already resolved prior. Custom BTL fit functions must check
 warm. Custom-fit signatures and the standalone
 <code>fit_bayes_btl_mcmc(warm_start_prior = ...)</code> interface are
 unchanged; standalone BTL has no adaptive four-mode argument.</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>  <span class="va">directory</span> <span class="op">&lt;-</span> <span class="fu">withr</span><span class="fu">::</span><span class="fu"><a href="https://withr.r-lib.org/reference/with_tempfile.html" class="external-link">local_tempdir</a></span><span class="op">(</span><span class="op">)</span></span>
 <span>  <span class="va">artifact</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">directory</span>, <span class="st">"ensemble.rds"</span><span class="op">)</span></span>

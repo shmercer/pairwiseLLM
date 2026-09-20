@@ -201,6 +201,46 @@ not use filtered `n_tokens` as its denominator. Tokenization,
 zero-vector coherence and undefined values follow the frozen upstream
 contract; upgrades cannot silently redefine v1.
 
+For the expanded representation, select `schema = "writing_features_v2"`
+in
+[`warm_start_python_status()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_python_status.md),
+[`extract_warm_start_features()`](https://shmercer.github.io/pairwiseLLM/reference/extract_warm_start_features.md)
+and
+[`fit_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.md).
+It retains the 20 v1 fields first and adds 26 audited scalar features
+using the same Python environment. Counts, medians, syllable summaries,
+AUX/DET/PART proportions, second-order coherence and readability
+measures intentionally retain conceptual overlap. Undefined values
+remain missing for training-split preprocessing. Inspect its definitions
+without Python:
+
+``` r
+
+schema_v2 <- warm_start_feature_schema("writing_features_v2")
+schema_v2[c("position", "feature", "family")]
+#> # A tibble: 46 × 3
+#>    position feature                  family                       
+#>       <int> <chr>                    <chr>                        
+#>  1        1 n_tokens                 length_productivity          
+#>  2        2 proportion_unique_tokens lexical_diversity            
+#>  3        3 token_length_mean        lexical_surface_complexity   
+#>  4        4 token_length_std         lexical_surface_complexity   
+#>  5        5 sentence_length_mean     sentence_syntactic_complexity
+#>  6        6 sentence_length_std      sentence_syntactic_complexity
+#>  7        7 pos_prop_noun            pos_composition              
+#>  8        8 pos_prop_verb            pos_composition              
+#>  9        9 pos_prop_adj             pos_composition              
+#> 10       10 pos_prop_adv             pos_composition              
+#> # ℹ 36 more rows
+```
+
+Schema hashes are recorded in the installed
+`python/schema-writing-v2.json`. Keep the schema attribute with cached
+features and select the same schema when fitting. Saved v1 models
+continue to require v1 features. A reusable CV plan can be shared
+between representations of the same ordered items/outcomes; the plan
+does not select a representation or establish predictive validity.
+
 ## Develop one model per assessment
 
 The following deterministic data are fabricated to illustrate the public

@@ -72,8 +72,8 @@ predictor definitions; it does not extract features or require Python.</p>
 
 
 <dl><dt id="arg-schema">schema<a class="anchor" aria-label="anchor" href="#arg-schema"></a></dt>
-<dd><p>A single schema identifier. Currently only
-<code>"writing_features_v1"</code> is supported.</p></dd>
+<dd><p>A single schema identifier: <code>"writing_features_v1"</code> (default,
+20 features) or <code>"writing_features_v2"</code> (46 features).</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -90,7 +90,13 @@ fixed calculation settings, formula, capabilities, and undefined values.</p></li
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>Version 1 describes English writing using TextDescriptives and a supplementary
 textstat readability measure. The schema records definitions, not evidence
-of predictive validity for any particular writing population.</p>
+of predictive validity for any particular writing population.
+Version 2 retains all version 1 features first, followed by 26 source-audited
+scalar additions in inventory order. It adds counts, medians, syllable
+summaries, AUX/DET/PART proportions, dependency variation, second-order
+coherence and readability measures using the same pinned Python environment.
+Conceptual overlap is intentional; selection did not use training outcomes.
+Inspect the installed <code>python/schema-writing-v2.json</code> for its CSV SHA-256.</p>
 <p><code>upstream_entropy_per_token</code> divides TextDescriptives' entropy by the number
 of all spaCy tokens, including punctuation and whitespace tokens. This is an
 average of upstream probability-weighted contributions, not normalized

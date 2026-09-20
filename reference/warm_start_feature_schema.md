@@ -15,8 +15,8 @@ warm_start_feature_schema(schema = "writing_features_v1")
 
 - schema:
 
-  A single schema identifier. Currently only `"writing_features_v1"` is
-  supported.
+  A single schema identifier: `"writing_features_v1"` (default, 20
+  features) or `"writing_features_v2"` (46 features).
 
 ## Value
 
@@ -41,7 +41,13 @@ A tibble with one row per feature in fixed predictor order. Columns:
 Version 1 describes English writing using TextDescriptives and a
 supplementary textstat readability measure. The schema records
 definitions, not evidence of predictive validity for any particular
-writing population.
+writing population. Version 2 retains all version 1 features first,
+followed by 26 source-audited scalar additions in inventory order. It
+adds counts, medians, syllable summaries, AUX/DET/PART proportions,
+dependency variation, second-order coherence and readability measures
+using the same pinned Python environment. Conceptual overlap is
+intentional; selection did not use training outcomes. Inspect the
+installed `python/schema-writing-v2.json` for its CSV SHA-256.
 
 `upstream_entropy_per_token` divides TextDescriptives' entropy by the
 number of all spaCy tokens, including punctuation and whitespace tokens.

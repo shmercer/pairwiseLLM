@@ -87,7 +87,8 @@ missing values. Empty strings are allowed. Text is never trimmed or normalized.<
 
 
 <dt id="arg-schema">schema<a class="anchor" aria-label="anchor" href="#arg-schema"></a></dt>
-<dd><p>The frozen schema identifier, currently <code>"writing_features_v1"</code>.</p></dd>
+<dd><p>The frozen schema identifier: <code>"writing_features_v1"</code> (default)
+or <code>"writing_features_v2"</code>.</p></dd>
 
 
 <dt id="arg-python">python<a class="anchor" aria-label="anchor" href="#arg-python"></a></dt>
@@ -99,7 +100,7 @@ or a fresh R session; this function never switches an initialized interpreter.</
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A tibble with character <code>item_id</code> and the 20 numeric features in schema
+    <p>A tibble with character <code>item_id</code> and the 20 (v1) or 46 (v2) numeric features in schema
 order, in the requested ID order. The <code>warm_start_schema</code> attribute records
 the schema identifier. Document-level undefined values remain <code>NA</code>.</p>
     </div>
@@ -117,7 +118,13 @@ checked before extraction. Missing resources fail without downloads. Entropy
 is divided by all spaCy tokens, including punctuation and whitespace, rather
 than the filtered <code>n_tokens</code> feature. Undefined values and valid zeros follow
 <code><a href="warm_start_feature_schema.html">warm_start_feature_schema()</a></code>. Zero-vector coherence preserves upstream values
-and warnings. No feature is imputed or replaced with zero.</p>
+and warnings. No feature is imputed or replaced with zero.
+Version 2 enables TextDescriptives readability and preserves undefined
+filtered-token summaries and second-order coherence (fewer than three
+sentences). textstat methods use their audited defaults, including first-100-word
+Linsear–Write and unique difficult-word counts. Valid negative readability
+scores remain unchanged. Model preprocessing learns missing-value handling
+from each training split.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

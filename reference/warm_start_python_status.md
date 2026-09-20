@@ -12,7 +12,8 @@ warm_start_python_status(schema = "writing_features_v1", python = NULL)
 
 - schema:
 
-  The frozen schema identifier, currently `"writing_features_v1"`.
+  The frozen schema identifier: `"writing_features_v1"` (default) or
+  `"writing_features_v2"`.
 
 - python:
 
