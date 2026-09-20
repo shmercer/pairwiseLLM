@@ -45,7 +45,11 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::rcmdcheck
+          # Work around the distributional macOS binary archive that pak cannot
+          # unpack. Remove the source override once that binary installs again.
+          extra-packages: |
+            any::rcmdcheck
+            ${{ runner.os == 'macOS' && 'distributional=?source' || '' }}
           needs: check
 
       - uses: r-lib/actions/check-r-package@v2
