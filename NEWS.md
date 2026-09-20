@@ -2,6 +2,11 @@
 
 ## Improvements
 
+- Added explicit `writing_features_v2` extraction with 46 source-audited features,
+  schema-specific hashes/decoding, and pinned readability/missingness behavior.
+  The default 20-feature v1 schema and Python environment remain unchanged
+  (#259, Phase 3).
+
 - Added reusable task/outcome-bound warm-start CV plans and portable format-3
   glmnet models, including full/reduced storage, registries, bundles, and warm
   priors. Legacy formats 1/2 and frozen v1/glmnet numerical behavior remain

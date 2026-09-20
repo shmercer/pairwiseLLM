@@ -108,11 +108,28 @@ or substitute another spaCy model to work around it.
 
 ## Contract and provenance
 
-The output is `item_id` plus the 20 ordered canonical numeric columns, with a
+The default output is `item_id` plus the 20 ordered canonical numeric columns, with a
 `warm_start_schema` attribute. IDs are character strings. Text is unchanged.
 Document-level undefined values stay missing; no features are imputed. In
 particular, entropy divides by all spaCy tokens rather than filtered `n_tokens`.
 Zero-vector coherence retains upstream values and warnings.
+
+Select `schema = "writing_features_v2"` in both the status and extraction calls
+to use the audited 46-feature expansion. It uses the same environment and lock,
+retaining all v1 features first. The additions are primitive counts, medians,
+syllable summaries, AUX/DET/PART proportions, dependency adjacency variation,
+second-order coherence, and readability measures. TD readability is enabled only
+for v2; textstat methods retain their pinned defaults. Empty filtered-token
+summaries and coherence with too few sentences remain missing; valid zeros and
+negative readability scores remain unchanged. Preprocessing is learned later
+from model training splits.
+
+`schema-writing-v2.json` records the v2 CSV/inventory SHA-256 and an additional
+source hash for textstat's public wrapper. It references the original environment
+manifest without modifying v1 evidence. The new CSV is
+`warm-start/feature-schema-writing-v2.csv`. Feature definitions and selection are
+source-based and do not establish predictive validity. Existing v1 calls/models
+retain their original schema; do not relabel saved artifacts as v2.
 
 `audit-environment.json` and `requirements-warm-start.lock` are exact copies of
 Task 01's `audit-environment.json` and `requirements-audit.lock` from

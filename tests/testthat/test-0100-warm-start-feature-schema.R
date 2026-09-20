@@ -38,7 +38,7 @@ test_that("schema lookup rejects malformed and unsupported identifiers", {
   for (value in list(NULL, character(), c("a", "b"), NA_character_, "", 1, TRUE, NA)) {
     expect_error(warm_start_feature_schema(value), "one nonmissing, nonempty character string")
   }
-  for (value in c("writing_features_v2", "../writing_features_v1", " writing_features_v1")) {
+  for (value in c("writing_features_v3", "../writing_features_v1", " writing_features_v1")) {
     expect_error(warm_start_feature_schema(value), "Unknown feature schema")
   }
 })

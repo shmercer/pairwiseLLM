@@ -1,0 +1,43 @@
+"file","test","nb","failed","skipped","error","warning","passed"
+"test-0100-warm-start-feature-schema.R","writing_features_v1 is ordered, explicit, and independent of Python",16,0,FALSE,FALSE,0,16
+"test-0100-warm-start-feature-schema.R","schema lookup rejects malformed and unsupported identifiers",11,0,FALSE,FALSE,0,11
+"test-0100-warm-start-feature-schema.R","missing and corrupt installed artifacts give actionable failures",45,0,FALSE,FALSE,0,45
+"test-0101-warm-start-python.R","status reports unavailable and available environments without throwing",14,0,FALSE,FALSE,0,14
+"test-0101-warm-start-python.R","status handles unreadable installed Python metadata",1,0,FALSE,FALSE,0,1
+"test-0101-warm-start-python.R","bridge decodes structured results and restores environment settings",7,0,FALSE,FALSE,0,7
+"test-0101-warm-start-python.R","bridge rejects malformed responses and produces concise errors",10,0,FALSE,FALSE,0,10
+"test-0101-warm-start-python.R","missing reticulate gives an actionable optional dependency error",1,0,FALSE,FALSE,0,1
+"test-0101-warm-start-python.R","interpreter selection detects conflicts without initializing Python",6,0,FALSE,FALSE,0,6
+"test-0101-warm-start-python.R","uninitialized interpreter selection uses only existing Python",7,0,FALSE,FALSE,0,7
+"test-0101-warm-start-python.R","corrupt Python metadata is an actionable installation error",1,0,FALSE,FALSE,0,1
+"test-0102-warm-start-features.R","extraction preserves the canonical fixture contract without Python",10,0,FALSE,FALSE,0,10
+"test-0102-warm-start-features.R","invalid inputs fail before crossing the Python boundary",21,0,FALSE,FALSE,0,21
+"test-0102-warm-start-features.R","feature validator aligns exact ID sets and ignores extra columns",12,0,FALSE,FALSE,0,12
+"test-0102-warm-start-features.R","feature validator rejects invalid values without imputing missingness",17,0,FALSE,FALSE,0,17
+"test-0102-warm-start-features.R","decoder rejects malformed rows, IDs, types and duplicate columns",16,0,FALSE,FALSE,0,16
+"test-0102-warm-start-features.R","real Python integration agrees with golden outputs and repeats",45,0,FALSE,FALSE,0,45
+"test-0102-warm-start-features.R","decoder ignores noncanonical upstream fields before numeric validation",1,0,FALSE,FALSE,0,1
+"test-0103-warm-start-preprocess.R","preprocessing learns missingness, imputation, NZV and sample scaling in order",10,0,FALSE,FALSE,0,10
+"test-0103-warm-start-preprocess.R","NZV unique fraction boundaries and control overrides are explicit",26,0,FALSE,FALSE,0,26
+"test-0103-warm-start-preprocess.R","apply uses training parameters without examining held-out distributions",6,0,FALSE,FALSE,0,6
+"test-0103-warm-start-preprocess.R","malformed matrices and stored preprocessing fail defensively",25,0,FALSE,FALSE,0,25
+"test-0103-warm-start-preprocess.R","outcome scaling is reusable and rejects degenerate or nonfinite values",19,0,FALSE,FALSE,0,19
+"test-0113-warm-start-legacy-regression.R","frozen v1 schema and historical full/reduced deployment remain compatible",41,0,FALSE,FALSE,0,41
+"test-0113-warm-start-legacy-regression.R","historical cross-task arithmetic and repeated components remain compatible",17,0,FALSE,FALSE,0,17
+"test-0113-warm-start-legacy-regression.R","glmnet refits preserve frozen folds, tuning, calibration and validation",90,0,FALSE,FALSE,0,90
+"test-0114-warm-start-cv-plan.R","plans preserve exact legacy fold draw order and serialize portably",45,0,FALSE,FALSE,0,45
+"test-0114-warm-start-cv-plan.R","plans preserve nondefault RNG kinds and an absent caller seed",6,0,FALSE,FALSE,0,6
+"test-0114-warm-start-cv-plan.R","plan identities reject task, order, outcome and structural corruption",26,0,FALSE,FALSE,0,26
+"test-0114-warm-start-cv-plan.R","plan and argument mismatches fail before extraction or engine calls",18,0,FALSE,FALSE,0,18
+"test-0114-warm-start-cv-plan.R","supplied plans defer omitted settings and insulate folds from engine RNG",7,0,FALSE,FALSE,0,7
+"test-0114-warm-start-cv-plan.R","format 3 rejects payload, compatibility view and CV evidence corruption",28,0,FALSE,FALSE,0,28
+"test-0114-warm-start-cv-plan.R","R 4.7 binomial RNG provenance is portable without changing partitions",21,0,FALSE,FALSE,0,21
+"test-0115-warm-start-writing-v2.R","v2 schema is a frozen additive inventory with an exact byte identity",8,0,FALSE,FALSE,0,8
+"test-0115-warm-start-writing-v2.R","v2 extraction decodes every field, aligns IDs and preserves upstream missingness",34,0,FALSE,FALSE,0,34
+"test-0115-warm-start-writing-v2.R","v2 response mismatches and invalid added values fail before fitting",131,0,FALSE,FALSE,0,131
+"test-0115-warm-start-writing-v2.R","v2 format-3 fitting reuses schema-independent plans and deploys reduced artifacts",22,0,FALSE,FALSE,0,22
+"test-0115-warm-start-writing-v2.R","real pinned v2 Python extraction agrees with independent upstream evidence",95,0,FALSE,FALSE,0,95
+"test-3107-warm-start-format3-artifacts.R","format-3 full and reduced artifacts deploy without a fitting backend",48,0,FALSE,FALSE,0,48
+"test-3107-warm-start-format3-artifacts.R","format-3 registry and verified bundles retain engine and CV metadata",10,0,FALSE,FALSE,0,10
+"test-3107-warm-start-format3-artifacts.R","mixed legacy and format-3 cross-task ensembles retain existing semantics",9,0,FALSE,FALSE,0,9
+"test-9104-warm-start-shared-plan.R","a shared plan survives independent fits, feature alignment and warm-prior deployment",9,0,FALSE,FALSE,0,9

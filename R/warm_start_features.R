@@ -8,13 +8,14 @@
 #'   returned as character strings; blank IDs are not allowed.
 #' @param texts A nonempty character vector of the same length as `ids`, without
 #'   missing values. Empty strings are allowed. Text is never trimmed or normalized.
-#' @param schema The frozen schema identifier, currently `"writing_features_v1"`.
+#' @param schema The frozen schema identifier: `"writing_features_v1"` (default)
+#'   or `"writing_features_v2"`.
 #' @param python Optional path to an existing Python interpreter. With `NULL`, use
 #'   an existing environment selected through reticulate. Automatic environment
 #'   creation is disabled. Conflicting interpreter selections require correction
 #'   or a fresh R session; this function never switches an initialized interpreter.
 #'
-#' @return A tibble with character `item_id` and the 20 numeric features in schema
+#' @return A tibble with character `item_id` and the 20 (v1) or 46 (v2) numeric features in schema
 #'   order, in the requested ID order. The `warm_start_schema` attribute records
 #'   the schema identifier. Document-level undefined values remain `NA`.
 #'
@@ -33,6 +34,12 @@
 #' than the filtered `n_tokens` feature. Undefined values and valid zeros follow
 #' [warm_start_feature_schema()]. Zero-vector coherence preserves upstream values
 #' and warnings. No feature is imputed or replaced with zero.
+#' Version 2 enables TextDescriptives readability and preserves undefined
+#' filtered-token summaries and second-order coherence (fewer than three
+#' sentences). textstat methods use their audited defaults, including first-100-word
+#' Linsear--Write and unique difficult-word counts. Valid negative readability
+#' scores remain unchanged. Model preprocessing learns missing-value handling
+#' from each training split.
 #'
 #' @examples
 #' \dontrun{
@@ -54,7 +61,7 @@ extract_warm_start_features <- function(ids, texts, schema = "writing_features_v
   result <- .warm_start_python_request(list(
     operation = "extract", schema = schema, ids = as.list(ids), texts = as.list(texts)
   ), python)
-  out <- .warm_start_decode_features(result)
+  out <- .warm_start_decode_features(result, definition)
   .validate_warm_start_features(out, ids, schema, definition)
 }
 
@@ -71,7 +78,7 @@ extract_warm_start_features <- function(ids, texts, schema = "writing_features_v
   ids
 }
 
-.warm_start_decode_features <- function(result) {
+.warm_start_decode_features <- function(result, definition = warm_start_feature_schema(result$schema)) {
   invalid <- function() rlang::abort("Malformed Python feature response: invalid columns or rows.")
   columns <- result$columns
   if (!is.list(columns) || !length(columns) ||
@@ -86,7 +93,7 @@ extract_warm_start_features <- function(ids, texts, schema = "writing_features_v
   if (any(!vapply(result$rows, function(x) is.list(x) && length(x) == length(columns), logical(1)))) {
     invalid()
   }
-  retained <- which(columns %in% c("item_id", warm_start_feature_schema()$feature))
+  retained <- which(columns %in% c("item_id", definition$feature))
   out <- lapply(retained, function(i) {
     values <- lapply(result$rows, `[[`, i)
     if (columns[i] == "item_id") {
@@ -140,6 +147,23 @@ extract_warm_start_features <- function(ids, texts, schema = "writing_features_v
   for (name in c("proportion_unique_tokens", "token_length_mean", "token_length_std")) {
     if (any(is.na(out[[name]]) != (out$n_tokens == 0))) {
       rlang::abort(paste0("Feature '", name, "' has missingness inconsistent with n_tokens."))
+    }
+  }
+  if (identical(schema, "writing_features_v2")) {
+    for (name in definition$feature[definition$type == "integer"]) {
+      value <- out[[name]]
+      if (anyNA(value) || any(value < 0 | value != floor(value))) {
+        rlang::abort(paste0("Feature '", name, "' must contain nonmissing nonnegative whole counts."))
+      }
+    }
+    for (name in definition$feature[definition$source_package == "textstat"]) {
+      if (anyNA(out[[name]])) rlang::abort(paste0("Feature '", name, "' must not be missing."))
+    }
+    for (name in c("token_length_median", "syllables_per_token_mean",
+      "syllables_per_token_median", "syllables_per_token_std", "gunning_fog", "lix")) {
+      if (any(is.na(out[[name]]) != (out$n_tokens == 0))) {
+        rlang::abort(paste0("Feature '", name, "' has missingness inconsistent with n_tokens."))
+      }
     }
   }
   attr(out, "warm_start_schema") <- schema

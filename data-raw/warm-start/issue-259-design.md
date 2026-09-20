@@ -241,9 +241,14 @@ textstat_long_word_count
 textstat_monosyllabcount
 ```
 
-Phase 3 must materialize and separately commit the explicit 46-row CSV and full
-audited inventory before consumers rely on them, then record the actual SHA.
-This note is not a substitute for that audit or a schema hash.
+Phase 3 materialized the explicit 46-row CSV and full 116-candidate audited
+inventory in schema-only commit `8e61988`, with source-wording corrections in
+metadata-only commit `3509f26`, before consumer validation/commit. Final CSV
+SHA-256: `d9f271abae50eeac6d06a9ab7304309932174d54193ba8fb26348e9e886b2492`.
+The installed `python/schema-writing-v2.json` records this hash and inventory
+identity. See `feature-schema-v2-audit.md` and `feature-inventory-v2.csv` for
+precise definitions, source defaults and conditional exclusions. Membership and
+order match the approved list above; original v1 evidence remains immutable.
 
 Retain TD and textstat character counts: literal-space versus regex-whitespace
 removal differ. Keep textstat difficult_words (unique=True, threshold=2) distinct

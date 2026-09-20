@@ -1,4 +1,4 @@
-"""Frozen writing_features_v1 extraction. Importing this module does not load the stack.
+"""Frozen writing_features_v1/v2 extraction. Import does not load the stack.
 
 Only request_json is called by R. Feature payloads contain IDs and canonical fields;
 version diagnostics and warnings live in the enclosing protocol, not feature columns.
@@ -110,7 +110,7 @@ def check_pipeline(nlp):
     check_annotations(nlp("The cat sat on the mat. It was warm there."))
 
 
-def build_pipeline():
+def build_pipeline(schema="writing_features_v1"):
     import spacy
     import textdescriptives  # noqa: F401 -- registers spaCy factories
 
@@ -118,8 +118,19 @@ def build_pipeline():
     for component in ("descriptive_stats", "pos_proportions", "dependency_distance",
                       "information_theory", "coherence"):
         nlp.add_pipe("textdescriptives/" + component)
+    if schema == "writing_features_v2":
+        nlp.add_pipe("textdescriptives/readability")
     check_pipeline(nlp)
     return nlp
+
+
+# Only the pinned public methods in the audited schemas are dispatchable.
+TEXTSTAT_METHODS = frozenset((
+    "dale_chall_readability_score", "char_count", "letter_count", "lexicon_count",
+    "miniword_count", "syllable_count", "sentence_count", "polysyllabcount",
+    "linsear_write_formula", "difficult_words", "gunning_fog", "spache_readability",
+    "long_word_count", "monosyllabcount",
+))
 
 
 def document_values(doc, schema, scorer):
@@ -131,7 +142,9 @@ def document_values(doc, schema, scorer):
     for row in schema:
         name = row["feature"]
         if row["source_package"] == "textstat":
-            value = scorer.dale_chall_readability_score(doc.text)
+            method = row["upstream_field"]
+            require(method in TEXTSTAT_METHODS, f"Unknown textstat method for {name}.")
+            value = getattr(scorer, method)(doc.text)
             undefined = False
         else:
             mapping = getattr(doc._, row["component"])
@@ -139,14 +152,19 @@ def document_values(doc, schema, scorer):
             value = mapping[row["upstream_field"]]
             if name == "upstream_entropy_per_token":
                 value = value / token_count if token_count else float("nan")
-            if name == "n_tokens":
+            if name in ("n_tokens", "n_characters"):
                 undefined = False
-            elif name in ("proportion_unique_tokens", "token_length_mean", "token_length_std"):
+            elif name in ("proportion_unique_tokens", "token_length_mean", "token_length_std",
+                          "token_length_median", "syllables_per_token_mean",
+                          "syllables_per_token_median", "syllables_per_token_std",
+                          "gunning_fog", "lix"):
                 undefined = filtered_count == 0
-            elif name in ("sentence_length_mean", "sentence_length_std"):
+            elif name in ("sentence_length_mean", "sentence_length_std", "sentence_length_median"):
                 undefined = sentence_count == 0
             elif name == "first_order_coherence":
                 undefined = sentence_count < 2
+            elif name == "second_order_coherence":
+                undefined = sentence_count < 3
             else:
                 undefined = token_count == 0
         require(not math.isinf(value), f"Infinite value for {name}.")
@@ -159,7 +177,7 @@ def run_request(request, expected, schema):
     observed = check_versions(expected)
     check_resources(expected)
     with offline_resources():
-        nlp = build_pipeline()
+        nlp = build_pipeline(request["schema"])
         if request["operation"] == "status":
             return {"observed": observed, "python": sys.executable}
         from textstat.textstat import textstatistics
@@ -182,7 +200,10 @@ def request_json(payload):
     caught = []
     try:
         request = json.loads(payload)
-        require(request.get("schema") == "writing_features_v1", "Unknown feature schema.")
+        schema_files = {"writing_features_v1": "feature-schema-writing-v1.csv",
+                        "writing_features_v2": "feature-schema-writing-v2.csv"}
+        require(isinstance(request.get("schema"), str) and request["schema"] in schema_files,
+                "Unknown feature schema.")
         require(request.get("operation") in ("status", "extract"), "Unknown extraction operation.")
         if request["operation"] == "extract":
             ids, texts = request.get("ids"), request.get("texts")
@@ -192,8 +213,13 @@ def request_json(payload):
                     and len(set(ids)) == len(ids), "IDs must be unique nonblank strings.")
             require(all(isinstance(x, str) for x in texts), "Texts must be strings without missing values.")
         expected = json.loads(artifact("audit-environment.json").read_text(encoding="utf-8"))
-        schema_path = artifact("../warm-start/feature-schema-writing-v1.csv")
-        require(hashlib.sha256(schema_path.read_bytes()).hexdigest() == expected["schema_sha256"],
+        schema_path = artifact("../warm-start/" + schema_files[request["schema"]])
+        checksum = expected["schema_sha256"]
+        if request["schema"] == "writing_features_v2":
+            manifest = json.loads(artifact("schema-writing-v2.json").read_text(encoding="utf-8"))
+            require(manifest["schema"] == request["schema"], "Incompatible schema manifest.")
+            checksum = manifest["schema_sha256"]
+        require(hashlib.sha256(schema_path.read_bytes()).hexdigest() == checksum,
                 "Installed feature schema differs from the frozen audit; reinstall pairwiseLLM.")
         with schema_path.open(encoding="utf-8") as stream:
             schema = list(csv.DictReader(stream))
