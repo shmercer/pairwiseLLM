@@ -1,7 +1,7 @@
 test_that("path and fixed fits forward the solver ceiling through both glmnet interfaces", {
   skip_if_not_installed("glmnet")
   x <- cbind(a = 1:5, b = (1:5)^2)
-  expected <- list(thresh = 1e-12, maxit = 1000000L)
+  expected <- list(thresh = 1e-12, maxit = 100000000L)
   seen <- list()
   fit_stub <- function(x, lambda = NULL, nlambda = NULL, ...) {
     if (is.null(lambda)) lambda <- seq(1, 0.01, length.out = nlambda)
