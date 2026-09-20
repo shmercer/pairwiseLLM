@@ -3,7 +3,7 @@
 ## Bug fixes
 
 - Increased the internal warm-start glmnet iteration ceiling from 100,000 to
-  1,000,000 while preserving the 1e-12 convergence threshold, exact lambda
+  10,000,000 while preserving the 1e-12 convergence threshold, exact lambda
   paths, and hard rejection of incomplete paths. This allows valid expanded
   warm-start folds that need more solver iterations to complete without
   dropping candidates or changing tuning rules (#268).
