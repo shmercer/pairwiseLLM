@@ -60,7 +60,8 @@
   invalid <- function() rlang::abort("Invalid warm-start nested validation contract.")
   n <- model$training$n
   t <- model$tuning
-  validate_tuning <- if (engine == "glmnet") .validate_warm_start_tuning else .validate_warm_start_pls_tuning
+  validate_tuning <- switch(engine, glmnet = .validate_warm_start_tuning,
+    pls = .validate_warm_start_pls_tuning, svr_rbf = .validate_warm_start_svr_tuning)
   validate_tuning(t, n)
   if (!identical(.warm_start_ids(t$ids), t$ids) || length(t$ids) != n ||
       !.warm_start_number(t$seed, 0, .Machine$integer.max) || t$seed != floor(t$seed) ||
@@ -68,6 +69,8 @@
       (engine == "glmnet" && (!identical(model$training$alpha, t$selected$alpha) ||
         !identical(model$training$lambda, t$selected$lambda))) ||
       (engine == "pls" && !identical(model$training$hyperparameters, list(ncomp = t$selected$ncomp))) ||
+      (engine == "svr_rbf" && !identical(model$training$hyperparameters,
+        .warm_start_svr_hyperparameters(t$selected, length(model$preprocessing$retained)))) ||
       !.warm_start_audit_equal(model$calibration,
         .warm_start_calibration_fit(t$oof$raw_prediction, t$oof$observed))) invalid()
   v <- model$validation
@@ -93,19 +96,21 @@
     .validate_warm_start_outcome(record$outcome)
     .validate_warm_start_preprocess(record$preprocessing)
     .validate_warm_start_calibration(record$calibration)
+    if (engine == "svr_rbf") .validate_warm_start_svr_refit(record)
     if (!identical(record$train_ids, t$ids[train]) || !identical(record$test_ids, t$ids[test]) ||
         (engine == "glmnet" && (!identical(record$tuning$alpha_grid, t$alpha_grid) ||
           !identical(record$tuning$lambda_rule, t$lambda_rule))) ||
         (engine == "pls" && !identical(record$tuning$ncomp_requested, t$ncomp_requested)) ||
+        (engine == "svr_rbf" && !identical(record$tuning$control, t$control)) ||
         !identical(max(record$tuning$foldid), v$inner_folds) ||
         !identical(record$preprocessing, record$tuning$reference_preprocessing) ||
         !.warm_start_audit_equal(record$outcome, .warm_start_outcome_fit(theta[train])) ||
         !.warm_start_audit_equal(record$tuning$oof$observed,
           .warm_start_outcome_apply(theta[train], record$outcome)) ||
         !.warm_start_audit_equal(p$observed[test], .warm_start_outcome_apply(theta[test], record$outcome)) ||
-        !.warm_start_named_numeric(record$coefficients, record$preprocessing$retained) ||
-        !.warm_start_number(record$intercept) ||
-        !identical(record$n_nonzero, sum(record$coefficients != 0)) ||
+        (engine != "svr_rbf" && (!.warm_start_named_numeric(record$coefficients, record$preprocessing$retained) ||
+          !.warm_start_number(record$intercept) ||
+          !identical(record$n_nonzero, sum(record$coefficients != 0)))) ||
         !.warm_start_audit_equal(record$calibration, .warm_start_calibration_fit(
           record$tuning$oof$raw_prediction, record$tuning$oof$observed)) ||
         !.warm_start_audit_equal(unname(as.matrix(record$predictions[, -1])),

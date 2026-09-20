@@ -32,6 +32,11 @@
 #' weight, so coefficient magnitude is not a unique measure of predictive
 #' importance, causal influence, or explained variance.
 #'
+#' Nonlinear SVR models have no linear feature coefficients. Requests raise
+#' `pairwiseLLM_warm_nonlinear_coefficients`, also naming the nonlinear component
+#' when an ensemble contains SVR. Dual coefficients are kernel weights, not
+#' linear feature effects.
+#'
 #' Ensemble columns show component coefficients side by side. Each component
 #' standardized predictors using its own training distribution, so columns do
 #' not imply one common raw-feature SD. The table exposes fitted direction,
@@ -67,7 +72,12 @@ warm_start_coefficients <- function(object, ...) {
   UseMethod("warm_start_coefficients")
 }
 
-.warm_start_model_coefficients <- function(model) {
+.warm_start_model_coefficients <- function(model, component = NULL) {
+  if (identical(model$training$engine, "svr_rbf")) {
+    label <- if (is.null(component)) "Model" else paste0("Component '", component, "'")
+    rlang::abort(paste0(label, " uses nonlinear engine svr_rbf; linear feature coefficients do not exist."),
+      class = "pairwiseLLM_warm_nonlinear_coefficients", engine = "svr_rbf", component = component)
+  }
   if (!identical(model$calibration$status, "oof_linear")) {
     rlang::abort(paste0(
       "Calibrated standardized coefficients require a warm-start model fitted ",
@@ -101,7 +111,7 @@ warm_start_coefficients.pairwiseLLM_warm_ensemble <- function(object, ...) {
   .validate_warm_start_ensemble(object)
   out <- tibble::tibble(feature = object$features)
   for (name in names(object$components)) {
-    component <- .warm_start_model_coefficients(object$components[[name]])
+    component <- .warm_start_model_coefficients(object$components[[name]], component = name)
     if (!identical(component$feature, object$features)) {
       rlang::abort("Warm-start ensemble component features are misaligned.")
     }

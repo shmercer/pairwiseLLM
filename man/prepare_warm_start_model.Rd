@@ -35,7 +35,9 @@ settings and nested-validation summaries. IDs, OOF rows, fold records, tuning
 traces and contextual warning messages are omitted; warning counts remain.
 Format-3 artifacts retain compact CV identity digests, not the original plan.
 Summaries cannot be recomputed without the original evidence. An already
-reduced artifact cannot recover its audit through this function.
+reduced artifact cannot recover its audit through this function. SVR support
+vectors retain numeric matrix dimensions and feature order as necessary
+deployment data; audit omission does not anonymize them.
 
 Ensembles retain ensemble format 1; audit omission recursively reduces each
 component, preserving its format generation and existing metadata. Supplied

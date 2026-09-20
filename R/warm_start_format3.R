@@ -29,7 +29,7 @@
   if (!all(required %in% names(model)) ||
       !identical(class(model), "pairwiseLLM_warm_model") ||
       !.warm_start_string(model$audit_status) || !model$audit_status %in% c("full", "summary_only") ||
-      !.warm_start_string(model$training$engine) || !model$training$engine %in% c("glmnet", "pls") ||
+      !.warm_start_string(model$training$engine) || !model$training$engine %in% c("glmnet", "pls", "svr_rbf") ||
       !identical(model$calibration$status, "oof_linear")) invalid()
   .validate_warm_start_engine_payload(model$engine_payload, model$training$engine, model$preprocessing$retained)
   if (!identical(model$coefficients, model$engine_payload$coefficients) ||
@@ -38,6 +38,8 @@
     if (!identical(model$training$hyperparameters,
         list(alpha = model$training$alpha, lambda = model$training$lambda))) invalid()
     .validate_warm_start_model(.warm_start_legacy_view(model))
+  } else if (model$training$engine == "svr_rbf") {
+    .validate_warm_start_svr_model(model)
   } else {
     .validate_warm_start_pls_model(model)
   }
@@ -83,6 +85,7 @@
 }
 
 .warm_start_reduced3 <- function(model) {
+  if (identical(model$training$engine, "svr_rbf")) return(.warm_start_svr_reduced(model))
   if (identical(model$training$engine, "pls")) return(.warm_start_pls_reduced(model))
   out <- .warm_start_reduced(.warm_start_legacy_view(model))
   out$format_version <- 3L

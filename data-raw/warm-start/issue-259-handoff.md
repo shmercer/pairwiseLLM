@@ -12,14 +12,16 @@ Do not use study outcomes to choose features, tuning, engines or exceptions.
 | 1 | Architecture, frozen regression evidence, handoffs | 01-architecture | master | Complete; PR #260 merged to reviewed master |
 | 2 | CV plans, format 3, compatible glmnet and single-model interoperability | 02-cv-engines | master (Phase 1 merged) | Complete; PR #261 merged, all seven checks passed |
 | 3 | Audited v2 schema commit, extraction and audit | 03-writing-v2 | master (Phase 2 merged) | Complete; PR #262 merged, all seven checks passed |
-| 4 | PLS backend and portable linear deployment | 04-pls | master (Phase 3 merged) | Complete locally; PR #263, CI/review pending |
-| 5 | RBF-SVR backend and portable kernel deployment | 05-svr-rbf | Phase 4 branch | Not started |
+| 4 | PLS backend and portable linear deployment | 04-pls | master (Phase 3 merged) | Complete; PR #263 merged, all seven reviewed-head checks passed |
+| 5 | RBF-SVR backend and portable kernel deployment | 05-svr-rbf | master (Phase 4 merged) | Local implementation/verification complete; PR/CI handoff follows |
 | 6 | Same-task algorithm ensemble and all consumers | 06-algorithm-ensemble | Phase 5 branch | Not started |
 | 7 | End-to-end docs, full validation, 1.5.2 | 07-docs-quality | Phase 6 branch | Not started |
 
 Fetch and verify actual upstream/PR state before each phase. Build a child branch
 from the verified predecessor tip, or its reviewed merge result if already merged.
-Open a draft phase PR, then mark ready after checks and handoff. Use small commits
+Open a draft phase PR after local checks and handoff. For Phase 5, the user
+explicitly requires ending the turn once the PR is open and waiting for them to
+return CI results; do not poll CI or wait for checks before that handoff. Use small commits
 and Refs #259; only the final completed PR targets master with a closing reference.
 Normal pending review does not block the next stacked phase. Scientific-contract
 conflicts or unresolved foundational defects do.
@@ -850,7 +852,7 @@ weighted tuning/ties, OOF calibration, strict full/reduced format3 audits and PL
 portable deployment. It adds only the frozen RBF-SVR engine, leaving algorithm
 ensembles to Phase6. No merge/tag/publication or Phase5 work has occurred.
 
-## Next-thread prompt
+## Historical Phase 5 entry prompt
 
 Start Phase5 in a new thread using this exact prompt (verify the latest PR head,
 including the reporting commit, before branching):

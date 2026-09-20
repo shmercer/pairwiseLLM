@@ -63,7 +63,15 @@ Format-3 audit omission keeps format 3 and compact identity but removes the plan
 PLS models record \code{training$hyperparameters$ncomp}, with complete component-grid,
 rank-bound, fold-loss and candidate OOF evidence in full models. Reduced PLS
 artifacts retain the selected count and tuning settings, but omit row evidence.
-\code{summary()} and \code{print()} report components for PLS and alpha/lambda for glmnet.
+SVR stores \code{type = "rbf_svr"} payloads with a retained-feature-ordered numeric
+\code{support_vectors} matrix, numeric \code{dual}, \code{rho}, and actual \code{gamma}. Linear
+coefficients/intercept are NULL; no linear nonzero count is reported. Training
+hyperparameters record cost, gamma multiplier, fixed epsilon and actual gamma.
+Full audits retain all candidate OOF/loss values and split-specific gammas;
+reduced models retain deployment parameters and tuning settings. Numeric support
+vectors remain necessary deployment data; reduction is not anonymization.
+\code{summary()} and \code{print()} report components for PLS, alpha/lambda for glmnet,
+and hyperparameters/support-vector count for SVR.
 
 For legacy models, \code{\link[=prepare_warm_start_model]{prepare_warm_start_model()}} audit omission creates format 2 with
 \code{audit_status = "summary_only"}. It preserves deployment parameters and
@@ -88,8 +96,8 @@ glmnet with an intercept and \code{standardize = FALSE}, with solver threshold
 Outcomes are standardized before fitting. No PCA or feature screening based
 on outcomes is used, including when predictors outnumber observations.
 
-Prediction uses only the stored preprocessing and linear coefficients, never
-a serialized backend object. Python is optional for extraction; glmnet and pls
+Prediction uses only the stored preprocessing and numeric engine payload, never
+a serialized backend object. Python is optional for extraction; glmnet, pls and e1071
 are optional development engines. None is needed to inspect or predict from a
 deployment object with precomputed features. Schema metadata is an input
 contract, not verified extraction provenance or evidence of predictive validity.

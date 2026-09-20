@@ -5,6 +5,11 @@ Issue #259 development uses the [architecture note](issue-259-design.md) and
 capture is `capture-issue-259-baseline.R`; its synthetic fixtures are frozen
 pre-refactor evidence and must not be refreshed to accommodate new code.
 
+For Phase 5 verification, `check-issue-259-phase5.R` collects focused tests and
+scoped coverage; `check-issue-259-svr-deployment.R` checks full/reduced v1/v2 SVR
+deployment in a fresh process without fitting backends. These scripts use only
+synthetic data and do not install packages.
+
 The existing feature inventory, audit, frozen environment lock, and explicit setup
 script remain the Task 01 sources of evidence. Installed extraction setup instructions
 are in `inst/python/README.md`. The frozen schema is not re-curated by model building.

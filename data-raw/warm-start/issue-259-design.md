@@ -228,6 +228,45 @@ it drops rank records, candidate/selected OOF rows and outer fold evidence.
 The legacy glmnet projection remains unchanged; PLS never impersonates a legacy
 glmnet model to bypass its validation. RBF-SVR remains reserved for Phase 5.
 
+### Phase 5 RBF-SVR implementation
+
+`svr_rbf` uses optional `e1071` for development only. Its normalized controls
+are sorted unique positive cost/multiplier vectors, with independently defaulted
+cost `2^(-2:4)` and multiplier `2^(-2:2)`. Epsilon stays 0.10; no other controls
+are accepted. Fits explicitly use eps-regression/radial, scale=FALSE, cross=0,
+probability=FALSE. Backend package/version mapping is e1071, not the engine label.
+
+The shared orchestrator retains all preprocessing, outcome-scale, partition,
+calibration and outer-validation contracts. Each context records normalized
+controls, lexicographically ordered Cartesian grid, reference/inner preprocessing,
+retained predictor counts and actual gamma for each candidate/refit/split,
+all candidate OOF predictions, fold losses/sizes, weighted MSE/SE, and minimum/
+1-SE selections. Selected cost/multiplier/OOF identity is exact; reconstructed
+floating losses use existing audit tolerance. Minimum ties and eligible 1-SE
+choices favor lower cost then lower multiplier. No candidate/fold is omitted.
+
+The payload is `list(type="rbf_svr", support_vectors=..., dual=..., rho=...,
+gamma=...)`. Support vectors are numeric matrices with NULL row names and retained
+feature column order; dual is a numeric vector. The one-predictor e1071 fit drops
+column names, so that single known column is restored from input identity.
+Prediction sums squared coordinate differences directly, avoiding cancellation
+and therefore negative-distance clamping, then computes the specified RBF kernel
+product minus rho. Nonfinite distances/predictions fail explicitly.
+
+Final and outer linear coefficients/intercept are NULL; linear nonzero counts
+are absent. Training hyperparameters contain cost, multiplier, epsilon and actual
+gamma; summaries report these and support-vector count. Full/reduced validation,
+prediction and metadata require no fitting backend. Numeric payload copying
+rebuilds matrix dimensions/column names and strips unrelated attributes.
+Summary-only models keep normalized tuning controls/conventions and compact CV
+identity while omitting all candidate, OOF, fold and retained-count audit records.
+Support vectors remain deployment data, not an anonymization guarantee.
+
+`warm_start_coefficients()` raises `pairwiseLLM_warm_nonlinear_coefficients` for
+SVR and names an offending cross-task component. Existing linear results and
+cross-task duplicate/component-only validation semantics remain unchanged.
+The same-task algorithm ensemble remains exclusively Phase 6 work.
+
 ## V2 feature contract
 
 V1 CSV SHA-256 remains

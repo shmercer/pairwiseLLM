@@ -41,6 +41,7 @@ Imports:
 Suggests:
     BradleyTerry2,
     cmdstanr,
+    e1071,
     EloChoice,
     future,
     future.apply,
@@ -177,6 +178,8 @@ Collate:
     'warm_start_preprocess.R'
     'warm_start_prior.R'
     'warm_start_python.R'
+    'warm_start_svr.R'
+    'warm_start_svr_validation.R'
     'warm_start_tune.R'
     'warm_start_validation.R'
 Config/roxygen2/version: 8.1.0

@@ -43,7 +43,15 @@
 #' PLS models record `training$hyperparameters$ncomp`, with complete component-grid,
 #' rank-bound, fold-loss and candidate OOF evidence in full models. Reduced PLS
 #' artifacts retain the selected count and tuning settings, but omit row evidence.
-#' `summary()` and `print()` report components for PLS and alpha/lambda for glmnet.
+#' SVR stores `type = "rbf_svr"` payloads with a retained-feature-ordered numeric
+#' `support_vectors` matrix, numeric `dual`, `rho`, and actual `gamma`. Linear
+#' coefficients/intercept are NULL; no linear nonzero count is reported. Training
+#' hyperparameters record cost, gamma multiplier, fixed epsilon and actual gamma.
+#' Full audits retain all candidate OOF/loss values and split-specific gammas;
+#' reduced models retain deployment parameters and tuning settings. Numeric support
+#' vectors remain necessary deployment data; reduction is not anonymization.
+#' `summary()` and `print()` report components for PLS, alpha/lambda for glmnet,
+#' and hyperparameters/support-vector count for SVR.
 #'
 #' For legacy models, [prepare_warm_start_model()] audit omission creates format 2 with
 #' `audit_status = "summary_only"`. It preserves deployment parameters and
@@ -68,8 +76,8 @@
 #' Outcomes are standardized before fitting. No PCA or feature screening based
 #' on outcomes is used, including when predictors outnumber observations.
 #'
-#' Prediction uses only the stored preprocessing and linear coefficients, never
-#' a serialized backend object. Python is optional for extraction; glmnet and pls
+#' Prediction uses only the stored preprocessing and numeric engine payload, never
+#' a serialized backend object. Python is optional for extraction; glmnet, pls and e1071
 #' are optional development engines. None is needed to inspect or predict from a
 #' deployment object with precomputed features. Schema metadata is an input
 #' contract, not verified extraction provenance or evidence of predictive validity.
@@ -286,6 +294,11 @@ summary.pairwiseLLM_warm_model <- function(object, ...) {
     out[c("alpha", "lambda")] <- NULL
     out$ncomp <- object$training$hyperparameters$ncomp
   }
+  if (object$training$engine == "svr_rbf") {
+    out[c("alpha", "lambda", "nonzero_coefficients")] <- NULL
+    out <- c(out, object$training$hyperparameters,
+      list(n_support_vectors = nrow(object$engine_payload$support_vectors)))
+  }
   out
 }
 
@@ -296,11 +309,18 @@ print.pairwiseLLM_warm_model <- function(x, ...) {
   info <- summary(x)
   cat("Task-specific warm-start model:", info$task_id, "\n")
   cat("Target: within-task standardized BT/BTL theta (sample SD)\n")
-  cat("Training rows:", info$n, "| Retained predictors:", info$retained_predictors,
-    "| Nonzero coefficients:", info$nonzero_coefficients, "\n")
+  cat("Training rows:", info$n, "| Retained predictors:", info$retained_predictors)
+  if (info$engine == "svr_rbf") {
+    cat(" | Support vectors:", info$n_support_vectors, "\n")
+  } else {
+    cat(" | Nonzero coefficients:", info$nonzero_coefficients, "\n")
+  }
   cat("Engine:", info$engine, "| Version:", info$engine_version, "\n")
   if (info$engine == "pls") {
     cat("Components:", info$ncomp, "\n")
+  } else if (info$engine == "svr_rbf") {
+    cat("Cost:", info$cost, "| Gamma multiplier:", info$gamma_multiplier,
+      "| Gamma:", info$gamma, "| Epsilon:", info$epsilon, "\n")
   } else {
     cat("Alpha:", info$alpha, "| Lambda:", info$lambda, "\n")
   }

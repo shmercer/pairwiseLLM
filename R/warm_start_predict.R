@@ -18,8 +18,10 @@
 #'
 #' @details
 #' Prediction applies training medians, centers, and sample SDs, followed by the
-#' stored intercept and coefficients. It does not recompute preprocessing, train
-#' a model, load glmnet or pls, initialize Python, or check a Python environment.
+#' stored numeric engine payload. Linear engines use intercept and coefficients;
+#' SVR uses `exp(-gamma * squared_distance) %*% dual - rho`. Prediction does not
+#' recompute preprocessing, train a model, load glmnet/pls/e1071, initialize Python,
+#' or check a Python environment.
 #' Predictions are not calibrated Bayesian prior means or prior standard
 #' deviations. See [pairwiseLLM_warm_model] for the portable model contract.
 #' @family adaptive warm start
