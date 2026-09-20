@@ -137,8 +137,9 @@ Defaults to 41 values from ridge to lasso in increments of 0.025.</p></dd>
 
 
 <dt id="arg-engine">engine<a class="anchor" aria-label="anchor" href="#arg-engine"></a></dt>
-<dd><p>Fitting engine. Default <code>"glmnet"</code>; <code>"pls"</code> and <code>"svr_rbf"</code>
-are reserved and currently fail explicitly.</p></dd>
+<dd><p>Fitting engine: default <code>"glmnet"</code> or <code>"pls"</code>. <code>"svr_rbf"</code>
+remains reserved and fails explicitly. Explicit <code>alpha_grid</code> or <code>lambda_rule</code>
+arguments are accepted only for glmnet.</p></dd>
 
 
 <dt id="arg-cv-plan">cv_plan<a class="anchor" aria-label="anchor" href="#arg-cv-plan"></a></dt>
@@ -148,8 +149,11 @@ explicitly conflicting arguments fail. A supplied plan is never regenerated.</p>
 
 
 <dt id="arg-engine-control">engine_control<a class="anchor" aria-label="anchor" href="#arg-engine-control"></a></dt>
-<dd><p>Reserved engine controls. For glmnet use <code>alpha_grid</code>
-and <code>lambda_rule</code>; nonempty engine controls fail.</p></dd>
+<dd><p>For PLS, an optional named list containing <code>ncomp</code>, a
+vector of unique positive integer candidate component counts, at most 10.
+Every candidate must be legal in every required inner fit and context refit.
+The default uses all counts from one through the common legal maximum in
+each tuning context. For glmnet use <code>alpha_grid</code> and <code>lambda_rule</code> instead.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -160,7 +164,9 @@ outer raw/calibrated predictions, transformed held-out outcomes, validation
 metrics and warnings. Audit records include item IDs and outcomes but no raw
 training texts. Each outer record includes its tuning, scaling, preprocessing,
 calibration, hyperparameters and nonzero coefficient count. Final tuning
-metadata is separate from outer validation. No glmnet fit is retained.</p>
+metadata is separate from outer validation. No backend fit is retained.
+PLS coefficients and <code>Ymeans - Xmeans %*% beta</code> reproduce backend predictions
+on the stored preprocessed predictor scale without requiring <code>pls</code> at deployment.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
@@ -187,6 +193,17 @@ Errors within <code>1e-10 * max(1, abs(a), abs(b))</code> are numerical ties. La
 ties favor the largest penalty. Alpha selection compares CV error at each
 alpha's lambda minimum and favors smaller alpha in a tie. The default selected
 penalty is the largest lambda within one SE of that alpha's minimum error.</p>
+<p>PLS uses the optional <code>pls</code> package with explicit <code>method = "kernelpls"</code>,
+<code>scale = FALSE</code>, <code>validation = "none"</code>, and centering. Preprocessing remains
+owned by this package. Each tuning context uses a common component grid bounded
+by every inner training matrix and the context refit: centered QR rank at
+tolerance 1e-7, retained predictor count, training row count minus one, and 10.
+Explicit candidates are never silently dropped. Weighted MSE and SE follow
+the rules above; minimum-error ties and eligible 1-SE choices favor fewer
+components. Nonfinite or degenerate fits fail with context, without fallback.
+All candidate OOF predictions, fold losses, rank bounds and selection evidence
+are retained. Stored rank bounds are checked for consistency; recomputing rank
+itself requires the original feature table, which is not stored in the model.</p>
 <p>OOF (out-of-fold) predictions are predictions for rows excluded from their
 corresponding coefficient fit. Calibration regresses standardized outcomes on
 selected-hyperparameter OOF predictions using ordinary least squares. Those same
@@ -199,7 +216,7 @@ are recorded as NA with reasons, without an identity-calibration fallback.</p>
 <p>After outer validation, full-data tuning and OOF calibration precede the final
 all-row coefficient refit. Raw and calibrated predictions use within-task
 standardized units, not original BTL units. They are not Bayesian prior SDs.
-glmnet and withr are required only for model development; Python is required only
+The selected engine package and withr are required only for model development; Python is required only
 for the text-input path. This function never installs software or downloads data.</p>
     </div>
     <div class="section level2">

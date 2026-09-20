@@ -83,7 +83,13 @@ Linear coefficients/intercept remain checked compatibility views.
 Training also records selected `hyperparameters`. The complete plan
 binds exact ordered IDs, original outcomes and every nested partition.
 No backend fit object is stored. Format-3 audit omission keeps format 3
-and compact identity but removes the plan.
+and compact identity but removes the plan. PLS models record
+`training$hyperparameters$ncomp`, with complete component-grid,
+rank-bound, fold-loss and candidate OOF evidence in full models. Reduced
+PLS artifacts retain the selected count and tuning settings, but omit
+row evidence. [`summary()`](https://rdrr.io/r/base/summary.html) and
+[`print()`](https://rdrr.io/r/base/print.html) report components for PLS
+and alpha/lambda for glmnet.
 
 For legacy models,
 [`prepare_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_warm_start_model.md)
@@ -113,11 +119,11 @@ or feature screening based on outcomes is used, including when
 predictors outnumber observations.
 
 Prediction uses only the stored preprocessing and linear coefficients,
-never a serialized glmnet object. Python is optional for extraction, and
-glmnet is optional for development; neither is needed to inspect or
-predict from a deployment object with precomputed features. Schema
-metadata is an input contract, not verified extraction provenance or
-evidence of predictive validity.
+never a serialized backend object. Python is optional for extraction;
+glmnet and pls are optional development engines. None is needed to
+inspect or predict from a deployment object with precomputed features.
+Schema metadata is an input contract, not verified extraction provenance
+or evidence of predictive validity.
 
 ## See also
 

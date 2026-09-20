@@ -84,8 +84,9 @@ fit_warm_start_model(
 
 - engine:
 
-  Fitting engine. Default `"glmnet"`; `"pls"` and `"svr_rbf"` are
-  reserved and currently fail explicitly.
+  Fitting engine: default `"glmnet"` or `"pls"`. `"svr_rbf"` remains
+  reserved and fails explicitly. Explicit `alpha_grid` or `lambda_rule`
+  arguments are accepted only for glmnet.
 
 - cv_plan:
 
@@ -97,8 +98,12 @@ fit_warm_start_model(
 
 - engine_control:
 
-  Reserved engine controls. For glmnet use `alpha_grid` and
-  `lambda_rule`; nonempty engine controls fail.
+  For PLS, an optional named list containing `ncomp`, a vector of unique
+  positive integer candidate component counts, at most 10. Every
+  candidate must be legal in every required inner fit and context refit.
+  The default uses all counts from one through the common legal maximum
+  in each tuning context. For glmnet use `alpha_grid` and `lambda_rule`
+  instead.
 
 ## Value
 
@@ -110,7 +115,10 @@ transformed held-out outcomes, validation metrics and warnings. Audit
 records include item IDs and outcomes but no raw training texts. Each
 outer record includes its tuning, scaling, preprocessing, calibration,
 hyperparameters and nonzero coefficient count. Final tuning metadata is
-separate from outer validation. No glmnet fit is retained.
+separate from outer validation. No backend fit is retained. PLS
+coefficients and `Ymeans - Xmeans %*% beta` reproduce backend
+predictions on the stored preprocessed predictor scale without requiring
+`pls` at deployment.
 
 ## Details
 
@@ -148,6 +156,20 @@ error at each alpha's lambda minimum and favors smaller alpha in a tie.
 The default selected penalty is the largest lambda within one SE of that
 alpha's minimum error.
 
+PLS uses the optional `pls` package with explicit
+`method = "kernelpls"`, `scale = FALSE`, `validation = "none"`, and
+centering. Preprocessing remains owned by this package. Each tuning
+context uses a common component grid bounded by every inner training
+matrix and the context refit: centered QR rank at tolerance 1e-7,
+retained predictor count, training row count minus one, and 10. Explicit
+candidates are never silently dropped. Weighted MSE and SE follow the
+rules above; minimum-error ties and eligible 1-SE choices favor fewer
+components. Nonfinite or degenerate fits fail with context, without
+fallback. All candidate OOF predictions, fold losses, rank bounds and
+selection evidence are retained. Stored rank bounds are checked for
+consistency; recomputing rank itself requires the original feature
+table, which is not stored in the model.
+
 OOF (out-of-fold) predictions are predictions for rows excluded from
 their corresponding coefficient fit. Calibration regresses standardized
 outcomes on selected-hyperparameter OOF predictions using ordinary least
@@ -162,9 +184,9 @@ recorded as NA with reasons, without an identity-calibration fallback.
 After outer validation, full-data tuning and OOF calibration precede the
 final all-row coefficient refit. Raw and calibrated predictions use
 within-task standardized units, not original BTL units. They are not
-Bayesian prior SDs. glmnet and withr are required only for model
-development; Python is required only for the text-input path. This
-function never installs software or downloads data.
+Bayesian prior SDs. The selected engine package and withr are required
+only for model development; Python is required only for the text-input
+path. This function never installs software or downloads data.
 
 ## See also
 

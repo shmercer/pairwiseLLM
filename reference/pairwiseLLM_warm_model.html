@@ -121,7 +121,11 @@ held-out predictions and metrics, and warning messages. See <code><a href="fit_w
 coefficients/intercept remain checked compatibility views. Training also
 records selected <code>hyperparameters</code>. The complete plan binds exact ordered IDs,
 original outcomes and every nested partition. No backend fit object is stored.
-Format-3 audit omission keeps format 3 and compact identity but removes the plan.</p>
+Format-3 audit omission keeps format 3 and compact identity but removes the plan.
+PLS models record <code>training$hyperparameters$ncomp</code>, with complete component-grid,
+rank-bound, fold-loss and candidate OOF evidence in full models. Reduced PLS
+artifacts retain the selected count and tuning settings, but omit row evidence.
+<code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> and <code><a href="https://rdrr.io/r/base/print.html" class="external-link">print()</a></code> report components for PLS and alpha/lambda for glmnet.</p>
 <p>For legacy models, <code><a href="prepare_warm_start_model.html">prepare_warm_start_model()</a></code> audit omission creates format 2 with
 <code>audit_status = "summary_only"</code>. It preserves deployment parameters and
 validation summaries but omits row-level evidence. Those summaries cannot be
@@ -143,8 +147,8 @@ glmnet with an intercept and <code>standardize = FALSE</code>, with solver thres
 Outcomes are standardized before fitting. No PCA or feature screening based
 on outcomes is used, including when predictors outnumber observations.</p>
 <p>Prediction uses only the stored preprocessing and linear coefficients, never
-a serialized glmnet object. Python is optional for extraction, and glmnet is
-optional for development; neither is needed to inspect or predict from a
+a serialized backend object. Python is optional for extraction; glmnet and pls
+are optional development engines. None is needed to inspect or predict from a
 deployment object with precomputed features. Schema metadata is an input
 contract, not verified extraction provenance or evidence of predictive validity.</p>
     </div>

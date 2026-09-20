@@ -43,9 +43,9 @@ calibration status), respectively.
 
 Prediction applies training medians, centers, and sample SDs, followed
 by the stored intercept and coefficients. It does not recompute
-preprocessing, train a model, load glmnet, initialize Python, or check a
-Python environment. Predictions are not calibrated Bayesian prior means
-or prior standard deviations. See
+preprocessing, train a model, load glmnet or pls, initialize Python, or
+check a Python environment. Predictions are not calibrated Bayesian
+prior means or prior standard deviations. See
 [pairwiseLLM_warm_model](https://shmercer.github.io/pairwiseLLM/reference/pairwiseLLM_warm_model.md)
 for the portable model contract.
 

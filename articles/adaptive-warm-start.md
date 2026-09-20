@@ -366,8 +366,58 @@ partitions across feature representations. A supplied plan is validated
 before extraction or fitting; it is never regenerated or silently
 realigned. Omitted seed/fold arguments defer to the plan, and explicitly
 conflicting values fail. Omitting `cv_plan` constructs the same
-partitions internally. The current engine is `"glmnet"`; PLS and RBF-SVR
-names are reserved for later implementation.
+partitions internally. Engines `"glmnet"` (default) and `"pls"` reuse
+the plan; RBF-SVR remains reserved for later implementation.
+
+With the optional `pls` package installed, fit PLS on the same synthetic
+rows and partitions. Omit glmnet-only `alpha_grid` and `lambda_rule`
+arguments.
+
+``` r
+
+pls_model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
+  features = features, engine = "pls", cv_plan = plan)
+pls_model$training$hyperparameters
+#> $ncomp
+#> [1] 1
+pls_model$validation$metrics
+#> $pearson_r
+#> [1] -0.330691
+#> 
+#> $squared_pearson_r
+#> [1] 0.1093565
+#> 
+#> $spearman_rho
+#> [1] -0.06785714
+#> 
+#> $rmse
+#> [1] 1.268724
+#> 
+#> $mae
+#> [1] 0.9691657
+#> 
+#> $calibration_intercept
+#> [1] 0.1509749
+#> 
+#> $calibration_slope
+#> [1] -0.6901574
+#> 
+#> $undefined_reasons
+#> character(0)
+stopifnot(identical(pls_model$cv_identity, model$cv_identity))
+```
+
+PLS uses `kernelpls` with backend scaling and CV disabled. Its default
+component grid starts at one and ends at the smallest centered rank,
+retained predictor count, training-row count minus one, or ten across
+every inner training split and the context refit. Rank uses QR tolerance
+`1e-7`. To request a smaller grid, use
+`engine_control = list(ncomp = c(1L, 2L))`; every requested count must
+be legal. Weighted MSE/SE and the 1-SE rule favor fewer components.
+Degenerate fits fail with their fold/refit context. Full audits retain
+candidate OOF predictions, losses and rank bounds. Saved PLS
+coefficients and intercept reproduce backend predictions without
+requiring `pls` for deployment.
 
 Every applicable training fold learns missingness filtering (\>20%
 missing or all missing), median imputation, constant/near-zero-variance
