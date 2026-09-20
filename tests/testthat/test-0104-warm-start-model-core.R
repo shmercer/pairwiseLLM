@@ -240,7 +240,7 @@ test_that("glmnet boundary handles missing dependency and solver failures explic
 })
 
 test_that("solver control routing supports both glmnet interfaces", {
-  controls <- list(thresh = 1e-12, maxit = 100000000L)
+  controls <- list(thresh = 1e-12, maxit = 10000000L)
   expect_identical(.warm_start_glmnet_controls(function(control = list()) NULL), list(control = controls))
   expect_identical(.warm_start_glmnet_controls(function(thresh, maxit) NULL), controls)
 })

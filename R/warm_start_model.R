@@ -215,7 +215,7 @@ NULL
 }
 
 .warm_start_glmnet_controls <- function(engine = glmnet::glmnet) {
-  control <- list(thresh = 1e-12, maxit = 100000000L)
+  control <- list(thresh = 1e-12, maxit = 10000000L)
   # glmnet 5 moved solver controls into a list; retain compatibility with 4.x.
   if ("control" %in% names(formals(engine))) return(list(control = control))
   control
