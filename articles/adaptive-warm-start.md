@@ -366,8 +366,8 @@ partitions across feature representations. A supplied plan is validated
 before extraction or fitting; it is never regenerated or silently
 realigned. Omitted seed/fold arguments defer to the plan, and explicitly
 conflicting values fail. Omitting `cv_plan` constructs the same
-partitions internally. Engines `"glmnet"` (default) and `"pls"` reuse
-the plan; RBF-SVR remains reserved for later implementation.
+partitions internally. Engines `"glmnet"` (default) and `"pls"` and
+`"svr_rbf"` reuse the plan.
 
 With the optional `pls` package installed, fit PLS on the same synthetic
 rows and partitions. Omit glmnet-only `alpha_grid` and `lambda_rule`
@@ -418,6 +418,87 @@ Degenerate fits fail with their fold/refit context. Full audits retain
 candidate OOF predictions, losses and rank bounds. Saved PLS
 coefficients and intercept reproduce backend predictions without
 requiring `pls` for deployment.
+
+RBF-SVR uses the optional `e1071` package. Its default grid is
+`cost = 2^(-2:4)` crossed with `gamma_multiplier = 2^(-2:2)`, with
+epsilon fixed at 0.10. Each fit divides the multiplier by its own
+retained predictor count. Backend scaling, cross-validation, and
+probability fitting are disabled. Weighted MSE/SE and the 1-SE rule
+favor lower cost, then lower gamma multiplier. The smaller explicit grid
+below keeps this synthetic example quick.
+
+``` r
+
+svr_model <- fit_warm_start_model(features$item_id, theta, "synthetic-a",
+  features = features, engine = "svr_rbf", cv_plan = plan,
+  engine_control = list(cost = c(0.5, 2), gamma_multiplier = c(0.5, 1)))
+svr_model$training$hyperparameters
+#> $cost
+#> [1] 0.5
+#> 
+#> $gamma_multiplier
+#> [1] 0.5
+#> 
+#> $epsilon
+#> [1] 0.1
+#> 
+#> $gamma
+#> [1] 0.025
+svr_model$validation$metrics
+#> $pearson_r
+#> [1] -0.2048213
+#> 
+#> $squared_pearson_r
+#> [1] 0.04195175
+#> 
+#> $spearman_rho
+#> [1] -0.007142857
+#> 
+#> $rmse
+#> [1] 1.089379
+#> 
+#> $mae
+#> [1] 0.8337594
+#> 
+#> $calibration_intercept
+#> [1] 0.08717433
+#> 
+#> $calibration_slope
+#> [1] -0.814778
+#> 
+#> $undefined_reasons
+#> character(0)
+stopifnot(identical(svr_model$cv_identity, model$cv_identity))
+predict(svr_model, features)
+#> # A tibble: 15 × 3
+#>    item_id raw_prediction calibrated_prediction
+#>    <chr>            <dbl>                 <dbl>
+#>  1 1               0.411                 0.183 
+#>  2 2               0.213                 0.0492
+#>  3 3               0.205                 0.0436
+#>  4 4              -0.181                -0.218 
+#>  5 5               0.554                 0.280 
+#>  6 6              -0.129                -0.183 
+#>  7 7               0.419                 0.188 
+#>  8 8               0.668                 0.357 
+#>  9 9               0.470                 0.223 
+#> 10 10             -0.483                -0.422 
+#> 11 11             -0.0855               -0.153 
+#> 12 12             -0.0575               -0.134 
+#> 13 13             -0.142                -0.191 
+#> 14 14              0.196                 0.0371
+#> 15 15              0.472                 0.224
+```
+
+Full SVR audits retain every candidate’s OOF predictions and losses plus
+each split’s preprocessing and actual gamma. Full and reduced artifacts
+predict from numeric support vectors, dual coefficients, rho, and gamma
+without `e1071`. Support-vector matrix dimensions and feature order are
+preserved. These numeric vectors remain deployment data after audit
+omission.
+[`warm_start_coefficients()`](https://shmercer.github.io/pairwiseLLM/reference/warm_start_coefficients.md)
+raises a typed error for SVR or a cross-task ensemble containing SVR
+because nonlinear kernel weights are not linear feature coefficients.
 
 Every applicable training fold learns missingness filtering (\>20%
 missing or all missing), median imputation, constant/near-zero-variance

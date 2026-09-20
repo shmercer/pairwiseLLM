@@ -4,6 +4,14 @@
 
 ### Improvements
 
+- Added optional RBF-SVR warm starts with the fixed epsilon/grid
+  conventions, split-specific gamma, weighted nested-CV tuning and
+  deterministic 1-SE selection. Complete format-3 audits and portable
+  numeric support vectors support full/reduced deployment without
+  `e1071`; nonlinear coefficient requests fail explicitly
+  ([\#259](https://github.com/shmercer/pairwiseLLM/issues/259), Phase
+  5).
+
 - Added optional PLS warm-start models using explicit kernel PLS, legal
   common component grids, weighted nested-CV tuning and fewer-component
   1-SE selection. Full format-3 audits retain candidate OOF evidence;

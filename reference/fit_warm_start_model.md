@@ -84,9 +84,9 @@ fit_warm_start_model(
 
 - engine:
 
-  Fitting engine: default `"glmnet"` or `"pls"`. `"svr_rbf"` remains
-  reserved and fails explicitly. Explicit `alpha_grid` or `lambda_rule`
-  arguments are accepted only for glmnet.
+  Fitting engine: `"glmnet"` (default), `"pls"`, or `"svr_rbf"`.
+  Explicit `alpha_grid` or `lambda_rule` arguments are accepted only for
+  glmnet.
 
 - cv_plan:
 
@@ -102,23 +102,28 @@ fit_warm_start_model(
   positive integer candidate component counts, at most 10. Every
   candidate must be legal in every required inner fit and context refit.
   The default uses all counts from one through the common legal maximum
-  in each tuning context. For glmnet use `alpha_grid` and `lambda_rule`
+  in each tuning context. For SVR, only `cost` and `gamma_multiplier`
+  are accepted: unique finite positive candidate vectors, defaulting
+  independently to `2^(-2:4)` and `2^(-2:2)`. Epsilon is fixed at 0.10.
+  Unknown controls fail. For glmnet use `alpha_grid` and `lambda_rule`
   instead.
 
 ## Value
 
 A portable
 [pairwiseLLM_warm_model](https://shmercer.github.io/pairwiseLLM/reference/pairwiseLLM_warm_model.md)
-with deployment preprocessing, coefficients and OOF calibration, plus
-tuning traces, fold assignments, outer raw/calibrated predictions,
-transformed held-out outcomes, validation metrics and warnings. Audit
-records include item IDs and outcomes but no raw training texts. Each
-outer record includes its tuning, scaling, preprocessing, calibration,
-hyperparameters and nonzero coefficient count. Final tuning metadata is
-separate from outer validation. No backend fit is retained. PLS
-coefficients and `Ymeans - Xmeans %*% beta` reproduce backend
-predictions on the stored preprocessed predictor scale without requiring
-`pls` at deployment.
+with deployment preprocessing, numeric engine parameters and OOF
+calibration, plus tuning traces, fold assignments, outer raw/calibrated
+predictions, transformed held-out outcomes, validation metrics and
+warnings. Audit records include item IDs and outcomes but no raw
+training texts. Each outer record includes its tuning, scaling,
+preprocessing, calibration and hyperparameters (linear models also
+record nonzero counts). Final tuning metadata is separate from outer
+validation. No backend fit is retained. PLS coefficients and
+`Ymeans - Xmeans %*% beta` reproduce backend predictions on the stored
+preprocessed predictor scale without requiring `pls` at deployment. SVR
+stores numeric support vectors, dual coefficients, rho and actual gamma;
+prediction needs no `e1071`. Its linear coefficients/intercept are NULL.
 
 ## Details
 
@@ -170,8 +175,18 @@ selection evidence are retained. Stored rank bounds are checked for
 consistency; recomputing rank itself requires the original feature
 table, which is not stored in the model.
 
+RBF-SVR uses optional `e1071`, with `type = "eps-regression"`,
+`kernel = "radial"`, `scale = FALSE`, `cross = 0`,
+`probability = FALSE`, and fixed `epsilon = 0.10`. Every fit divides its
+gamma multiplier by its own retained predictor count. The complete
+Cartesian grid is tuned with the weighted MSE/SE above. Both
+minimum-error ties and eligible 1-SE choices favor lower cost, then
+lower gamma multiplier. Full audits retain candidate OOF values, fold
+losses, retained counts and actual gammas. Failed candidates are never
+omitted.
+
 OOF (out-of-fold) predictions are predictions for rows excluded from
-their corresponding coefficient fit. Calibration regresses standardized
+their corresponding engine fit. Calibration regresses standardized
 outcomes on selected-hyperparameter OOF predictions using ordinary least
 squares. Those same folds select hyperparameters: calibration fit
 statistics are not independent performance estimates. Only untouched
@@ -182,7 +197,7 @@ negative slopes are allowed. Undefined validation diagnostics are
 recorded as NA with reasons, without an identity-calibration fallback.
 
 After outer validation, full-data tuning and OOF calibration precede the
-final all-row coefficient refit. Raw and calibrated predictions use
+final all-row engine refit. Raw and calibrated predictions use
 within-task standardized units, not original BTL units. They are not
 Bayesian prior SDs. The selected engine package and withr are required
 only for model development; Python is required only for the text-input

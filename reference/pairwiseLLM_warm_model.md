@@ -87,9 +87,18 @@ and compact identity but removes the plan. PLS models record
 `training$hyperparameters$ncomp`, with complete component-grid,
 rank-bound, fold-loss and candidate OOF evidence in full models. Reduced
 PLS artifacts retain the selected count and tuning settings, but omit
-row evidence. [`summary()`](https://rdrr.io/r/base/summary.html) and
-[`print()`](https://rdrr.io/r/base/print.html) report components for PLS
-and alpha/lambda for glmnet.
+row evidence. SVR stores `type = "rbf_svr"` payloads with a
+retained-feature-ordered numeric `support_vectors` matrix, numeric
+`dual`, `rho`, and actual `gamma`. Linear coefficients/intercept are
+NULL; no linear nonzero count is reported. Training hyperparameters
+record cost, gamma multiplier, fixed epsilon and actual gamma. Full
+audits retain all candidate OOF/loss values and split-specific gammas;
+reduced models retain deployment parameters and tuning settings. Numeric
+support vectors remain necessary deployment data; reduction is not
+anonymization. [`summary()`](https://rdrr.io/r/base/summary.html) and
+[`print()`](https://rdrr.io/r/base/print.html) report components for
+PLS, alpha/lambda for glmnet, and hyperparameters/support-vector count
+for SVR.
 
 For legacy models,
 [`prepare_warm_start_model()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_warm_start_model.md)
@@ -118,12 +127,12 @@ the requested lambda. Outcomes are standardized before fitting. No PCA
 or feature screening based on outcomes is used, including when
 predictors outnumber observations.
 
-Prediction uses only the stored preprocessing and linear coefficients,
-never a serialized backend object. Python is optional for extraction;
-glmnet and pls are optional development engines. None is needed to
-inspect or predict from a deployment object with precomputed features.
-Schema metadata is an input contract, not verified extraction provenance
-or evidence of predictive validity.
+Prediction uses only the stored preprocessing and numeric engine
+payload, never a serialized backend object. Python is optional for
+extraction; glmnet, pls and e1071 are optional development engines. None
+is needed to inspect or predict from a deployment object with
+precomputed features. Schema metadata is an input contract, not verified
+extraction provenance or evidence of predictive validity.
 
 ## See also
 

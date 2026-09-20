@@ -461,8 +461,7 @@ fitting; it is never regenerated or silently realigned. Omitted
 seed/fold arguments defer to the plan, and explicitly conflicting values
 fail. Omitting <code>cv_plan</code> constructs the same partitions
 internally. Engines <code>"glmnet"</code> (default) and
-<code>"pls"</code> reuse the plan; RBF-SVR remains reserved for later
-implementation.</p>
+<code>"pls"</code> and <code>"svr_rbf"</code> reuse the plan.</p>
 <p>With the optional <code>pls</code> package installed, fit PLS on the
 same synthetic rows and partitions. Omit glmnet-only
 <code>alpha_grid</code> and <code>lambda_rule</code> arguments.</p>
@@ -508,6 +507,82 @@ components. Degenerate fits fail with their fold/refit context. Full
 audits retain candidate OOF predictions, losses and rank bounds. Saved
 PLS coefficients and intercept reproduce backend predictions without
 requiring <code>pls</code> for deployment.</p>
+<p>RBF-SVR uses the optional <code>e1071</code> package. Its default
+grid is <code>cost = 2^(-2:4)</code> crossed with
+<code>gamma_multiplier = 2^(-2:2)</code>, with epsilon fixed at 0.10.
+Each fit divides the multiplier by its own retained predictor count.
+Backend scaling, cross-validation, and probability fitting are disabled.
+Weighted MSE/SE and the 1-SE rule favor lower cost, then lower gamma
+multiplier. The smaller explicit grid below keeps this synthetic example
+quick.</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">svr_model</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_warm_start_model.html">fit_warm_start_model</a></span><span class="op">(</span><span class="va">features</span><span class="op">$</span><span class="va">item_id</span>, <span class="va">theta</span>, <span class="st">"synthetic-a"</span>,</span>
+<span>  features <span class="op">=</span> <span class="va">features</span>, engine <span class="op">=</span> <span class="st">"svr_rbf"</span>, cv_plan <span class="op">=</span> <span class="va">plan</span>,</span>
+<span>  engine_control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>cost <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.5</span>, <span class="fl">2</span><span class="op">)</span>, gamma_multiplier <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.5</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">svr_model</span><span class="op">$</span><span class="va">training</span><span class="op">$</span><span class="va">hyperparameters</span></span>
+<span><span class="co">#&gt; $cost</span></span>
+<span><span class="co">#&gt; [1] 0.5</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $gamma_multiplier</span></span>
+<span><span class="co">#&gt; [1] 0.5</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $epsilon</span></span>
+<span><span class="co">#&gt; [1] 0.1</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $gamma</span></span>
+<span><span class="co">#&gt; [1] 0.025</span></span>
+<span><span class="va">svr_model</span><span class="op">$</span><span class="va">validation</span><span class="op">$</span><span class="va">metrics</span></span>
+<span><span class="co">#&gt; $pearson_r</span></span>
+<span><span class="co">#&gt; [1] -0.2048213</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $squared_pearson_r</span></span>
+<span><span class="co">#&gt; [1] 0.04195175</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $spearman_rho</span></span>
+<span><span class="co">#&gt; [1] -0.007142857</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $rmse</span></span>
+<span><span class="co">#&gt; [1] 1.089379</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $mae</span></span>
+<span><span class="co">#&gt; [1] 0.8337594</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $calibration_intercept</span></span>
+<span><span class="co">#&gt; [1] 0.08717433</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $calibration_slope</span></span>
+<span><span class="co">#&gt; [1] -0.814778</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $undefined_reasons</span></span>
+<span><span class="co">#&gt; character(0)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">svr_model</span><span class="op">$</span><span class="va">cv_identity</span>, <span class="va">model</span><span class="op">$</span><span class="va">cv_identity</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">svr_model</span>, <span class="va">features</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 15 × 3</span></span></span>
+<span><span class="co">#&gt;    item_id raw_prediction calibrated_prediction</span></span>
+<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>                 <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> 1               0.411                 0.183 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> 2               0.213                 0.049<span style="text-decoration: underline;">2</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> 3               0.205                 0.043<span style="text-decoration: underline;">6</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> 4              -<span style="color: #BB0000;">0.181</span>                -<span style="color: #BB0000;">0.218</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> 5               0.554                 0.280 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> 6              -<span style="color: #BB0000;">0.129</span>                -<span style="color: #BB0000;">0.183</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> 7               0.419                 0.188 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> 8               0.668                 0.357 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> 9               0.470                 0.223 </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> 10             -<span style="color: #BB0000;">0.483</span>                -<span style="color: #BB0000;">0.422</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">11</span> 11             -<span style="color: #BB0000;">0.085</span><span style="color: #BB0000; text-decoration: underline;">5</span>               -<span style="color: #BB0000;">0.153</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">12</span> 12             -<span style="color: #BB0000;">0.057</span><span style="color: #BB0000; text-decoration: underline;">5</span>               -<span style="color: #BB0000;">0.134</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">13</span> 13             -<span style="color: #BB0000;">0.142</span>                -<span style="color: #BB0000;">0.191</span> </span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">14</span> 14              0.196                 0.037<span style="text-decoration: underline;">1</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">15</span> 15              0.472                 0.224</span></span></code></pre></div>
+<p>Full SVR audits retain every candidate’s OOF predictions and losses
+plus each split’s preprocessing and actual gamma. Full and reduced
+artifacts predict from numeric support vectors, dual coefficients, rho,
+and gamma without <code>e1071</code>. Support-vector matrix dimensions
+and feature order are preserved. These numeric vectors remain deployment
+data after audit omission. <code><a href="../reference/warm_start_coefficients.html">warm_start_coefficients()</a></code> raises
+a typed error for SVR or a cross-task ensemble containing SVR because
+nonlinear kernel weights are not linear feature coefficients.</p>
 <p>Every applicable training fold learns missingness filtering (&gt;20%
 missing or all missing), median imputation, constant/near-zero-variance
 removal, and sample-SD scaling. Near-zero variance requires unique
@@ -528,7 +603,7 @@ training data. Final deployment uses full-data OOF calibration and an
 all-row coefficient refit. Degenerate calibration errors; finite
 negative slopes are allowed, and undefined validation diagnostics have
 NA values with reasons.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">model</span><span class="op">$</span><span class="va">validation</span><span class="op">$</span><span class="va">metrics</span></span>
 <span><span class="co">#&gt; $pearson_r</span></span>
 <span><span class="co">#&gt; [1] 0.9897764</span></span>
@@ -583,7 +658,7 @@ lambda and nonzero counts.</p>
 Store the portable object, not a training-engine fit. Explicit saving
 and registration are separate operations; ordinary save/load preserves
 the complete audit.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".rds"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/save_warm_start_model.html">save_warm_start_model</a></span><span class="op">(</span><span class="va">model</span>, path <span class="op">=</span> <span class="va">path</span><span class="op">)</span></span>
 <span><span class="va">restored</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/save_warm_start_model.html">load_warm_start_model</a></span><span class="op">(</span>path <span class="op">=</span> <span class="va">path</span><span class="op">)</span></span>
@@ -609,7 +684,7 @@ automatic backup history accumulates. Bundles are read-only.</p>
 scale, then combine the models with stable component names. Actual
 training assessments must be independent; relabeling the same training
 data does not establish independence.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">features_b</span> <span class="op">&lt;-</span> <span class="fu">example_features</span><span class="op">(</span><span class="fl">3104</span><span class="op">)</span></span>
 <span><span class="va">theta_b</span> <span class="op">&lt;-</span> <span class="fl">30</span> <span class="op">+</span> <span class="va">features_b</span><span class="op">$</span><span class="va">n_tokens</span> <span class="op">-</span> <span class="fl">3</span> <span class="op">*</span> <span class="va">features_b</span><span class="op">$</span><span class="va">token_length_mean</span></span>
 <span><span class="va">model_b</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_warm_start_model.html">fit_warm_start_model</a></span><span class="op">(</span><span class="va">features_b</span><span class="op">$</span><span class="va">item_id</span>, <span class="va">theta_b</span>, <span class="st">"synthetic-b"</span>,</span>
@@ -663,7 +738,7 @@ data does not establish independence.</p>
 model weights without reconstructing a glmnet fit. Individual models
 return one row per frozen feature in schema order:</p>
 <pre class="text"><code><span><span class="va">feature</span> <span class="op">|</span> <span class="va">retained</span> <span class="op">|</span> <span class="va">calibrated_std_coefficient</span></span></code></pre>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">coef_tbl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/warm_start_coefficients.html">warm_start_coefficients</a></span><span class="op">(</span><span class="va">model</span><span class="op">)</span></span>
 <span><span class="va">coef_tbl</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 20 × 3</span></span></span>
@@ -799,7 +874,7 @@ assume generic slicing updates nested metadata. For text input, ensemble
 prediction extracts once using <code>texts</code>, <code>ids</code>, and
 <code>python</code>. Single-model <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code> accepts
 precomputed features only.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Empty in this release. Future reviewed bundles use the same public prediction path.</span></span>
 <span><span class="fu"><a href="../reference/register_warm_start_model.html">list_warm_start_models</a></span><span class="op">(</span>source <span class="op">=</span> <span class="st">"bundled"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 0 × 18</span></span></span>
@@ -818,7 +893,7 @@ not authenticate a publisher.</p>
 <div class="section level2">
 <h2 id="convert-predictions-and-resume">Convert predictions and resume<a class="anchor" aria-label="anchor" href="#convert-predictions-and-resume"></a>
 </h2>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">prior</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_warm_start_prior.html">make_warm_start_prior</a></span><span class="op">(</span><span class="va">predictions</span>, ids <span class="op">=</span> <span class="va">features</span><span class="op">$</span><span class="va">item_id</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>item_id <span class="op">=</span> <span class="va">prior</span><span class="op">$</span><span class="va">item_id</span>, mean <span class="op">=</span> <span class="va">prior</span><span class="op">$</span><span class="va">prior_mean</span>, sd <span class="op">=</span> <span class="va">prior</span><span class="op">$</span><span class="va">prior_sd</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   item_id        mean  sd</span></span>
@@ -848,7 +923,7 @@ and pooled judge refits retain their existing priors; evidence is not
 injected twice.</p>
 <p>Standalone sampling requires your installed CmdStan toolchain and is
 not run here:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/build_btl_results_data.html">build_btl_results_data</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>ID1 <span class="op">=</span> <span class="st">"1"</span>, ID2 <span class="op">=</span> <span class="st">"2"</span>, better_id <span class="op">=</span> <span class="st">"1"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_bayes_btl_mcmc.html">fit_bayes_btl_mcmc</a></span><span class="op">(</span><span class="va">results</span>, ids <span class="op">=</span> <span class="va">features</span><span class="op">$</span><span class="va">item_id</span>, warm_start_prior <span class="op">=</span> <span class="va">prior</span><span class="op">)</span></span></code></pre></div>
 <p>Instead of supplying a prior, initialize with
@@ -866,7 +941,7 @@ accompany an already resolved prior. Custom BTL fit functions must check
 warm. Custom-fit signatures and the standalone
 <code>fit_bayes_btl_mcmc(warm_start_prior = ...)</code> interface are
 unchanged; standalone BTL has no adaptive four-mode argument.</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>  <span class="va">directory</span> <span class="op">&lt;-</span> <span class="fu">withr</span><span class="fu">::</span><span class="fu"><a href="https://withr.r-lib.org/reference/with_tempfile.html" class="external-link">local_tempdir</a></span><span class="op">(</span><span class="op">)</span></span>
 <span>  <span class="va">artifact</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">directory</span>, <span class="st">"ensemble.rds"</span><span class="op">)</span></span>
