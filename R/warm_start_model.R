@@ -72,7 +72,7 @@
 #' The internal fixed fit requires at least three observations, explicit alpha
 #' in `[0, 1]`, and finite lambda greater than or equal to zero. It uses Gaussian
 #' glmnet with an intercept and `standardize = FALSE`, with solver threshold
-#' `1e-12` and maximum `1000000` iterations, directly at the requested lambda.
+#' `1e-12` and maximum `10000000` iterations, directly at the requested lambda.
 #' Outcomes are standardized before fitting. No PCA or feature screening based
 #' on outcomes is used, including when predictors outnumber observations.
 #'
@@ -215,7 +215,7 @@ NULL
 }
 
 .warm_start_glmnet_controls <- function(engine = glmnet::glmnet) {
-  control <- list(thresh = 1e-12, maxit = 1000000L)
+  control <- list(thresh = 1e-12, maxit = 10000000L)
   # glmnet 5 moved solver controls into a list; retain compatibility with 4.x.
   if ("control" %in% names(formals(engine))) return(list(control = control))
   control
