@@ -213,3 +213,69 @@ test_that("the optional audited Python stack supports the text-to-model wrapper"
   expect_false("texts" %in% names(model))
   expect_true(all(startsWith(model$validation$warnings, known_warning)))
 })
+
+test_that("nested tail invalidation retains portable audits and never falls back after selection", {
+  skip_if_not_installed("glmnet")
+  features <- warm_core_features(18)
+  original <- glmnet::glmnet
+  scalar_calls <- 0L
+  fail_at <- Inf
+  engine <- function(x, lambda = NULL, alpha, control, ...) {
+    if (length(lambda) == 1L) {
+      scalar_calls <<- scalar_calls + 1L
+      if (scalar_calls == fail_at) return(list(jerr = -1L))
+    }
+    if (length(lambda) > 1L && alpha == 0) {
+      return(list(jerr = -1L, lambda = Inf, a0 = rep(0, length(lambda)),
+        beta = matrix(0, ncol(x), 1L, dimnames = list(colnames(x), NULL))))
+    }
+    controls <- if ("control" %in% names(formals(original))) list(control = control) else control
+    fit <- do.call(original, c(list(x = x, lambda = lambda, alpha = alpha, ...), controls))
+    if (length(lambda) > 1L) {
+      keep <- seq_len(length(lambda) - 1L)
+      fit$lambda <- fit$lambda[keep]
+      fit$a0 <- fit$a0[keep]
+      fit$beta <- fit$beta[, keep, drop = FALSE]
+      fit$jerr <- -as.integer(length(lambda))
+      warning("simulated iteration-limit tail", call. = FALSE)
+    }
+    fit
+  }
+  local_mocked_bindings(glmnet = engine, .package = "glmnet")
+  run <- function() {
+    suppressWarnings(fit_warm_start_model(features$item_id,
+      warm_core_theta(features), "tail", features = features, alpha_grid = c(0, 1),
+      outer_folds = 3L, inner_folds = 3L))
+  }
+  model <- run()
+  expect_identical(scalar_calls, 4L)
+  expect_invisible(.validate_warm_start_model(model))
+  expect_identical(model$training$alpha, 1)
+  expect_length(model$validation$warnings, 12L)
+  expect_match(model$validation$warnings[1], "Outer fold 1: Alpha 1: Inner fold 1:")
+  expect_match(model$validation$warnings[12], "Final full-data fit: Alpha 1: Inner fold 3:")
+  contexts <- c(list(model$tuning), lapply(model$validation$folds, `[[`, "tuning"))
+  for (tuning in contexts) {
+    expect_false(tuning$candidate_validity$alphas[[1]]$alpha_eligible)
+    expect_identical(tuning$candidate_validity$alphas[[2]]$invalid_tail_count, 1L)
+    expect_true(tuning$candidate_validity$alphas[[2]]$eligible[tuning$traces[[2]]$index])
+  }
+  reduced <- prepare_warm_start_model(model, omit_audit = TRUE)
+  root <- withr::local_tempdir()
+  with_mocked_bindings({
+    for (artifact in list(model, reduced)) {
+      path <- file.path(root, "tail.rds")
+      save_warm_start_model(artifact, path, overwrite = TRUE)
+      restored <- load_warm_start_model(path)
+      expect_identical(restored, artifact)
+      expect_identical(predict(restored, features), predict(model, features))
+    }
+  }, .warm_start_require_glmnet = function() stop("unexpected backend"), .package = "pairwiseLLM")
+  for (failure in c(1L, 4L)) {
+    scalar_calls <- 0L
+    fail_at <- failure
+    label <- if (failure == 1L) "Outer fold 1" else "Final full-data fit"
+    expect_error(run(), paste0(label, ".*did not converge"))
+    expect_identical(scalar_calls, failure)
+  }
+})

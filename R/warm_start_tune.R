@@ -27,13 +27,12 @@
   fit <- do.call(glmnet::glmnet, c(list(x = x, y = z, family = "gaussian", alpha = alpha,
     lambda = lambda, nlambda = 100L, lambda.min.ratio = lambda_min_ratio,
     standardize = FALSE, intercept = TRUE, exclude = exclude), .warm_start_glmnet_controls()))
-  if (!isTRUE(fit$jerr == 0)) rlang::abort("Elastic-net path did not converge.")
-  if (!length(fit$lambda) || any(!is.finite(fit$lambda)) || any(fit$lambda < 0) ||
-      any(diff(fit$lambda) >= 0) || any(!is.finite(fit$a0)) || any(!is.finite(fit$beta)) ||
-      length(fit$a0) != length(fit$lambda) ||
-      !identical(dim(fit$beta), c(ncol(x), length(fit$lambda))) ||
-      (!is.null(lambda) && (length(fit$lambda) != length(lambda) ||
-        !isTRUE(all.equal(as.numeric(fit$lambda), as.numeric(lambda), tolerance = 1e-12))))) {
+  count <- .warm_start_path_count(lambda, fit$lambda, fit$jerr)
+  empty <- count == 0L && identical(as.numeric(fit$lambda), Inf)
+  if (!is.numeric(fit$a0) || any(!is.finite(fit$a0)) || any(!is.finite(fit$beta)) ||
+      (!empty && length(fit$a0) != count) ||
+      (empty && (!length(fit$a0) || any(fit$beta != 0))) ||
+      !identical(dim(fit$beta), c(ncol(x), if (empty) 1L else count))) {
     rlang::abort("Elastic-net path did not return finite coefficients at every requested lambda.")
   }
   fit
@@ -41,7 +40,11 @@
 
 .warm_start_near <- function(a, b) abs(a - b) <= 1e-10 * pmax(1, abs(a), abs(b))
 
-.warm_start_alpha_choice <- function(errors) which(.warm_start_near(errors, min(errors)))[1]
+.warm_start_alpha_choice <- function(errors) {
+  eligible <- which(is.finite(errors))
+  if (!length(eligible)) rlang::abort("No alpha has a lambda converged in every inner fold.")
+  eligible[which(.warm_start_near(errors[eligible], min(errors[eligible])))[1]]
+}
 
 .warm_start_loss_summary <- function(loss, sizes) {
   if (!is.matrix(loss) || !is.numeric(loss) || nrow(loss) < 2L || ncol(loss) < 1L ||
@@ -95,6 +98,7 @@
   ratio <- if (ncol(reference_x) > nrow(reference_x)) 0.01 else 0.0001
   traces <- vector("list", length(alpha_grid))
   candidates <- vector("list", length(alpha_grid))
+  validity <- vector("list", length(alpha_grid))
   alpha_errors <- numeric(length(alpha_grid))
   sizes <- vapply(splits, function(s) length(s$test), integer(1))
   for (i in seq_along(alpha_grid)) {
@@ -104,25 +108,38 @@
       lambda <- as.numeric(ref$lambda)
       oof <- matrix(NA_real_, nrow(x), length(lambda))
       loss <- matrix(NA_real_, k, length(lambda))
+      fold_lambda <- vector("list", k)
+      fold_jerr <- integer(k)
       for (fold in seq_len(k)) {
         s <- splits[[fold]]
-        predicted <- .warm_start_cv_context(paste("Inner fold", fold), function() {
-          fit <- .warm_start_glmnet_path(s$x_train, z[s$train], alpha, lambda)
-          coefficients <- as.matrix(fit$beta)[colnames(s$x_train), , drop = FALSE]
-          sweep(s$x_test %*% coefficients, 2, fit$a0, "+")
+        fit <- .warm_start_cv_context(paste("Inner fold", fold), function() {
+          .warm_start_glmnet_path(s$x_train, z[s$train], alpha, lambda)
         })
+        fold_lambda[[fold]] <- as.numeric(fit$lambda)
+        fold_jerr[fold] <- as.integer(fit$jerr)
+        count <- .warm_start_path_count(lambda, fold_lambda[[fold]], fold_jerr[fold])
+        if (!count) next
+        coefficients <- as.matrix(fit$beta)[colnames(s$x_train), , drop = FALSE]
+        predicted <- sweep(s$x_test %*% coefficients, 2, fit$a0, "+")
         if (any(!is.finite(predicted))) rlang::abort("Nonfinite inner predictions.")
-        oof[s$test, ] <- predicted
-        loss[fold, ] <- colMeans((predicted - z[s$test])^2)
+        oof[s$test, seq_len(count)] <- predicted
+        loss[fold, seq_len(count)] <- colMeans((predicted - z[s$test])^2)
+        if (any(!is.finite(loss[fold, seq_len(count)]))) rlang::abort("Nonfinite inner losses.")
       }
-      errors <- .warm_start_loss_summary(loss, sizes)
-      choice <- .warm_start_lambda_choice(lambda, errors$cvm, errors$cvsd, lambda_rule)
+      record <- .warm_start_candidate_record(lambda, fold_lambda, fold_jerr, NA_integer_)
+      summary <- .warm_start_candidate_summary(lambda, loss, sizes, record$eligible, lambda_rule)
+      record$selected_smallest_eligible <- if (record$alpha_eligible) {
+        isTRUE(summary$index == max(which(record$eligible)))
+      } else {
+        NA
+      }
       list(trace = c(list(alpha = alpha, lambda = lambda, fold_mse = loss,
-        fold_sizes = sizes), errors, choice), oof = as.numeric(oof[, choice$index]))
+        fold_sizes = sizes), summary), validity = record, oof = as.numeric(oof[, summary$index]))
     })
     traces[[i]] <- result$trace
     alpha_errors[i] <- result$trace$cvm[result$trace$index_min]
     candidates[[i]] <- result$oof
+    validity[[i]] <- result$validity
   }
   index <- .warm_start_alpha_choice(alpha_errors)
   selected_trace <- traces[[index]]
@@ -131,6 +148,7 @@
   list(alpha_grid = alpha_grid, lambda_rule = lambda_rule, foldid = foldid,
     conventions = .warm_start_tuning_conventions(), reference_preprocessing = reference,
     lambda_min_ratio = ratio,
+    candidate_validity = list(version = 1L, alphas = validity),
     inner_preprocessing = lapply(splits, `[[`, "preprocessing"), traces = traces,
     selected = best, oof = data.frame(row = seq_len(nrow(x)), fold = foldid,
       observed = z, raw_prediction = best$oof))

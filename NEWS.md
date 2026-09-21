@@ -2,11 +2,15 @@
 
 ## Bug fixes
 
+- Warm-start glmnet tuning now invalidates only verified nonconvergent inner-fold
+  lambda tails. Selection requires complete converged evidence across all folds;
+  full audits retain candidate eligibility and engine convergence evidence.
+  Reference-path failures and selected-lambda refit failures remain fatal (#271).
+
 - Increased the internal warm-start glmnet iteration ceiling from 100,000 to
   10,000,000 while preserving the 1e-12 convergence threshold, exact lambda
-  paths, and hard rejection of incomplete paths. This allows valid expanded
-  warm-start folds that need more solver iterations to complete without
-  dropping candidates or changing tuning rules (#268).
+  paths, and strict convergence checks. Candidate eligibility for incomplete
+  inner paths is now governed by the explicit rule described above (#268, #271).
 
 # pairwiseLLM 1.5.2
 

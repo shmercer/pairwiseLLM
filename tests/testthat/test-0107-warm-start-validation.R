@@ -41,10 +41,80 @@ test_that("portable tuning validation rejects missing and inconsistent audit rec
   expect_error(.validate_warm_start_tuning(bad, 15L), "tuning contract")
   bad <- tuning
   bad$traces[[1]]$fold_mse[1, 1] <- Inf
-  expect_error(.validate_warm_start_tuning(bad, 15L), "CV loss")
+  expect_error(.validate_warm_start_tuning(bad, 15L), "candidate-validity")
   bad <- tuning
   bad$traces[[1]]$lambda[1] <- -1
   expect_error(.validate_warm_start_tuning(bad, 15L), "tuning contract")
+})
+
+test_that("candidate validity is reconstructed from raw fold convergence evidence", {
+  skip_if_not_installed("glmnet")
+  x <- cbind(a = 1:12, b = (1:12)^2)
+  local_mocked_bindings(glmnet = warm_tail_engine(empty_alpha = 0), .package = "glmnet")
+  tuning <- .warm_start_tune(x, as.numeric(scale(1:12)), rep(1:3, 4), c(0, 1), "lambda.min")
+  expect_invisible(.validate_warm_start_tuning(tuning, 12L))
+  numeric_index <- tuning
+  numeric_index$traces[[2]]$index <- as.numeric(numeric_index$traces[[2]]$index)
+  expect_invisible(.validate_warm_start_tuning(numeric_index, 12L))
+  numeric_index$candidate_validity$alphas[[2]]$selected_smallest_eligible <- FALSE
+  expect_error(.validate_warm_start_tuning(numeric_index, 12L), "candidate-validity")
+  for (i in 1:2) {
+    for (field in names(tuning$candidate_validity$alphas[[i]])) {
+      bad <- tuning
+      bad$candidate_validity$alphas[[i]][field] <- list(NULL)
+      expect_error(.validate_warm_start_tuning(bad, 12L), info = paste(i, field))
+    }
+  }
+  for (change in list(
+    list(fold_converged_count = c(4L, 4L, 4L)), list(eligible = rep(TRUE, 4)),
+    list(fold_eligible = matrix(TRUE, 3, 4)), list(invalid_tail_count = 0L),
+    list(alpha_eligible = FALSE), list(selected_smallest_eligible = FALSE),
+    list(fold_jerr = c(0L, -3L, 0L)), list(fold_lambda = list(c(4, 1, 0.5), c(4, 2), c(4, 2, 1, 0.5))),
+    list(requested_lambda = c(4, 2, 1, 0.4)))) {
+    bad <- tuning
+    bad$candidate_validity$alphas[[2]][names(change)] <- change
+    expect_error(.validate_warm_start_tuning(bad, 12L), info = names(change))
+  }
+  for (change in list(
+    function(t) {
+      t$traces[[2]]$fold_mse[2, 3] <- 0
+      t
+    }, function(t) {
+      t$traces[[2]]$fold_mse[1, 3] <- NA_real_
+      t
+    }, function(t) {
+      t$traces[[2]]$fold_mse[1, 1] <- -1
+      t
+    }, function(t) {
+      t$traces[[2]]$fold_mse[1, 1] <- Inf
+      t
+    }, function(t) {
+      t$traces[[2]]$cvm[3] <- 0
+      t
+    }, function(t) {
+      t$traces[[2]]$cvsd[3] <- 0
+      t
+    }, function(t) {
+      t$traces[[2]]$index <- 3L
+      t
+    }, function(t) {
+      t$traces[[2]]$index_1se <- 3L
+      t
+    }, function(t) {
+      t$traces[[1]]$index_min <- 1L
+      t
+    }, function(t) {
+      t$selected$alpha_index <- 1L
+      t
+    }, function(t) {
+      t$candidate_validity$version <- 2L
+      t
+    }, function(t) {
+      t$candidate_validity <- NULL
+      t
+    })) {
+    expect_error(.validate_warm_start_tuning(change(tuning), 12L))
+  }
 })
 
 test_that("portable model validation rejects inconsistent nested predictions and metadata", {
