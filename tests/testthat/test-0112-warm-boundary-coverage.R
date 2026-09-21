@@ -2,7 +2,7 @@ test_that("tuning rejects nonfinite inner predictions at the engine boundary", {
   x <- cbind(a = 1:8, b = (1:8)^2)
   z <- as.numeric(scale(1:8))
   testthat::local_mocked_bindings(.warm_start_glmnet_path = function(x, z, alpha, lambda = NULL, ...) {
-    list(lambda = c(1, 0.1), a0 = c(Inf, Inf),
+    list(jerr = 0L, lambda = c(1, 0.1), a0 = c(Inf, Inf),
       beta = matrix(0, ncol(x), 2, dimnames = list(colnames(x), NULL)))
   }, .package = "pairwiseLLM")
   expect_error(pairwiseLLM:::.warm_start_tune(x, z, rep(1:2, 4), 0.5, "lambda.min"),

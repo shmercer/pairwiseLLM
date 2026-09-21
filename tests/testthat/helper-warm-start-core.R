@@ -16,6 +16,26 @@ warm_core_theta <- function(x) {
   10 + 0.4 * x$n_tokens - 2 * x$token_length_mean + x$dale_chall_readability_score / 10
 }
 
+# Deterministic exact-path engine fixture; install only with scoped mocked bindings.
+warm_tail_engine <- function(counts = c(3L, 2L, 4L), empty_alpha = NULL) {
+  fold <- 0L
+  function(x, lambda = NULL, alpha, ...) {
+    if (is.null(lambda)) {
+      fold <<- 0L
+      lambda <- c(4, 2, 1, 0.5)
+      count <- length(lambda)
+    } else {
+      fold <<- fold + 1L
+      count <- if (alpha %in% empty_alpha && fold == 1L) 0L else counts[fold]
+    }
+    if (!count) return(list(jerr = -1L, lambda = Inf, a0 = rep(0, length(lambda)),
+      beta = matrix(0, ncol(x), 1L, dimnames = list(colnames(x), NULL))))
+    list(jerr = if (count == length(lambda)) 0L else -as.integer(count + 1L),
+      lambda = lambda[seq_len(count)], a0 = c(0.2, 0, 10, -20)[seq_len(count)],
+      beta = matrix(0, ncol(x), count, dimnames = list(colnames(x), NULL)))
+  }
+}
+
 # Valid portable fixture constructed without glmnet or Python.
 warm_core_model <- function() {
   x <- warm_core_features()

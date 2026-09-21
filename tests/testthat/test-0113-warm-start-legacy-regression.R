@@ -95,6 +95,7 @@ test_that("glmnet refits preserve frozen folds, tuning, calibration and validati
       expected <- old$validation$folds[[i]]
       expect_identical(actual$tuning$foldid, expected$tuning$foldid)
       expect_identical(actual$tuning$selected$alpha, expected$tuning$selected$alpha)
+      actual$tuning <- actual$tuning[names(expected$tuning)]
       expect_equal(actual[names(expected)], expected, tolerance = 1e-8)
     }
     predicted <- predict(current, f$newdata)

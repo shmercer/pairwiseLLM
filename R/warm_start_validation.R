@@ -27,6 +27,12 @@
         !identical(p$features, x$reference_preprocessing$features)) invalid()
   }
   errors <- numeric(length(x$traces))
+  has_validity <- "candidate_validity" %in% names(x)
+  if (has_validity && (!is.list(x$candidate_validity) ||
+      !identical(names(x$candidate_validity), c("version", "alphas")) ||
+      !identical(x$candidate_validity$version, 1L) ||
+      !is.list(x$candidate_validity$alphas) ||
+      length(x$candidate_validity$alphas) != length(x$traces))) invalid()
   for (i in seq_along(x$traces)) {
     t <- x$traces[[i]]
     if (!is.list(t) || !identical(t$alpha, x$alpha_grid[i]) || !is.numeric(t$lambda) ||
@@ -34,11 +40,18 @@
         any(diff(t$lambda) >= 0) || !is.matrix(t$fold_mse) ||
         !identical(dim(t$fold_mse), c(length(sizes), length(t$lambda))) ||
         !identical(t$fold_sizes, sizes)) invalid()
-    summary <- .warm_start_loss_summary(t$fold_mse, sizes)
-    if (!.warm_start_audit_equal(t$cvm, summary$cvm) ||
-        !.warm_start_audit_equal(t$cvsd, summary$cvsd)) invalid()
-    choice <- .warm_start_lambda_choice(t$lambda, t$cvm, t$cvsd, x$lambda_rule)
-    if (!.warm_start_audit_equal(t[names(choice)], choice)) invalid()
+    if (has_validity) {
+      eligible <- .validate_warm_start_candidate_record(x$candidate_validity$alphas[[i]],
+        t, length(sizes))
+      summary <- .warm_start_candidate_summary(t$lambda, t$fold_mse, sizes, eligible, x$lambda_rule)
+      if (!.warm_start_audit_equal(t[names(summary)], summary)) invalid()
+    } else {
+      summary <- .warm_start_loss_summary(t$fold_mse, sizes)
+      if (!.warm_start_audit_equal(t$cvm, summary$cvm) ||
+          !.warm_start_audit_equal(t$cvsd, summary$cvsd)) invalid()
+      choice <- .warm_start_lambda_choice(t$lambda, t$cvm, t$cvsd, x$lambda_rule)
+      if (!.warm_start_audit_equal(t[names(choice)], choice)) invalid()
+    }
     errors[i] <- t$cvm[t$index_min]
   }
   index <- .warm_start_alpha_choice(errors)
