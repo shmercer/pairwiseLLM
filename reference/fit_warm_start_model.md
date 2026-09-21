@@ -150,7 +150,20 @@ returned path is stored. Each inner training split fits those exact
 penalties with its own preprocessing; reference preprocessing is not
 used to transform inner rows. Candidate penalties use the entire tuning
 dataset, including its inner holdouts. No interpolation, extrapolation,
-incomplete path, or omitted fold is accepted.
+or omitted fold is accepted for an eligible candidate. When an inner fit
+reports an iteration-limit failure and returns a verified prefix of the
+requested path, only its missing tail is invalidated. A lambda is
+eligible only if it converges in every inner fold. CV summaries and both
+lambda rules use eligible candidates only; an alpha with none is
+excluded. If all alphas are excluded, tuning fails. Reference-path
+generation, malformed engine output, other engine errors, and
+selected-lambda refit failures remain fatal. Full audits retain
+versioned candidate-validity records with requested and returned fold
+lambdas, convergence codes, counts, masks, invalid-tail counts, alpha
+eligibility and whether selection reached the smallest eligible lambda.
+Selection indices refer to the original path; unavailable losses and
+summaries are `NA`, never imputed. Historical fully converged audits
+remain valid.
 
 CV error is the observation-count-weighted mean of fold mean squared
 errors. Its SE is
