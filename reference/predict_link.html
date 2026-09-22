@@ -86,7 +86,12 @@ the dispatcher never silently substitutes probabilities at posterior means.</p>
     <p>Conditional probabilities are
 <code>(1-epsilon) * plogis(theta_A-theta_B+beta) + epsilon/2</code>.
 Reversing presentation is complementary only when beta is zero. Prediction
-requires no refit or provider calls. Engines are added in subsequent issues.</p>
+requires no refit or provider calls. E1 integrates over delta using the
+serialized posterior quadrature nodes. It refines numerical integration
+for a requested pair when necessary, without updating the posterior or
+modifying the result. There is no plug-in-mean prediction mode. Integration
+failure raises <code>pairwiseLLM_e1_numerical_error</code>, rather than substituting
+another prediction. E2/E3 engines are added in subsequent issues.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

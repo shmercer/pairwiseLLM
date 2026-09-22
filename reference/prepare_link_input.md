@@ -1,10 +1,9 @@
 # Prepare explicit evidence for a linking estimator
 
 These development interfaces define the common contract for E1–E3. They
-do not select pairs, contact providers, or depend on adaptive state.
-Fitting engines will be added separately; currently
-[`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md)
-reports an unavailable estimator instead of running a legacy linker.
+do not select pairs, contact providers, or depend on adaptive state. E1
+is implemented with deterministic quadrature; E2 and E3 report an
+unavailable estimator instead of running a legacy linker.
 
 ## Usage
 
@@ -45,7 +44,20 @@ prepare_link_input(
   means recorded. Optional `source` metadata contains `artifact_hash`,
   `evidence_hash`, and `n_observations`; unavailable values remain typed
   missing. External source hashes are assertions of provenance, distinct
-  from computed payload hashes.
+  from computed payload hashes. E1 also accepts
+  `list(artifact = artifact)` in either set entry, mutually exclusive
+  with `points`. Supply an in-memory canonical Phase A artifact (use
+  [`readRDS()`](https://rdrr.io/r/base/readRDS.html) explicitly for
+  files). Its `set_id`, `fit_model_id`, `n_items`, `n_pairs_committed`,
+  and `items` are checked. Item-aligned `items$theta_raw_mean` values
+  are the EAP source; global IDs must match when supplied. Phase B
+  summaries are rejected. The original artifact is hashed, and its
+  declared within-set evidence hash/count are retained as provenance;
+  raw outcomes, posterior draws, and marginal SDs are not used for E1
+  inference or retained in normalized input. Artifact `source` fields,
+  if supplied, must agree with the extracted metadata. This extracts
+  statistical inputs; it does not run adaptive Phase A
+  quality/reliability gates.
 
 - cross:
 
@@ -67,9 +79,15 @@ prepare_link_input(
 - control:
 
   List with `delta_prior = list(mean = 0, sd = 5)`, numerical
-  `estimator` controls (currently an empty list), and optional named
-  `initial` free-coordinate vector. Initial values are optimization
-  hints only.
+  `estimator` controls, and optional named `initial` free-coordinate
+  vector. E1 accepts positive `rel_tol = 1e-9`, `abs_tol = 1e-11`,
+  `quantile_tol = 1e-8`, and integer `subdivisions = 1000L`. The
+  subdivision limit bounds the number of quadrature panels and CDF
+  integration/root iterations. Tolerances apply to normalized mass and
+  moments in prior-SD coordinates; `quantile_tol` is in delta units.
+  Effective defaults are logged with every fit. Other estimators
+  currently accept no numerical controls. Initial values are
+  optimization hints only; E1 does not use them.
 
 - provenance:
 
@@ -115,4 +133,24 @@ input$counts
 #> $source_spoke
 #> [1] NA
 #> 
+fit <- fit_link(input)
+fit$offset
+#> $delta_mean
+#> [1] 0
+#> 
+#> $delta_sd
+#> [1] 5
+#> 
+#> $delta_lower
+#> [1] -9.79982
+#> 
+#> $delta_upper
+#> [1] 9.79982
+#> 
+#> $identification
+#> [1] "prior_only"
+#> 
+predict_link(fit, data.frame(observation_id = "held-out-1",
+  A_set = "H", A_item = "h1", B_set = "S", B_item = "s2"))
+#> [1] 0.3887695
 ```

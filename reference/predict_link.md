@@ -35,5 +35,10 @@ means.
 Conditional probabilities are
 `(1-epsilon) * plogis(theta_A-theta_B+beta) + epsilon/2`. Reversing
 presentation is complementary only when beta is zero. Prediction
-requires no refit or provider calls. Engines are added in subsequent
+requires no refit or provider calls. E1 integrates over delta using the
+serialized posterior quadrature nodes. It refines numerical integration
+for a requested pair when necessary, without updating the posterior or
+modifying the result. There is no plug-in-mean prediction mode.
+Integration failure raises `pairwiseLLM_e1_numerical_error`, rather than
+substituting another prediction. E2/E3 engines are added in subsequent
 issues.

@@ -2,6 +2,26 @@
 
 ## pairwiseLLM (development version)
 
+### E1 fixed-shape offset linking
+
+- Implemented `fixed_shape_offset` in
+  [`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md)
+  with deterministic adaptive one-dimensional quadrature,
+  posterior-integrated
+  [`predict_link()`](https://shmercer.github.io/pairwiseLLM/reference/predict_link.md),
+  explicit numerical failures, and cumulative-evidence continuation
+  ([\#276](https://github.com/shmercer/pairwiseLLM/issues/276); epic
+  [\#273](https://github.com/shmercer/pairwiseLLM/issues/273)). E1
+  uncertainty is offset-only and conditional on fixed Phase A shapes.
+- [`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md)
+  now accepts canonical Phase A artifacts for E1, extracting aligned EAP
+  means and provenance without replaying Phase A outcomes or treating
+  marginal Phase A SDs as posterior linking uncertainty.
+- Estimator choice remains explicit. E2/E3 fitting, adaptive
+  integration, and anchored-joint removal remain separate epic tasks.
+  Frozen study source:
+  `shmercer/pairwise-linking-study@2bf3f0b4a2f257b7855f965f782f05c61853aac6`.
+
 ### Linking estimator foundation
 
 - Added
@@ -13,9 +33,9 @@
   centered Helmert coordinates, common results, and continuation
   validation
   ([\#275](https://github.com/shmercer/pairwiseLLM/issues/275)).
-  Estimator choice is explicit; fitting engines will arrive in
-  [\#276](https://github.com/shmercer/pairwiseLLM/issues/276)–#278 and
-  currently report an unavailable- estimator error. Existing adaptive
+  Estimator choice is explicit; E2/E3 fitting engines will arrive in
+  [\#277](https://github.com/shmercer/pairwiseLLM/issues/277)–#278 and
+  currently report an unavailable-estimator error. Existing adaptive
   linking integration is unchanged.
 
 ### Bug fixes

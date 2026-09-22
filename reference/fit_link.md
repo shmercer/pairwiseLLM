@@ -34,14 +34,33 @@ method-specific results.
 
 ## Details
 
-This foundation release has no E1–E3 fitting engines yet. Each
-recognized estimator raises `pairwiseLLM_link_not_implemented`; there is
-no default or fallback. Result schema version 1 uses `theta_H = H_H u_H`
-and `theta_S = delta + H_S u_S`, 95 percent interval endpoints,
-descending ranks with average ties, and free coordinates delta, hub
-shape, then spoke shape. E1 has only the delta free coordinate.
-Prediction and continuation state contain serializable data, with
-functions resolved by estimator ID/version.
+E1 (`fixed_shape_offset`) uses adaptive one-dimensional quadrature. E2
+and E3 raise `pairwiseLLM_link_not_implemented`; there is no default or
+fallback. Result schema version 1 uses `theta_H = H_H u_H` and
+`theta_S = delta + H_S u_S`, 95 percent interval endpoints, descending
+ranks with average ties, and free coordinates delta, hub shape, then
+spoke shape. E1 has only the delta free coordinate. Prediction and
+continuation state contain serializable data, with functions resolved by
+estimator ID/version.
+
+E1 holds separately centered Phase A EAP shapes fixed and updates only
+delta under the configured Normal prior and the supplied cross-set
+likelihood. Reported means, SDs, and equal-tailed 95 percent intervals
+come from adaptive Gauss-Kronrod quadrature, with CDF integration and
+root finding for interval endpoints. Both infinite tails are integrated
+using rational coordinate maps; there is no finite-domain truncation or
+Laplace approximation. Monotone likelihood bounds guard against missed
+distant mass. With zero edges, or epsilon equal to one, summaries use
+the exact Normal prior. Positive-budget epsilon-one fits report
+`unidentified`.
+
+E1 uncertainty is conditional on fixed shapes: hub variance is truly
+zero, every spoke SD equals delta SD, and all spoke uncertainty is
+perfectly correlated. It does not propagate Phase A estimation
+uncertainty. E1 is useful with strong Phase A estimates or when
+computation must be inexpensive. Numerical initial values are ignored;
+continuation recomputes the posterior from the original prior and
+cumulative evidence, deterministically.
 
 ## Result fields
 
@@ -67,9 +86,14 @@ item means.
 `uncertainty_scope`, `sampler`, `elapsed_seconds`, `cpu_seconds`,
 `peak_memory_bytes`, and `n_parameters`. Undefined fields use typed
 missing values. Invalid fits carry a failure code and cannot be used for
-prediction. Valid E1 scope is `offset_only_conditional_on_fixed_shapes`;
-valid E2/E3 scope is `joint_shapes_and_offset`. A true zero conditional
-variance is allowed.
+prediction. E1 adds optional `quadrature` diagnostics: method, domain,
+coordinate, effective controls, integration partitions, subdivision
+count, log normalizer, estimated mass/ moment errors, CDF error and root
+brackets when computed, summary method, and status. Partial diagnostics
+remain available after numerical failure. Quadrature errors are
+numerical estimates, not posterior SDs. Valid E1 scope is
+`offset_only_conditional_on_fixed_shapes`; valid E2/E3 scope is
+`joint_shapes_and_offset`. A true zero conditional variance is allowed.
 
 `provenance` retains package/source versions, all input hashes and
 counts, Phase A sources, and the judge source. `prediction` binds
