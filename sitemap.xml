@@ -62,6 +62,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/fit_bayes_btl_mcmc.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/fit_link.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/fit_rubric_calibration.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/fit_warm_start_model.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.html</loc></url>
@@ -101,6 +102,8 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_algorithm_ensemble.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_ensemble.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_model.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict_link.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/prepare_warm_start_model.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/print.adaptive_state.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/print.pairwiseLLM_cost_estimate.html</loc></url>

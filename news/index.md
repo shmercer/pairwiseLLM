@@ -2,6 +2,22 @@
 
 ## pairwiseLLM (development version)
 
+### Linking estimator foundation
+
+- Added
+  [`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
+  [`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md),
+  and
+  [`predict_link()`](https://shmercer.github.io/pairwiseLLM/reference/predict_link.md)
+  as the explicit- evidence contract for E1–E3, with evidence guards,
+  centered Helmert coordinates, common results, and continuation
+  validation
+  ([\#275](https://github.com/shmercer/pairwiseLLM/issues/275)).
+  Estimator choice is explicit; fitting engines will arrive in
+  [\#276](https://github.com/shmercer/pairwiseLLM/issues/276)–#278 and
+  currently report an unavailable- estimator error. Existing adaptive
+  linking integration is unchanged.
+
 ### Bug fixes
 
 - Warm-start glmnet tuning now invalidates only verified nonconvergent

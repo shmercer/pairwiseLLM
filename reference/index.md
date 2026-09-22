@@ -140,6 +140,18 @@ guide](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md).
 - [`load_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/load_adaptive_session.md)
   : Load an adaptive session from disk.
 
+## Link sets from explicit evidence (development)
+
+Shared E1–E3 evidence and result contracts. Fitting engines are not yet
+available.
+
+- [`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md)
+  : Prepare explicit evidence for a linking estimator
+- [`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md)
+  : Fit a linker using prepared explicit evidence
+- [`predict_link()`](https://shmercer.github.io/pairwiseLLM/reference/predict_link.md)
+  : Predict oriented hub-spoke comparison probabilities
+
 ## Convert Bayesian rankings to rubric levels
 
 Requires completed Bayesian CJ results. See the [rubric
