@@ -35,6 +35,10 @@ Notes specific to adaptive pairing tests:
 - Adaptive tests should validate invariants (degree counts, duplicate limits,
   ordering reversals, hard caps), not just nominal outputs.
 
+Link estimator foundations reserve 5070–5074 for input/evidence contracts,
+reduced coordinates, results, prediction, and continuation (#275). These prefixes
+were verified unused on 2026-09-22.
+
 ## Determinism Rules
 
 - No randomness without explicit local seeding.

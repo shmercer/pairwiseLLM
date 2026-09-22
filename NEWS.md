@@ -1,5 +1,13 @@
 # pairwiseLLM (development version)
 
+## Linking estimator foundation
+
+- Added `prepare_link_input()`, `fit_link()`, and `predict_link()` as the explicit-
+  evidence contract for E1–E3, with evidence guards, centered Helmert coordinates,
+  common results, and continuation validation (#275). Estimator choice is explicit;
+  fitting engines will arrive in #276–#278 and currently report an unavailable-
+  estimator error. Existing adaptive linking integration is unchanged.
+
 ## Bug fixes
 
 - Warm-start glmnet tuning now invalidates only verified nonconvergent inner-fold

@@ -165,6 +165,12 @@ reference:
       - save_adaptive_session
       - validate_session_dir
       - load_adaptive_session
+  - title: "Link sets from explicit evidence (development)"
+    desc: "Shared E1–E3 evidence and result contracts. Fitting engines are not yet available."
+    contents:
+      - prepare_link_input
+      - fit_link
+      - predict_link
   - title: "Convert Bayesian rankings to rubric levels"
     desc: "Requires completed Bayesian CJ results. See the [rubric guide](../articles/rubric-calibration.html) for human labels and interpretation."
     contents:
