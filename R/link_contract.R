@@ -160,12 +160,8 @@
   if (estimator == "gaussian_posterior_bridge") return(list(id = estimator, version = "1",
     kind = "draws", fit = .link_e2_fit, predict = .link_e2_predict,
     validate_control = .link_e2_control))
-  list(id = estimator, version = "1", kind = c("points", "draws", "observations")[[match(estimator, ids)]],
-    fit = NULL, predict = NULL,
-    validate_control = function(x) {
-      .link_fields(x, character(), label = "estimator controls (not yet implemented)")
-      x
-    })
+  list(id = estimator, version = "1", kind = "observations",
+    fit = .link_e3_fit, predict = .link_e3_predict, validate_control = .link_e3_control)
 }
 
 .link_control <- function(x, backend, coordinates) {
@@ -189,7 +185,8 @@
 #' These development interfaces define the common contract for E1--E3. They do
 #' not select pairs, contact providers, or depend on adaptive state. E1 is
 #' implemented with deterministic quadrature; E2 uses a Gaussian posterior bridge
-#' with MAP/Laplace inference. E3 reports an unavailable estimator.
+#' with MAP/Laplace inference. E3 jointly refits raw evidence using MAP/Laplace
+#' or an explicitly requested MCMC audit/reference engine.
 #'
 #' @param estimator Required exact ID: `fixed_shape_offset`,
 #'   `gaussian_posterior_bridge`, or `joint_offset`. There is no default.
@@ -222,6 +219,9 @@
 #'   E2 retains the centered draw matrix and source hashes/counts, without raw
 #'   Phase A outcomes. Each set is Gaussianized in reduced centered coordinates
 #'   using its sample mean and full sample covariance.
+#'   E3 requires raw within-set `observations` for both sets. It retains all raw
+#'   evidence and jointly re-estimates both centered shapes and the offset.
+#'   Every observation enters once; points/draws cannot accompany raw evidence.
 #' @param cross Explicit active cross-set observations, including an empty table
 #'   at zero budget. Evidence tables contain `observation_id`, `A_set`, `A_item`,
 #'   `B_set`, `B_item`, and numeric binary `y_A` (one means A won). IDs identify
@@ -245,9 +245,21 @@
 #'   `subdivisions = 1000L`. `maxit` limits BFGS iterations per deterministic
 #'   start; `gradient_tol` bounds the absolute gradient in whitened coordinates.
 #'   Prediction tolerances apply to the integrated logistic probability, and
-#'   `subdivisions` limits integration on each interval. E3 accepts no controls.
-#'   Initial values are optimization hints only; E1 and E2 ignore them to keep
-#'   fresh and cumulative-evidence fits on the same deterministic numerical path.
+#'   `subdivisions` limits integration on each interval.
+#'   E3 accepts the same numerical controls/defaults, with gradients measured in
+#'   prior-whitened coordinates, and `engine = "map_laplace"` (default) or
+#'   `engine = "mcmc"`. Only explicit MCMC accepts a nested `cmdstan` list:
+#'   `chains = 4L`, `iter_warmup = 1000L`, `iter_sampling = 1000L`,
+#'   `adapt_delta = .90`, `max_treedepth = 12L`, optional `seed` and `output_dir`,
+#'   and `parallel_chains`, `threads_per_chain`, `core_fraction` following
+#'   [fit_bayes_btl_mcmc()] CPU-allocation policy. Missing seed uses CmdStan's
+#'   random seed; supply a seed for reproducibility. All effective controls and
+#'   resource allocation are recorded. MCMC uses optional cmdstanr and posterior;
+#'   MAP/Laplace requires neither. Sampling repairs are separate explicit calls.
+#'   Initial values are optimization hints only; the current engines ignore them
+#'   to keep fresh and cumulative-evidence fits on the same numerical path.
+#'   E3 shape priors are always independent standard Normals in reduced
+#'   coordinates; Phase A posterior summaries cannot supply data-derived priors.
 #' @param provenance List with optional `source_commit` (package source revision;
 #'   unknown is `NA_character_`) and `expected`, a named subset of the computed
 #'   `hashes` and `counts` lists against which to reconcile inputs. Hashes use a
@@ -281,6 +293,15 @@
 #' bridge_fit$offset
 #' predict_link(bridge_fit, data.frame(observation_id = "bridge-held-out",
 #'   A_set = "H", A_item = "h1", B_set = "S", B_item = "s2"))
+#'
+#' # E3: raw within-set outcomes, with the same explicit cross evidence.
+#' within <- function(set, id, a, b) data.frame(observation_id = id, A_set = set,
+#'   A_item = a, B_set = set, B_item = b, y_A = 1L)
+#' joint <- prepare_link_input("joint_offset", hub, spoke,
+#'   phase_a = list(hub = list(observations = within("H", "h1", "h1", "h2")),
+#'     spoke = list(observations = within("S", "s1", "s1", "s2"))),
+#'   cross = cross, judge = input$judge)
+#' joint_fit <- fit_link(joint)
 #' @export
 prepare_link_input <- function(estimator, hub, spoke, phase_a, cross, judge,
                                control = list(), provenance = list()) {

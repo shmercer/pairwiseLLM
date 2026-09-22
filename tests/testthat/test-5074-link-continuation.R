@@ -1,7 +1,5 @@
 test_that("fit dispatcher requires implementations without a legacy fallback", {
-  for (id in "joint_offset") {
-    expect_error(fit_link(link_contract_input(id)), class = "pairwiseLLM_link_not_implemented")
-  }
+  expect_true(fit_link(link_contract_input("joint_offset"))$diagnostics$fit_valid)
   expect_true(fit_link(link_contract_input())$diagnostics$fit_valid)
   expect_true(fit_link(link_contract_input("gaussian_posterior_bridge"))$diagnostics$fit_valid)
   expect_error(fit_link(list()), "input schema")

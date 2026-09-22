@@ -44,6 +44,11 @@ E2 Gaussian bridge linking reserves 5078–5081 for bridges/artifacts,
 inference/oracles, prediction/continuation, and numerical failures (#277);
 verified unused on 2026-09-22.
 
+E3 joint-offset linking reserves 5082–5085 for inference/evidence, invariance and
+prediction, failures, and MCMC contracts; 6021 contains opt-in real synthetic Stan
+parity tests (#278). Prefixes verified unused on 2026-09-22. Run 6021 with
+`PAIRWISELLM_TEST_E3_STAN=true`; ordinary tests never compile or sample implicitly.
+
 ## Determinism Rules
 
 - No randomness without explicit local seeding.

@@ -295,8 +295,8 @@
 #'   and continuation inputs. Unavailable uncertainty is typed missing, never
 #'   implicitly zero. Numerical failures remain invalid method-specific results.
 #' @details E1 (`fixed_shape_offset`) uses adaptive one-dimensional quadrature.
-#'   E2 (`gaussian_posterior_bridge`) uses MAP/Laplace. E3 raises
-#'   `pairwiseLLM_link_not_implemented`; there is no default or fallback.
+#'   E2 (`gaussian_posterior_bridge`) and E3 (`joint_offset`) use MAP/Laplace.
+#'   E3 additionally supports explicit MCMC; there is no default estimator or fallback.
 #'   Result schema version 1 uses `theta_H = H_H u_H` and
 #'   `theta_S = delta + H_S u_S`, 95 percent interval endpoints, descending ranks
 #'   with average ties, and free coordinates delta, hub shape, then spoke shape.
@@ -345,6 +345,47 @@
 #'   With epsilon one the same distribution applies, labeled `unidentified`
 #'   at positive budget. Continuation refits cumulative evidence from the original
 #'   bridges, never from an earlier Phase B posterior.
+#'   E3 uses each raw hub Phase A, spoke Phase A, and cross-set observation
+#'   exactly once, with fixed beta/epsilon. It jointly re-estimates the centered
+#'   shapes with independent standard-Normal reduced-coordinate priors and an
+#'   independent Normal offset prior. This is a complete joint model with greater
+#'   data-retention and computational requirements than staged E2. E3 MAP uses
+#'   the same five deterministic starts and convergence/PD-Hessian requirements
+#'   as E2, in prior-whitened coordinates. Reported means are the MAP/Laplace
+#'   center and intervals are normal 95 percent approximations. No Hessian repair
+#'   or fallback is applied. The same finite-multistart/global-mode limitation
+#'   applies. Initial values do not alter the deterministic search.
+#'
+#'   E3-MCMC (`control$estimator$engine = "mcmc"`) is an audit/reference engine,
+#'   never invoked by ordinary MAP/Laplace fitting. It samples the mathematically
+#'   identical model, returns empirical means/covariance and equal-tailed 95
+#'   percent intervals, and retains chain-indexed free-coordinate draws in
+#'   `prediction$state`. Item draws are `free_draws %*% t(item_transform)`.
+#'   No live CmdStan object or CSV file is required for saved-result prediction.
+#'   Compiled models are cached in the writable package user cache, keyed by
+#'   source, CmdStan/CmdStanR versions, and compilation options.
+#'
+#'   At zero cross edges, E3-MCMC reports exact Normal offset-prior moments and
+#'   intervals, with theoretical zero between-block covariances and sampled
+#'   within-shape moments. Spoke intervals convolve empirical shape draws with
+#'   the independent Normal offset prior. Raw draws remain unmodified for audit
+#'   and posterior-average prediction, so their sample moments can differ from
+#'   these factorized summaries. With epsilon one, all reported moments/intervals
+#'   use the exact independent Gaussian priors. Zero-edge identification is
+#'   `prior_only`; positive-budget epsilon-one identification is `unidentified`.
+#'
+#'   Sampler diagnostics include per-coordinate rank-normalized R-hat, bulk/tail
+#'   ESS, MCSE(mean)/SD, per-chain divergences, E-BFMI and treedepth hits/fractions,
+#'   effective controls, and the frozen D005 audit gate. Valid MCMC fits require
+#'   zero divergences, R-hat <= 1.01, bulk ESS >= 1000, tail ESS >= 500,
+#'   E-BFMI >= .30 in every chain, overall treedepth-hit fraction <= .01, and
+#'   MCSE/SD <= .05 for every free coordinate. Missing diagnostics fail the gate.
+#'   Failed gates retain finite summaries, covariance, draws, and diagnostics,
+#'   but set `fit_valid = FALSE` and `failure_code = "mcmc_audit_gate_failed"`;
+#'   prediction requires a valid fit. Sampling errors instead return typed
+#'   missing summaries. Repairs use a new explicitly configured call; the package
+#'   does not automatically escalate sampling or change the model. MCMC does not
+#'   supply a continuation mode, and no engine reuses a posterior as a prior.
 #' @section Result fields:
 #' `items` contains `set_id`, `item_id`, `global_item_id`, `theta_link_mean`,
 #' `theta_link_sd`, `theta_link_lower`, `theta_link_upper`, and `rank_link`.
@@ -431,7 +472,9 @@ fit_link <- function(input, previous = NULL) {
 #'   excessively long finite intervals); both infinite tails are integrated.
 #'   Degenerate zero-variance contrasts use the exact conditional probability.
 #'   Repeated calls do not sample or mutate state. Integration failure raises
-#'   `pairwiseLLM_e2_numerical_error`. E3 remains unavailable.
+#'   `pairwiseLLM_e2_numerical_error`. E3 MAP uses the same integration with
+#'   `pairwiseLLM_e3_numerical_error` on failure. E3-MCMC averages the conditional
+#'   probability over its retained raw draws, without new sampling.
 #' @export
 predict_link <- function(result, pairs) {
   .link_validate_result(result)
