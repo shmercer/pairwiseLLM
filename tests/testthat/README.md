@@ -38,6 +38,8 @@ Notes specific to adaptive pairing tests:
 Link estimator foundations reserve 5070–5074 for input/evidence contracts,
 reduced coordinates, results, prediction, and continuation (#275). These prefixes
 were verified unused on 2026-09-22.
+E1 fixed-shape linking reserves 5075–5077 for quadrature/oracle inference,
+prediction/continuation, and numerical failures (#276); verified unused on 2026-09-22.
 
 ## Determinism Rules
 

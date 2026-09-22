@@ -154,6 +154,9 @@
   ids <- c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset")
   .link_check(is.character(estimator) && length(estimator) == 1L &&
     !is.na(estimator) && estimator %in% ids, paste0("Choose an explicit estimator: ", paste(ids, collapse = ", "), "."))
+  if (estimator == "fixed_shape_offset") return(list(id = estimator, version = "1",
+    kind = "points", fit = .link_e1_fit, predict = .link_e1_predict,
+    validate_control = .link_e1_control))
   list(id = estimator, version = "1", kind = c("points", "draws", "observations")[[match(estimator, ids)]],
     fit = NULL, predict = NULL,
     validate_control = function(x) {
@@ -181,8 +184,8 @@
 #' Prepare explicit evidence for a linking estimator
 #'
 #' These development interfaces define the common contract for E1--E3. They do
-#' not select pairs, contact providers, or depend on adaptive state. Fitting
-#' engines will be added separately; currently [fit_link()] reports an unavailable
+#' not select pairs, contact providers, or depend on adaptive state. E1 is
+#' implemented with deterministic quadrature; E2 and E3 report an unavailable
 #' estimator instead of running a legacy linker.
 #'
 #' @param estimator Required exact ID: `fixed_shape_offset`,
@@ -198,6 +201,17 @@
 #'   Optional `source` metadata contains `artifact_hash`, `evidence_hash`, and
 #'   `n_observations`; unavailable values remain typed missing. External source
 #'   hashes are assertions of provenance, distinct from computed payload hashes.
+#'   E1 also accepts `list(artifact = artifact)` in either set entry, mutually
+#'   exclusive with `points`. Supply an in-memory canonical Phase A artifact
+#'   (use [readRDS()] explicitly for files). Its `set_id`, `fit_model_id`,
+#'   `n_items`, `n_pairs_committed`, and `items` are checked. Item-aligned
+#'   `items$theta_raw_mean` values are the EAP source; global IDs must match when
+#'   supplied. Phase B summaries are rejected. The original artifact is hashed,
+#'   and its declared within-set evidence hash/count are retained as provenance;
+#'   raw outcomes, posterior draws, and marginal SDs are not used for E1
+#'   inference or retained in normalized input. Artifact `source` fields, if
+#'   supplied, must agree with the extracted metadata. This extracts statistical
+#'   inputs; it does not run adaptive Phase A quality/reliability gates.
 #' @param cross Explicit active cross-set observations, including an empty table
 #'   at zero budget. Evidence tables contain `observation_id`, `A_set`, `A_item`,
 #'   `B_set`, `B_item`, and numeric binary `y_A` (one means A won). IDs identify
@@ -209,8 +223,14 @@
 #'   `model_variant` (`btl`, `btl_b`, `btl_e`, or `btl_e_b`), `link = "logit"`,
 #'   and scalar `source`. Omitted model components must have value zero.
 #' @param control List with `delta_prior = list(mean = 0, sd = 5)`, numerical
-#'   `estimator` controls (currently an empty list), and optional named `initial`
-#'   free-coordinate vector. Initial values are optimization hints only.
+#'   `estimator` controls, and optional named `initial` free-coordinate vector.
+#'   E1 accepts positive `rel_tol = 1e-9`, `abs_tol = 1e-11`,
+#'   `quantile_tol = 1e-8`, and integer `subdivisions = 1000L`. The subdivision
+#'   limit bounds the number of quadrature panels and CDF integration/root
+#'   iterations. Tolerances apply to normalized mass and moments in prior-SD
+#'   coordinates; `quantile_tol` is in delta units. Effective defaults are logged
+#'   with every fit. Other estimators currently accept no numerical controls.
+#'   Initial values are optimization hints only; E1 does not use them.
 #' @param provenance List with optional `source_commit` (package source revision;
 #'   unknown is `NA_character_`) and `expected`, a named subset of the computed
 #'   `hashes` and `counts` lists against which to reconcile inputs. Hashes use a
@@ -229,6 +249,10 @@
 #'   judge = list(beta = 0, epsilon = 0, model_variant = "btl",
 #'     link = "logit", source = "frozen Phase A"))
 #' input$counts
+#' fit <- fit_link(input)
+#' fit$offset
+#' predict_link(fit, data.frame(observation_id = "held-out-1",
+#'   A_set = "H", A_item = "h1", B_set = "S", B_item = "s2"))
 #' @export
 prepare_link_input <- function(estimator, hub, spoke, phase_a, cross, judge,
                                control = list(), provenance = list()) {
@@ -240,6 +264,11 @@ prepare_link_input <- function(estimator, hub, spoke, phase_a, cross, judge,
   globals <- c(hub$items$global_item_id, spoke$items$global_item_id)
   .link_check(!anyDuplicated(globals[!is.na(globals)]), "Global item IDs must be unique across sets.")
   .link_fields(phase_a, c("hub", "spoke"), c("hub", "spoke"), "phase_a")
+  judge <- .link_judge(judge)
+  if (estimator == "fixed_shape_offset") {
+    phase_a$hub <- .link_e1_artifact(phase_a$hub, hub, judge)
+    phase_a$spoke <- .link_e1_artifact(phase_a$spoke, spoke, judge)
+  }
   phase_a <- list(hub = .link_phase_a(phase_a$hub, hub, backend$kind),
     spoke = .link_phase_a(phase_a$spoke, spoke, backend$kind))
   cross <- .link_observations(cross, hub, spoke)
@@ -247,7 +276,6 @@ prepare_link_input <- function(estimator, hub, spoke, phase_a, cross, judge,
     ids <- c(phase_a$hub$value$observation_id, phase_a$spoke$value$observation_id, cross$observation_id)
     .link_check(!anyDuplicated(ids), "Duplicate observation IDs reuse evidence across likelihood blocks.")
   }
-  judge <- .link_judge(judge)
   basis <- list(hub = .link_basis(hub$items$item_id), spoke = .link_basis(spoke$items$item_id))
   transform <- .link_item_transform(basis, estimator)
   control <- .link_control(control, backend, colnames(transform))

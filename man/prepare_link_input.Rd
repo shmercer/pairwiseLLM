@@ -30,7 +30,18 @@ exactly one statistical payload: E1 \code{points} (named numeric vector), E2
 Points and each draw are separately centered, with removed means recorded.
 Optional \code{source} metadata contains \code{artifact_hash}, \code{evidence_hash}, and
 \code{n_observations}; unavailable values remain typed missing. External source
-hashes are assertions of provenance, distinct from computed payload hashes.}
+hashes are assertions of provenance, distinct from computed payload hashes.
+E1 also accepts \code{list(artifact = artifact)} in either set entry, mutually
+exclusive with \code{points}. Supply an in-memory canonical Phase A artifact
+(use \code{\link[=readRDS]{readRDS()}} explicitly for files). Its \code{set_id}, \code{fit_model_id},
+\code{n_items}, \code{n_pairs_committed}, and \code{items} are checked. Item-aligned
+\code{items$theta_raw_mean} values are the EAP source; global IDs must match when
+supplied. Phase B summaries are rejected. The original artifact is hashed,
+and its declared within-set evidence hash/count are retained as provenance;
+raw outcomes, posterior draws, and marginal SDs are not used for E1
+inference or retained in normalized input. Artifact \code{source} fields, if
+supplied, must agree with the extracted metadata. This extracts statistical
+inputs; it does not run adaptive Phase A quality/reliability gates.}
 
 \item{cross}{Explicit active cross-set observations, including an empty table
 at zero budget. Evidence tables contain \code{observation_id}, \code{A_set}, \code{A_item},
@@ -45,8 +56,14 @@ use the same columns and must be within the corresponding set.}
 and scalar \code{source}. Omitted model components must have value zero.}
 
 \item{control}{List with \code{delta_prior = list(mean = 0, sd = 5)}, numerical
-\code{estimator} controls (currently an empty list), and optional named \code{initial}
-free-coordinate vector. Initial values are optimization hints only.}
+\code{estimator} controls, and optional named \code{initial} free-coordinate vector.
+E1 accepts positive \code{rel_tol = 1e-9}, \code{abs_tol = 1e-11},
+\code{quantile_tol = 1e-8}, and integer \code{subdivisions = 1000L}. The subdivision
+limit bounds the number of quadrature panels and CDF integration/root
+iterations. Tolerances apply to normalized mass and moments in prior-SD
+coordinates; \code{quantile_tol} is in delta units. Effective defaults are logged
+with every fit. Other estimators currently accept no numerical controls.
+Initial values are optimization hints only; E1 does not use them.}
 
 \item{provenance}{List with optional \code{source_commit} (package source revision;
 unknown is \code{NA_character_}) and \code{expected}, a named subset of the computed
@@ -60,8 +77,8 @@ likelihood counts are zero for E1/E2; source observation counts are separate.
 }
 \description{
 These development interfaces define the common contract for E1--E3. They do
-not select pairs, contact providers, or depend on adaptive state. Fitting
-engines will be added separately; currently \code{\link[=fit_link]{fit_link()}} reports an unavailable
+not select pairs, contact providers, or depend on adaptive state. E1 is
+implemented with deterministic quadrature; E2 and E3 report an unavailable
 estimator instead of running a legacy linker.
 }
 \examples{
@@ -75,4 +92,8 @@ input <- prepare_link_input("fixed_shape_offset", hub, spoke,
   judge = list(beta = 0, epsilon = 0, model_variant = "btl",
     link = "logit", source = "frozen Phase A"))
 input$counts
+fit <- fit_link(input)
+fit$offset
+predict_link(fit, data.frame(observation_id = "held-out-1",
+  A_set = "H", A_item = "h1", B_set = "S", B_item = "s2"))
 }

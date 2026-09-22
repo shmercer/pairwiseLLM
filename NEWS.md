@@ -1,12 +1,25 @@
 # pairwiseLLM (development version)
 
+## E1 fixed-shape offset linking
+
+- Implemented `fixed_shape_offset` in `fit_link()` with deterministic adaptive
+  one-dimensional quadrature, posterior-integrated `predict_link()`, explicit
+  numerical failures, and cumulative-evidence continuation (#276; epic #273).
+  E1 uncertainty is offset-only and conditional on fixed Phase A shapes.
+- `prepare_link_input()` now accepts canonical Phase A artifacts for E1,
+  extracting aligned EAP means and provenance without replaying Phase A outcomes
+  or treating marginal Phase A SDs as posterior linking uncertainty.
+- Estimator choice remains explicit. E2/E3 fitting, adaptive integration, and
+  anchored-joint removal remain separate epic tasks. Frozen study source:
+  `shmercer/pairwise-linking-study@2bf3f0b4a2f257b7855f965f782f05c61853aac6`.
+
 ## Linking estimator foundation
 
 - Added `prepare_link_input()`, `fit_link()`, and `predict_link()` as the explicit-
   evidence contract for E1–E3, with evidence guards, centered Helmert coordinates,
   common results, and continuation validation (#275). Estimator choice is explicit;
-  fitting engines will arrive in #276–#278 and currently report an unavailable-
-  estimator error. Existing adaptive linking integration is unchanged.
+  E2/E3 fitting engines will arrive in #277–#278 and currently report an
+  unavailable-estimator error. Existing adaptive linking integration is unchanged.
 
 ## Bug fixes
 

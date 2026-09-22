@@ -25,13 +25,30 @@ implicitly zero. Numerical failures remain invalid method-specific results.
 Fit a linker using prepared explicit evidence
 }
 \details{
-This foundation release has no E1--E3 fitting engines yet. Each
-recognized estimator raises \code{pairwiseLLM_link_not_implemented}; there is no
-default or fallback. Result schema version 1 uses \verb{theta_H = H_H u_H} and
+E1 (\code{fixed_shape_offset}) uses adaptive one-dimensional quadrature.
+E2 and E3 raise \code{pairwiseLLM_link_not_implemented}; there is no default or
+fallback. Result schema version 1 uses \verb{theta_H = H_H u_H} and
 \verb{theta_S = delta + H_S u_S}, 95 percent interval endpoints, descending ranks
 with average ties, and free coordinates delta, hub shape, then spoke shape.
 E1 has only the delta free coordinate. Prediction and continuation state
 contain serializable data, with functions resolved by estimator ID/version.
+
+E1 holds separately centered Phase A EAP shapes fixed and updates only
+delta under the configured Normal prior and the supplied cross-set
+likelihood. Reported means, SDs, and equal-tailed 95 percent intervals come
+from adaptive Gauss-Kronrod quadrature, with CDF integration and root
+finding for interval endpoints. Both infinite tails are integrated using
+rational coordinate maps; there is no finite-domain truncation or Laplace
+approximation. Monotone likelihood bounds guard against missed distant mass.
+With zero edges, or epsilon equal to one, summaries use the exact Normal
+prior. Positive-budget epsilon-one fits report \code{unidentified}.
+
+E1 uncertainty is conditional on fixed shapes: hub variance is truly zero,
+every spoke SD equals delta SD, and all spoke uncertainty is perfectly
+correlated. It does not propagate Phase A estimation uncertainty. E1 is
+useful with strong Phase A estimates or when computation must be inexpensive.
+Numerical initial values are ignored; continuation recomputes the posterior
+from the original prior and cumulative evidence, deterministically.
 }
 \section{Result fields}{
 
@@ -53,7 +70,12 @@ its fixed shapes supply the deterministic part of item means.
 \code{covariance_jitter}, \code{warning_code}, \code{failure_code}, \code{uncertainty_scope},
 \code{sampler}, \code{elapsed_seconds}, \code{cpu_seconds}, \code{peak_memory_bytes}, and
 \code{n_parameters}. Undefined fields use typed missing values. Invalid fits carry
-a failure code and cannot be used for prediction. Valid E1 scope is
+a failure code and cannot be used for prediction. E1 adds optional
+\code{quadrature} diagnostics: method, domain, coordinate, effective controls,
+integration partitions, subdivision count, log normalizer, estimated mass/
+moment errors, CDF error and root brackets when computed, summary method,
+and status. Partial diagnostics remain available after numerical failure.
+Quadrature errors are numerical estimates, not posterior SDs. Valid E1 scope is
 \code{offset_only_conditional_on_fixed_shapes}; valid E2/E3 scope is
 \code{joint_shapes_and_offset}. A true zero conditional variance is allowed.
 
