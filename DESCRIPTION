@@ -132,6 +132,8 @@ Collate:
     'link_contract.R'
     'link_coordinates.R'
     'link_fixed_shape.R'
+    'link_gaussian_bridge.R'
+    'link_phase_a_draws.R'
     'link_phase_a_points.R'
     'link_result.R'
     'llm_backends.R'

@@ -157,6 +157,9 @@
   if (estimator == "fixed_shape_offset") return(list(id = estimator, version = "1",
     kind = "points", fit = .link_e1_fit, predict = .link_e1_predict,
     validate_control = .link_e1_control))
+  if (estimator == "gaussian_posterior_bridge") return(list(id = estimator, version = "1",
+    kind = "draws", fit = .link_e2_fit, predict = .link_e2_predict,
+    validate_control = .link_e2_control))
   list(id = estimator, version = "1", kind = c("points", "draws", "observations")[[match(estimator, ids)]],
     fit = NULL, predict = NULL,
     validate_control = function(x) {
@@ -185,8 +188,8 @@
 #'
 #' These development interfaces define the common contract for E1--E3. They do
 #' not select pairs, contact providers, or depend on adaptive state. E1 is
-#' implemented with deterministic quadrature; E2 and E3 report an unavailable
-#' estimator instead of running a legacy linker.
+#' implemented with deterministic quadrature; E2 uses a Gaussian posterior bridge
+#' with MAP/Laplace inference. E3 reports an unavailable estimator.
 #'
 #' @param estimator Required exact ID: `fixed_shape_offset`,
 #'   `gaussian_posterior_bridge`, or `joint_offset`. There is no default.
@@ -212,6 +215,13 @@
 #'   inference or retained in normalized input. Artifact `source` fields, if
 #'   supplied, must agree with the extracted metadata. This extracts statistical
 #'   inputs; it does not run adaptive Phase A quality/reliability gates.
+#'   E2 also accepts `list(artifact = artifact)`, mutually exclusive with `draws`.
+#'   The same identity/model/scope checks apply, but the required statistical
+#'   payload is `posterior_draws`, a finite matrix with at least two rows and
+#'   named item columns. EAP summaries and marginal SDs cannot replace draws.
+#'   E2 retains the centered draw matrix and source hashes/counts, without raw
+#'   Phase A outcomes. Each set is Gaussianized in reduced centered coordinates
+#'   using its sample mean and full sample covariance.
 #' @param cross Explicit active cross-set observations, including an empty table
 #'   at zero budget. Evidence tables contain `observation_id`, `A_set`, `A_item`,
 #'   `B_set`, `B_item`, and numeric binary `y_A` (one means A won). IDs identify
@@ -229,8 +239,15 @@
 #'   limit bounds the number of quadrature panels and CDF integration/root
 #'   iterations. Tolerances apply to normalized mass and moments in prior-SD
 #'   coordinates; `quantile_tol` is in delta units. Effective defaults are logged
-#'   with every fit. Other estimators currently accept no numerical controls.
-#'   Initial values are optimization hints only; E1 does not use them.
+#'   with every fit. E2 accepts positive `rel_tol = 1e-10`,
+#'   `gradient_tol = 1e-6`, `prediction_rel_tol = 1e-9`,
+#'   `prediction_abs_tol = 1e-11`, and positive integers `maxit = 2000L` and
+#'   `subdivisions = 1000L`. `maxit` limits BFGS iterations per deterministic
+#'   start; `gradient_tol` bounds the absolute gradient in whitened coordinates.
+#'   Prediction tolerances apply to the integrated logistic probability, and
+#'   `subdivisions` limits integration on each interval. E3 accepts no controls.
+#'   Initial values are optimization hints only; E1 and E2 ignore them to keep
+#'   fresh and cumulative-evidence fits on the same deterministic numerical path.
 #' @param provenance List with optional `source_commit` (package source revision;
 #'   unknown is `NA_character_`) and `expected`, a named subset of the computed
 #'   `hashes` and `counts` lists against which to reconcile inputs. Hashes use a
@@ -253,6 +270,17 @@
 #' fit$offset
 #' predict_link(fit, data.frame(observation_id = "held-out-1",
 #'   A_set = "H", A_item = "h1", B_set = "S", B_item = "s2"))
+#'
+#' # E2 carries the full joint Phase A draw information forward.
+#' hub_draws <- cbind(h1 = c(-1, -2, -.5, -1.5), h2 = c(1, 2, .5, 1.5))
+#' spoke_draws <- cbind(s1 = c(-.3, -.7, -.4, -.6), s2 = c(.3, .7, .4, .6))
+#' bridge <- prepare_link_input("gaussian_posterior_bridge", hub, spoke,
+#'   phase_a = list(hub = list(draws = hub_draws), spoke = list(draws = spoke_draws)),
+#'   cross = cross, judge = input$judge)
+#' bridge_fit <- fit_link(bridge)
+#' bridge_fit$offset
+#' predict_link(bridge_fit, data.frame(observation_id = "bridge-held-out",
+#'   A_set = "H", A_item = "h1", B_set = "S", B_item = "s2"))
 #' @export
 prepare_link_input <- function(estimator, hub, spoke, phase_a, cross, judge,
                                control = list(), provenance = list()) {
@@ -268,6 +296,10 @@ prepare_link_input <- function(estimator, hub, spoke, phase_a, cross, judge,
   if (estimator == "fixed_shape_offset") {
     phase_a$hub <- .link_e1_artifact(phase_a$hub, hub, judge)
     phase_a$spoke <- .link_e1_artifact(phase_a$spoke, spoke, judge)
+  }
+  if (estimator == "gaussian_posterior_bridge") {
+    phase_a$hub <- .link_e2_artifact(phase_a$hub, hub, judge)
+    phase_a$spoke <- .link_e2_artifact(phase_a$spoke, spoke, judge)
   }
   phase_a <- list(hub = .link_phase_a(phase_a$hub, hub, backend$kind),
     spoke = .link_phase_a(phase_a$spoke, spoke, backend$kind))

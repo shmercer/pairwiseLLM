@@ -41,7 +41,14 @@ and its declared within-set evidence hash/count are retained as provenance;
 raw outcomes, posterior draws, and marginal SDs are not used for E1
 inference or retained in normalized input. Artifact \code{source} fields, if
 supplied, must agree with the extracted metadata. This extracts statistical
-inputs; it does not run adaptive Phase A quality/reliability gates.}
+inputs; it does not run adaptive Phase A quality/reliability gates.
+E2 also accepts \code{list(artifact = artifact)}, mutually exclusive with \code{draws}.
+The same identity/model/scope checks apply, but the required statistical
+payload is \code{posterior_draws}, a finite matrix with at least two rows and
+named item columns. EAP summaries and marginal SDs cannot replace draws.
+E2 retains the centered draw matrix and source hashes/counts, without raw
+Phase A outcomes. Each set is Gaussianized in reduced centered coordinates
+using its sample mean and full sample covariance.}
 
 \item{cross}{Explicit active cross-set observations, including an empty table
 at zero budget. Evidence tables contain \code{observation_id}, \code{A_set}, \code{A_item},
@@ -62,8 +69,15 @@ E1 accepts positive \code{rel_tol = 1e-9}, \code{abs_tol = 1e-11},
 limit bounds the number of quadrature panels and CDF integration/root
 iterations. Tolerances apply to normalized mass and moments in prior-SD
 coordinates; \code{quantile_tol} is in delta units. Effective defaults are logged
-with every fit. Other estimators currently accept no numerical controls.
-Initial values are optimization hints only; E1 does not use them.}
+with every fit. E2 accepts positive \code{rel_tol = 1e-10},
+\code{gradient_tol = 1e-6}, \code{prediction_rel_tol = 1e-9},
+\code{prediction_abs_tol = 1e-11}, and positive integers \code{maxit = 2000L} and
+\code{subdivisions = 1000L}. \code{maxit} limits BFGS iterations per deterministic
+start; \code{gradient_tol} bounds the absolute gradient in whitened coordinates.
+Prediction tolerances apply to the integrated logistic probability, and
+\code{subdivisions} limits integration on each interval. E3 accepts no controls.
+Initial values are optimization hints only; E1 and E2 ignore them to keep
+fresh and cumulative-evidence fits on the same deterministic numerical path.}
 
 \item{provenance}{List with optional \code{source_commit} (package source revision;
 unknown is \code{NA_character_}) and \code{expected}, a named subset of the computed
@@ -78,8 +92,8 @@ likelihood counts are zero for E1/E2; source observation counts are separate.
 \description{
 These development interfaces define the common contract for E1--E3. They do
 not select pairs, contact providers, or depend on adaptive state. E1 is
-implemented with deterministic quadrature; E2 and E3 report an unavailable
-estimator instead of running a legacy linker.
+implemented with deterministic quadrature; E2 uses a Gaussian posterior bridge
+with MAP/Laplace inference. E3 reports an unavailable estimator.
 }
 \examples{
 hub <- list(set_id = "H", items = data.frame(item_id = c("h1", "h2")))
@@ -95,5 +109,16 @@ input$counts
 fit <- fit_link(input)
 fit$offset
 predict_link(fit, data.frame(observation_id = "held-out-1",
+  A_set = "H", A_item = "h1", B_set = "S", B_item = "s2"))
+
+# E2 carries the full joint Phase A draw information forward.
+hub_draws <- cbind(h1 = c(-1, -2, -.5, -1.5), h2 = c(1, 2, .5, 1.5))
+spoke_draws <- cbind(s1 = c(-.3, -.7, -.4, -.6), s2 = c(.3, .7, .4, .6))
+bridge <- prepare_link_input("gaussian_posterior_bridge", hub, spoke,
+  phase_a = list(hub = list(draws = hub_draws), spoke = list(draws = spoke_draws)),
+  cross = cross, judge = input$judge)
+bridge_fit <- fit_link(bridge)
+bridge_fit$offset
+predict_link(bridge_fit, data.frame(observation_id = "bridge-held-out",
   A_set = "H", A_item = "h1", B_set = "S", B_item = "s2"))
 }
