@@ -30,5 +30,12 @@ serialized posterior quadrature nodes. It refines numerical integration
 for a requested pair when necessary, without updating the posterior or
 modifying the result. There is no plug-in-mean prediction mode. Integration
 failure raises \code{pairwiseLLM_e1_numerical_error}, rather than substituting
-another prediction. E2/E3 engines are added in subsequent issues.
+another prediction. E2 integrates the oriented Gaussian pair contrast under
+its joint Laplace approximation, including all item/offset cross-covariances.
+Deterministic adaptive quadrature over the standard Normal variable splits
+at zero and the logistic transition (bounded to plus/minus eight SDs to avoid
+excessively long finite intervals); both infinite tails are integrated.
+Degenerate zero-variance contrasts use the exact conditional probability.
+Repeated calls do not sample or mutate state. Integration failure raises
+\code{pairwiseLLM_e2_numerical_error}. E3 remains unavailable.
 }

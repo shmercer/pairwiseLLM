@@ -40,6 +40,9 @@ reduced coordinates, results, prediction, and continuation (#275). These prefixe
 were verified unused on 2026-09-22.
 E1 fixed-shape linking reserves 5075–5077 for quadrature/oracle inference,
 prediction/continuation, and numerical failures (#276); verified unused on 2026-09-22.
+E2 Gaussian bridge linking reserves 5078–5081 for bridges/artifacts,
+inference/oracles, prediction/continuation, and numerical failures (#277);
+verified unused on 2026-09-22.
 
 ## Determinism Rules
 

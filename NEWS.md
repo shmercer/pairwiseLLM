@@ -1,5 +1,19 @@
 # pairwiseLLM (development version)
 
+## E2 Gaussian posterior-bridge linking
+
+- Implemented `gaussian_posterior_bridge` in the explicit-evidence linking API
+  (#277; epic #273), with full reduced-coordinate Phase A covariance, deterministic
+  MAP optimization, observed-Hessian Laplace uncertainty, and Gaussian-integrated
+  prediction. Only new cross-set observations enter its Phase B likelihood.
+- Canonical Phase A artifacts or named draw matrices supply each bridge; missing
+  draws cannot fall back to EAP means or independent marginal SDs. Bounded,
+  recorded covariance jitter and explicit numerical failures preserve the common
+  evidence, result, and cumulative-continuation contracts.
+- E2 is staged and propagates joint shape/offset uncertainty, approximately through
+  Gaussianized Phase A posteriors and a Laplace update. Estimator selection remains
+  explicit. E3, adaptive integration, and legacy removal remain separate tasks.
+
 ## E1 fixed-shape offset linking
 
 - Implemented `fixed_shape_offset` in `fit_link()` with deterministic adaptive
@@ -9,7 +23,7 @@
 - `prepare_link_input()` now accepts canonical Phase A artifacts for E1,
   extracting aligned EAP means and provenance without replaying Phase A outcomes
   or treating marginal Phase A SDs as posterior linking uncertainty.
-- Estimator choice remains explicit. E2/E3 fitting, adaptive integration, and
+- Estimator choice remains explicit. E3 fitting, adaptive integration, and
   anchored-joint removal remain separate epic tasks. Frozen study source:
   `shmercer/pairwise-linking-study@2bf3f0b4a2f257b7855f965f782f05c61853aac6`.
 
@@ -18,7 +32,7 @@
 - Added `prepare_link_input()`, `fit_link()`, and `predict_link()` as the explicit-
   evidence contract for E1–E3, with evidence guards, centered Helmert coordinates,
   common results, and continuation validation (#275). Estimator choice is explicit;
-  E2/E3 fitting engines will arrive in #277–#278 and currently report an
+  E1/E2 engines are implemented; E3 will arrive in #278 and currently reports an
   unavailable-estimator error. Existing adaptive linking integration is unchanged.
 
 ## Bug fixes

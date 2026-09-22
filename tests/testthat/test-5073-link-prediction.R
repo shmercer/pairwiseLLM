@@ -15,7 +15,7 @@ test_that("oriented prediction honors positional bias and lapse", {
 test_that("prediction dispatch uses serialized state and validates probabilities", {
   result <- link_contract_result(link_contract_input(edges = 1L))
   pairs <- result$continuation$input$cross[, -6L]
-  expect_error(predict_link(link_contract_result(link_contract_input("gaussian_posterior_bridge", 1L)),
+  expect_error(predict_link(link_contract_result(link_contract_input("joint_offset", 1L)),
     pairs), class = "pairwiseLLM_link_not_implemented")
   resolver <- pairwiseLLM:::.link_resolve
   local_mocked_bindings(.link_resolve = function(id) {
