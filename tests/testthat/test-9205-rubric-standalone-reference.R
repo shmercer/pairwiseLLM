@@ -159,3 +159,74 @@ test_that("legacy standalone fits retain same-set calibration and failed links r
   expect_false(result$diagnostics$fit_valid)
   expect_error(predict(calibration, result), "valid, cross-set identified")
 })
+
+test_that("posterior sampler matrices yield verified references across standalone variants", {
+  skip_if_not_installed("posterior")
+  local_mocked_bindings(.fit_bayes_btl_mcmc_adaptive = function(...) {
+    sampled <- rubric_reference_sampler(...)
+    sampled$draws$theta <- posterior::as_draws_matrix(sampled$draws$theta)
+    sampled
+  }, .package = "pairwiseLLM")
+  evidence <- rubric_reference_evidence()
+  for (variant in c("btl", "btl_e", "btl_b", "btl_e_b")) {
+    completed <- rubric_reference_completed(evidence, variant = variant)
+    fit <- completed$fits[[1L]]
+    ids <- colnames(fit$theta_draws)
+    expected <- rubric_reference_sampler(list(item_id = ids), list(model_variant = variant))$draws$theta
+    expect_silent(validate_btl_fit_contract(fit, ids))
+    expect_false(is.object(fit$theta_draws))
+    expect_identical(as.vector(fit$theta_draws), as.vector(expected))
+    expect_identical(colnames(fit$theta_draws), colnames(expected))
+    reference <- rubric_reference_prepare(completed, evidence)
+    expect_false(is.object(reference$posterior_draws))
+    expect_true(.link_data_only(unclass(reference)))
+    expect_identical(reference$fit_evidence, fit$evidence_identity)
+    expect_identical(as.vector(reference$posterior_draws), as.vector(expected))
+    # The guard must still reject classed draws, even with recomputed hashes.
+    bad <- reference
+    bad$posterior_draws <- posterior::as_draws_matrix(bad$posterior_draws)
+    bad$reference_hash <- .rubric_standalone_hash(bad)
+    bad$source$reference_hash <- bad$reference_hash
+    expect_false(.link_data_only(unclass(bad)))
+    expect_error(.rubric_validate_standalone_reference(bad), "Invalid frozen standalone rubric reference")
+  }
+  expect_false(.link_data_only(structure(1, class = "incidental_sampler_class")))
+})
+
+test_that("classed sampler references round trip and transport through E1--E3 and E3-MCMC", {
+  skip_if_not_installed("posterior")
+  skip_if_not_installed("ordinal")
+  local_mocked_bindings(.fit_bayes_btl_mcmc_adaptive = function(...) {
+    sampled <- rubric_reference_sampler(...)
+    sampled$draws$theta <- posterior::as_draws_matrix(sampled$draws$theta)
+    sampled
+  }, .package = "pairwiseLLM")
+  reference <- rubric_reference_prepare(rubric_reference_completed())
+  path <- file.path(withr::local_tempdir(), "reference.rds")
+  saveRDS(reference, path)
+  restored <- readRDS(path)
+  expect_identical(restored, reference)
+  expect_silent(.rubric_validate_standalone_reference(restored))
+  expect_true(.link_data_only(unclass(restored)))
+  calibration <- fit_rubric_calibration(restored, rubric_reference_labels(restored),
+    calibration_design = "linked_anchors")
+  for (estimator in c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset")) {
+    input <- do.call(prepare_link_input, rubric_reference_link_args(restored, estimator))
+    result <- fit_link(input)
+    expect_true(result$diagnostics$fit_valid)
+    expect_identical(result$provenance$phase_a_sources$hub$reference_hash, reference$reference_hash)
+    prediction <- predict(calibration, result)
+    expect_equal(nrow(prediction), 3L)
+    expect_true(all(is.finite(prediction$expected_level)))
+  }
+  args <- rubric_reference_link_args(restored, "joint_offset")
+  args$control <- list(estimator = list(engine = "mcmc"))
+  input <- do.call(prepare_link_input, args)
+  sampled <- link_e3_mock_sampler(input)
+  local_mocked_bindings(.btl_mcmc_require_cmdstanr = function() invisible(NULL),
+    .link_e3_sample = function(...) sampled, .package = "pairwiseLLM")
+  result <- fit_link(input)
+  expect_true(result$diagnostics$fit_valid)
+  expect_identical(result$provenance$phase_a_sources$hub$reference_hash, reference$reference_hash)
+  expect_true(all(is.finite(predict(calibration, result)$expected_level)))
+})
