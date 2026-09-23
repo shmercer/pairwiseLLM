@@ -2,6 +2,26 @@
 
 ## pairwiseLLM (development version)
 
+### E3 joint-offset linking
+
+- Implemented `joint_offset` in the explicit-evidence linking API
+  ([\#278](https://github.com/shmercer/pairwiseLLM/issues/278);
+  [\#273](https://github.com/shmercer/pairwiseLLM/issues/273)).
+  MAP/Laplace jointly refits centered hub/spoke shapes and an explicit
+  offset, using every raw Phase A and cross-set observation once with
+  fixed judge parameters. Exact derivatives, deterministic multistart
+  optimization, and unregularized observed-Hessian checks provide
+  explicit failure diagnostics.
+- An explicitly selected `engine = "mcmc"` supplies a matching optional
+  Stan audit/reference model, resource controls, retained serializable
+  draws, full audit diagnostics, covariance transforms, and
+  posterior-average prediction. Zero-edge summaries preserve the exact
+  independent offset prior.
+- E3 requires more raw-data retention and computation than E2. Estimator
+  choice remains explicit; MCMC is never an implicit production path.
+  Adaptive/state integration, legacy removal, and default selection
+  remain separate epic work.
+
 ### E2 Gaussian posterior-bridge linking
 
 - Implemented `gaussian_posterior_bridge` in the explicit-evidence
@@ -19,8 +39,8 @@
   cumulative-continuation contracts.
 - E2 is staged and propagates joint shape/offset uncertainty,
   approximately through Gaussianized Phase A posteriors and a Laplace
-  update. Estimator selection remains explicit. E3, adaptive
-  integration, and legacy removal remain separate tasks.
+  update. Estimator selection remains explicit. Adaptive integration and
+  legacy removal remain separate tasks.
 
 ### E1 fixed-shape offset linking
 
@@ -37,8 +57,8 @@
   now accepts canonical Phase A artifacts for E1, extracting aligned EAP
   means and provenance without replaying Phase A outcomes or treating
   marginal Phase A SDs as posterior linking uncertainty.
-- Estimator choice remains explicit. E3 fitting, adaptive integration,
-  and anchored-joint removal remain separate epic tasks. Frozen study
+- Estimator choice remains explicit. Adaptive integration and
+  anchored-joint removal remain separate epic tasks. Frozen study
   source:
   `shmercer/pairwise-linking-study@2bf3f0b4a2f257b7855f965f782f05c61853aac6`.
 
@@ -53,9 +73,7 @@
   centered Helmert coordinates, common results, and continuation
   validation
   ([\#275](https://github.com/shmercer/pairwiseLLM/issues/275)).
-  Estimator choice is explicit; E1/E2 engines are implemented; E3 will
-  arrive in [\#278](https://github.com/shmercer/pairwiseLLM/issues/278)
-  and currently reports an unavailable-estimator error. Existing
+  Estimator choice is explicit; E1–E3 engines are implemented. Existing
   adaptive linking integration is unchanged.
 
 ### Bug fixes

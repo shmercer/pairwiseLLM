@@ -48,4 +48,7 @@ the standard Normal variable splits at zero and the logistic transition
 intervals); both infinite tails are integrated. Degenerate zero-variance
 contrasts use the exact conditional probability. Repeated calls do not
 sample or mutate state. Integration failure raises
-`pairwiseLLM_e2_numerical_error`. E3 remains unavailable.
+`pairwiseLLM_e2_numerical_error`. E3 MAP uses the same integration with
+`pairwiseLLM_e3_numerical_error` on failure. E3-MCMC averages the
+conditional probability over its retained raw draws, without new
+sampling.

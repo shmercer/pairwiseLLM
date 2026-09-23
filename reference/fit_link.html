@@ -87,8 +87,8 @@ implicitly zero. Numerical failures remain invalid method-specific results.</p>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>E1 (<code>fixed_shape_offset</code>) uses adaptive one-dimensional quadrature.
-E2 (<code>gaussian_posterior_bridge</code>) uses MAP/Laplace. E3 raises
-<code>pairwiseLLM_link_not_implemented</code>; there is no default or fallback.
+E2 (<code>gaussian_posterior_bridge</code>) and E3 (<code>joint_offset</code>) use MAP/Laplace.
+E3 additionally supports explicit MCMC; there is no default estimator or fallback.
 Result schema version 1 uses <code>theta_H = H_H u_H</code> and
 <code>theta_S = delta + H_S u_S</code>, 95 percent interval endpoints, descending ranks
 with average ties, and free coordinates delta, hub shape, then spoke shape.
@@ -132,7 +132,45 @@ and intervals are normal 95 percent approximations. At zero edges, E2 returns
 the two independent stabilized bridges and the offset prior exactly.
 With epsilon one the same distribution applies, labeled <code>unidentified</code>
 at positive budget. Continuation refits cumulative evidence from the original
-bridges, never from an earlier Phase B posterior.</p>
+bridges, never from an earlier Phase B posterior.
+E3 uses each raw hub Phase A, spoke Phase A, and cross-set observation
+exactly once, with fixed beta/epsilon. It jointly re-estimates the centered
+shapes with independent standard-Normal reduced-coordinate priors and an
+independent Normal offset prior. This is a complete joint model with greater
+data-retention and computational requirements than staged E2. E3 MAP uses
+the same five deterministic starts and convergence/PD-Hessian requirements
+as E2, in prior-whitened coordinates. Reported means are the MAP/Laplace
+center and intervals are normal 95 percent approximations. No Hessian repair
+or fallback is applied. The same finite-multistart/global-mode limitation
+applies. Initial values do not alter the deterministic search.</p>
+<p>E3-MCMC (<code>control$estimator$engine = "mcmc"</code>) is an audit/reference engine,
+never invoked by ordinary MAP/Laplace fitting. It samples the mathematically
+identical model, returns empirical means/covariance and equal-tailed 95
+percent intervals, and retains chain-indexed free-coordinate draws in
+<code>prediction$state</code>. Item draws are <code>free_draws %*% t(item_transform)</code>.
+No live CmdStan object or CSV file is required for saved-result prediction.
+Compiled models are cached in the writable package user cache, keyed by
+source, CmdStan/CmdStanR versions, and compilation options.</p>
+<p>At zero cross edges, E3-MCMC reports exact Normal offset-prior moments and
+intervals, with theoretical zero between-block covariances and sampled
+within-shape moments. Spoke intervals convolve empirical shape draws with
+the independent Normal offset prior. Raw draws remain unmodified for audit
+and posterior-average prediction, so their sample moments can differ from
+these factorized summaries. With epsilon one, all reported moments/intervals
+use the exact independent Gaussian priors. Zero-edge identification is
+<code>prior_only</code>; positive-budget epsilon-one identification is <code>unidentified</code>.</p>
+<p>Sampler diagnostics include per-coordinate rank-normalized R-hat, bulk/tail
+ESS, MCSE(mean)/SD, per-chain divergences, E-BFMI and treedepth hits/fractions,
+effective controls, and the frozen D005 audit gate. Valid MCMC fits require
+zero divergences, R-hat &lt;= 1.01, bulk ESS &gt;= 1000, tail ESS &gt;= 500,
+E-BFMI &gt;= .30 in every chain, overall treedepth-hit fraction &lt;= .01, and
+MCSE/SD &lt;= .05 for every free coordinate. Missing diagnostics fail the gate.
+Failed gates retain finite summaries, covariance, draws, and diagnostics,
+but set <code>fit_valid = FALSE</code> and <code>failure_code = "mcmc_audit_gate_failed"</code>;
+prediction requires a valid fit. Sampling errors instead return typed
+missing summaries. Repairs use a new explicitly configured call; the package
+does not automatically escalate sampling or change the model. MCMC does not
+supply a continuation mode, and no engine reuses a posterior as a prior.</p>
     </div>
     <div class="section level2">
     <h2 id="result-fields">Result fields<a class="anchor" aria-label="anchor" href="#result-fields"></a></h2>
