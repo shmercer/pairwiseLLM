@@ -171,8 +171,12 @@ test_that("Phase A import readiness retains reference metadata and rejects unrea
 
 test_that("old Phase B posterior state is rejected rather than reinterpreted for rubric scoring", {
   withr::local_seed(203)
+  testthat::local_mocked_bindings(
+    .adaptive_linking_refit_update_state = function(...) stop("Rejection fixtures must not refit"),
+    .package = "pairwiseLLM"
+  )
   for (n_sets in 2:3) {
-    state <- rubric_test_linked(n_sets)
+    state <- rubric_test_legacy_linked(n_sets)
     expect_error(pairwiseLLM:::.rubric_normalize_cj(state, "trait"),
       "Restart linking from compatible Phase A", class = "pairwiseLLM_unsupported_legacy_link_state")
   }

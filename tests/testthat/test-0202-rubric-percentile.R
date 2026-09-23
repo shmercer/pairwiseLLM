@@ -194,7 +194,7 @@ test_that("percentile scoring preserves provenance and diagnostics across curren
   expect_identical(fit$reference, fit$cj$reference)
   expect_identical(stats::predict(fit, artifact), stats::predict(fit))
   expect_error(stats::predict(fit, rubric_test_fixed()), "inappropriate")
-  linked <- rubric_test_linked(2L)
+  linked <- rubric_test_legacy_linked(2L)
   expect_error(stats::predict(fit, linked), "Unsupported legacy")
   expect_error(pairwiseLLM::fit_rubric_calibration(linked, method = "percentile", trait = "trait", K = 3),
     "Unsupported legacy")
