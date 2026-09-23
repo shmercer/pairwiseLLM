@@ -2,12 +2,20 @@
 
 ## pairwiseLLM (development version)
 
+- Sampler draws are now stored as plain numeric matrices in BTL fit
+  contracts, preserving values and item alignment. This fixes standalone
+  linked-reference preparation for real CmdStan fits without relaxing
+  serialization checks or requiring new sampling to canonicalize
+  existing draws
+  ([\#292](https://github.com/shmercer/pairwiseLLM/issues/292)).
+
 - [`prepare_linked_rubric_reference()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_linked_rubric_reference.md)
   saves a completed standalone Bayesian ranking as a reusable reference
   for `linked_anchors` rubric calibration. This includes rankings based
   on pooled historical comparisons. E1, E2, and E3 can use the same
   saved reference with their respective inputs
   ([\#290](https://github.com/shmercer/pairwiseLLM/issues/290)).
+
 - New standalone fits record the comparisons used in each refit so
   reference preparation can verify them. Older standalone fits must be
   refitted from their original comparisons before becoming reusable
