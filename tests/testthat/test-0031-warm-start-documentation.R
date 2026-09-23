@@ -86,13 +86,12 @@ test_that("warm-mode tables distinguish destinations and the common bootstrap", 
 test_that("adaptive documentation assigns model roles and scopes strategies", {
   root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
   skip_if_not(file.exists(file.path(root, "_pkgdown.yml")), "Source documentation unavailable")
-  articles <- c("adaptive-pairing", "within-set-adaptive-design",
-    "adaptive-linking", "adaptive-linking-design")
+  articles <- c("adaptive-pairing", "within-set-adaptive-design")
   for (article in articles) {
     text <- paste(readLines(file.path(root, "vignettes", paste0(article, ".Rmd"))), collapse = " ")
     text <- gsub("[[:space:]]+", " ", text)
     for (contract in c("TrueSkill", "rolling anchors", "long-link gate", "reliability",
-      "diagnostics", "stopping", "global_identified", "Phase B", "unchanged")) {
+      "diagnostics", "stopping", "global_identified", "Phase B")) {
       expect_match(text, contract, fixed = TRUE, info = article)
     }
     expect_match(text, "[Dd]irect strategies.*within-set", info = article)
@@ -101,9 +100,8 @@ test_that("adaptive documentation assigns model roles and scopes strategies", {
   guide <- paste(readLines(file.path(root, "vignettes", "adaptive-pairing.Rmd")), collapse = " ")
   for (contract in c(
     "pairing_strategy", "hybrid", "random", "trueskill_p50", "trueskill_pollitt",
-    "abs(p_ts(i > j) - 0.50)",
-    "min(abs(p_ts(i > j) - 1/3), abs(p_ts(i > j) - 2/3))",
-    "minimum current committed degree", "Pollitt-inspired", "direct_pairing", "target_distance"
+    "50% chance", "one-third or two-thirds",
+    "fewest completed comparisons", "Pollitt-inspired", "direct_pairing", "target_distance"
   )) {
     expect_match(guide, contract, fixed = TRUE)
   }

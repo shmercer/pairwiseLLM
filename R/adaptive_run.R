@@ -3946,7 +3946,7 @@
 #' diagnostics, stopping, and the existing `global_identified` signal. This signal
 #' can affect later hybrid tapering and routing; selection is not wholly independent
 #' of BTL. Direct within-set strategies use their documented partner targets after
-#' the common bootstrap. Phase B selection and prior rules are unchanged.
+#' the common bootstrap. Automatic Phase B selection is unavailable pending separate validation.
 #' Linking Phase B refits use Bayesian posterior estimation and posterior
 #' summaries/diagnostics are logged per spoke at each linking refit.
 #'
@@ -4172,7 +4172,7 @@ adaptive_rank_start <- function(items,
 #' identifiability-gated settings in \code{adaptive_config}; those controls
 #' affect hybrid pair routing and quotas through the existing `global_identified`
 #' signal. BTL supplies item estimates, posterior uncertainty, EAP reliability,
-#' diagnostics, and stopping. Phase B selection and prior rules are unchanged.
+#' diagnostics, and stopping. Automatic Phase B selection is unavailable pending separate validation.
 #' If \code{adaptive_config$max_pairs_after_stop > 0}, the run records a stop
 #' boundary at the first refit with \code{stop_decision = TRUE} and allows at
 #' most that many additional committed comparisons before deterministic

@@ -123,7 +123,7 @@ strategy requires a new session.}
 under the relaxed near-tie fallback: \code{3L} (historical default) or \code{2L}.
 For directed-table replay, use \code{2L} with \code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}} for
 two collected orientations. The ordinary ceiling remains two; direct
-strategies already cap at two. Phase B retains its existing ceiling.
+strategies already cap at two. Automatic Phase B selection is unavailable.
 This setting persists; sparse reservoirs independently enforce a one-use ceiling.}
 \item{\code{global_identified_reliability_min}}{Global EAP reliability threshold
 used to mark the run as globally identified after a refit. Default is
@@ -133,7 +133,7 @@ between the TrueSkill rank proxy and the BTL posterior mean ranks used
 to mark the run as globally identified after a refit. Default is \code{0.90}.}
 \item{\code{p_long_low}}{Lower bound for long-link win probability gating after
 global identification. Within-set/Phase-A hybrid uses TrueSkill throughout.
-Phase B retains its posterior gate with TrueSkill fallback. Default is \code{0.10}.}
+Automatic Phase B selection is unavailable. Default is \code{0.10}.}
 \item{\code{p_long_high}}{Upper bound for the same long-link probability gate.
 Default is \code{0.90}; bounds are inclusive.}
 \item{\code{long_taper_mult}}{Multiplier controlling long-link quota tapering
@@ -163,7 +163,9 @@ multi-set inputs with \code{set_id} and \code{global_item_id} in \code{data}.}
 \item{\code{hub_id}}{Hub \code{set_id} for linking modes. Default is \code{1L}.}
 \item{\code{link_estimation_mode}}{Explicit estimator identity for linking Phase A
 preparation: \code{fixed_shape_offset}, \code{gaussian_posterior_bridge}, or
-\code{joint_offset}. There is no default. Adaptive Phase B selection is
+\code{joint_offset}. E1 needs earlier scores, E2 needs joint posterior draws,
+and E3 needs original within-set comparisons under compatible model/prior
+settings. There is no default. Adaptive Phase B selection is
 unavailable pending validation. Use \code{\link[=prepare_link_input]{prepare_link_input()}}, \code{\link[=fit_link]{fit_link()}},
 and \code{\link[=start_link_session]{start_link_session()}} for explicit-evidence linking. Legacy Phase B
 posteriors cannot be migrated; restart from compatible Phase A inputs.}
@@ -464,7 +466,8 @@ BTL refits supply item estimates, posterior uncertainty, EAP reliability,
 diagnostics, stopping, and the existing \code{global_identified} signal. That signal
 can change later hybrid tapering and routing, so selection is not wholly
 independent of BTL. The within-set/Phase-A long-link gate uses TrueSkill
-probabilities throughout. Phase B selection and prior rules are unchanged.
+probabilities throughout. Automatic linking Phase B selection is unavailable
+pending validation; use \code{\link[=prepare_link_input]{prepare_link_input()}} and \code{\link[=start_link_session]{start_link_session()}}.
 
 Resume behavior:
 when \code{resume = TRUE} and \code{session_dir} already contains adaptive artifacts,

@@ -857,7 +857,8 @@ make_adaptive_judge_llm <- function(
 #' diagnostics, stopping, and the existing `global_identified` signal. That signal
 #' can change later hybrid tapering and routing, so selection is not wholly
 #' independent of BTL. The within-set/Phase-A long-link gate uses TrueSkill
-#' probabilities throughout. Phase B selection and prior rules are unchanged.
+#' probabilities throughout. Automatic linking Phase B selection is unavailable
+#' pending validation; use [prepare_link_input()] and [start_link_session()].
 #'
 #' Resume behavior:
 #' when `resume = TRUE` and `session_dir` already contains adaptive artifacts,
@@ -926,7 +927,7 @@ make_adaptive_judge_llm <- function(
 #'     under the relaxed near-tie fallback: `3L` (historical default) or `2L`.
 #'     For directed-table replay, use `2L` with [make_adaptive_judge_replay()] for
 #'     two collected orientations. The ordinary ceiling remains two; direct
-#'     strategies already cap at two. Phase B retains its existing ceiling.
+#'     strategies already cap at two. Automatic Phase B selection is unavailable.
 #'     This setting persists; sparse reservoirs independently enforce a one-use ceiling.}
 #'   \item{`global_identified_reliability_min`}{Global EAP reliability threshold
 #'     used to mark the run as globally identified after a refit. Default is
@@ -936,7 +937,7 @@ make_adaptive_judge_llm <- function(
 #'     to mark the run as globally identified after a refit. Default is `0.90`.}
 #'   \item{`p_long_low`}{Lower bound for long-link win probability gating after
 #'     global identification. Within-set/Phase-A hybrid uses TrueSkill throughout.
-#'     Phase B retains its posterior gate with TrueSkill fallback. Default is `0.10`.}
+#'     Automatic Phase B selection is unavailable. Default is `0.10`.}
 #'   \item{`p_long_high`}{Upper bound for the same long-link probability gate.
 #'     Default is `0.90`; bounds are inclusive.}
 #'   \item{`long_taper_mult`}{Multiplier controlling long-link quota tapering
@@ -966,7 +967,9 @@ make_adaptive_judge_llm <- function(
 #'   \item{`hub_id`}{Hub `set_id` for linking modes. Default is `1L`.}
 #'   \item{`link_estimation_mode`}{Explicit estimator identity for linking Phase A
 #'     preparation: `fixed_shape_offset`, `gaussian_posterior_bridge`, or
-#'     `joint_offset`. There is no default. Adaptive Phase B selection is
+#'     `joint_offset`. E1 needs earlier scores, E2 needs joint posterior draws,
+#'     and E3 needs original within-set comparisons under compatible model/prior
+#'     settings. There is no default. Adaptive Phase B selection is
 #'     unavailable pending validation. Use [prepare_link_input()], [fit_link()],
 #'     and [start_link_session()] for explicit-evidence linking. Legacy Phase B
 #'     posteriors cannot be migrated; restart from compatible Phase A inputs.}

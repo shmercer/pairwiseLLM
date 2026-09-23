@@ -1,95 +1,86 @@
-# pairwiseLLM (development version)
+# pairwiseLLM 1.6.0
 
-* Rubric Phase A imports now verify evidence hashes against the original stored
-  table before normalization, preserving valid artifacts whose table attributes
-  serialize differently. Tampered evidence still fails validation.
+## Breaking changes to linking
 
-* Removed the anchored-joint linking estimator, its priors, initialization and
-  accepted-state/Fisher machinery. Legacy Phase B sessions fail with a targeted
-  restart error; compatible Phase A artifacts remain reusable. Linking requires
-  an explicit E1--E3 estimator, with no study-development default. Adaptive Phase B
-  remains gated pending selector validation. The linking guides now describe
-  supported explicit-evidence sessions.
+* Removed the anchored-joint estimator, its priors, initialization and
+  estimator-specific selection machinery. Saved anchored-joint Phase B sessions
+  cannot be resumed, reported or used for rubric scoring. Restart from compatible
+  original Phase A artifacts and intentionally supplied cross-set comparisons.
+  The Phase B posterior is never silently migrated into a new method.
+* Linking requires an explicit method: `fixed_shape_offset` (E1),
+  `gaussian_posterior_bridge` (E2), or `joint_offset` (E3). There is no default
+  until the downstream study applies its frozen selection rule (#273).
+* Adaptive Phase B D-optimal selection, including legacy aliases, is unavailable
+  pending separate selector validation. Explicit-evidence fitting and continuation
+  remain available. Ordinary within-set adaptive ranking and Phase A preparation
+  retain their existing behavior.
 
-## Linking orchestration and selector restriction
+## Three linking methods
 
-* Adaptive Phase B D-optimal execution now fails explicitly for every estimator
-  and legacy alias pending the separate selector validation study (#280).
-  Direct E1--E3 fitting and session continuation remain available; E3-MCMC is
-  an audit engine. Internal orchestration hooks use common results for routing,
-  ordered prediction, covariance, contrast gradients, and held-out probe/stopping
-  metrics. Probe outcomes remain outside fitting, and E1 conditional uncertainty
-  cannot satisfy a full-uncertainty reliability criterion.
+* Added `prepare_link_input()`, `fit_link()` and `predict_link()` to separate
+  link estimation from pair selection. Inputs identify hub/spoke samples, compatible
+  Phase A information, explicit ordered cross-set judgments and fixed shared judge
+  settings. Each method uses an explicit offset and enforces single-use evidence.
+* E1 estimates only the offset, using adaptive one-dimensional quadrature and
+  posterior-integrated prediction. It accepts Phase A point scores or compatible
+  artifacts. Its uncertainty is conditional on fixed Phase A scores.
+* E2 uses saved joint posterior draws to construct full-covariance Gaussian bridges.
+  Only cross-set judgments enter its new likelihood. MAP/Laplace fitting propagates
+  approximate shape and offset uncertainty; covariance jitter is bounded and
+  recorded, with no fallback to separate marginal standard errors.
+* E3 jointly fits the original raw within-set and cross-set comparisons, each once,
+  under compatible original model/prior assumptions. MAP/Laplace fitting uses
+  deterministic optimization, analytic derivatives and observed-Hessian checks.
+  An explicitly selected `engine = "mcmc"` supplies a matching optional Stan audit
+  model, sampler diagnostics and retained serializable draws.
+* All methods preserve the offset prior at zero cross-set evidence and report that
+  the link is not identified. Numerical failures and missing uncertainty are
+  explicit; no engine silently falls back to another estimator.
 
-## Linking sessions and rubric transport
+## Sessions, reporting and rubric scoring
 
-* E1--E3 explicit-evidence linking sessions now support exact save/load and
-  append-only resume, estimator-neutral logs and item summaries, and hub-only
-  rubric calibration transport. Estimator choice remains explicit. Legacy
-  anchored-joint Phase B sessions cannot be resumed or used for rubric scoring;
-  restart from compatible Phase A inputs. E3 can import exact historical raw
-  Phase A rows. See `vignette("linking-sessions")`.
+* Added `start_link_session()`, `resume_link_session()`, `save_link_session()` and
+  `load_link_session()` for exact save/load and append-only continuation. Unchanged
+  resume reuses the saved result. Multi-spoke sessions preserve separate hub/spoke
+  fits, and statuses describe the caller's workflow without enabling automatic stopping.
+* Common input, result and session schemas use version 1. Estimator-neutral logs
+  and summaries replace obsolete anchored-joint fields with estimator identity,
+  offset estimates, uncertainty scope, fit diagnostics and evidence counts/hashes.
+  `theta_link_eap` aliases `theta_link_mean`: posterior averages for E1/E3-MCMC,
+  MAP locations for E2/E3 Laplace. Unknown source provenance remains missing.
+* Linked rubric scoring reuses the exact original hub calibration on valid linked
+  spoke scores. Compatible Phase A artifacts can be reused where they retain the
+  selected method's required points, joint draws or original raw observations.
+* Probe and stopping adapters consume common results, preserve presentation order,
+  and keep held-out outcomes outside fitting. E1 conditional uncertainty cannot
+  satisfy a full-uncertainty reliability criterion. These adapters do not enable
+  or validate adaptive Phase B selection or stopping.
 
-## E3 joint-offset linking
+## Validation and documentation
 
-- Implemented `joint_offset` in the explicit-evidence linking API (#278; #273).
-  MAP/Laplace jointly refits centered hub/spoke shapes and an explicit offset,
-  using every raw Phase A and cross-set observation once with fixed judge
-  parameters. Exact derivatives, deterministic multistart optimization, and
-  unregularized observed-Hessian checks provide explicit failure diagnostics.
-- An explicitly selected `engine = "mcmc"` supplies a matching optional Stan
-  audit/reference model, resource controls, retained serializable draws, full
-  audit diagnostics, covariance transforms, and posterior-average prediction.
-  Zero-edge summaries preserve the exact independent offset prior.
-- E3 requires more raw-data retention and computation than E2. Estimator choice
-  remains explicit; MCMC is never an implicit production path. Adaptive/state
-  integration, legacy removal, and default selection remain separate epic work.
-
-## E2 Gaussian posterior-bridge linking
-
-- Implemented `gaussian_posterior_bridge` in the explicit-evidence linking API
-  (#277; epic #273), with full reduced-coordinate Phase A covariance, deterministic
-  MAP optimization, observed-Hessian Laplace uncertainty, and Gaussian-integrated
-  prediction. Only new cross-set observations enter its Phase B likelihood.
-- Canonical Phase A artifacts or named draw matrices supply each bridge; missing
-  draws cannot fall back to EAP means or independent marginal SDs. Bounded,
-  recorded covariance jitter and explicit numerical failures preserve the common
-  evidence, result, and cumulative-continuation contracts.
-- E2 is staged and propagates joint shape/offset uncertainty, approximately through
-  Gaussianized Phase A posteriors and a Laplace update. Estimator selection remains
-  explicit. Adaptive integration and legacy removal remain separate tasks.
-
-## E1 fixed-shape offset linking
-
-- Implemented `fixed_shape_offset` in `fit_link()` with deterministic adaptive
-  one-dimensional quadrature, posterior-integrated `predict_link()`, explicit
-  numerical failures, and cumulative-evidence continuation (#276; epic #273).
-  E1 uncertainty is offset-only and conditional on fixed Phase A shapes.
-- `prepare_link_input()` now accepts canonical Phase A artifacts for E1,
-  extracting aligned EAP means and provenance without replaying Phase A outcomes
-  or treating marginal Phase A SDs as posterior linking uncertainty.
-- Estimator choice remains explicit. Adaptive integration and
-  anchored-joint removal remain separate epic tasks. Frozen study source:
-  `shmercer/pairwise-linking-study@2bf3f0b4a2f257b7855f965f782f05c61853aac6`.
-
-## Linking estimator foundation
-
-- Added `prepare_link_input()`, `fit_link()`, and `predict_link()` as the explicit-
-  evidence contract for E1–E3, with evidence guards, centered Helmert coordinates,
-  common results, and continuation validation (#275). Estimator choice is explicit;
-  E1–E3 engines are implemented. Existing adaptive linking integration is unchanged.
+* Added a shared provider-free release matrix for invariance, repeated judgments,
+  evidence single-use, known-offset simulations and integration. Real optional
+  E3-MCMC audits cover density agreement, MAP parity, symmetry, repeated likelihood
+  information and seeded repeatability. Tests never request provider judgments.
+* Rewrote linking usage guides with offline examples for all three methods and
+  practical save/resume guidance. Expanded the design guide with full statistical
+  models and plain-language explanations; audited the series' rubric and README
+  changes for the same accessible style.
+* Added an inspectable downstream linking contract and standalone synthetic smoke
+  runner that records the exact package revision for candidate production pinning.
 
 ## Bug fixes
 
-- Warm-start glmnet tuning now invalidates only verified nonconvergent inner-fold
+* Rubric Phase A imports verify evidence hashes against the original stored table
+  before normalization, preserving valid artifacts with different serialized table
+  attributes. Tampered evidence still fails validation.
+* Warm-start glmnet tuning invalidates only verified nonconvergent inner-fold
   lambda tails. Selection requires complete converged evidence across all folds;
-  full audits retain candidate eligibility and engine convergence evidence.
-  Reference-path failures and selected-lambda refit failures remain fatal (#271).
-
-- Increased the internal warm-start glmnet iteration ceiling from 100,000 to
-  10,000,000 while preserving the 1e-12 convergence threshold, exact lambda
-  paths, and strict convergence checks. Candidate eligibility for incomplete
-  inner paths is now governed by the explicit rule described above (#268, #271).
+  full audits retain candidate eligibility and convergence evidence. Reference-path
+  failures and selected-lambda refit failures remain fatal (#271).
+* Increased the internal warm-start glmnet iteration ceiling from 100,000 to
+  10,000,000 while preserving the 1e-12 convergence threshold, exact lambda paths
+  and strict convergence checks (#268, #271).
 
 # pairwiseLLM 1.5.2
 
