@@ -117,7 +117,7 @@ test_that("adaptive results extraction maps linking phase and judge scope", {
     items,
     seed = 3L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -163,7 +163,7 @@ test_that("adaptive results extraction uses link judge scope for within-set rows
     items,
     seed = 8L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -444,7 +444,7 @@ test_that("round_log_row suppresses global stop reasons during phase_b linking",
       global_item_id = c("gh1", "gh2", "gs21", "gs22")
     ),
     seed = 17L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$linking$phase_a$phase <- "phase_b"
   state$linking$phase_a$ready_for_phase_b <- TRUE
@@ -488,7 +488,7 @@ test_that("round_log_row suppresses global stop reasons during phase_b linking",
       set_j = 2L,
       is_cross_set = TRUE,
       link_spoke_id = 2L,
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       is_probe_step = FALSE,
       round_stage = "anchor_link"
     )
@@ -524,7 +524,7 @@ test_that("default_btl_fit_fn scopes Phase A linking refits to active set ids", 
   state <- adaptive_rank_start(
     items,
     seed = 13L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$linking$phase_a$set_status <- tibble::tibble(
     set_id = c(1L, 2L),
@@ -603,7 +603,7 @@ test_that("adaptive stop metric scope warns when Phase A scoped ids fallback to 
   state <- adaptive_rank_start(
     items,
     seed = 9L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$linking$phase_a$set_status <- tibble::tibble(
     set_id = c(1L, 2L),

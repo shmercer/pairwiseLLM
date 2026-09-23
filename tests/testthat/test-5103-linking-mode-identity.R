@@ -26,7 +26,7 @@ phase_identity_artifacts <- function(state) {
 
 phase_identity_link <- function(state, artifacts = list(), mode = "import") {
   pairwiseLLM:::.adaptive_apply_controller_config(state, list(
-    run_mode = "link_one_spoke", phase_a_mode = mode, phase_a_artifacts = artifacts,
+    run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", phase_a_mode = mode, phase_a_artifacts = artifacts,
     phase_a_required_reliability_min = 0
   ))
 }
@@ -285,22 +285,21 @@ test_that("Phase A committed cache rejects malformed counts and generation contr
   expect_error(surface("global_shared", "unknown"), "model_variant")
 })
 
-test_that("Phase B pooled evidence and anchored initialization ignore session warm metadata", {
+test_that("Phase A pooled evidence ignores session warm metadata", {
   artifacts <- phase_identity_artifacts(phase_identity_state())
   outputs <- lapply(c("cold", "btl_only", "trueskill_only", "both"), function(mode) {
     state <- phase_identity_link(phase_identity_state(mode), artifacts)
     state <- pairwiseLLM:::.adaptive_phase_a_prepare(state)
     expect_no_error(pairwiseLLM:::.adaptive_phase_a_gate_or_abort(state))
     list(
-      pooled = pairwiseLLM:::.adaptive_phase_a_pooled_judge_results(state, artifacts, 1:2, state$controller),
-      anchored = pairwiseLLM:::.adaptive_anchored_joint_artifact_copy_init(state, 2L)
+      pooled = pairwiseLLM:::.adaptive_phase_a_pooled_judge_results(state, artifacts, 1:2, state$controller)
     )
   })
   for (out in outputs[-1L]) expect_identical(out, outputs[[1L]])
   for (mode in c("run", "import", "mixed")) {
     for (strategy in c("random", "trueskill_p50", "trueskill_pollitt")) {
       expect_error(adaptive_rank_start(phase_identity_items(), adaptive_config = list(
-        run_mode = "link_one_spoke", phase_a_mode = mode, pairing_strategy = strategy)),
+        run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", phase_a_mode = mode, pairing_strategy = strategy)),
         "requires.*within_set")
     }
   }

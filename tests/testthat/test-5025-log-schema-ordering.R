@@ -27,8 +27,7 @@ test_that("canonical log schemas follow the expected column order", {
     "delta_spoke_estimate_pre", "delta_spoke_sd_pre", "dist_stratum_global",
     "posterior_win_prob_ij_pre", "posterior_win_prob_pre",
     "link_transform_policy", "link_transform_state", "cross_set_utility_pre",
-    "utility_mode", "log_alpha_spoke_estimate_pre", "log_alpha_spoke_sd_pre",
-    "hub_lock_mode", "hub_lock_kappa"
+    "utility_mode", "log_alpha_spoke_estimate_pre", "log_alpha_spoke_sd_pre"
   )
   expected_round <- c(
     "predictive_prior_digest",
@@ -116,7 +115,7 @@ test_that("canonical log schemas follow the expected column order", {
     "status",
     "refit_id", "spoke_id", "hub_id", "link_epoch_id", "link_estimation_mode",
     "link_transform_policy", "link_transform_state",
-    "link_refit_mode", "hub_lock_mode", "hub_lock_kappa",
+    "link_refit_mode",
     "shift_only_theta_treatment", "shift_only_theta_treatment_resolved",
     "delta_spoke_mean", "delta_spoke_sd",
     "log_alpha_spoke_mean", "log_alpha_spoke_sd",
@@ -232,12 +231,11 @@ test_that("public log accessors cast linking categorical fields to constrained f
   expect_true(is.factor(step_log$link_transform_policy))
   expect_true(is.factor(step_log$link_transform_state))
   expect_true(is.factor(step_log$utility_mode))
-  expect_true(is.factor(step_log$hub_lock_mode))
   expect_identical(
     levels(step_log$run_mode),
     c("within_set", "link_one_spoke", "link_multi_spoke", "link_probe_holdout")
   )
-  expect_identical(levels(step_log$link_estimation_mode), c("transform", "anchored_joint"))
+  expect_identical(levels(step_log$link_estimation_mode), c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset"))
   expect_identical(levels(step_log$link_stage), c("anchor_link", "long_link", "mid_link", "local_link", "probe_panel"))
   expect_identical(levels(step_log$link_transform_policy), c("auto", "fixed_shift_only", "fixed_shift_scale"))
   expect_identical(levels(step_log$link_transform_state), c("shift_only", "shift_scale"))
@@ -246,26 +244,22 @@ test_that("public log accessors cast linking categorical fields to constrained f
     c(
       "pairing_trueskill_u0",
       "pairing_trueskill_u",
-      "linking_d_optimal_transform",
-      "linking_d_optimal_anchored_joint"
+      "linking_d_optimal"
     )
   )
-  expect_identical(levels(step_log$hub_lock_mode), c("hard_lock", "soft_lock", "free"))
 
   expect_true(is.factor(logs$link_stage_log$link_estimation_mode))
   expect_true(is.factor(logs$link_stage_log$link_transform_policy))
   expect_true(is.factor(logs$link_stage_log$link_transform_state))
   expect_true(is.factor(logs$link_stage_log$link_refit_mode))
-  expect_true(is.factor(logs$link_stage_log$hub_lock_mode))
-  expect_false("anchored_joint_init_state_method" %in% names(logs$link_stage_log))
-  expect_identical(levels(logs$link_stage_log$link_estimation_mode), c("transform", "anchored_joint"))
+  expect_false("joint_offset_init_state_method" %in% names(logs$link_stage_log))
+  expect_identical(levels(logs$link_stage_log$link_estimation_mode), c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset"))
   expect_identical(
     levels(logs$link_stage_log$link_transform_policy),
     c("auto", "fixed_shift_only", "fixed_shift_scale")
   )
   expect_identical(levels(logs$link_stage_log$link_transform_state), c("shift_only", "shift_scale"))
   expect_identical(levels(logs$link_stage_log$link_refit_mode), c("shift_only", "joint_refit"))
-  expect_identical(levels(logs$link_stage_log$hub_lock_mode), c("hard_lock", "soft_lock", "free"))
 })
 
 test_that("public step log accessors normalize legacy audit labels narrowly", {
@@ -279,7 +273,7 @@ test_that("public step log accessors normalize legacy audit labels narrowly", {
       is_probe_step = TRUE,
       is_holdout_probe_step = FALSE,
       is_drift_probe_step = TRUE,
-      link_estimation_mode = "transform",
+      link_estimation_mode = "joint_offset",
       utility_mode = "linking_d_optimal"
     )
   )
@@ -292,7 +286,7 @@ test_that("public step log accessors normalize legacy audit labels narrowly", {
       is_probe_step = FALSE,
       is_holdout_probe_step = FALSE,
       is_drift_probe_step = FALSE,
-      link_estimation_mode = "anchored_joint",
+      link_estimation_mode = "joint_offset",
       utility_mode = "linking_d_optimal"
     )
   )
@@ -303,7 +297,7 @@ test_that("public step log accessors normalize legacy audit labels narrowly", {
   expect_true(isTRUE(step_log$is_drift_probe_step[[1L]]))
   expect_false(isTRUE(step_log$is_holdout_probe_step[[1L]]))
   expect_true(is.na(step_log$utility_mode[[1L]]))
-  expect_identical(as.character(step_log$utility_mode[[2L]]), "linking_d_optimal_anchored_joint")
+  expect_identical(as.character(step_log$utility_mode[[2L]]), "linking_d_optimal")
 })
 
 test_that("public log accessors fail fast on invalid linking categorical values", {
@@ -322,11 +316,11 @@ test_that("public log accessors fail fast on invalid linking categorical values"
       spoke_id = 2L,
       hub_id = 1L,
       link_epoch_id = 1L,
-      link_estimation_mode = "transform",
+      link_estimation_mode = "joint_offset",
       link_transform_policy = "bad_mode",
       link_transform_state = "shift_only",
       link_refit_mode = "shift_only",
-      hub_lock_mode = "soft_lock",
+
       reliability_link_global = 0.9,
       linking_identified = TRUE,
       link_stop_eligible = TRUE,

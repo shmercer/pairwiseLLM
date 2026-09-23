@@ -2,7 +2,7 @@ task09_link_state <- function() {
   items <- tibble::tibble(item_id = letters[1:6], set_id = rep(1:3, each = 2L),
     global_item_id = paste0("g", letters[1:6]))
   state <- pairwiseLLM::adaptive_rank_start(items, seed = 91L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L),
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L),
     now_fn = function() as.POSIXct("2026-09-11", tz = "UTC"))
   means <- stats::setNames(c(-1, 1, -0.5, 0.5, -0.2, 0.2), state$item_ids)
   draws <- outer(c(-0.3, -0.1, 0.1, 0.3), means, `+`)

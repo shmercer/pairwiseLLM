@@ -99,9 +99,7 @@ schema_step_log <- c(
   cross_set_utility_pre = "double",
   utility_mode = "character",
   log_alpha_spoke_estimate_pre = "double",
-  log_alpha_spoke_sd_pre = "double",
-  hub_lock_mode = "character",
-  hub_lock_kappa = "double"
+  log_alpha_spoke_sd_pre = "double"
 )
 
 schema_round_log <- c(
@@ -270,8 +268,6 @@ schema_link_stage_log <- c(
   link_transform_policy = "character",
   link_transform_state = "character",
   link_refit_mode = "character",
-  hub_lock_mode = "character",
-  hub_lock_kappa = "double",
   shift_only_theta_treatment = "character",
   shift_only_theta_treatment_resolved = "character",
   delta_spoke_mean = "double",
@@ -507,109 +503,19 @@ schema_item_step_log <- c(
   )
 }
 
-.adaptive_link_stage_anchored_joint_disabled_fields <- function() {
-  c(
-    "alternative_fit_method",
-    "alternative_uncertainty_approximation",
-    "alt_eval_active_edges",
-    "probe_brier_delta_min_used",
-    "logalpha_sd_guardrail_used",
-    "escalation_recent_pass_count",
-    "escalation_recent_window_size"
-  )
-}
-
 .adaptive_log_normalize_mode_fields <- function(row, schema, log_name) {
   out <- tibble::as_tibble(row)
-
   if (identical(log_name, "link_stage_log")) {
     if ("transform_frozen" %in% names(out) && !"link_state_frozen" %in% names(out)) {
       out$link_state_frozen <- out$transform_frozen
     }
     if ("transform_frozen_refit_id" %in% names(out) &&
-      !"link_state_frozen_refit_id" %in% names(out)) {
+        !"link_state_frozen_refit_id" %in% names(out)) {
       out$link_state_frozen_refit_id <- out$transform_frozen_refit_id
     }
     out$transform_frozen <- NULL
     out$transform_frozen_refit_id <- NULL
   }
-
-  if ("link_estimation_mode" %in% names(schema) && !"link_estimation_mode" %in% names(out)) {
-    default_mode <- if (identical(log_name, "link_stage_log")) {
-      "transform"
-    } else {
-      NA_character_
-    }
-    out$link_estimation_mode <- rep_len(default_mode, nrow(out))
-  }
-
-  if ("link_estimation_mode" %in% names(out)) {
-    out$link_estimation_mode <- vapply(
-      as.character(out$link_estimation_mode),
-      function(value) {
-        if (is.na(value) || value == "") {
-          if (identical(log_name, "link_stage_log")) {
-            return("transform")
-          }
-          return(NA_character_)
-        }
-        .adaptive_normalize_link_estimation_mode(value)
-      },
-      character(1),
-      USE.NAMES = FALSE
-    )
-  }
-
-  mode <- as.character(out$link_estimation_mode %||% rep_len(NA_character_, nrow(out)))
-  if ("hub_lock_mode" %in% names(schema)) {
-    if (!"hub_lock_mode" %in% names(out)) {
-      out$hub_lock_mode <- rep_len(NA_character_, nrow(out))
-    }
-    missing_lock <- is.na(out$hub_lock_mode) | as.character(out$hub_lock_mode) == ""
-    out$hub_lock_mode[missing_lock & mode == "transform"] <- "soft_lock"
-    out$hub_lock_mode[missing_lock & mode == "anchored_joint"] <- "hard_lock"
-  }
-  anchored_idx <- !is.na(mode) & mode == "anchored_joint"
-  if (!any(anchored_idx)) {
-    return(out)
-  }
-
-  fields <- if (identical(log_name, "step_log")) {
-    .adaptive_step_log_transform_only_fields()
-  } else if (identical(log_name, "link_stage_log")) {
-    .adaptive_link_stage_transform_only_fields()
-  } else {
-    character()
-  }
-
-  for (col in intersect(fields, names(schema))) {
-    if (!col %in% names(out)) {
-      out[[col]] <- rep_len(.adaptive_schema_typed_na(schema[[col]]), nrow(out))
-    }
-    out[[col]][anchored_idx] <- .adaptive_schema_typed_na(schema[[col]])
-  }
-
-  if (identical(log_name, "link_stage_log")) {
-    if ("hub_lock_kappa" %in% names(out)) {
-      out$hub_lock_kappa[anchored_idx] <- NA_real_
-    }
-    for (col in intersect(.adaptive_link_stage_anchored_joint_disabled_fields(), names(schema))) {
-      if (!col %in% names(out)) {
-        out[[col]] <- rep_len(.adaptive_schema_typed_na(schema[[col]]), nrow(out))
-      }
-      out[[col]][anchored_idx] <- .adaptive_schema_typed_na(schema[[col]])
-    }
-    if ("scale_ready" %in% names(out)) {
-      out$scale_ready[anchored_idx] <- FALSE
-    }
-    if ("alt_eval_converged" %in% names(out)) {
-      out$alt_eval_converged[anchored_idx] <- FALSE
-    }
-    if ("escalated_this_refit" %in% names(out)) {
-      out$escalated_this_refit[anchored_idx] <- FALSE
-    }
-  }
-
   out
 }
 

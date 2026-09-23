@@ -850,29 +850,7 @@
       spoke_id = as.integer(spoke_id),
       epoch_id = as.integer(.adaptive_link_probe_epoch_for_spoke(state, spoke_id = spoke_id))
     ),
-    link_estimation_mode = link_estimation_mode,
-    link_transform_policy = if (identical(link_estimation_mode, "anchored_joint")) {
-      NA_character_
-    } else {
-      as.character(.adaptive_normalize_link_transform_policy(
-        controller$link_transform_policy %||% "auto"
-      ))
-    },
-    link_transform_state = if (identical(link_estimation_mode, "anchored_joint")) {
-      NA_character_
-    } else {
-      as.character(.adaptive_link_transform_state_for_spoke(controller, spoke_id = as.integer(spoke_id)))
-    },
-    link_refit_mode = if (identical(link_estimation_mode, "anchored_joint")) {
-      NA_character_
-    } else {
-      as.character(controller$link_refit_mode %||% "shift_only")
-    },
-    hub_lock_mode = if (identical(link_estimation_mode, "anchored_joint")) {
-      "hard_lock"
-    } else {
-      as.character(controller$hub_lock_mode %||% "soft_lock")
-    }
+    link_estimation_mode = link_estimation_mode
   )
 }
 
@@ -889,11 +867,7 @@
     hub_id = as.integer,
     link_epoch_id = as.integer,
     probe_panel_id = as.character,
-    link_estimation_mode = as.character,
-    link_transform_policy = as.character,
-    link_transform_state = as.character,
-    link_refit_mode = as.character,
-    hub_lock_mode = as.character
+    link_estimation_mode = as.character
   )
   all(vapply(names(compare), function(field) {
     coercer <- compare[[field]]
@@ -3962,17 +3936,11 @@
 #' Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling anchors,
 #' pair probabilities, and base utility
 #' \deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
-#' win probability for pair \eqn{\{i, j\}}. In linking Phase B, anchor/strata
-#' routing uses a linking-global score derived from Phase A raw summaries and
-#' the accepted Phase B linking state.
-#' In linking Phase B, eligible cross-set candidates are ranked by
-#' ridge-stabilized D-optimal log-det information gain on the active linking
-#' parameter block using order-averaged Model D probabilities. In
-#' the spoke free block with the hub fixed. Linking inference parameters are
-#' used for inference/diagnostics/stopping, not as direct selection objectives.
-#' Phase B uses pooled within-set Phase A judge-parameter estimates, using the
-#' configured BTL model variant, as the accepted shared source for fixed
-#' \code{beta}/\code{epsilon} constants.
+#' win probability for pair \eqn{\{i, j\}}. Linking Phase A preparation requires
+#' an explicit `adaptive_config$link_estimation_mode`. Adaptive Phase B selection
+#' remains unavailable pending separate validation. Use [prepare_link_input()],
+#' [fit_link()], and [start_link_session()] with explicit cross-set evidence and
+#' frozen shared judge parameters for E1--E3 linking.
 #' The within-set/Phase-A hybrid long-link gate uses TrueSkill throughout.
 #' Bayesian BTL supplies item estimates, posterior uncertainty, EAP reliability,
 #' diagnostics, stopping, and the existing `global_identified` signal. This signal
@@ -4071,7 +4039,7 @@
 #' Predictive BTL priors apply only in `btl_only` and `both`, including run-required
 #' linking Phase A. TrueSkill initialization applies in `trueskill_only` and `both`.
 #' Imported Phase-A artifacts retain their own generation identity and are not
-#' rerun because predictive input exists. Transform, anchored-joint, and pooled
+#' rerun because predictive input exists. Linking and pooled
 #' judge refits keep their existing prior rules; predictive evidence is not
 #' injected into Phase B priors, D-optimal selection, or probes.
 #' Custom BTL fit functions should consume `state$predictive_prior` only when
@@ -4170,15 +4138,10 @@ adaptive_rank_start <- function(items,
 #' The long-link probability gate uses TrueSkill throughout within-set/Phase-A
 #' hybrid selection. Direct strategies apply their partner targets after the same
 #' connected shuffled bootstrap and currently require ordinary within-set mode.
-#' In linking Phase B, anchor/strata routing uses linking-global scores built
-#' from Phase A summaries and the accepted anchored-joint state. Linking Phase B
-#' routing ranks eligible
-#' cross-set candidates by ridge-stabilized D-optimal log-det information gain
-#' on the active linking parameter block using order-averaged Model D
-#' probabilities. Linking inference parameters remain inference-only
-#' (diagnostics and stopping) and are not direct pair-selection objectives.
-#' Phase B uses a hard-lock hub-fixed fit and a deterministic accepted state
-#' before the first linking refit.
+#' Adaptive Phase B selection is unavailable pending separate validation.
+#' Use [prepare_link_input()], [fit_link()], and [start_link_session()] with
+#' explicit cross-set evidence and an explicit E1--E3 estimator. Legacy Phase B
+#' posteriors cannot be resumed or migrated into a new estimator.
 #' Exploration/exploitation routing and fallback handling are recorded in
 #' \code{step_log}.
 #'

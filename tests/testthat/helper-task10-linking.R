@@ -5,7 +5,7 @@ task10_link_state <- function(n_sets = 3L) {
   now_fn <- function() as.POSIXct("2026-09-11", tz = "UTC")
   environment(now_fn) <- baseenv()
   state <- adaptive_rank_start(items, seed = 91L,
-    adaptive_config = list(run_mode = if (n_sets == 2L) "link_one_spoke" else "link_multi_spoke",
+    adaptive_config = list(run_mode = if (n_sets == 2L) "link_one_spoke" else "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L), now_fn = now_fn)
   means <- stats::setNames(c(-1, 1, -0.5, 0.5, -0.2, 0.2)[seq_along(ids)], ids)
   draws <- outer(c(-0.3, -0.1, 0.1, 0.3), means, `+`)
@@ -29,5 +29,5 @@ task10_link_state <- function(n_sets = 3L) {
   state$linking$phase_a$phase <- "phase_b"
   state$linking$phase_a$active_phase_a_set <- NA_integer_
   state$warm_start_done <- TRUE
-  .adaptive_anchored_joint_sync_scaffolding(state)
+  add_test_link_results(state)
 }

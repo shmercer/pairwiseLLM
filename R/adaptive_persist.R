@@ -1,3 +1,13 @@
+# Check both embedded state and authoritative persisted logs before schema repair.
+.adaptive_reject_legacy_session <- function(state, paths) {
+  .link_reject_legacy(state)
+  candidate <- state
+  candidate$step_log <- read_log(paths$step_log)
+  if (file.exists(paths$link_stage_log)) candidate$link_stage_log <- read_log(paths$link_stage_log)
+  .link_reject_legacy(candidate)
+  invisible(NULL)
+}
+
 # -------------------------------------------------------------------------
 # Adaptive persistence helpers.
 # -------------------------------------------------------------------------
@@ -123,6 +133,8 @@ read_log <- function(path) {
     rlang::abort(paste0("`", name, "` must be a data frame."))
   }
   out <- tibble::as_tibble(log_tbl)
+  out$hub_lock_mode <- NULL
+  out$hub_lock_kappa <- NULL
   normalize_policy_col <- function(x) {
     vapply(
       as.character(x),
@@ -398,23 +410,7 @@ read_log <- function(path) {
     if (is.na(log_mode)) {
       log_mode <- read_latest_non_missing(out$step_log, "link_estimation_mode")
     }
-    controller$link_estimation_mode <- if (is.na(log_mode)) "transform" else log_mode
-  }
-
-  lock_missing <- is.null(controller$hub_lock_mode) ||
-    length(controller$hub_lock_mode) < 1L ||
-    is.na(as.character(controller$hub_lock_mode[[1L]])) ||
-    !nzchar(as.character(controller$hub_lock_mode[[1L]]))
-  if (isTRUE(lock_missing)) {
-    mode <- as.character(controller$link_estimation_mode[[1L]] %||% NA_character_)
-    log_lock <- read_latest_non_missing(out$link_stage_log, "hub_lock_mode")
-    controller$hub_lock_mode <- if (identical(mode, "anchored_joint")) {
-      "hard_lock"
-    } else if (!is.na(log_lock)) {
-      log_lock
-    } else {
-      "soft_lock"
-    }
+    controller$link_estimation_mode <- if (is.na(log_mode)) NULL else log_mode
   }
 
   out$controller <- controller
@@ -1173,7 +1169,7 @@ validate_session_dir <- function(session_dir) {
 
   metadata <- .adaptive_read_session_metadata(paths)
   state <- readRDS(paths$state)
-  .link_reject_legacy(state)
+  .adaptive_reject_legacy_session(state, paths)
   state <- .adaptive_backfill_session_behavior(state, metadata)
   metadata$warm_start_mode <- state$meta$warm_start_mode
   metadata$pairing_strategy <- state$controller$pairing_strategy
@@ -1395,6 +1391,7 @@ load_adaptive_session <- function(session_dir) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state.rds` does not contain an adaptive_state object.")
   }
+  .adaptive_reject_legacy_session(state, paths)
   state <- .adaptive_phase_a_strip_runtime_prepare_memo(state)
 
   state <- .adaptive_validate_state_for_resume(state)

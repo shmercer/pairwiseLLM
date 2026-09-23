@@ -255,7 +255,7 @@ test_that("session persistence round-trips D-opt information matrix state", {
   state <- pairwiseLLM::adaptive_rank_start(
     items,
     seed = 9L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$controller$link_d_opt_it_by_spoke <- list(
     `1::2` = list(
@@ -687,7 +687,7 @@ test_that("global stop allowance respects within-set and linking phase boundarie
       global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
     ),
     seed = 2L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   link_phase_a$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -737,7 +737,7 @@ test_that("stale phase A btl stop state is cleared on resume for linking modes",
       global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
     ),
     seed = 9L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   state$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -780,7 +780,7 @@ test_that("linking phase A convergence does not terminate the whole run before p
   base_state <- pairwiseLLM::adaptive_rank_start(
     items,
     seed = 3L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   base_state$warm_start_done <- TRUE
   base_state$round$staged_active <- TRUE
@@ -883,7 +883,7 @@ test_that("linking phase A convergence does not terminate the whole run before p
   one_spoke <- pairwiseLLM::adaptive_rank_start(
     items[items$set_id %in% c(1L, 2L), , drop = FALSE],
     seed = 4L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   one_spoke$warm_start_done <- TRUE
   one_spoke$round$staged_active <- TRUE
@@ -918,7 +918,7 @@ test_that("phase B stage exhaustion persists across round rollover within refit 
   state <- pairwiseLLM::adaptive_rank_start(
     items,
     seed = 31L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state$round$staged_active <- TRUE
@@ -971,7 +971,7 @@ test_that("phase B global stop remains blocked until linking stop is terminally 
   state <- pairwiseLLM::adaptive_rank_start(
     items,
     seed = 61L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state$round$staged_active <- TRUE
@@ -1006,7 +1006,7 @@ test_that("phase B all-spokes-exhausted stop uses explicit linking reason", {
       global_item_id = c("gh1", "gh2", "gs21", "gs22", "gs31", "gs32")
     ),
     seed = 62L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -1040,7 +1040,7 @@ test_that("adaptive run helper branches for linking stop/routing utilities are c
   state <- pairwiseLLM::adaptive_rank_start(
     items,
     seed = 41L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
 
   state$linking$phase_a$set_status <- pairwiseLLM:::.adaptive_phase_a_empty_state(c(1L, 2L))
@@ -1131,7 +1131,7 @@ test_that("linking Phase A stage exhaustion advances to next round when progress
   state <- pairwiseLLM::adaptive_rank_start(
     items,
     seed = 71L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   state$warm_start_done <- TRUE
   state$round$staged_active <- TRUE
@@ -1188,7 +1188,7 @@ test_that("linking Phase B committed steps restart the round when the exposure w
   state <- pairwiseLLM::adaptive_rank_start(
     items,
     seed = 713L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   state$warm_start_done <- TRUE
   state$linking$phase_a <- list(
@@ -1224,7 +1224,7 @@ test_that("linking Phase B rounds use the AD-sized exposure window, not the full
     round_id = 1L,
     staged_active = TRUE,
     controller = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       link_phase = "phase_b",
       current_link_spoke_id = 2L,
       B_spoke_refit_budget = 75L,
@@ -1249,7 +1249,7 @@ test_that("linking Phase A unresolved exhaustion fails loudly with set-specific 
   state <- pairwiseLLM::adaptive_rank_start(
     items,
     seed = 72L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   state$warm_start_done <- TRUE
   state$round$staged_active <- TRUE

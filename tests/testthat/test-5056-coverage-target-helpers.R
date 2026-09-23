@@ -9,7 +9,7 @@ make_cov_target_phase_a_state <- function() {
   state <- adaptive_rank_start(
     items,
     seed = 17L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -455,18 +455,18 @@ test_that("adaptive select history update and utility helpers cover remaining br
   expect_false(.adaptive_selection_mode_is_linking("link_one_spoke", is_cross_set = FALSE))
   expect_true(.adaptive_selection_mode_is_linking("link_one_spoke", is_cross_set = TRUE))
   expect_identical(
-    .adaptive_linking_utility_mode("anchored_joint"),
-    "linking_d_optimal_anchored_joint"
+    .adaptive_linking_utility_mode("joint_offset"),
+    "linking_d_optimal"
   )
   expect_true(.adaptive_is_linking_d_optimal_mode("linking_d_optimal", allow_legacy = TRUE))
-  expect_false(.adaptive_is_linking_d_optimal_mode("linking_d_optimal", allow_legacy = FALSE))
+  expect_true(.adaptive_is_linking_d_optimal_mode("linking_d_optimal", allow_legacy = FALSE))
   expect_identical(
     .adaptive_selection_utility_mode(
       run_mode = "link_one_spoke",
       is_cross_set = TRUE,
-      link_estimation_mode = "anchored_joint"
+      link_estimation_mode = "joint_offset"
     ),
-    "linking_d_optimal_anchored_joint"
+    "linking_d_optimal"
   )
   expect_identical(.adaptive_resolve_selection_column("linking_d_optimal"), "link_d_opt_gain")
 })
@@ -1065,7 +1065,7 @@ test_that("adaptive select posterior and predictive helpers cover remaining edge
   )
 
   expect_false(testthat::with_mocked_bindings(
-    .adaptive_controller_resolve = function(...) list(run_mode = "link_one_spoke"),
+    .adaptive_controller_resolve = function(...) list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset"),
     .adaptive_link_phase_context = function(...) list(phase = "phase_a", active_phase_a_set = 2L),
     .adaptive_long_link_gate_has_posterior(list(
       btl_fit = list(btl_posterior_draws = matrix(c(1, 0), nrow = 1L)),
@@ -1162,7 +1162,7 @@ test_that("adaptive select posterior and predictive helpers cover remaining edge
     logdet_start = NA_real_,
     ridge = 0
   )))
-  expect_error(.adaptive_link_d_opt_matrix_dim("shift_only", "anchored_joint", 0L),
+  expect_error(.adaptive_link_d_opt_matrix_dim("shift_only", "joint_offset", 0L),
     class = "pairwiseLLM_link_selector_unvalidated")
   expect_error(.adaptive_link_attach_predictive_utility(NULL, list(), list(), 2L),
     class = "pairwiseLLM_link_selector_unvalidated")

@@ -916,20 +916,17 @@ adaptive_defaults <- function(N) {
   c(
     "pairing_trueskill_u0",
     "pairing_trueskill_u",
-    "linking_d_optimal_transform",
-    "linking_d_optimal_anchored_joint"
+    "linking_d_optimal"
   )
 }
 
 .adaptive_linking_d_optimal_utility_modes <- function() {
-  c("linking_d_optimal_transform", "linking_d_optimal_anchored_joint")
+  "linking_d_optimal"
 }
 
 .adaptive_linking_utility_mode <- function(link_estimation_mode = "transform") {
-  if (identical(as.character(link_estimation_mode %||% "transform"), "anchored_joint")) {
-    return("linking_d_optimal_anchored_joint")
-  }
-  "linking_d_optimal_transform"
+
+  "linking_d_optimal"
 }
 
 .adaptive_is_linking_d_optimal_mode <- function(utility_mode, allow_legacy = FALSE) {

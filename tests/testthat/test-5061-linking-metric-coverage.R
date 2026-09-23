@@ -1,35 +1,9 @@
-test_that("marginal reconstruction preserves aligned means and sample uncertainty", {
-  f <- pairwiseLLM:::.adaptive_phase_b_global_metric_marginal_quantile_draws
-  mu <- c(a = -1, b = 2, c = 0)
-  sigma <- c(c = 0, a = 0.2, b = 0.4)
-  withr::local_seed(31)
-  before <- .Random.seed
-  draws <- f(mu, sigma, 8L, "fixture")
-  expect_identical(.Random.seed, before)
-  expect_identical(colnames(draws), names(mu))
-  expect_equal(colMeans(draws), mu)
-  expect_equal(apply(draws, 2, sd), sigma[names(mu)])
-  expect_equal(draws[, "c"], rep(0, 8))
-  expect_identical(f(mu, sigma, 8L, "fixture"), draws)
-  expect_error(f(mu, sigma, 1L, "fixture"), "at least two")
-  expect_error(f(numeric(), sigma, 4L, "fixture"), "named theta")
-  expect_error(f(c(a = 1, a = 2), c(a = 1), 4L, "fixture"), "unique")
-  expect_error(f(mu, c(a = 1), 4L, "fixture"), "missing required")
-  expect_error(f(c(a = Inf), c(a = 1), 4L, "fixture"), "finite theta means")
-  expect_error(f(c(a = 1), c(a = Inf), 4L, "fixture"), "finite theta SD")
-  expect_error(f(c(a = 1), c(a = -1), 4L, "fixture"), "non-negative")
-})
-
-test_that("global reconstruction distinguishes retained uncertainty contracts", {
+test_that("uncertainty labels stay explicit rather than inventing a reconstruction", {
   f <- pairwiseLLM:::.adaptive_phase_b_global_metric_uncertainty_approximation
-  expect_identical(f("transform", "plugin"), "plugin")
-  expect_identical(f("transform"), NA_character_)
-  expect_identical(f("anchored_joint", "cmdstan_posterior_draws"), "cmdstan_posterior_draws")
-  expect_identical(f("anchored_joint", link_fit_method = "map_laplace"),
-    "laplace_hessian_marginal_quantiles")
-  expect_identical(f("anchored_joint", "accepted_state"), "accepted_state_marginal_quantiles")
-  expect_identical(f("anchored_joint"), "accepted_state_marginal_quantiles")
-  expect_error(f("anchored_joint", "unsupported"), "Unsupported")
+  expect_identical(f("fixed_shape_offset", "conditional_offset"), "conditional_offset")
+  expect_identical(f("joint_offset", "laplace_hessian"), "laplace_hessian")
+  expect_identical(f("joint_offset"), NA_character_)
+  expect_identical(f(), NA_character_)
 })
 
 test_that("artifact draw reconstruction rejects incompatible domains and shapes", {
@@ -94,9 +68,6 @@ test_that("retained transformations propagate plugin and joint posterior uncerta
     refit_mode = "joint_refit")
   expect_equal(joint$mean_map[1:4], c(a = -1.5, b = 1.5, c = 0, d = 1.5))
   expect_equal(joint$var_map[1:4], c(a = 0.5, b = 0.5, c = 2, d = 4.5))
-  locked <- f(state, ids, 2L, 1L, "shift_only", 0.5, fit = fit,
-    refit_mode = "joint_refit", hub_lock_mode = "hard_lock")
-  expect_equal(locked$mean_map[1:2], c(a = -1, b = 1))
   fit$posterior_draws$theta_spoke <- fit$posterior_draws$theta_spoke[1, , drop = FALSE]
   fit$posterior_draws$log_alpha <- numeric()
   fallback <- f(state, ids, 2L, 1L, "shift_scale", 0.5, log(2), fit = fit)

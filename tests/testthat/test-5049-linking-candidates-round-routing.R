@@ -190,7 +190,7 @@ test_that("linking candidates are hub-spoke only by default", {
   state <- adaptive_rank_start(
     items,
     seed = 123L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state$controller$current_link_spoke_id <- 2L
@@ -222,7 +222,7 @@ test_that("spoke-spoke Phase B routing remains hard-gated on the current path", 
     items,
     seed = 124L,
     adaptive_config = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -252,7 +252,7 @@ test_that("phase B non-anchor routing activates only after a committed active-li
   state <- adaptive_rank_start(
     items,
     seed = 1234L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state$controller$current_link_spoke_id <- 2L
@@ -300,7 +300,7 @@ test_that("phase B non-anchor routing activates only after a committed active-li
       is_holdout_probe_step = FALSE,
       is_drift_probe_step = FALSE,
       link_spoke_id = 2L,
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       link_stage = "anchor_link",
       round_stage = "anchor_link"
     )
@@ -323,7 +323,7 @@ test_that("phase B non-anchor routing activates only after a committed active-li
       is_holdout_probe_step = FALSE,
       is_drift_probe_step = FALSE,
       link_spoke_id = 2L,
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       link_stage = "anchor_link",
       round_stage = "anchor_link"
     )
@@ -371,7 +371,7 @@ test_that("linking long-link taper applies only to the active spoke and respects
     round_id = 1L,
     n_items = 100L,
     controller = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       current_link_spoke_id = 2L,
       linking_identified_by_spoke = list(`2` = FALSE)
     )
@@ -380,7 +380,7 @@ test_that("linking long-link taper applies only to the active spoke and respects
     round_id = 1L,
     n_items = 100L,
     controller = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       current_link_spoke_id = 2L,
       linking_identified_by_spoke = list(`2` = TRUE)
     )
@@ -389,7 +389,7 @@ test_that("linking long-link taper applies only to the active spoke and respects
     round_id = 1L,
     n_items = 100L,
     controller = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       current_link_spoke_id = 3L,
       linking_identified_by_spoke = list(`2` = TRUE)
     )
@@ -414,7 +414,7 @@ test_that("phase B hub-anchor candidates are derived from hub-only scores", {
   state <- adaptive_rank_start(
     items,
     seed = 88L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
@@ -462,7 +462,7 @@ test_that("multi-spoke long-link taper remains isolated to identified spoke", {
     round_id = 1L,
     n_items = 100L,
     controller = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       current_link_spoke_id = 2L,
       linking_identified_by_spoke = list(`2` = TRUE, `3` = FALSE)
     )
@@ -471,7 +471,7 @@ test_that("multi-spoke long-link taper remains isolated to identified spoke", {
     round_id = 1L,
     n_items = 100L,
     controller = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       current_link_spoke_id = 3L,
       linking_identified_by_spoke = list(`2` = TRUE, `3` = FALSE)
     )
@@ -494,7 +494,7 @@ test_that("phase A linking scheduling uses within-set round defaults", {
   state <- adaptive_rank_start(
     items,
     seed = 99L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   q_within <- pairwiseLLM:::.adaptive_round_compute_quotas(
     round_id = 1L,
@@ -515,7 +515,7 @@ test_that("phase A linking quotas use active set size, not global multi-set size
   state <- adaptive_rank_start(
     items,
     seed = 109L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   q_set <- pairwiseLLM:::.adaptive_round_compute_quotas(
     round_id = 1L,
@@ -542,7 +542,7 @@ test_that("linking spoke quantile bins dynamically fall back for small spokes", 
   state <- adaptive_rank_start(
     items,
     seed = 44L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, spoke_quantile_coverage_bins = 3L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, spoke_quantile_coverage_bins = 3L)
   )
   proxy <- pairwiseLLM:::.adaptive_rank_proxy(state)
   spoke_ids <- as.character(items$item_id[items$set_id == 2L])
@@ -567,7 +567,7 @@ test_that("phase B coverage bins use linking-global score source", {
   state <- adaptive_rank_start(
     items,
     seed = 7L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
@@ -607,7 +607,7 @@ test_that("coverage source switches from Phase A rank to linking-global after ea
   state <- adaptive_rank_start(
     items,
     seed = 70L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state <- mark_link_phase_b_ready(state)
   proxy <- pairwiseLLM:::.adaptive_rank_proxy(state)
@@ -660,7 +660,7 @@ test_that("refit-local routing memo matches direct helper outputs and reuses the
   state <- adaptive_rank_start(
     items,
     seed = 321L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state$controller$current_link_spoke_id <- 2L
@@ -683,7 +683,7 @@ test_that("refit-local routing memo matches direct helper outputs and reuses the
       is_holdout_probe_step = FALSE,
       is_drift_probe_step = FALSE,
       link_spoke_id = 2L,
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       link_stage = "anchor_link",
       round_stage = "anchor_link"
     )
@@ -770,7 +770,7 @@ test_that("linking refit-local inputs invalidate on step, refit, epoch, spoke, a
     items,
     seed = 402L,
     adaptive_config = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -1105,7 +1105,7 @@ test_that("rank-one D-opt helpers stay numerically aligned with the legacy logde
   expect_equal(anchored_gain, anchored_legacy, tolerance = 1e-12)
 })
 
-test_that("anchored-joint diagonal D-opt helpers avoid dense state while matching logdet", {
+test_that("diagonal D-opt helpers remain unavailable pending selector validation", {
   it_diag <- c(1.2, 1.1)
   info_scale <- c(0.24, 0.18)
   diag_index <- c(1L, 2L)
@@ -1152,7 +1152,7 @@ test_that("theta/global and predictive utility helpers handle empty and sparse d
   state <- adaptive_rank_start(
     items,
     seed = 201L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
@@ -1174,7 +1174,7 @@ test_that("theta/global and predictive utility helpers handle empty and sparse d
   sparse_state <- adaptive_rank_start(
     sparse_items,
     seed = 202L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   sparse_state$warm_start_done <- TRUE
   sparse_state <- mark_link_phase_b_ready(sparse_state)
@@ -1203,7 +1203,7 @@ test_that("active spoke routing handles no-spoke and single-spoke modes determin
   state_multi <- adaptive_rank_start(
     items_multi,
     seed = 2L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   expect_identical(pairwiseLLM:::.adaptive_link_active_spoke(state_multi, state_multi$controller), 2L)
 
@@ -1221,7 +1221,7 @@ test_that("concurrent active spoke routing falls back deterministically when def
     items,
     seed = 3L,
     adaptive_config = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       min_cross_set_pairs_per_spoke_per_refit = 1L
     )
@@ -1328,7 +1328,7 @@ test_that("concurrent spoke ranking breaks matched deficits toward stronger cano
     ),
     seed = 404L,
     adaptive_config = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       min_cross_set_pairs_per_spoke_per_refit = 1L
     )
@@ -1379,7 +1379,7 @@ test_that("ranked spokes retire concurrent targets once a spoke budget is fully 
     items,
     seed = 182L,
     adaptive_config = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -1407,7 +1407,7 @@ test_that("ranked spokes retire concurrent targets once a spoke budget is fully 
         is_holdout_probe_step = FALSE,
         is_drift_probe_step = FALSE,
         link_spoke_id = as.integer(spoke_id),
-        run_mode = "link_multi_spoke",
+        run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
         link_stage = "anchor_link",
         round_stage = "anchor_link"
       )
@@ -1453,7 +1453,7 @@ test_that("frozen spokes are retired from ranked routing immediately", {
   state <- adaptive_rank_start(
     items,
     seed = 101L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
@@ -1478,7 +1478,7 @@ test_that("concurrent spoke stage progress is computed per spoke", {
   state <- adaptive_rank_start(
     items,
     seed = 303L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
@@ -1520,7 +1520,7 @@ test_that("link stop rows update per-spoke stop state in controller metadata", {
   state <- adaptive_rank_start(
     items,
     seed = 202L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state <- mark_link_phase_b_ready(state)
   rows <- tibble::tibble(
@@ -1548,7 +1548,7 @@ test_that("planned holdout probe edges are excluded from active linking candidat
   state <- adaptive_rank_start(
     items,
     seed = 77L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
@@ -1580,7 +1580,7 @@ test_that("direct Phase B builders match reference stage domains and pooled back
   state <- adaptive_rank_start(
     items,
     seed = 170L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
@@ -1758,7 +1758,7 @@ test_that("active linking hub domain excludes anchor-only hub items before any c
   state <- adaptive_rank_start(
     items,
     seed = 13L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
@@ -1785,7 +1785,7 @@ test_that("held-out probes do not activate hub items in the active linking domai
   state <- adaptive_rank_start(
     items,
     seed = 31L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
@@ -1892,7 +1892,7 @@ test_that("phase-B routing helpers enforce finite inputs and anchor fallback rul
   state <- adaptive_rank_start(
     items,
     seed = 901L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state <- mark_link_phase_b_ready(state)
   controller <- pairwiseLLM:::.adaptive_controller_resolve(state)
@@ -1945,7 +1945,7 @@ test_that("probe panel construction hard-gates missing Phase A theta surfaces", 
   state <- adaptive_rank_start(
     items,
     seed = 903L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   controller <- pairwiseLLM:::.adaptive_controller_resolve(state)
 
@@ -1980,7 +1980,7 @@ test_that("long-link candidates carry global distance strata", {
   state <- pairwiseLLM:::.adaptive_apply_controller_config(
     state,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -2005,7 +2005,7 @@ test_that("long-link candidates carry global distance strata", {
       is_holdout_probe_step = FALSE,
       is_drift_probe_step = FALSE,
       link_spoke_id = 2L,
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       link_stage = "anchor_link",
       round_stage = "anchor_link"
     )
@@ -2036,7 +2036,7 @@ test_that("round candidate helper branches are exercised for anchor/phase-a path
       global_item_id = paste0("g", 1:6)
     ),
     seed = 4L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   state$round$anchor_ids <- as.character(state$item_ids[1:2])
   state$round$anchor_round_id <- 1L
@@ -2082,7 +2082,7 @@ test_that("cross-set candidate generation aborts when requested spoke is not pha
   state <- adaptive_rank_start(
     items,
     seed = 66L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state <- mark_link_phase_b_ready(state)
@@ -2113,7 +2113,7 @@ test_that("phase B global-safe starvation exhausts only the attempted stage for 
   state <- adaptive_rank_start(
     items,
     seed = 780L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state$round$staged_active <- TRUE
@@ -2158,7 +2158,7 @@ test_that("phase B pooled backfill starvation exhausts only the attempted spoke"
     items,
     seed = 79L,
     adaptive_config = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -2207,7 +2207,7 @@ test_that("ranked spokes exclude fully exhausted spokes in the current refit", {
   state <- adaptive_rank_start(
     items,
     seed = 82L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state$round$staged_active <- TRUE

@@ -17,7 +17,7 @@ test_that("step-entry invariant guard aborts on non-link phase_b routing", {
 
 test_that("step row linking completeness guard rejects missing cross-set fields", {
   bad_row <- list(
-    run_mode = "link_one_spoke",
+    run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
     is_cross_set = TRUE,
     set_i = 1L,
     set_j = 2L,
@@ -60,7 +60,7 @@ test_that("step row linking completeness guard rejects malformed linking metadat
   )
 
   bad_cross_utility <- list(
-    run_mode = "link_one_spoke",
+    run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
     is_cross_set = TRUE,
     set_i = 1L,
     set_j = 2L,
@@ -73,7 +73,7 @@ test_that("step row linking completeness guard rejects malformed linking metadat
   )
   expect_error(
     pairwiseLLM:::.adaptive_assert_step_row_linking_completeness(bad_cross_utility),
-    "must be linking_d_optimal_transform"
+    "must be linking_d_optimal"
   )
 
   bad_non_cross_cols <- list(
@@ -174,13 +174,13 @@ test_that("step-entry invariant guard rejects empty ready spokes and pending run
   state <- adaptive_rank_start(
     items,
     seed = 6L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
 
   expect_error(
     pairwiseLLM:::.adaptive_assert_step_entry_invariants(
       state = state,
-      controller = list(run_mode = "link_one_spoke"),
+      controller = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset"),
       phase_ctx = list(
         phase = "phase_b",
         pending_run_sets = integer(),
@@ -194,7 +194,7 @@ test_that("step-entry invariant guard rejects empty ready spokes and pending run
   expect_error(
     pairwiseLLM:::.adaptive_assert_step_entry_invariants(
       state = state,
-      controller = list(run_mode = "link_one_spoke"),
+      controller = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset"),
       phase_ctx = list(
         phase = "phase_b",
         pending_run_sets = c(2L),
@@ -215,13 +215,13 @@ test_that("step-entry invariant guard rejects unsupported linking cross-set util
   state <- adaptive_rank_start(
     items,
     seed = 16L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
 
   expect_error(
     pairwiseLLM:::.adaptive_assert_step_entry_invariants(
       state = state,
-      controller = list(run_mode = "link_one_spoke", cross_set_utility = "entropy"),
+      controller = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", cross_set_utility = "entropy"),
       phase_ctx = list(
         phase = "phase_b",
         pending_run_sets = integer(),
@@ -256,7 +256,7 @@ test_that("step row completeness guard validates structure and non-cross-set spo
   )
 
   bad_cross_stage <- list(
-    run_mode = "link_one_spoke",
+    run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
     is_cross_set = TRUE,
     set_i = 1L,
     set_j = 2L,
@@ -348,7 +348,7 @@ test_that("all-spokes-stopped helper is phase and mode aware", {
   state <- adaptive_rank_start(
     items,
     seed = 77L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
 
   expect_false(pairwiseLLM:::.adaptive_link_all_spokes_stopped(state))
@@ -389,7 +389,7 @@ test_that("anchored-joint link-stage completeness allows transform-only typed NA
     items,
     seed = 19L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -475,5 +475,5 @@ test_that("anchored-joint link-stage completeness allows transform-only typed NA
   row$anchored_joint_free_block_dim <- 2L
 
   expect_invisible(pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(row))
-  expect_identical(controller$link_estimation_mode, "anchored_joint")
+  expect_identical(controller$link_estimation_mode, "fixed_shape_offset")
 })

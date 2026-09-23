@@ -8,7 +8,7 @@ make_5058_link_state <- function() {
   state <- adaptive_rank_start(
     items,
     seed = 5058L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   draws <- rbind(
     c(0.8, 0.3, -0.1, 0.2, -0.2, -0.5),
@@ -131,7 +131,7 @@ test_that("BTL refit helpers cover config and Phase A artifact edge branches", {
   expect_identical(colnames(draws), c("s1", "s2", "s3"))
 })
 
-test_that("BTL Phase B metric helpers cover transform, anchored, and fallback branches", {
+test_that("BTL Phase B metric helpers cover transform and missing-uncertainty branches", {
   state <- make_5058_link_state()
   transform_stats <- .adaptive_phase_b_global_metric_transform_stats(
     state,
@@ -147,18 +147,13 @@ test_that("BTL Phase B metric helpers cover transform, anchored, and fallback br
   )
   expect_identical(
     .adaptive_phase_b_global_metric_uncertainty_approximation(
-      "anchored_joint",
-      link_fit_method = "map_laplace"
+      "joint_offset",
+      link_uncertainty_approximation = "laplace_hessian"
     ),
-    "laplace_hessian_marginal_quantiles"
+    "laplace_hessian"
   )
-  expect_error(
-    .adaptive_phase_b_global_metric_uncertainty_approximation(
-      "anchored_joint",
-      link_uncertainty_approximation = "bad"
-    ),
-    "uncertainty approximation"
-  )
+  expect_identical(.adaptive_phase_b_global_metric_uncertainty_approximation("joint_offset"),
+    NA_character_)
 
   rel_empty <- .adaptive_link_global_score_stats_active(state, active_ids = "h1", spoke_id = 2L)
   expect_false(rel_empty$defined)
@@ -256,8 +251,8 @@ test_that("selection helpers cover D-opt, ordering, and memo-key edge branches",
   expect_true(.adaptive_selection_mode_is_linking("link_one_spoke", TRUE))
   expect_false(.adaptive_selection_mode_is_linking("link_one_spoke", FALSE))
   expect_identical(
-    .adaptive_selection_utility_mode("link_multi_spoke", TRUE, "anchored_joint"),
-    "linking_d_optimal_anchored_joint"
+    .adaptive_selection_utility_mode("link_multi_spoke", TRUE, "joint_offset"),
+    "linking_d_optimal"
   )
   expect_identical(.adaptive_resolve_selection_column("unknown"), NA_character_)
 
@@ -310,7 +305,7 @@ test_that("selection helpers cover D-opt, ordering, and memo-key edge branches",
 })
 
 test_that("state, schema, persistence, print, utility, and draws helpers cover small edge branches", {
-  expect_error(.adaptive_normalize_link_estimation_mode("bad"), "Link estimation mode")
+  expect_error(.adaptive_normalize_link_estimation_mode("bad"), "Unsupported link estimator")
   expect_identical(.adaptive_normalize_link_transform_policy(legacy_mode = "shift_scale"), "fixed_shift_scale")
   expect_error(.adaptive_normalize_link_transform_policy("bad"), "Link transform policy")
   expect_identical(.adaptive_normalize_link_transform_state(NULL, "fixed_shift_scale"), "shift_scale")
@@ -318,7 +313,7 @@ test_that("state, schema, persistence, print, utility, and draws helpers cover s
 
   controller <- .adaptive_controller_normalize_legacy_fields(
     list(
-      link_estimation_mode = "anchored_joint",
+      link_estimation_mode = "joint_offset",
       link_transform_mode = "shift_scale",
       link_transform_mode_by_spoke = list(`2` = "shift_scale"),
       transform_frozen_by_spoke = list(`2` = TRUE)
@@ -408,7 +403,7 @@ test_that("legacy controller and resume schema normalization cover migration bra
     ),
     n_items = 6L
   )
-  expect_identical(normalized$link_estimation_mode, "anchored_joint")
+  expect_null(normalized$link_estimation_mode)
   expect_identical(normalized$link_transform_policy, NA_character_)
   expect_identical(normalized$shift_only_theta_treatment, NA_character_)
   expect_identical(normalized$stability_passes_required, 3L)

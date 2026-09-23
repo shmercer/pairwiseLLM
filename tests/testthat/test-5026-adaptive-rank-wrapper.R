@@ -490,7 +490,7 @@ test_that("adaptive_rank summary uses persisted meta stop state, not stale round
       n_steps = 1L,
       progress = "none",
       seed = 17L,
-      adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+      adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
     ),
     .package = "pairwiseLLM"
   )
@@ -545,7 +545,7 @@ test_that("adaptive_rank later linking consumes prior wrapper phase_a surfaces b
     fit_fn = fit_link$fit_fn,
     n_steps = 12L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = list(
@@ -629,7 +629,7 @@ test_that("adaptive_rank reuses session_dir and artifact_dir phase_a sources aft
     fit_fn = fit_link$fit_fn,
     n_steps = 12L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = list(
@@ -819,7 +819,7 @@ test_that("adaptive_rank accepts reviewed public Phase B controls but gates adap
     judge = judge,
     n_steps = 1L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts[c("1", "2")],
@@ -849,7 +849,7 @@ test_that("adaptive_rank rejects removed Phase B public controls", {
       n_steps = 1L,
       progress = "none",
       adaptive_config = list(
-        run_mode = "link_multi_spoke",
+        run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
         hub_id = 1L,
         probe_edges_count_toward_active_constraints = TRUE
       )
@@ -866,7 +866,7 @@ test_that("adaptive_rank rejects removed Phase B public controls", {
       n_steps = 1L,
       progress = "none",
       adaptive_config = list(
-        run_mode = "link_multi_spoke",
+        run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
         hub_id = 1L,
         allow_spoke_spoke_cross_set = TRUE
       )
@@ -963,7 +963,7 @@ test_that("adaptive_rank logs include documented adaptive step and refit fields"
   expect_true(all(round_cols %in% names(out$logs$round_log)))
 })
 
-test_that("adaptive_rank wrapper defaults link_one_spoke import flow to anchored-joint but gates adaptive execution", {
+test_that("adaptive_rank wrapper retains explicit link_one_spoke import identity but gates adaptive execution", {
   samples <- make_linking_samples_df()
   two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
   items <- dplyr::rename(samples, item_id = ID)
@@ -982,7 +982,7 @@ test_that("adaptive_rank wrapper defaults link_one_spoke import flow to anchored
     fit_fn = fit_override$fit_fn,
     n_steps = 12L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts[c("1", "2")]
@@ -994,7 +994,7 @@ test_that("adaptive_rank wrapper defaults link_one_spoke import flow to anchored
     class = "pairwiseLLM_link_selector_unvalidated")
 })
 
-test_that("adaptive_rank wrapper supports anchored-joint linking activation but gates adaptive execution", {
+test_that("adaptive_rank wrapper supports explicit linking activation but gates adaptive execution", {
   samples <- make_linking_samples_df()
   two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
   items <- dplyr::rename(samples, item_id = ID)
@@ -1013,7 +1013,7 @@ test_that("adaptive_rank wrapper supports anchored-joint linking activation but 
     fit_fn = fit_override$fit_fn,
     n_steps = 12L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts[c("1", "2")]
@@ -1043,7 +1043,7 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow but g
     fit_fn = fit_override$fit_fn,
     n_steps = 24L,
     adaptive_config = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       min_cross_set_pairs_per_spoke_per_refit = 1L,
       probe_panel_edges = 18L,
@@ -1079,7 +1079,7 @@ test_that("adaptive_rank wrapper preserves mixed Phase A and rejects legacy Phas
     fit_fn = fit_override$fit_fn,
     n_steps = 1L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "mixed",
       phase_a_artifacts = list(`1` = artifacts[["1"]])
@@ -1095,7 +1095,7 @@ test_that("adaptive_rank wrapper preserves mixed Phase A and rejects legacy Phas
 
   session_dir <- withr::local_tempdir()
   link_config <- list(
-    run_mode = "link_one_spoke",
+    run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
     hub_id = 1L,
     phase_a_mode = "import",
     phase_a_artifacts = artifacts
@@ -1115,12 +1115,13 @@ test_that("adaptive_rank wrapper preserves mixed Phase A and rejects legacy Phas
       progress = "none",
       seed = 29L
     ),
-    class = "pairwiseLLM_unsupported_legacy_link_state"
+    class = "pairwiseLLM_link_selector_unvalidated"
   )
 
   # Emulate a pre-refactor bundle without asking the new writer to accept it.
-  pairwiseLLM::save_adaptive_session(pairwiseLLM::adaptive_rank_start(items), session_dir)
+  pairwiseLLM::save_adaptive_session(pairwiseLLM::adaptive_rank_start(items), session_dir, overwrite = TRUE)
   legacy <- pairwiseLLM::adaptive_rank_start(items, adaptive_config = link_config, seed = 29L)
+  legacy$controller$link_estimation_mode <- "anchored_joint"
   saveRDS(legacy, file.path(session_dir, "state.rds"))
   expect_error(
     pairwiseLLM::adaptive_rank(
@@ -1136,7 +1137,7 @@ test_that("adaptive_rank wrapper preserves mixed Phase A and rejects legacy Phas
       resume = TRUE,
       progress = "none"
     ),
-    "Unsupported legacy anchored-joint Phase B session"
+    class = "pairwiseLLM_unsupported_legacy_link_state"
   )
 })
 
@@ -1156,7 +1157,7 @@ test_that("adaptive_rank wrapper falls back to rank_raw when linked ranks are un
     fit_fn = fit_override$fit_fn,
     n_steps = 1L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "run"
     ),
@@ -1185,7 +1186,7 @@ test_that("adaptive_rank wrapper emits clear linking preflight errors", {
       text_col = "text",
       judge = judge,
       n_steps = 1L,
-      adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L),
+      adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L),
       progress = "none"
     ),
     "Linking run modes require multi-set input"
@@ -1223,7 +1224,7 @@ test_that("adaptive_rank rejects removed within-set maintenance control", {
       judge = judge,
       n_steps = 1L,
       adaptive_config = list(
-        run_mode = "link_one_spoke",
+        run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
         hub_id = 1L,
         phase_a_mode = "import",
         phase_a_artifacts = artifacts[c("1", "2")],

@@ -1,28 +1,5 @@
 # Explicit-evidence sessions. Estimator-private data live only in common results.
 
-.link_reject_legacy <- function(state) {
-  if (!is.list(state)) return(invisible(NULL))
-  get <- function(x, key) if (is.list(x)) x[[key]] else NULL
-  controller <- get(state, "controller")
-  linking <- get(state, "linking")
-  mode <- get(controller, "link_estimation_mode") %||%
-    get(get(get(state, "config"), "adaptive_config"), "link_estimation_mode")
-  phase <- get(get(linking, "phase_a"), "phase")
-  legacy <- get(linking, "anchored_joint")
-  accepted <- get(legacy, "accepted_state_by_spoke")
-  used <- is.list(accepted) && length(accepted) > 0L && any(vapply(accepted, function(x)
-    identical(get(x, "anchored_joint_init_state_method"), "phase_b_refit"), logical(1)))
-  legacy_mode <- identical(mode, "anchored_joint") || !is.null(legacy) ||
-    any(get(get(state, "link_stage_log"), "link_estimation_mode") == "anchored_joint", na.rm = TRUE)
-  if (isTRUE(used) || (legacy_mode &&
-      (identical(phase, "phase_b") || NROW(state$link_stage_log) > 0L))) {
-    rlang::abort(paste0("Unsupported legacy anchored-joint Phase B session. Restart linking from ",
-      "compatible Phase A artifacts/evidence with an explicit E1, E2, or E3 estimator; ",
-      "the Phase B posterior cannot be migrated."), class = "pairwiseLLM_unsupported_legacy_link_state")
-  }
-  invisible(NULL)
-}
-
 .link_session_results <- function(state) {
   state$linking$estimator$accepted_state_by_spoke
 }

@@ -102,17 +102,11 @@ Pair selection in this framework is stepwise and uncertainty-aware.
 Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling anchors,
 pair probabilities, and base utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})} where \eqn{p_{ij}} is the current TrueSkill
-win probability for pair \eqn{\{i, j\}}. In linking Phase B, anchor/strata
-routing uses a linking-global score derived from Phase A raw summaries and
-the accepted Phase B linking state.
-In linking Phase B, eligible cross-set candidates are ranked by
-ridge-stabilized D-optimal log-det information gain on the active linking
-parameter block using order-averaged Model D probabilities. In
-the spoke free block with the hub fixed. Linking inference parameters are
-used for inference/diagnostics/stopping, not as direct selection objectives.
-Phase B uses pooled within-set Phase A judge-parameter estimates, using the
-configured BTL model variant, as the accepted shared source for fixed
-\code{beta}/\code{epsilon} constants.
+win probability for pair \eqn{\{i, j\}}. Linking Phase A preparation requires
+an explicit \code{adaptive_config$link_estimation_mode}. Adaptive Phase B selection
+remains unavailable pending separate validation. Use \code{\link[=prepare_link_input]{prepare_link_input()}},
+\code{\link[=fit_link]{fit_link()}}, and \code{\link[=start_link_session]{start_link_session()}} with explicit cross-set evidence and
+frozen shared judge parameters for E1--E3 linking.
 The within-set/Phase-A hybrid long-link gate uses TrueSkill throughout.
 Bayesian BTL supplies item estimates, posterior uncertainty, EAP reliability,
 diagnostics, stopping, and the existing \code{global_identified} signal. This signal
@@ -141,7 +135,7 @@ determine TrueSkill sigma. No historical training-score units are restored.
 Predictive BTL priors apply only in \code{btl_only} and \code{both}, including run-required
 linking Phase A. TrueSkill initialization applies in \code{trueskill_only} and \code{both}.
 Imported Phase-A artifacts retain their own generation identity and are not
-rerun because predictive input exists. Transform, anchored-joint, and pooled
+rerun because predictive input exists. Linking and pooled
 judge refits keep their existing prior rules; predictive evidence is not
 injected into Phase B priors, D-optimal selection, or probes.
 Custom BTL fit functions should consume \code{state$predictive_prior} only when

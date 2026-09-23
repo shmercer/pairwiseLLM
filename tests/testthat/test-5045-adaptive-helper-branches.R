@@ -954,7 +954,7 @@ test_that("adaptive state and trueskill validators cover additional edge branche
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
-      list(run_mode = "link_multi_spoke"),
+      list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset"),
       5L,
       set_ids = c(1L, 1L, 1L)
     ),
@@ -963,7 +963,7 @@ test_that("adaptive state and trueskill validators cover additional edge branche
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
       list(
-        run_mode = "link_multi_spoke",
+        run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
         multi_spoke_mode = "concurrent",
         link_estimation_mode = "transform",
         link_refit_mode = "joint_refit",
@@ -976,7 +976,7 @@ test_that("adaptive state and trueskill validators cover additional edge branche
   )
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
-      list(run_mode = "link_one_spoke", hub_id = 1L),
+      list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L),
       5L,
       set_ids = c(1L, 2L, 3L)
     ),
@@ -989,7 +989,7 @@ test_that("adaptive state and trueskill validators cover additional edge branche
   expect_identical(cfg_ok$boundary_k, 3L)
   cfg_link_ok <- pairwiseLLM:::.adaptive_validate_controller_config(
     list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     ),
     5L,
@@ -999,7 +999,7 @@ test_that("adaptive state and trueskill validators cover additional edge branche
   expect_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
       list(
-        run_mode = "link_multi_spoke",
+        run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
         hub_id = 1L,
         allow_spoke_spoke_cross_set = TRUE
       ),

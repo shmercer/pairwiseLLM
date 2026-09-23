@@ -197,7 +197,7 @@ test_that("D-optimal entrypoints reject every estimator and legacy alias", {
   expect_error(.link_guard_adaptive_selection(start_link_session(orchestration_input())), class = error)
   expect_error(.link_guard_adaptive_selection(fit_link(orchestration_input())), class = error)
   expect_true(.link_guard_adaptive_selection(list(), list(run_mode = "within_set")))
-  row <- data.frame(is_cross_set = TRUE, run_mode = "link_one_spoke", is_probe_step = FALSE)
+  row <- data.frame(is_cross_set = TRUE, run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", is_probe_step = FALSE)
   expect_error(.adaptive_link_d_opt_update_after_commit(NULL, list(), row), class = error)
   row$is_probe_step <- TRUE
   expect_identical(.adaptive_link_d_opt_update_after_commit(NULL, list(ok = TRUE), row), list(ok = TRUE))

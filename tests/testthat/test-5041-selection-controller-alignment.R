@@ -216,6 +216,7 @@ test_that("Phase A uses inclusive trueskill bounds and Phase B keeps its posteri
   state$round$stage_index <- 2L
   state$controller <- pairwiseLLM:::.adaptive_controller_defaults(length(state$item_ids))
   state$controller$run_mode <- "link_one_spoke"
+  state$controller$link_estimation_mode <- "fixed_shape_offset"
   state$controller$hub_id <- 1L
   state$controller$global_identified <- TRUE
   state$controller$p_long_low <- 0.45
@@ -300,6 +301,7 @@ test_that("the preserved Phase B long gate falls back when posterior evidence is
       ts <- make_test_trueskill_state(items, mu = c(if (extreme) 100 else 25, 25, 25, 25))
       state <- make_test_state(items, ts)
       state$controller$run_mode <- "link_one_spoke"
+  state$controller$link_estimation_mode <- "fixed_shape_offset"
       state$controller$global_identified <- TRUE
       state$controller$p_long_low <- 0.45
       state$controller$p_long_high <- 0.55

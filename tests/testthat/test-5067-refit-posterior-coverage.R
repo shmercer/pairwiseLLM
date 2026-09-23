@@ -1,27 +1,13 @@
-test_that("global posterior reconstruction aligns artifacts and applies each saved transform", {
+test_that("global posterior reconstruction cannot invent a pooled common posterior", {
   state <- task09_link_state()
-  controller <- task09_transform_controller(state, "shift_scale")
-  draws <- .adaptive_phase_b_global_metric_draws(state, controller)
-  expected <- do.call(cbind, lapply(state$linking$phase_a$artifacts, `[[`, "posterior_draws"))
-  expected[, c("c", "d")] <- 0.3 + 2 * expected[, c("c", "d")]
-  expected[, c("e", "f")] <- -0.1 + 0.5 * expected[, c("e", "f")]
-  expect_equal(unname(as.vector(draws)), unname(as.vector(expected)))
-  expect_identical(colnames(draws), state$item_ids)
-  bad <- state
-  bad$linking$phase_a$required_sets <- integer()
-  expect_error(.adaptive_phase_b_global_metric_draws(bad, controller), "non-empty.*required_sets")
-  bad <- state
-  bad$item_ids <- c(bad$item_ids, "missing")
-  expect_error(.adaptive_phase_b_global_metric_draws(bad, controller), "full runtime item domain")
-  state <- .adaptive_anchored_joint_sync_scaffolding(state)
-  anchored <- .adaptive_phase_b_global_metric_draws_anchored_joint(state, 2L, 4L)
-  accepted <- state$linking$anchored_joint$accepted_state_by_spoke[["2"]]
-  expect_equal(colMeans(anchored$draws), accepted$theta_spoke_global_mean)
-  expect_equal(apply(anchored$draws, 2, stats::sd), accepted$theta_spoke_global_sd)
-  state$controller$link_refit_stats_by_spoke[["2"]] <-
-    list(link_uncertainty_approximation = "cmdstan_posterior_draws")
-  expect_error(.adaptive_phase_b_global_metric_draws_anchored_joint(state, 2L, 4L),
-    "persisted authoritative posterior draws")
+  expect_error(.adaptive_phase_b_global_metric_draws(state),
+    class = "pairwiseLLM_link_selector_unvalidated")
+  for (id in c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset")) {
+    session <- start_link_session(link_contract_input(id, 2L))
+    result <- .link_session_results(session)[[1L]]
+    expect_identical(.link_orchestration_view(result)$covariance, result$uncertainty$covariance)
+    expect_true(result$diagnostics$fit_valid)
+  }
 })
 
 test_that("unversioned probe caches cannot supply stopping metrics", {

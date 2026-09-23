@@ -91,7 +91,7 @@ test_that("adaptive rank phase-a surface derives canonical defaults from runtime
   surface <- suppressWarnings(
     testthat::with_mocked_bindings(
       .adaptive_controller_resolve = function(state) {
-        list(run_mode = "link_multi_spoke")
+        list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset")
       },
       .adaptive_rank_collect_phase_a_artifacts = function(state, set_ids = NULL) {
         list(
@@ -367,21 +367,21 @@ test_that("adaptive rank adaptive_config helpers reject invalid linking inputs",
   expect_error(
     pairwiseLLM:::.adaptive_rank_validate_linking_config(
       items_multi,
-      list(run_mode = "link_multi_spoke", phase_a_mode = "bad_mode")
+      list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", phase_a_mode = "bad_mode")
     ),
     "phase_a_mode"
   )
   expect_error(
     pairwiseLLM:::.adaptive_rank_validate_linking_config(
       items_multi,
-      list(run_mode = "link_multi_spoke", hub_id = 99L)
+      list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 99L)
     ),
     "hub_id"
   )
   expect_error(
     pairwiseLLM:::.adaptive_rank_validate_linking_config(
       items_multi,
-      list(run_mode = "link_one_spoke", hub_id = 1L)
+      list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
     ),
     "exactly one spoke set"
   )

@@ -33,7 +33,7 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
     items,
     seed = 9L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -55,11 +55,11 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
       refit_id = 2L,
       spoke_id = 2L,
       hub_id = 1L,
-      link_estimation_mode = "anchored_joint",
+      link_estimation_mode = "joint_offset",
       link_transform_policy = NA_character_,
       link_transform_state = NA_character_,
       link_refit_mode = NA_character_,
-      hub_lock_mode = "hard_lock",
+
       link_epoch_id = 3L,
       probe_panel_id = "panel-epoch-3",
       link_fit_method = "cmdstan_hmc",
@@ -89,7 +89,7 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
   expect_true(any(grepl("probe_accel=fixed_per_refit", output)))
   expect_true(any(grepl("probe_floor=10", output)))
   expect_true(any(grepl("probe_cap=2->2", output)))
-  expect_true(any(grepl("mode=anchored_joint", output)))
+  expect_true(any(grepl("mode=joint_offset", output)))
   expect_true(any(grepl("stop_blockers=probe_pred_rmse_lagged,theta_global_rmse_lagged", output)))
   expect_false(any(grepl("transform_policy=", output)))
   expect_false(any(grepl("transform_state=", output)))
@@ -101,57 +101,14 @@ test_that("common link sessions print estimator and uncertainty without obsolete
   expect_true(any(grepl("fixed_shape_offset", output)))
   expect_true(any(grepl("frozen", output)))
   expect_true(any(grepl("Offset:", output)))
-  expect_false(any(grepl("transform|hard_lock|anchored_joint", output)))
+  expect_false(any(grepl("transform|hard_lock|joint_offset", output)))
 })
 
-test_that("adaptive_get_logs and print preserve free hub-lock mode", {
-  items <- tibble::tibble(
-    item_id = c("h1", "h2", "s21", "s22"),
-    set_id = c(1L, 1L, 2L, 2L),
-    global_item_id = c("gh1", "gh2", "gs21", "gs22")
-  )
-  state <- adaptive_rank_start(
-    items,
-    seed = 18L,
-    adaptive_config = list(
-      run_mode = "link_one_spoke",
-      hub_id = 1L
-    )
-  )
-  state$controller$link_refit_mode <- "joint_refit"
-  state$controller$hub_lock_mode <- "free"
-  state$linking$phase_a$phase <- "phase_b"
-  state$linking$phase_a$ready_spokes <- 2L
-  state$linking$phase_a$ready_for_phase_b <- TRUE
-  state$linking$phase_a$set_status <- tibble::tibble(
-    set_id = c(1L, 2L),
-    source = c("run", "run"),
-    status = c("ready", "ready"),
-    validation_message = c("ok", "ok"),
-    artifact_path = c(NA_character_, NA_character_)
-  )
-  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
-    state$link_stage_log,
-    list(
-      refit_id = 1L,
-      spoke_id = 2L,
-      hub_id = 1L,
-      link_estimation_mode = "transform",
-      link_transform_policy = "auto",
-      link_transform_state = "shift_only",
-      link_refit_mode = "joint_refit",
-      hub_lock_mode = "free",
-      link_fit_method = "cmdstan_hmc",
-      link_uncertainty_approximation = "cmdstan_posterior_draws",
-      hub_anchored = FALSE,
-      link_stop_pass = FALSE,
-      link_state_frozen = FALSE
-    )
-  )
-
+test_that("common logs do not expose removed hub lock controls", {
+  state <- start_link_session(link_contract_input("joint_offset", 2L))
   logs <- adaptive_get_logs(state)
-  expect_identical(as.character(logs$link_stage_log$hub_lock_mode[[1L]]), "free")
-  expect_no_error(capture.output(print(state)))
+  expect_false(any(c("hub_lock_mode", "hub_lock_kappa") %in% names(logs$link_stage_log)))
+  expect_false(any(c("hub_lock_mode", "hub_lock_kappa") %in% names(schema_step_log)))
 })
 
 test_that("print-compatible public logs preserve legacy drift probe labels", {
@@ -167,7 +124,7 @@ test_that("print-compatible public logs preserve legacy drift probe labels", {
       is_drift_probe_step = TRUE,
       is_cross_set = TRUE,
       link_spoke_id = 2L,
-      link_estimation_mode = "transform",
+      link_estimation_mode = "joint_offset",
       utility_mode = "linking_d_optimal"
     )
   )

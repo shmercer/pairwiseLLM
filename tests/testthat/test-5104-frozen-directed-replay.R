@@ -231,6 +231,7 @@ test_that("Phase A respects the study ceiling while Phase B keeps its existing l
         B_id = c("2", "1")[seq_len(n_prior)])
       state <- make_test_state(items, make_test_trueskill_state(items), history)
       state$controller$run_mode <- "link_one_spoke"
+  state$controller$link_estimation_mode <- "fixed_shape_offset"
       state$controller$dup_max_obs_relaxed <- ceiling
       config <- pairwiseLLM:::adaptive_defaults(4L)
       config$dup_max_obs_relaxed <- ceiling

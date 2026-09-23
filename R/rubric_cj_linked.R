@@ -30,7 +30,7 @@
   items$set_id <- as.integer(set_id)
   structure(list(
     items = items, item_ids = as.character(items$item_id), n_items = nrow(items),
-    controller = list(judge_param_mode = surface$judge_param_mode, link_estimation_mode = "transform"),
+    controller = list(judge_param_mode = surface$judge_param_mode),
     config = list(btl_config = list(model_variant = surface$model_variant))
   ), class = "adaptive_state")
 }

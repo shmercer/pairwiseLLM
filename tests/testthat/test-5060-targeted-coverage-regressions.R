@@ -95,7 +95,7 @@ make_covr_probe_resume_state <- function() {
   state <- adaptive_rank_start(
     items,
     seed = 61L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$warm_start_done <- TRUE
   state$linking$phase_a <- list(
@@ -139,7 +139,7 @@ make_covr_link_probe_state <- function() {
   state <- adaptive_rank_start(
     items,
     seed = 101L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$controller$probe_pairs_per_refit_per_spoke <- 0L
   state$linking$phase_a <- list(
@@ -164,7 +164,7 @@ make_phase_a_anchored_import_state <- function() {
   state <- .adaptive_apply_controller_config(
     make_covr_phase_a_ready_state_with_evidence(),
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import"
     )
@@ -193,11 +193,11 @@ make_phase_a_anchored_import_state <- function() {
   state
 }
 
-test_that("phase A validators and anchored-joint guards cover uncovered error branches", {
+test_that("Phase A validators reject incompatible artifacts", {
   state <- make_covr_phase_a_ready_state_with_evidence()
   state_link <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
 
   state_link$linking$phase_a <- list(set_status = tibble::tibble(), phase = "phase_a")
@@ -322,258 +322,7 @@ test_that("phase A validators and anchored-joint guards cover uncovered error br
 
   expect_true(nzchar(.adaptive_phase_a_within_set_evidence_hash(NULL)))
 
-  expect_error(
-    .adaptive_normalize_anchored_joint_init_state_method("bad"),
-    "must be one of"
-  )
-  expect_error(
-    .adaptive_anchored_joint_validate_named_numeric(c(1, 2), c("a1", "a2"), "theta_hub_fixed"),
-    "named numeric vector"
-  )
-  expect_error(
-    .adaptive_anchored_joint_validate_named_numeric(
-      stats::setNames(c(1, 2), c("a1", "oops")),
-      c("a1", "a2"),
-      "theta_hub_fixed"
-    ),
-    "item domain mismatch"
-  )
-  expect_error(
-    .adaptive_anchored_joint_validate_named_numeric(
-      stats::setNames(c(1, Inf), c("a1", "a2")),
-      c("a1", "a2"),
-      "theta_hub_fixed"
-    ),
-    "must be finite"
-  )
 
-  state_aj <- make_phase_a_anchored_import_state()
-  hub_theta <- c(a1 = 1.0, a2 = 0.8)
-  spoke_mean <- c(b1 = -0.5, b2 = -0.7)
-  spoke_sd <- c(b1 = 0.1, b2 = 0.2)
-  judge_params <- list(beta = 0.1, epsilon = 0.02)
-
-  expect_error(
-    .adaptive_anchored_joint_new_accepted_state(
-      state = state_aj,
-      hub_id = 1L,
-      spoke_id = 99L,
-      theta_hub_fixed = hub_theta,
-      theta_spoke_global_mean = numeric(),
-      theta_spoke_global_sd = numeric(),
-      judge_params = judge_params,
-      anchored_joint_init_state_method = "artifact_copy_init",
-      phase_a_evidence_hash_hub = "hub",
-      phase_a_evidence_hash_spoke = "spoke"
-    ),
-    "requires non-empty hub and spoke item domains"
-  )
-  expect_error(
-    .adaptive_anchored_joint_new_accepted_state(
-      state = state_aj,
-      hub_id = 1L,
-      spoke_id = 2L,
-      theta_hub_fixed = hub_theta,
-      theta_spoke_global_mean = spoke_mean,
-      theta_spoke_global_sd = c(b1 = -0.1, b2 = 0.2),
-      judge_params = judge_params,
-      anchored_joint_init_state_method = "artifact_copy_init",
-      phase_a_evidence_hash_hub = "hub",
-      phase_a_evidence_hash_spoke = "spoke"
-    ),
-    "must be non-negative"
-  )
-  expect_error(
-    .adaptive_anchored_joint_new_accepted_state(
-      state = state_aj,
-      hub_id = 1L,
-      spoke_id = 2L,
-      theta_hub_fixed = hub_theta,
-      theta_spoke_global_mean = spoke_mean,
-      theta_spoke_global_sd = spoke_sd,
-      judge_params = 1L,
-      anchored_joint_init_state_method = "artifact_copy_init",
-      phase_a_evidence_hash_hub = "hub",
-      phase_a_evidence_hash_spoke = "spoke"
-    ),
-    "`judge_params` must be a list"
-  )
-  expect_error(
-    .adaptive_anchored_joint_new_accepted_state(
-      state = state_aj,
-      hub_id = 1L,
-      spoke_id = 2L,
-      theta_hub_fixed = hub_theta,
-      theta_spoke_global_mean = spoke_mean,
-      theta_spoke_global_sd = spoke_sd,
-      judge_params = list(beta = Inf, epsilon = 0.02),
-      anchored_joint_init_state_method = "artifact_copy_init",
-      phase_a_evidence_hash_hub = "hub",
-      phase_a_evidence_hash_spoke = "spoke"
-    ),
-    "requires finite fixed judge parameters"
-  )
-
-  state_non_aj <- make_covr_phase_a_ready_state_with_evidence()
-  state_non_aj$controller$link_estimation_mode <- "transform"
-  state_non_aj$controller$hub_lock_mode <- "soft_lock"
-  expect_error(
-    .adaptive_anchored_joint_artifact_copy_init(state_non_aj, spoke_id = 2L),
-    "requires hub and spoke Phase A artifacts"
-  )
-  state_aj_missing <- state_aj
-  state_aj_missing$linking$phase_a$artifacts <- list()
-  expect_error(
-    .adaptive_anchored_joint_artifact_copy_init(
-      state_aj_missing,
-      spoke_id = 2L,
-      controller = .adaptive_controller_resolve(state_aj_missing)
-    ),
-    "requires hub and spoke Phase A artifacts"
-  )
-
-  accepted <- .adaptive_anchored_joint_artifact_copy_init(
-    state_aj,
-    spoke_id = 2L,
-    controller = .adaptive_controller_resolve(state_aj)
-  )
-  expect_error(
-    .adaptive_anchored_joint_validate_current_state(
-      state_obj = 1L,
-      state = state_aj,
-      spoke_id = 2L,
-      controller = .adaptive_controller_resolve(state_aj)
-    ),
-    "must be a list"
-  )
-  expect_error(
-    .adaptive_anchored_joint_validate_current_state(
-      state_obj = utils::modifyList(accepted, list(spoke_id = 99L)),
-      state = state_aj,
-      spoke_id = 2L,
-      controller = .adaptive_controller_resolve(state_aj)
-    ),
-    "spoke/hub identifiers do not match"
-  )
-  expect_error(
-    .adaptive_anchored_joint_validate_current_state(
-      state_obj = accepted,
-      state = state_aj_missing,
-      spoke_id = 2L,
-      controller = .adaptive_controller_resolve(state_aj_missing)
-    ),
-    "requires current hub and spoke Phase A artifacts"
-  )
-  expect_error(
-    .adaptive_anchored_joint_validate_current_state(
-      state_obj = utils::modifyList(accepted, list(phase_a_evidence_hash_spoke = "bad_hash")),
-      state = state_aj,
-      spoke_id = 2L,
-      controller = .adaptive_controller_resolve(state_aj)
-    ),
-    "spoke evidence hash does not match"
-  )
-
-  state_sync <- state_aj
-  state_sync$linking$anchored_joint <- .adaptive_anchored_joint_empty_state()
-  state_sync$linking$anchored_joint$accepted_state_by_spoke <- list(`2` = accepted)
-  state_sync$linking$anchored_joint$fisher_t0_by_spoke <- list(
-    `2` = list(
-      free_block_dim = 999L,
-      n_link_active_pairs = 0L,
-      anchored_joint_init_state_method = "artifact_copy_init"
-    )
-  )
-  state_sync$meta$resumed_from_session <- TRUE
-  expect_error(
-    .adaptive_anchored_joint_sync_scaffolding(state_sync),
-    "free-block dimension"
-  )
-
-  state_no_hub <- state_aj
-  state_no_hub$linking$phase_a$artifacts[["1"]] <- NULL
-  expect_error(.adaptive_anchored_joint_sync_scaffolding(state_no_hub), "requires a hub Phase A artifact")
-
-  state_no_spoke <- state_aj
-  state_no_spoke$linking$phase_a$ready_spokes <- c(2L, 99L)
-  expect_error(.adaptive_anchored_joint_sync_scaffolding(state_no_spoke), "spoke set_id=99")
-
-  valid_artifact <- .adaptive_phase_a_build_artifact(make_covr_phase_a_ready_state_with_evidence(), set_id = 1L)
-  valid_artifact$quality_gate_accepted <- TRUE
-  controller <- .adaptive_controller_resolve(make_covr_phase_a_ready_state())
-
-  bad_n_items_missing <- valid_artifact
-  bad_n_items_missing$n_items <- NULL
-  expect_error(
-    .adaptive_phase_a_validate_imported_artifact(bad_n_items_missing, make_covr_phase_a_ready_state(), 1L, controller),
-    "missing `n_items`"
-  )
-
-  bad_n_items_zero <- valid_artifact
-  bad_n_items_zero$n_items <- 0L
-  expect_error(
-    .adaptive_phase_a_validate_imported_artifact(bad_n_items_zero, make_covr_phase_a_ready_state(), 1L, controller),
-    "`n_items` must be >= 1"
-  )
-
-  bad_theta_mean <- valid_artifact
-  bad_theta_mean$items$theta_raw_mean[[1L]] <- Inf
-  expect_error(
-    .adaptive_phase_a_validate_imported_artifact(bad_theta_mean, make_covr_phase_a_ready_state(), 1L, controller),
-    "`theta_raw_mean` must be finite"
-  )
-
-  bad_rank_mu <- valid_artifact
-  bad_rank_mu$items$rank_mu_raw[[1L]] <- Inf
-  expect_error(
-    .adaptive_phase_a_validate_imported_artifact(bad_rank_mu, make_covr_phase_a_ready_state(), 1L, controller),
-    "`rank_mu_raw` must be finite"
-  )
-
-  bad_diag_pass <- valid_artifact
-  bad_diag_pass$diagnostics$diagnostics_pass <- "yes"
-  expect_error(
-    .adaptive_phase_a_validate_imported_artifact(bad_diag_pass, make_covr_phase_a_ready_state(), 1L, controller),
-    "`diagnostics\\$diagnostics_pass` must be TRUE/FALSE/NA"
-  )
-
-  gate_state <- .adaptive_apply_controller_config(
-    make_covr_phase_a_ready_state_with_evidence(),
-    adaptive_config = list(
-      run_mode = "link_one_spoke",
-      hub_id = 1L,
-      phase_a_mode = "run",
-      phase_a_required_reliability_min = 0
-    )
-  )
-  art1 <- .adaptive_phase_a_build_artifact(gate_state, set_id = 1L)
-  art2 <- .adaptive_phase_a_build_artifact(gate_state, set_id = 2L)
-  gate_state$linking$phase_a <- list(
-    set_status = tibble::tibble(
-      set_id = c(1L, 2L),
-      source = c("run", "run"),
-      status = c("ready", "ready"),
-      validation_message = c("built", "built"),
-      artifact_path = c(NA_character_, NA_character_)
-    ),
-    artifacts = list(`1` = art1, `2` = art2),
-    required_sets = c(1L, 2L),
-    set_stop_pass_by_set = list(`1` = TRUE, `2` = FALSE),
-    phase = "phase_b",
-    ready_spokes = 2L,
-    active_phase_a_set = NA_integer_
-  )
-  expect_error(
-    .adaptive_phase_a_gate_or_abort(gate_state),
-    "missing stop-pass set_id: 2"
-  )
-
-  gate_state$linking$phase_a$set_stop_pass_by_set <- list(`1` = TRUE, `2` = TRUE)
-  gate_state$linking$phase_a$artifacts[["2"]]$n_pairs_committed <- 0L
-  expect_error(
-    .adaptive_phase_a_gate_or_abort(gate_state),
-    "did not reconcile to `n_pairs_committed`"
-  )
 })
 
 test_that("persistence resume helpers cover legacy mode inference and resume invariants", {
@@ -706,7 +455,7 @@ test_that("persistence resume helpers cover legacy mode inference and resume inv
 test_that("adaptive run helper fallbacks cover remaining probe and phase-scope branches", {
   state <- .adaptive_apply_controller_config(
     adaptive_rank_start(make_covr_multiset_items(), seed = 3L),
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -839,7 +588,7 @@ test_that("adaptive run helper fallbacks cover remaining probe and phase-scope b
 
   phase_b_empty <- .adaptive_apply_controller_config(
     adaptive_rank_start(make_covr_multiset_items(), seed = 4L),
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   phase_b_empty$linking$phase_a <- list(
     set_status = tibble::tibble(

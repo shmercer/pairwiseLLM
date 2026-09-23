@@ -31,32 +31,19 @@ test_that("linking fit contracts distinguish HMC, deterministic, and reused fits
   expect_error(f(list()), "undefined")
 })
 
-test_that("spoke snapshots and merges isolate independent state", {
-  state <- task09_link_state()
-  f <- pairwiseLLM:::.adaptive_linking_refit_merge_spoke_state
-  snapshot <- pairwiseLLM:::.adaptive_linking_refit_spoke_snapshot(state, 2L)
-  expect_identical(snapshot$linking$phase_a$ready_spokes, 2L)
-  expect_identical(snapshot$controller$current_link_spoke_id, 2L)
-  expect_identical(state$linking$phase_a$ready_spokes, 2:3)
-  state$controller$link_refit_stats_by_spoke <- list(`2` = list(value = 1), `3` = list(value = 3))
-  snapshot$controller$link_refit_stats_by_spoke <- list(`2` = list(value = 2), `3` = list(value = 99))
-  snapshot$controller$linking_identified_by_spoke <- list(`2` = TRUE)
-  snapshot$linking$anchored_joint$accepted_state_by_spoke <- list(`2` = list(marker = 2))
-  snapshot$linking$anchored_joint$fisher_t0_by_spoke <- list(`2` = list(marker = 3))
-  snapshot$linking$probe$panels_by_spoke <- list(`2` = list(marker = 4))
-  out <- f(state, snapshot, 2L)
-  expect_identical(out$controller$link_refit_stats_by_spoke,
-    list(`2` = list(value = 2), `3` = list(value = 3)))
-  expect_true(out$controller$linking_identified)
-  expect_identical(out$linking$anchored_joint$accepted_state_by_spoke[["2"]], list(marker = 2))
-  expect_identical(out$linking$anchored_joint$fisher_t0_by_spoke[["2"]], list(marker = 3))
-  expect_identical(out$linking$probe$panels_by_spoke[["2"]], list(marker = 4))
-  expect_identical(out$history_pairs, state$history_pairs)
-  expect_identical(out$trueskill_state, state$trueskill_state)
-  state$config$btl_config$phase_b_refit_workers <- 4L
-  expect_identical(pairwiseLLM:::.adaptive_phase_b_refit_parallel_workers(state, 2L), 2L)
-  state$config$btl_config$phase_b_refit_workers <- 0L
-  expect_error(pairwiseLLM:::.adaptive_phase_b_refit_parallel_workers(state, 2L), "positive integer")
+test_that("multi-spoke common sessions update only the selected spoke", {
+  args <- link_contract_args("fixed_shape_offset", 2L)
+  first <- do.call(prepare_link_input, args)
+  args$spoke$set_id <- "T"
+  args$spoke$items$global_item_id <- paste0("t", seq_len(nrow(args$spoke$items)))
+  args$cross$B_set[args$cross$B_set == "S"] <- "T"
+  args$cross$A_set[args$cross$A_set == "S"] <- "T"
+  second <- do.call(prepare_link_input, args)
+  state <- start_link_session(list(first, second))
+  out <- resume_link_session(state, link_contract_input("fixed_shape_offset", 4L))
+  expect_identical(.link_session_results(out)$T, .link_session_results(state)$T)
+  expect_false(identical(.link_session_results(out)$S, .link_session_results(state)$S))
+  expect_identical(out$link_stage_log$spoke_set_id, c("S", "T", "S"))
 })
 
 test_that("stop reconstruction checks every required gate and historical reliability", {

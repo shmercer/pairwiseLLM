@@ -58,7 +58,7 @@ test_that("append_step_log validates column names and fills missing columns", {
   expect_true(is.na(out$link_estimation_mode))
 })
 
-test_that("append_link_stage_log normalizes legacy freeze names and anchored transform fields", {
+test_that("append_link_stage_log normalizes legacy freeze names and inactive transform fields", {
   rows <- pairwiseLLM:::append_link_stage_log(
     pairwiseLLM:::new_link_stage_log(),
     list(
@@ -66,11 +66,11 @@ test_that("append_link_stage_log normalizes legacy freeze names and anchored tra
       spoke_id = 2L,
       hub_id = 1L,
       link_epoch_id = 1L,
-      link_estimation_mode = "anchored_joint",
-      link_transform_policy = "auto",
-      link_transform_state = "shift_only",
-      link_refit_mode = "shift_only",
-      hub_lock_mode = "hard_lock",
+      link_estimation_mode = "joint_offset",
+      link_transform_policy = NA_character_,
+      link_transform_state = NA_character_,
+      link_refit_mode = NA_character_,
+
       transform_frozen = TRUE
     )
   )

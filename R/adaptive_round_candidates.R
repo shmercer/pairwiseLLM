@@ -2348,7 +2348,7 @@ generate_stage_candidates_from_state <- function(state,
 #' @keywords internal
 #' @noRd
 .adaptive_linking_selection_order <- function(candidates,
-                                              utility_mode = "linking_d_optimal_transform",
+                                              utility_mode = "linking_d_optimal",
                                               stage_name = NA_character_,
                                               spoke_id = NA_integer_) {
   if (.adaptive_is_linking_d_optimal_mode(utility_mode, allow_legacy = TRUE)) {
@@ -2507,7 +2507,7 @@ generate_stage_candidates_from_state <- function(state,
   if (nrow(cand) < 1L) {
     return(integer())
   }
-  utility_col <- .adaptive_resolve_selection_column("linking_d_optimal_transform")
+  utility_col <- .adaptive_resolve_selection_column("linking_d_optimal")
   if (is.na(utility_col) || !utility_col %in% names(cand)) {
     rlang::abort(sprintf(
       paste0(

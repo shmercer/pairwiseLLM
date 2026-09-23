@@ -184,8 +184,7 @@ test_that("adaptive step schema supports probe-mode run typing", {
     c(
       "pairing_trueskill_u0",
       "pairing_trueskill_u",
-      "linking_d_optimal_transform",
-      "linking_d_optimal_anchored_joint"
+      "linking_d_optimal"
     )
   )
 })

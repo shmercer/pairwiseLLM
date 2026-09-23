@@ -130,15 +130,10 @@ pair probabilities, and utility
 The long-link probability gate uses TrueSkill throughout within-set/Phase-A
 hybrid selection. Direct strategies apply their partner targets after the same
 connected shuffled bootstrap and currently require ordinary within-set mode.
-In linking Phase B, anchor/strata routing uses linking-global scores built
-from Phase A summaries and the accepted anchored-joint state. Linking Phase B
-routing ranks eligible
-cross-set candidates by ridge-stabilized D-optimal log-det information gain
-on the active linking parameter block using order-averaged Model D
-probabilities. Linking inference parameters remain inference-only
-(diagnostics and stopping) and are not direct pair-selection objectives.
-Phase B uses a hard-lock hub-fixed fit and a deterministic accepted state
-before the first linking refit.
+Adaptive Phase B selection is unavailable pending separate validation.
+Use \code{\link[=prepare_link_input]{prepare_link_input()}}, \code{\link[=fit_link]{fit_link()}}, and \code{\link[=start_link_session]{start_link_session()}} with
+explicit cross-set evidence and an explicit E1--E3 estimator. Legacy Phase B
+posteriors cannot be resumed or migrated into a new estimator.
 Exploration/exploitation routing and fallback handling are recorded in
 \code{step_log}.
 
