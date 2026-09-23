@@ -188,7 +188,8 @@
 #'
 #' @param cj A completed [fit_bayes_btl_mcmc()] result, a completed within-set
 #'   [adaptive_rank()] result (or its `adaptive_state`), or an import-ready Phase A
-#'   artifact list. Fixed results with several refits use the last refit.
+#'   artifact list, or a frozen [prepare_linked_rubric_reference()] result.
+#'   Fixed results with several refits use the last refit.
 #'   Raw score tables and intermediate adaptive states are not accepted.
 #' @param rubric Data frame with `item_id` and `rubric_score`, optionally `trait`.
 #'   Rows align by ID, never position. Missing scores denote unlabeled items.
@@ -297,9 +298,14 @@
 #' retained; failed diagnostics produce a warning.
 #'
 #' With `linked_anchors`, first obtain an import-ready Phase A artifact for the
-#' human-scored `rubric_reference_set` and fit its ordinal calibration. Next run
+#' human-scored `rubric_reference_set`, or prepare a completed standalone Bayesian
+#' ranking with [prepare_linked_rubric_reference()], and fit its ordinal calibration.
+#' Standalone references require evidence identity recorded during fitting; older
+#' fits must be refitted from their original comparisons before reuse as a reference.
+#' Their existing same-set uses remain supported. Next run
 #' Phase A for the target set, then explicitly select an E1--E3 estimator in
-#' [prepare_link_input()], supplying the reference artifact as the hub input.
+#' [prepare_link_input()], supplying the reference artifact or the prepared
+#' standalone reference's matching hub payload and `source` metadata.
 #' Pass the [fit_link()] result or [start_link_session()] session to `predict()`.
 #' E1 needs points, E2 needs posterior draws, and E3 needs raw within-set rows.
 #' Rubric labels are used for calibration; Phase B does not require them.

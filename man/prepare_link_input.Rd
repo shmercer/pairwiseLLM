@@ -28,10 +28,12 @@ hub first, then spoke, and by bytewise item ID within each set.}
 exactly one statistical payload: E1 \code{points} (named numeric vector), E2
 \code{draws} (draws by named item columns), or E3 \code{observations} (table as below).
 Points and each draw are separately centered, with removed means recorded.
-Optional \code{source} metadata contains \code{artifact_hash}, \code{evidence_hash}, and
+Optional \code{source} metadata contains \code{artifact_hash}, \code{reference_hash}, \code{evidence_hash}, and
 \code{n_observations}, optional \code{trait} and \code{orientation} (\code{higher_is_better});
 unavailable values remain typed missing. External source
 hashes are assertions of provenance, distinct from computed payload hashes.
+Use the \code{source} from \code{\link[=prepare_linked_rubric_reference]{prepare_linked_rubric_reference()}} for a frozen
+standalone hub; rubric prediction checks its identity and estimator payload.
 E1 also accepts \code{list(artifact = artifact)} in either set entry, mutually
 exclusive with \code{points}. Supply an in-memory canonical Phase A artifact
 (use \code{\link[=readRDS]{readRDS()}} explicitly for files). Its \code{set_id}, \code{fit_model_id},

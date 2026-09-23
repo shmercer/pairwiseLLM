@@ -509,7 +509,11 @@ build_btl_results_data <- function(
 #'     (one row per refit).}
 #'   \item{fits}{List of BTL fit contracts (one per refit). Each records the actual
 #'     per-item raw theta prior in `theta_prior`; predictive fits also include
-#'     compact provenance in `predictive_prior`.}
+#'     compact provenance in `predictive_prior`. Each new fit also records
+#'     `evidence_identity` (normalized fitted comparisons, item domain, hash and
+#'     count) and `reference_fit_config`. These let
+#'     [prepare_linked_rubric_reference()] check the original comparisons before
+#'     saving a reusable rubric reference. Subset fits record only their fitted rows.}
 #'   \item{fit}{Single fit contract (only when one refit is run).}
 #' }
 #'
@@ -630,6 +634,8 @@ fit_bayes_btl_mcmc <- function(
     fit_metrics <- .btl_mcmc_standalone_fit_metrics(fit_contract, mcmc_config)
     fit_contract$diagnostics_pass <- as.logical(fit_metrics$diagnostics_pass)
     validate_btl_fit_contract(fit_contract, ids = ids)
+    fit_contract$evidence_identity <- .btl_evidence_identity(results_subset, ids)
+    fit_contract$reference_fit_config <- .btl_reference_fit_config(fit_contract, mcmc_config, mcmc_seed)
     fits[[idx]] <- fit_contract
 
     state <- .btl_mcmc_summary_state(

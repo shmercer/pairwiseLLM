@@ -89,7 +89,11 @@ a refit; \code{refit_id} identifies the refit.}
 (one row per refit).}
 \item{fits}{List of BTL fit contracts (one per refit). Each records the actual
 per-item raw theta prior in \code{theta_prior}; predictive fits also include
-compact provenance in \code{predictive_prior}.}
+compact provenance in \code{predictive_prior}. Each new fit also records
+\code{evidence_identity} (normalized fitted comparisons, item domain, hash and
+count) and \code{reference_fit_config}. These let
+\code{\link[=prepare_linked_rubric_reference]{prepare_linked_rubric_reference()}} check the original comparisons before
+saving a reusable rubric reference. Subset fits record only their fitted rows.}
 \item{fit}{Single fit contract (only when one refit is run).}
 }
 }

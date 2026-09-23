@@ -1,6 +1,12 @@
 # Historical ordinal calibration consumes validated Phase B scores read-only.
 
 .rubric_reference_identity <- function(reference) {
+  if (inherits(reference, "pairwiseLLM_linked_rubric_reference")) {
+    .rubric_validate_standalone_reference(reference)
+    return(list(set_id = reference$set_id, items = reference$items[c("item_id", "theta", "theta_sd")],
+      fit_contract = reference$fit_contract, evidence = reference$evidence,
+      evidence_hash = reference$evidence_hash, reference_hash = reference$reference_hash))
+  }
   required <- c("set_id", "items", "fit_contract", "fit_contract_hash", "evidence", "evidence_hash")
   scalar_id <- function(x) {
     is.numeric(x) && is.null(dim(x)) && length(x) == 1L &&

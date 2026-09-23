@@ -62,6 +62,14 @@
   out
 }
 
+# Keep historical session log schemas unchanged; expose new identity in views.
+.link_reference_reporting <- function(result) {
+  source <- result$provenance$phase_a_sources
+  if (is.null(source$hub$reference_hash) && is.null(source$spoke$reference_hash)) return(list())
+  list(phase_a_hub_reference_hash = source$hub$reference_hash %||% NA_character_,
+    phase_a_spoke_reference_hash = source$spoke$reference_hash %||% NA_character_)
+}
+
 #' Inspect explicit-evidence linking results and sessions
 #'
 #' @param object,x A common linking result or linking session.
@@ -79,7 +87,7 @@
 #' @export
 summary.pairwiseLLM_link_result <- function(object, ...) {
   .link_validate_result(object)
-  tibble::as_tibble(.link_stage_row(object))
+  tibble::as_tibble(c(.link_stage_row(object), .link_reference_reporting(object)))
 }
 
 #' @rdname summary.pairwiseLLM_link_result
@@ -88,8 +96,9 @@ summary.pairwiseLLM_link_session <- function(object, ...) {
   results <- .link_reporting_results(object)
   dplyr::bind_rows(lapply(names(results), function(key) {
     ids <- object$link_stage_log$refit_id[object$link_stage_log$spoke_set_id == key]
-    .link_stage_row(results[[key]], max(ids), object$status_by_spoke[[key]],
-      object$link_stage_log$fit_reused[match(max(ids), object$link_stage_log$refit_id)])
+    c(.link_stage_row(results[[key]], max(ids), object$status_by_spoke[[key]],
+      object$link_stage_log$fit_reused[match(max(ids), object$link_stage_log$refit_id)]),
+      .link_reference_reporting(results[[key]]))
   }))
 }
 

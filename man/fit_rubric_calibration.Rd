@@ -19,7 +19,8 @@ fit_rubric_calibration(
 \arguments{
 \item{cj}{A completed \code{\link[=fit_bayes_btl_mcmc]{fit_bayes_btl_mcmc()}} result, a completed within-set
 \code{\link[=adaptive_rank]{adaptive_rank()}} result (or its \code{adaptive_state}), or an import-ready Phase A
-artifact list. Fixed results with several refits use the last refit.
+artifact list, or a frozen \code{\link[=prepare_linked_rubric_reference]{prepare_linked_rubric_reference()}} result.
+Fixed results with several refits use the last refit.
 Raw score tables and intermediate adaptive states are not accepted.}
 
 \item{rubric}{Data frame with \code{item_id} and \code{rubric_score}, optionally \code{trait}.
@@ -182,9 +183,14 @@ that the originating adaptive run terminated. Existing CJ diagnostics are
 retained; failed diagnostics produce a warning.
 
 With \code{linked_anchors}, first obtain an import-ready Phase A artifact for the
-human-scored \code{rubric_reference_set} and fit its ordinal calibration. Next run
+human-scored \code{rubric_reference_set}, or prepare a completed standalone Bayesian
+ranking with \code{\link[=prepare_linked_rubric_reference]{prepare_linked_rubric_reference()}}, and fit its ordinal calibration.
+Standalone references require evidence identity recorded during fitting; older
+fits must be refitted from their original comparisons before reuse as a reference.
+Their existing same-set uses remain supported. Next run
 Phase A for the target set, then explicitly select an E1--E3 estimator in
-\code{\link[=prepare_link_input]{prepare_link_input()}}, supplying the reference artifact as the hub input.
+\code{\link[=prepare_link_input]{prepare_link_input()}}, supplying the reference artifact or the prepared
+standalone reference's matching hub payload and \code{source} metadata.
 Pass the \code{\link[=fit_link]{fit_link()}} result or \code{\link[=start_link_session]{start_link_session()}} session to \code{predict()}.
 E1 needs points, E2 needs posterior draws, and E3 needs raw within-set rows.
 Rubric labels are used for calibration; Phase B does not require them.
@@ -253,6 +259,7 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
 
 Other rubric calibration:
 \code{\link[=evaluate_rubric_predictions]{evaluate_rubric_predictions()}},
-\code{\link[=predict.pairwiseLLM_rubric_calibration]{predict.pairwiseLLM_rubric_calibration()}}
+\code{\link[=predict.pairwiseLLM_rubric_calibration]{predict.pairwiseLLM_rubric_calibration()}},
+\code{\link[=prepare_linked_rubric_reference]{prepare_linked_rubric_reference()}}
 }
 \concept{rubric calibration}

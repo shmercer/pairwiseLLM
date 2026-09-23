@@ -92,13 +92,14 @@
   rlang::abort("Linked rubric prediction requires an E1--E3 common result or linking session.")
 }
 
-# A calibration is attached to the centered Phase A hub scale, not to the
-# estimator's potentially updated hub posterior. Exact artifact identity binds
-# all three estimators to that origin; raw Phase A means are never used as priors.
+# Calibration stays on the original frozen hub scale even when an estimator
+# updates its hub posterior. Validated artifact or standalone reference identity
+# binds transport to that origin; raw Phase A means are never used as priors.
 .rubric_cj_estimator <- function(state, reference, trait) {
   results <- .link_reporting_results(state)
   ref <- .rubric_reference_identity(reference)
-  .link_check(is.character(reference$artifact_hash) && length(reference$artifact_hash) == 1L,
+  standalone <- inherits(reference, "pairwiseLLM_linked_rubric_reference")
+  if (!standalone) .link_check(is.character(reference$artifact_hash) && length(reference$artifact_hash) == 1L,
     "Linked E1--E3 calibration requires reference artifact identity; refit the hub calibration.")
   summaries <- list()
   for (key in names(results)) {
@@ -109,9 +110,10 @@
     }
     .link_check(isTRUE(r$diagnostics$fit_valid) && identical(r$offset$identification, "cross_set"),
       "Linked rubric prediction requires a valid, cross-set identified E1--E3 result.")
+    if (standalone) .rubric_standalone_link_match(reference, input)
     .link_check(identical(input$hub$set_id, as.character(ref$set_id)) &&
       identical(input$judge$model_variant, ref$fit_contract$model_variant) &&
-      identical(input$phase_a$hub$source$artifact_hash, reference$artifact_hash),
+      (standalone || identical(input$phase_a$hub$source$artifact_hash, reference$artifact_hash)),
       "Linked prediction requires the stored rubric reference hub artifact, identities, and model.")
     .link_check(setequal(input$hub$items$global_item_id, ref$items$item_id),
       "Linked prediction hub global identities do not match the stored reference.")

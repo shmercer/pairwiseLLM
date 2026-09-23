@@ -293,6 +293,49 @@ or cross-spoke covariance. Rubric transport uses the exact original Phase A hub
 calibration, restoring its original location origin. It conditions on linked point
 locations and does not propagate CJ uncertainty through the rubric model.
 
+### Frozen standalone rubric-reference identity
+
+`prepare_linked_rubric_reference()` extends the reference source contract without
+changing E1--E3 or the conditional ordinal likelihood. A completed standalone fit
+must carry versioned evidence identity recorded at fit time. Each refit records
+its own selected observations, including sampled subsets. Constructor evidence
+must reproduce that identity exactly. Retrospectively supplied compatible rows
+cannot verify a legacy fit; such fits require refitting for reusable references,
+while their existing same-set uses remain supported.
+
+Canonical evidence retains the comparison identifier, ordered item endpoints,
+binary outcome, phase and normalized judge scope, with repeated rows retained.
+It sorts observations deterministically, binds the fitted item domain, and strips
+incidental table attributes. Collection timestamps and table row names do not
+change statistical identity. The constructor translates these rows into uniquely
+identified within-hub observations for E3; evidence is never aggregated into
+pairwise counts or discarded merely because comparisons repeat.
+
+The computed reference hash binds set/source/global item identities, accepted
+locations and SDs, aligned posterior draws, trait, higher-is-better orientation,
+shared judge settings, native model/prior/configuration identity, and exact
+evidence/count. Fit diagnostics and reliability are retained. Descriptive user
+provenance is separate and cannot override computed fields. Failed standalone
+diagnostics retain the existing rubric warning policy; adaptive import readiness
+is not imposed on standalone fits. Existing adaptive-artifact validation and
+artifact hashes remain unchanged.
+
+The standalone `source$reference_hash` identifies one frozen reference for all
+estimators. E1 receives its accepted points, E2 its joint draws, and E3 its raw
+observations. Transport verifies both source identity and the corresponding
+actual hub payload, including the origin removed during centering, exact item
+mapping, and shared judge settings. An asserted source hash alone is insufficient.
+These hashes establish consistency of saved objects, not cryptographic proof of
+how an externally manufactured R object was obtained.
+
+For frozen hub locations $m_{H,i}$, linked spoke locations are translated back
+by $\bar m_H$ before the saved ordinal calibration is applied. E2/E3 updates to
+the hub posterior do not replace $m_H$, refit the ordinal calibration, or introduce
+target labels. The calibration remains conditional on accepted point locations;
+CJ posterior uncertainty is not propagated through its likelihood. Valid
+cross-set identification remains mandatory. The saved reference and calibration
+contain data needed for transport without live sampler objects.
+
 ## Why old Phase B sessions cannot resume
 
 The removed anchored-joint method used Phase A information both in data-derived
