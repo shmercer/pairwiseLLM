@@ -12,6 +12,10 @@
     rlang::abort(paste0("`", name, "` must have at least one row and column."))
   }
 
+  # Persistent fit contracts contain base matrices, not sampler S3 objects.
+  # Retain storage and item/draw alignment, but discard sampler-only metadata.
+  attributes(draws) <- attributes(draws)[intersect(c("dim", "dimnames"), names(attributes(draws)))]
+
   bad <- !is.finite(draws)
   if (!any(bad)) {
     return(draws)

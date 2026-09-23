@@ -286,3 +286,25 @@ test_that("adaptive utility candidate scoring validates shape and handles empty 
   cand <- pairwiseLLM:::score_candidates_u0(tibble::tibble(i = c(1L, 1L), j = c(2L, 3L)), ts)
   expect_true(all(cand$u0 >= 0))
 })
+
+test_that("saved posterior sampler draws rebuild canonical fit contracts without sampling", {
+  skip_if_not_installed("posterior")
+  draws <- posterior::as_draws_matrix(matrix(c(-1, -.8, -1.2, .1, 0, -.1), nrow = 3L,
+    dimnames = list(NULL, c("b", "a"))))
+  raw <- list(draws = list(theta = draws), model_variant = "btl")
+  path <- file.path(withr::local_tempdir(), "sampler-draws.rds")
+  saveRDS(raw, path)
+  local_mocked_bindings(.fit_bayes_btl_mcmc_adaptive = function(...) stop("must not resample"),
+    .package = "pairwiseLLM")
+  fit <- pairwiseLLM:::as_btl_fit_contract_from_mcmc(readRDS(path), ids = c("a", "b"))
+  expect_silent(pairwiseLLM:::validate_btl_fit_contract(fit, ids = c("a", "b")))
+  expect_false(is.object(fit$theta_draws))
+  expect_true(pairwiseLLM:::.link_data_only(fit$theta_draws))
+  expect_identical(colnames(fit$theta_draws), c("a", "b"))
+  expect_identical(rownames(fit$theta_draws), rownames(draws))
+  expect_identical(as.vector(fit$theta_draws), as.vector(draws[, c("a", "b"), drop = FALSE]))
+  direct <- pairwiseLLM:::build_btl_fit_contract(draws, model_variant = "btl")
+  expect_silent(pairwiseLLM:::validate_btl_fit_contract(direct, ids = c("b", "a")))
+  expect_false(is.object(direct$theta_draws))
+  expect_identical(as.vector(direct$theta_draws), as.vector(draws))
+})

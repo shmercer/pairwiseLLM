@@ -172,3 +172,8 @@ arithmetic only and do not establish selector validity.
 Issue #290 reserves 0208 for verified standalone rubric-reference identities and
 9205 for provider-free standalone-reference transport and serialization. Sampler
 fixtures test interface contracts, not numerical MCMC correctness.
+
+Issue #292 extends 0021, 0022 and 9205 with optional `posterior` draws-matrix
+regressions that require no live sampler. From the package root, run the separate
+synthetic CmdStan reference/CSV-recovery smoke explicitly with
+`PAIRWISELLM_TEST_STANDALONE_STAN=true Rscript scripts/standalone-rubric-reference-stan-smoke.R`.

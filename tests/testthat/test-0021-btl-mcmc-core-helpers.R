@@ -95,6 +95,46 @@ test_that("draw sanitization handles invalid types and non-finite replacement", 
   expect_equal(colnames(clean), c("1", "2"))
 })
 
+test_that("draw sanitization preserves ordinary numeric matrices exactly", {
+  for (values in list(1:12, as.double(1:12))) {
+    for (dn in list(NULL, list(paste0("draw", 1:4), c("b", "a", "c")))) {
+      draws <- matrix(values, nrow = 4L, dimnames = dn)
+      expect_identical(pairwiseLLM:::.pairwiseLLM_sanitize_draws_matrix(draws), draws)
+    }
+  }
+})
+
+test_that("posterior draws become base matrices without changing draws or alignment", {
+  skip_if_not_installed("posterior")
+  for (values in list(1:12, as.double(1:12))) {
+    draws <- posterior::as_draws_matrix(matrix(values, nrow = 4L,
+      dimnames = list(paste0("draw", 1:4), c("b", "a", "c"))))
+    expect_true(is.object(draws))
+    clean <- pairwiseLLM:::.pairwiseLLM_sanitize_draws_matrix(draws)
+    expect_true(is.numeric(clean))
+    expect_true(is.matrix(clean))
+    expect_true(all(is.finite(clean)))
+    expect_false(is.object(clean))
+    expect_identical(dim(clean), dim(draws))
+    expect_identical(dimnames(clean), dimnames(draws))
+    expect_identical(typeof(clean), typeof(draws))
+    expect_identical(as.vector(clean), as.vector(draws))
+    expect_null(attr(clean, "nchains"))
+    expect_identical(pairwiseLLM:::.pairwiseLLM_sanitize_draws_matrix(clean), clean)
+  }
+})
+
+test_that("classed non-finite draws retain existing repair behavior as base matrices", {
+  skip_if_not_installed("posterior")
+  draws <- posterior::as_draws_matrix(matrix(c(1, Inf, 3, NA, NaN, Inf), nrow = 3L,
+    dimnames = list(NULL, c("a", "b"))))
+  expect_warning(clean <- pairwiseLLM:::.pairwiseLLM_sanitize_draws_matrix(draws),
+    "replaced 4 value\\(s\\) across 2 column\\(s\\) with column means")
+  expect_false(is.object(clean))
+  expect_identical(dimnames(clean), dimnames(draws))
+  expect_identical(as.vector(clean), c(1, 2, 3, 0, 0, 0))
+})
+
 test_that("model variant helpers validate and map flags", {
   expect_error(pairwiseLLM:::normalize_model_variant(NA_character_), "length-1 character")
   expect_error(pairwiseLLM:::normalize_model_variant("bad"), "must be one of")

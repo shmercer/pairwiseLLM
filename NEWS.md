@@ -1,5 +1,10 @@
 # pairwiseLLM (development version)
 
+* Sampler draws are now stored as plain numeric matrices in BTL fit contracts,
+  preserving values and item alignment. This fixes standalone linked-reference
+  preparation for real CmdStan fits without relaxing serialization checks or
+  requiring new sampling to canonicalize existing draws (#292).
+
 * `prepare_linked_rubric_reference()` saves a completed standalone Bayesian
   ranking as a reusable reference for `linked_anchors` rubric calibration. This
   includes rankings based on pooled historical comparisons. E1, E2, and E3 can
