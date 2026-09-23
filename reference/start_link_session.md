@@ -3,7 +3,11 @@
 Sessions retain common E1–E3 results under `linking$estimator`,
 including estimator ID/version, per-spoke continuation, diagnostics and
 exact provenance. Pair selection and stopping remain external. No
-estimator is selected by default.
+estimator is selected by default. Adaptive Phase B D-optimal execution
+is unavailable for all estimators pending a separate selector validation
+study. Posterior covariance does not establish selector validity. Use
+these explicit-evidence sessions for E1–E3 comparisons; E3-MCMC remains
+an explicitly requested audit/reference engine.
 
 ## Usage
 

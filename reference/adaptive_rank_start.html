@@ -229,6 +229,17 @@ not imply BTL warming. Resume preserves saved predictions, current TrueSkill
 state, mode, strategy, and bootstrap progress; omit all warm-start arguments.</p>
     </div>
     <div class="section level2">
+    <h2 id="phase-b-linking-restriction">Phase B linking restriction<a class="anchor" aria-label="anchor" href="#phase-b-linking-restriction"></a></h2>
+
+
+<p>Adaptive Phase B D-optimal selection is unavailable pending a separate
+selector validation study. This includes all E1–E3 engines and legacy
+D-optimal aliases; execution fails before selecting or judging a Phase B pair.
+Phase A and ordinary within-set ranking remain available. For linking, use
+<code><a href="prepare_link_input.html">prepare_link_input()</a></code>, <code><a href="fit_link.html">fit_link()</a></code>, and <code><a href="start_link_session.html">start_link_session()</a></code> with explicit
+cross-set evidence and an explicit estimator choice.</p>
+    </div>
+    <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="make_warm_start_prior.html">make_warm_start_prior()</a></code>, <code><a href="adaptive_rank_run_live.html">adaptive_rank_run_live()</a></code>, <code><a href="adaptive_rank_resume.html">adaptive_rank_resume()</a></code>,
 <code><a href="adaptive_step_log.html">adaptive_step_log()</a></code>, <code><a href="adaptive_round_log.html">adaptive_round_log()</a></code>, <code><a href="adaptive_item_log.html">adaptive_item_log()</a></code></p>

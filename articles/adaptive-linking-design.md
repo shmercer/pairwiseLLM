@@ -1,5 +1,14 @@
 # Design: Adaptive Linking
 
+**Development restriction (#280):** Adaptive Phase B D-optimal execution
+is currently unavailable for every estimator and legacy alias, pending
+the separate selector validation study. Use [explicit-evidence linking
+sessions](https://shmercer.github.io/pairwiseLLM/articles/linking-sessions.md)
+for E1–E3. The adaptive Phase B descriptions below are historical and
+are not an enabled or validated workflow; the full documentation
+replacement is tracked in \#281. Phase A and ordinary within-set ranking
+remain available.
+
 This article describes the algorithm currently implemented by
 `pairwiseLLM` for placing items from separately ranked sets onto one
 common scale. For a runnable, wrapper-first tutorial, begin with [Guide:

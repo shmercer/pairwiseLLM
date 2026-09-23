@@ -281,6 +281,17 @@ termination. Round logs record
 <code>max_pairs_after_stop</code> and <code>pairs_committed_after_stop</code>.</p>
     </div>
     <div class="section level2">
+    <h2 id="phase-b-linking-restriction">Phase B linking restriction<a class="anchor" aria-label="anchor" href="#phase-b-linking-restriction"></a></h2>
+
+
+<p>Adaptive Phase B D-optimal selection is unavailable pending a separate
+selector validation study. This includes all E1–E3 engines and legacy
+D-optimal aliases; execution fails before selecting or judging a Phase B pair.
+Phase A and ordinary within-set ranking remain available. For linking, use
+<code><a href="prepare_link_input.html">prepare_link_input()</a></code>, <code><a href="fit_link.html">fit_link()</a></code>, and <code><a href="start_link_session.html">start_link_session()</a></code> with explicit
+cross-set evidence and an explicit estimator choice.</p>
+    </div>
+    <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="make_warm_start_prior.html">make_warm_start_prior()</a></code>, <code><a href="adaptive_rank_start.html">adaptive_rank_start()</a></code>, <code><a href="adaptive_rank_resume.html">adaptive_rank_resume()</a></code>,
 <code><a href="adaptive_step_log.html">adaptive_step_log()</a></code>, <code><a href="adaptive_round_log.html">adaptive_round_log()</a></code>, <code><a href="adaptive_item_log.html">adaptive_item_log()</a></code></p>
@@ -377,12 +388,12 @@ termination. Round logs record
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 6 × 99</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-23 <span style="color: #949494;">01:57:32</span>       1     1     5 S01   S05       5     1 S05  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-23 <span style="color: #949494;">01:57:32</span>       2     5     8 S05   S08       8     5 S08  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-23 <span style="color: #949494;">01:57:32</span>       3     8     6 S08   S06       6     8 S06  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-23 <span style="color: #949494;">01:57:32</span>       4     6     2 S06   S02       2     6 S02  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">5</span>       5 2026-09-23 <span style="color: #949494;">01:57:32</span>       5     2     4 S02   S04       4     2 S04  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">6</span>       6 2026-09-23 <span style="color: #949494;">01:57:32</span>       6     4     3 S04   S03       3     4 S03  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-23 <span style="color: #949494;">03:46:00</span>       1     1     5 S01   S05       5     1 S05  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-23 <span style="color: #949494;">03:46:00</span>       2     5     8 S05   S08       8     5 S08  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-23 <span style="color: #949494;">03:46:00</span>       3     8     6 S08   S06       6     8 S06  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-23 <span style="color: #949494;">03:46:00</span>       4     6     2 S06   S02       2     6 S02  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">5</span>       5 2026-09-23 <span style="color: #949494;">03:46:00</span>       5     2     4 S02   S04       4     2 S04  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">6</span>       6 2026-09-23 <span style="color: #949494;">03:46:00</span>       6     4     3 S04   S03       3     4 S03  </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 89 more variables: B_id &lt;chr&gt;, unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   Y &lt;int&gt;, status &lt;chr&gt;, judge_backend &lt;chr&gt;, judge_model &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   judge_endpoint &lt;chr&gt;, judge_valid &lt;lgl&gt;, judge_invalid_reason &lt;chr&gt;,</span></span>

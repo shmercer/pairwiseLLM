@@ -189,6 +189,19 @@ D-optimal selection, or probes. Custom BTL fit functions should consume
 Resume preserves saved predictions, current TrueSkill state, mode,
 strategy, and bootstrap progress; omit all warm-start arguments.
 
+## Phase B linking restriction
+
+Adaptive Phase B D-optimal selection is unavailable pending a separate
+selector validation study. This includes all E1–E3 engines and legacy
+D-optimal aliases; execution fails before selecting or judging a Phase B
+pair. Phase A and ordinary within-set ranking remain available. For
+linking, use
+[`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
+[`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md),
+and
+[`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md)
+with explicit cross-set evidence and an explicit estimator choice.
+
 ## See also
 
 [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md),

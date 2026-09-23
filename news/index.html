@@ -55,6 +55,10 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="pairwisellm-development-version">pairwiseLLM (development version)<a class="anchor" aria-label="anchor" href="#pairwisellm-development-version"></a></h2>
 <div class="section level3">
+<h3 id="linking-orchestration-and-selector-restriction-development-version">Linking orchestration and selector restriction<a class="anchor" aria-label="anchor" href="#linking-orchestration-and-selector-restriction-development-version"></a></h3>
+<ul><li>Adaptive Phase B D-optimal execution now fails explicitly for every estimator and legacy alias pending the separate selector validation study (<a href="https://github.com/shmercer/pairwiseLLM/issues/280" class="external-link">#280</a>). Direct E1–E3 fitting and session continuation remain available; E3-MCMC is an audit engine. Internal orchestration hooks use common results for routing, ordered prediction, covariance, contrast gradients, and held-out probe/stopping metrics. Probe outcomes remain outside fitting, and E1 conditional uncertainty cannot satisfy a full-uncertainty reliability criterion.</li>
+</ul></div>
+<div class="section level3">
 <h3 id="linking-sessions-and-rubric-transport-development-version">Linking sessions and rubric transport<a class="anchor" aria-label="anchor" href="#linking-sessions-and-rubric-transport-development-version"></a></h3>
 <ul><li>E1–E3 explicit-evidence linking sessions now support exact save/load and append-only resume, estimator-neutral logs and item summaries, and hub-only rubric calibration transport. Estimator choice remains explicit. Legacy anchored-joint Phase B sessions cannot be resumed or used for rubric scoring; restart from compatible Phase A inputs. E3 can import exact historical raw Phase A rows. See <code><a href="../articles/linking-sessions.html">vignette("linking-sessions")</a></code>.</li>
 </ul></div>

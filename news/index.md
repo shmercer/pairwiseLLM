@@ -2,6 +2,18 @@
 
 ## pairwiseLLM (development version)
 
+### Linking orchestration and selector restriction
+
+- Adaptive Phase B D-optimal execution now fails explicitly for every
+  estimator and legacy alias pending the separate selector validation
+  study ([\#280](https://github.com/shmercer/pairwiseLLM/issues/280)).
+  Direct E1–E3 fitting and session continuation remain available;
+  E3-MCMC is an audit engine. Internal orchestration hooks use common
+  results for routing, ordered prediction, covariance, contrast
+  gradients, and held-out probe/stopping metrics. Probe outcomes remain
+  outside fitting, and E1 conditional uncertainty cannot satisfy a
+  full-uncertainty reliability criterion.
+
 ### Linking sessions and rubric transport
 
 - E1–E3 explicit-evidence linking sessions now support exact save/load

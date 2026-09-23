@@ -240,6 +240,19 @@ most that many additional committed comparisons before deterministic
 termination. Round logs record `max_pairs_after_stop` and
 `pairs_committed_after_stop`.
 
+## Phase B linking restriction
+
+Adaptive Phase B D-optimal selection is unavailable pending a separate
+selector validation study. This includes all E1–E3 engines and legacy
+D-optimal aliases; execution fails before selecting or judging a Phase B
+pair. Phase A and ordinary within-set ranking remain available. For
+linking, use
+[`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
+[`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md),
+and
+[`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md)
+with explicit cross-set evidence and an explicit estimator choice.
+
 ## See also
 
 [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md),
@@ -342,12 +355,12 @@ head(step_view)
 #> # A tibble: 6 × 99
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-09-23 01:57:32       1     1     5 S01   S05       5     1 S05  
-#> 2       2 2026-09-23 01:57:32       2     5     8 S05   S08       8     5 S08  
-#> 3       3 2026-09-23 01:57:32       3     8     6 S08   S06       6     8 S06  
-#> 4       4 2026-09-23 01:57:32       4     6     2 S06   S02       2     6 S02  
-#> 5       5 2026-09-23 01:57:32       5     2     4 S02   S04       4     2 S04  
-#> 6       6 2026-09-23 01:57:32       6     4     3 S04   S03       3     4 S03  
+#> 1       1 2026-09-23 03:46:00       1     1     5 S01   S05       5     1 S05  
+#> 2       2 2026-09-23 03:46:00       2     5     8 S05   S08       8     5 S08  
+#> 3       3 2026-09-23 03:46:00       3     8     6 S08   S06       6     8 S06  
+#> 4       4 2026-09-23 03:46:00       4     6     2 S06   S02       2     6 S02  
+#> 5       5 2026-09-23 03:46:00       5     2     4 S02   S04       4     2 S04  
+#> 6       6 2026-09-23 03:46:00       6     4     3 S04   S03       3     4 S03  
 #> # ℹ 89 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,
