@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.6.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -24,7 +24,7 @@
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
-    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Explicit-evidence Linking Sessions</a></li>
+    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Linking Saved Comparisons</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
@@ -53,44 +53,40 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="development version" id="pairwisellm-development-version">pairwiseLLM (development version)<a class="anchor" aria-label="anchor" href="#pairwisellm-development-version"></a></h2>
-<ul><li><p>Rubric Phase A imports now verify evidence hashes against the original stored table before normalization, preserving valid artifacts whose table attributes serialize differently. Tampered evidence still fails validation.</p></li>
-<li><p>Removed the anchored-joint linking estimator, its priors, initialization and accepted-state/Fisher machinery. Legacy Phase B sessions fail with a targeted restart error; compatible Phase A artifacts remain reusable. Linking requires an explicit E1–E3 estimator, with no study-development default. Adaptive Phase B remains gated pending selector validation. The linking guides now describe supported explicit-evidence sessions.</p></li>
-</ul><div class="section level3">
-<h3 id="linking-orchestration-and-selector-restriction-development-version">Linking orchestration and selector restriction<a class="anchor" aria-label="anchor" href="#linking-orchestration-and-selector-restriction-development-version"></a></h3>
-<ul><li>Adaptive Phase B D-optimal execution now fails explicitly for every estimator and legacy alias pending the separate selector validation study (<a href="https://github.com/shmercer/pairwiseLLM/issues/280" class="external-link">#280</a>). Direct E1–E3 fitting and session continuation remain available; E3-MCMC is an audit engine. Internal orchestration hooks use common results for routing, ordered prediction, covariance, contrast gradients, and held-out probe/stopping metrics. Probe outcomes remain outside fitting, and E1 conditional uncertainty cannot satisfy a full-uncertainty reliability criterion.</li>
+<h2 class="pkg-version" data-toc-text="1.6.0" id="pairwisellm-160">pairwiseLLM 1.6.0<a class="anchor" aria-label="anchor" href="#pairwisellm-160"></a></h2>
+<div class="section level3">
+<h3 id="breaking-changes-to-linking-1-6-0">Breaking changes to linking<a class="anchor" aria-label="anchor" href="#breaking-changes-to-linking-1-6-0"></a></h3>
+<ul><li>Removed the anchored-joint estimator, its priors, initialization and estimator-specific selection machinery. Saved anchored-joint Phase B sessions cannot be resumed, reported or used for rubric scoring. Restart from compatible original Phase A artifacts and intentionally supplied cross-set comparisons. The Phase B posterior is never silently migrated into a new method.</li>
+<li>Linking requires an explicit method: <code>fixed_shape_offset</code> (E1), <code>gaussian_posterior_bridge</code> (E2), or <code>joint_offset</code> (E3). There is no default until the downstream study applies its frozen selection rule (<a href="https://github.com/shmercer/pairwiseLLM/issues/273" class="external-link">#273</a>).</li>
+<li>Adaptive Phase B D-optimal selection, including legacy aliases, is unavailable pending separate selector validation. Explicit-evidence fitting and continuation remain available. Ordinary within-set adaptive ranking and Phase A preparation retain their existing behavior.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="linking-sessions-and-rubric-transport-development-version">Linking sessions and rubric transport<a class="anchor" aria-label="anchor" href="#linking-sessions-and-rubric-transport-development-version"></a></h3>
-<ul><li>E1–E3 explicit-evidence linking sessions now support exact save/load and append-only resume, estimator-neutral logs and item summaries, and hub-only rubric calibration transport. Estimator choice remains explicit. Legacy anchored-joint Phase B sessions cannot be resumed or used for rubric scoring; restart from compatible Phase A inputs. E3 can import exact historical raw Phase A rows. See <code><a href="../articles/linking-sessions.html">vignette("linking-sessions")</a></code>.</li>
+<h3 id="three-linking-methods-1-6-0">Three linking methods<a class="anchor" aria-label="anchor" href="#three-linking-methods-1-6-0"></a></h3>
+<ul><li>Added <code><a href="../reference/prepare_link_input.html">prepare_link_input()</a></code>, <code><a href="../reference/fit_link.html">fit_link()</a></code> and <code><a href="../reference/predict_link.html">predict_link()</a></code> to separate link estimation from pair selection. Inputs identify hub/spoke samples, compatible Phase A information, explicit ordered cross-set judgments and fixed shared judge settings. Each method uses an explicit offset and enforces single-use evidence.</li>
+<li>E1 estimates only the offset, using adaptive one-dimensional quadrature and posterior-integrated prediction. It accepts Phase A point scores or compatible artifacts. Its uncertainty is conditional on fixed Phase A scores.</li>
+<li>E2 uses saved joint posterior draws to construct full-covariance Gaussian bridges. Only cross-set judgments enter its new likelihood. MAP/Laplace fitting propagates approximate shape and offset uncertainty; covariance jitter is bounded and recorded, with no fallback to separate marginal standard errors.</li>
+<li>E3 jointly fits the original raw within-set and cross-set comparisons, each once, under compatible original model/prior assumptions. MAP/Laplace fitting uses deterministic optimization, analytic derivatives and observed-Hessian checks. An explicitly selected <code>engine = "mcmc"</code> supplies a matching optional Stan audit model, sampler diagnostics and retained serializable draws.</li>
+<li>All methods preserve the offset prior at zero cross-set evidence and report that the link is not identified. Numerical failures and missing uncertainty are explicit; no engine silently falls back to another estimator.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="e3-joint-offset-linking-development-version">E3 joint-offset linking<a class="anchor" aria-label="anchor" href="#e3-joint-offset-linking-development-version"></a></h3>
-<ul><li>Implemented <code>joint_offset</code> in the explicit-evidence linking API (<a href="https://github.com/shmercer/pairwiseLLM/issues/278" class="external-link">#278</a>; <a href="https://github.com/shmercer/pairwiseLLM/issues/273" class="external-link">#273</a>). MAP/Laplace jointly refits centered hub/spoke shapes and an explicit offset, using every raw Phase A and cross-set observation once with fixed judge parameters. Exact derivatives, deterministic multistart optimization, and unregularized observed-Hessian checks provide explicit failure diagnostics.</li>
-<li>An explicitly selected <code>engine = "mcmc"</code> supplies a matching optional Stan audit/reference model, resource controls, retained serializable draws, full audit diagnostics, covariance transforms, and posterior-average prediction. Zero-edge summaries preserve the exact independent offset prior.</li>
-<li>E3 requires more raw-data retention and computation than E2. Estimator choice remains explicit; MCMC is never an implicit production path. Adaptive/state integration, legacy removal, and default selection remain separate epic work.</li>
+<h3 id="sessions-reporting-and-rubric-scoring-1-6-0">Sessions, reporting and rubric scoring<a class="anchor" aria-label="anchor" href="#sessions-reporting-and-rubric-scoring-1-6-0"></a></h3>
+<ul><li>Added <code><a href="../reference/start_link_session.html">start_link_session()</a></code>, <code><a href="../reference/start_link_session.html">resume_link_session()</a></code>, <code><a href="../reference/save_link_session.html">save_link_session()</a></code> and <code><a href="../reference/save_link_session.html">load_link_session()</a></code> for exact save/load and append-only continuation. Unchanged resume reuses the saved result. Multi-spoke sessions preserve separate hub/spoke fits, and statuses describe the caller’s workflow without enabling automatic stopping.</li>
+<li>Common input, result and session schemas use version 1. Estimator-neutral logs and summaries replace obsolete anchored-joint fields with estimator identity, offset estimates, uncertainty scope, fit diagnostics and evidence counts/hashes. <code>theta_link_eap</code> aliases <code>theta_link_mean</code>: posterior averages for E1/E3-MCMC, MAP locations for E2/E3 Laplace. Unknown source provenance remains missing.</li>
+<li>Linked rubric scoring reuses the exact original hub calibration on valid linked spoke scores. Compatible Phase A artifacts can be reused where they retain the selected method’s required points, joint draws or original raw observations.</li>
+<li>Probe and stopping adapters consume common results, preserve presentation order, and keep held-out outcomes outside fitting. E1 conditional uncertainty cannot satisfy a full-uncertainty reliability criterion. These adapters do not enable or validate adaptive Phase B selection or stopping.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="e2-gaussian-posterior-bridge-linking-development-version">E2 Gaussian posterior-bridge linking<a class="anchor" aria-label="anchor" href="#e2-gaussian-posterior-bridge-linking-development-version"></a></h3>
-<ul><li>Implemented <code>gaussian_posterior_bridge</code> in the explicit-evidence linking API (<a href="https://github.com/shmercer/pairwiseLLM/issues/277" class="external-link">#277</a>; epic <a href="https://github.com/shmercer/pairwiseLLM/issues/273" class="external-link">#273</a>), with full reduced-coordinate Phase A covariance, deterministic MAP optimization, observed-Hessian Laplace uncertainty, and Gaussian-integrated prediction. Only new cross-set observations enter its Phase B likelihood.</li>
-<li>Canonical Phase A artifacts or named draw matrices supply each bridge; missing draws cannot fall back to EAP means or independent marginal SDs. Bounded, recorded covariance jitter and explicit numerical failures preserve the common evidence, result, and cumulative-continuation contracts.</li>
-<li>E2 is staged and propagates joint shape/offset uncertainty, approximately through Gaussianized Phase A posteriors and a Laplace update. Estimator selection remains explicit. Adaptive integration and legacy removal remain separate tasks.</li>
+<h3 id="validation-and-documentation-1-6-0">Validation and documentation<a class="anchor" aria-label="anchor" href="#validation-and-documentation-1-6-0"></a></h3>
+<ul><li>Added a shared provider-free release matrix for invariance, repeated judgments, evidence single-use, known-offset simulations and integration. Real optional E3-MCMC audits cover density agreement, MAP parity, symmetry, repeated likelihood information and seeded repeatability. Tests never request provider judgments.</li>
+<li>Rewrote linking usage guides with offline examples for all three methods and practical save/resume guidance. Expanded the design guide with full statistical models and plain-language explanations; audited the series’ rubric and README changes for the same accessible style.</li>
+<li>Added an inspectable downstream linking contract and standalone synthetic smoke runner that records the exact package revision for candidate production pinning.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="e1-fixed-shape-offset-linking-development-version">E1 fixed-shape offset linking<a class="anchor" aria-label="anchor" href="#e1-fixed-shape-offset-linking-development-version"></a></h3>
-<ul><li>Implemented <code>fixed_shape_offset</code> in <code><a href="../reference/fit_link.html">fit_link()</a></code> with deterministic adaptive one-dimensional quadrature, posterior-integrated <code><a href="../reference/predict_link.html">predict_link()</a></code>, explicit numerical failures, and cumulative-evidence continuation (<a href="https://github.com/shmercer/pairwiseLLM/issues/276" class="external-link">#276</a>; epic <a href="https://github.com/shmercer/pairwiseLLM/issues/273" class="external-link">#273</a>). E1 uncertainty is offset-only and conditional on fixed Phase A shapes.</li>
-<li>
-<code><a href="../reference/prepare_link_input.html">prepare_link_input()</a></code> now accepts canonical Phase A artifacts for E1, extracting aligned EAP means and provenance without replaying Phase A outcomes or treating marginal Phase A SDs as posterior linking uncertainty.</li>
-<li>Estimator choice remains explicit. Adaptive integration and anchored-joint removal remain separate epic tasks. Frozen study source: <code>shmercer/pairwise-linking-study@2bf3f0b4a2f257b7855f965f782f05c61853aac6</code>.</li>
-</ul></div>
-<div class="section level3">
-<h3 id="linking-estimator-foundation-development-version">Linking estimator foundation<a class="anchor" aria-label="anchor" href="#linking-estimator-foundation-development-version"></a></h3>
-<ul><li>Added <code><a href="../reference/prepare_link_input.html">prepare_link_input()</a></code>, <code><a href="../reference/fit_link.html">fit_link()</a></code>, and <code><a href="../reference/predict_link.html">predict_link()</a></code> as the explicit- evidence contract for E1–E3, with evidence guards, centered Helmert coordinates, common results, and continuation validation (<a href="https://github.com/shmercer/pairwiseLLM/issues/275" class="external-link">#275</a>). Estimator choice is explicit; E1–E3 engines are implemented. Existing adaptive linking integration is unchanged.</li>
-</ul></div>
-<div class="section level3">
-<h3 id="bug-fixes-development-version">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-development-version"></a></h3>
-<ul><li><p>Warm-start glmnet tuning now invalidates only verified nonconvergent inner-fold lambda tails. Selection requires complete converged evidence across all folds; full audits retain candidate eligibility and engine convergence evidence. Reference-path failures and selected-lambda refit failures remain fatal (<a href="https://github.com/shmercer/pairwiseLLM/issues/271" class="external-link">#271</a>).</p></li>
-<li><p>Increased the internal warm-start glmnet iteration ceiling from 100,000 to 10,000,000 while preserving the 1e-12 convergence threshold, exact lambda paths, and strict convergence checks. Candidate eligibility for incomplete inner paths is now governed by the explicit rule described above (<a href="https://github.com/shmercer/pairwiseLLM/issues/268" class="external-link">#268</a>, <a href="https://github.com/shmercer/pairwiseLLM/issues/271" class="external-link">#271</a>).</p></li>
+<h3 id="bug-fixes-1-6-0">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-1-6-0"></a></h3>
+<ul><li>Keep each item in exactly one ranking band when the top band includes every item. Added regression tests for recovery, diagnostics and numerical failures, and removed unreachable execution code behind the Phase B selection gate.</li>
+<li>Rubric Phase A imports verify evidence hashes against the original stored table before normalization, preserving valid artifacts with different serialized table attributes. Tampered evidence still fails validation.</li>
+<li>Warm-start glmnet tuning invalidates only verified nonconvergent inner-fold lambda tails. Selection requires complete converged evidence across all folds; full audits retain candidate eligibility and convergence evidence. Reference-path failures and selected-lambda refit failures remain fatal (<a href="https://github.com/shmercer/pairwiseLLM/issues/271" class="external-link">#271</a>).</li>
+<li>Increased the internal warm-start glmnet iteration ceiling from 100,000 to 10,000,000 while preserving the 1e-12 convergence threshold, exact lambda paths and strict convergence checks (<a href="https://github.com/shmercer/pairwiseLLM/issues/268" class="external-link">#268</a>, <a href="https://github.com/shmercer/pairwiseLLM/issues/271" class="external-link">#271</a>).</li>
 </ul></div>
 </div>
     <div class="section level2">

@@ -232,11 +232,11 @@ Controller behavior can change after refits via identifiability-gated
 settings in `adaptive_config`; those controls affect hybrid pair routing
 and quotas through the existing `global_identified` signal. BTL supplies
 item estimates, posterior uncertainty, EAP reliability, diagnostics, and
-stopping. Phase B selection and prior rules are unchanged. If
-`adaptive_config$max_pairs_after_stop > 0`, the run records a stop
-boundary at the first refit with `stop_decision = TRUE` and allows at
-most that many additional committed comparisons before deterministic
-termination. Round logs record `max_pairs_after_stop` and
+stopping. Automatic Phase B selection is unavailable pending separate
+validation. If `adaptive_config$max_pairs_after_stop > 0`, the run
+records a stop boundary at the first refit with `stop_decision = TRUE`
+and allows at most that many additional committed comparisons before
+deterministic termination. Round logs record `max_pairs_after_stop` and
 `pairs_committed_after_stop`.
 
 ## Phase B linking restriction
@@ -354,12 +354,12 @@ head(step_view)
 #> # A tibble: 6 × 97
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-09-23 05:10:30       1     1     5 S01   S05       5     1 S05  
-#> 2       2 2026-09-23 05:10:30       2     5     8 S05   S08       8     5 S08  
-#> 3       3 2026-09-23 05:10:30       3     8     6 S08   S06       6     8 S06  
-#> 4       4 2026-09-23 05:10:30       4     6     2 S06   S02       2     6 S02  
-#> 5       5 2026-09-23 05:10:30       5     2     4 S02   S04       4     2 S04  
-#> 6       6 2026-09-23 05:10:30       6     4     3 S04   S03       3     4 S03  
+#> 1       1 2026-09-23 17:08:19       1     1     5 S01   S05       5     1 S05  
+#> 2       2 2026-09-23 17:08:19       2     5     8 S05   S08       8     5 S08  
+#> 3       3 2026-09-23 17:08:19       3     8     6 S08   S06       6     8 S06  
+#> 4       4 2026-09-23 17:08:20       4     6     2 S06   S02       2     6 S02  
+#> 5       5 2026-09-23 17:08:20       5     2     4 S02   S04       4     2 S04  
+#> 6       6 2026-09-23 17:08:20       6     4     3 S04   S03       3     4 S03  
 #> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,

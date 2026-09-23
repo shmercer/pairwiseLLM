@@ -140,10 +140,10 @@ guide](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md).
 - [`load_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/load_adaptive_session.md)
   : Load an adaptive session from disk.
 
-## Link sets from explicit evidence (development)
+## Link separately ranked sets
 
-Fit, inspect, save and resume E1–E3 on explicit evidence; estimator
-selection is required.
+Use saved comparisons to link sets, inspect results, and save your work;
+choose a method explicitly.
 
 - [`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md)
   : Prepare explicit evidence for a linking estimator

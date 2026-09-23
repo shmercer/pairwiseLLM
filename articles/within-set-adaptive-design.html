@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.6.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,7 +40,7 @@
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
-    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Explicit-evidence Linking Sessions</a></li>
+    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Linking Saved Comparisons</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
@@ -89,8 +89,9 @@
 default hybrid procedure also produces canonical within-set artifacts
 inside linking Phase A. Direct strategies currently require ordinary
 within-set runs; compatible artifacts from those runs can be imported.
-Phase B selection and priors are unchanged by 1.4.0 and are outside this
-article’s scope. For an operational tutorial, begin with <a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html">Guide:
+Version 1.6.0 requires an explicit E1–E3 linking estimator and gates
+adaptive Phase B selection pending validation; see the <a href="adaptive-linking-design.html">linking design</a> for those models.
+For an operational tutorial, begin with <a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html">Guide:
 Adaptive Pairing</a>. The public entry points are
 <code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code>, <code><a href="../reference/adaptive_rank_start.html">adaptive_rank_start()</a></code>,
 <code><a href="../reference/adaptive_rank_run_live.html">adaptive_rank_run_live()</a></code>, and

@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.6.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,7 +40,7 @@
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
-    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Explicit-evidence Linking Sessions</a></li>
+    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Linking Saved Comparisons</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
@@ -84,79 +84,146 @@
 
     
     
-<p>Linking now uses explicit-evidence E1–E3 sessions. Choose the
-estimator explicitly; there is no study-development default. The <a href="adaptive-linking-design.html">design</a> explains the evidence and
-uncertainty contracts, and <a href="linking-sessions.html">linking
-sessions</a> provides executable examples of supported estimation,
-persistence, reporting and rubric interoperability.</p>
+<p>Linking helps you compare writing samples that were originally ranked
+in separate sets. For example, you might have ranked last year’s samples
+and this year’s samples separately. Each ranking describes differences
+<em>within</em> its own set. Comparisons between the two sets are needed
+to put their scores on a common scale.</p>
+<p>The reference set is called the <strong>hub</strong>; each set you
+want to connect to it is a <strong>spoke</strong>. <strong>Phase
+A</strong> means ranking each set separately. <strong>Phase B</strong>
+means using comparisons between sets to link their scores.</p>
+<p>In version 1.6.0, you supply the between-set comparisons yourself and
+choose one of three linking methods. Automatic selection of Phase B
+comparisons is unavailable while it awaits separate validation. Ordinary
+adaptive ranking within a set remains available. The <a href="linking-sessions.html">linking sessions guide</a> walks through a
+complete example using invented results, without an API key or provider
+request.</p>
 <div class="section level2">
-<h2 id="prepare-phase-a-inputs">Prepare Phase A inputs<a class="anchor" aria-label="anchor" href="#prepare-phase-a-inputs"></a>
+<h2 id="choose-what-to-retain-from-phase-a">Choose what to retain from Phase A<a class="anchor" aria-label="anchor" href="#choose-what-to-retain-from-phase-a"></a>
 </h2>
-<p>Keep the separately estimated hub and spoke artifacts and their item
-identities. Pass <code>list(artifact = artifact)</code> for each set in
-the <code>phase_a</code> argument of <code><a href="../reference/prepare_link_input.html">prepare_link_input()</a></code>.
-It validates the payload required by the chosen estimator. E2 needs
-joint covariance information; E3 needs raw within-set evidence and the
-original prior/model contract. A historical Phase A artifact remains
-reusable when it supplies the required inputs. A Phase B posterior is
-not a Phase A artifact.</p>
-<p>Ordinary within-set adaptive ranking is unchanged. Linking Phase A
-preparation through <code><a href="../reference/adaptive_rank_start.html">adaptive_rank_start()</a></code> requires an
-explicit <code>adaptive_config$link_estimation_mode</code> of
-<code>fixed_shape_offset</code>, <code>gaussian_posterior_bridge</code>,
-or <code>joint_offset</code>. Adaptive Phase B selection is unavailable
-pending separate validation; use the explicit session path below.</p>
+<p>Keep the original Phase A results for both sets, including sample IDs
+and the settings used to fit them. The three methods need different
+parts of those results:</p>
+<table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
+<thead><tr class="header">
+<th>Method</th>
+<th>What you need from each set</th>
+<th>What the method does</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>E1: <code>fixed_shape_offset</code>
+</td>
+<td>Estimated scores</td>
+<td>Keeps within-set score differences fixed and estimates how far to
+shift the spoke</td>
+</tr>
+<tr class="even">
+<td>E2: <code>gaussian_posterior_bridge</code>
+</td>
+<td>Saved joint posterior draws</td>
+<td>Uses the saved uncertainty to update both sets and their
+separation</td>
+</tr>
+<tr class="odd">
+<td>E3: <code>joint_offset</code>
+</td>
+<td>Original comparison outcomes and compatible original model/prior
+settings</td>
+<td>Fits both sets and their separation together, using each comparison
+once</td>
+</tr>
+</tbody>
+</table>
+<p>Posterior draws are saved sets of plausible scores from a Bayesian
+fit. E2 needs them together because uncertainty in one sample’s score is
+related to uncertainty in other scores. A table of scores and separate
+standard errors is not enough. E3 needs the original outcomes because it
+rebuilds the fit from those comparisons.</p>
+<p>There is <strong>no default linking method</strong> yet. The study
+will determine that choice. The examples choose a method to show how to
+use it, without recommending a winner. The <a href="adaptive-linking-design.html">design guide</a> explains the
+statistical differences.</p>
 </div>
 <div class="section level2">
-<h2 id="fit-explicit-cross-set-observations">Fit explicit cross-set observations<a class="anchor" aria-label="anchor" href="#fit-explicit-cross-set-observations"></a>
+<h2 id="prepare-your-comparisons">Prepare your comparisons<a class="anchor" aria-label="anchor" href="#prepare-your-comparisons"></a>
+</h2>
+<p>Choose one writing trait, such as organization, and use compatible
+Phase A models for both sets. Keep the same shared judge settings for
+linking: <code>beta</code> describes presentation-order bias and
+<code>epsilon</code> describes random lapses. These settings come from
+Phase A and are held fixed during linking.</p>
+<p>Record each between-set judgment with the IDs of the samples shown as
+A and B, the set each belongs to, and the winner. Give every judgment
+its own <code>observation_id</code>. If a pair was judged more than
+once, retain separate rows and separate judgment IDs. Do not
+accidentally import the same judgment twice.</p>
+<p>Keep comparisons reserved for checking accuracy in a separate table.
+Only pass comparisons intended for fitting in <code>cross</code>. A
+session label such as <code>"probe"</code> does not exclude observations
+from the fit.</p>
+</div>
+<div class="section level2">
+<h2 id="fit-and-inspect-the-link">Fit and inspect the link<a class="anchor" aria-label="anchor" href="#fit-and-inspect-the-link"></a>
 </h2>
 <ol style="list-style-type: decimal">
-<li>Declare the hub/spoke item identities and frozen judge
-parameters.</li>
-<li>Prepare ordered cross-set observations, excluding held-out
-probes.</li>
-<li>Call <code><a href="../reference/prepare_link_input.html">prepare_link_input()</a></code> with an explicit estimator
-and its compatible Phase A inputs.</li>
-<li>Call <code><a href="../reference/fit_link.html">fit_link()</a></code> for one fit, or
-<code><a href="../reference/start_link_session.html">start_link_session()</a></code> for a persistent session.</li>
-<li>Inspect identification, diagnostics and uncertainty scope before
-interpreting linked scores. Zero-edge fits are prior-only, not
-identified links.</li>
+<li>Use <code><a href="../reference/prepare_link_input.html">prepare_link_input()</a></code> to supply both sets, their
+Phase A information, the between-set comparisons and your chosen
+method.</li>
+<li>Use <code><a href="../reference/fit_link.html">fit_link()</a></code> for a single fit, or
+<code><a href="../reference/start_link_session.html">start_link_session()</a></code> if you want to save the work and add
+comparisons later.</li>
+<li>Inspect the offset, scores, uncertainty and fit diagnostics before
+using results.</li>
 </ol>
-<p>E1 estimates only the offset conditional on fixed shapes. E2 updates
-full Gaussian posterior bridges. E3 combines raw Phase A and cross
-evidence once under the original model/prior contract, using MAP/Laplace
-by default; MCMC is an explicit audit engine.</p>
+<p>The <strong>offset</strong> is the estimated shift from the hub to
+the spoke. Positive values place the spoke higher on the common scale.
+Without any between-set comparisons, the offset reflects only the
+starting assumption, not an established link. By default that assumption
+is a Normal distribution with mean 0 and SD 5.</p>
+<p>E1’s uncertainty describes the shift while treating the earlier
+scores as fixed. It does not include uncertainty in those earlier
+rankings. E2 and E3 include uncertainty in both the scores and the
+shift, using approximations explained in the design guide. Missing
+uncertainty is reported as <code>NA</code>; a failed fit should not be
+treated as a completed link.</p>
 </div>
 <div class="section level2">
-<h2 id="report-and-resume">Report and resume<a class="anchor" aria-label="anchor" href="#report-and-resume"></a>
+<h2 id="save-add-comparisons-and-reuse-a-reference">Save, add comparisons, and reuse a reference<a class="anchor" aria-label="anchor" href="#save-add-comparisons-and-reuse-a-reference"></a>
 </h2>
-<p>Use <code><a href="../reference/summarize_items.html">summarize_items()</a></code>, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>,
-<code><a href="../reference/adaptive_get_logs.html">adaptive_get_logs()</a></code> and <code><a href="https://rdrr.io/r/base/print.html" class="external-link">print()</a></code> on common
-sessions. Multi-spoke reports preserve each fit’s hub estimates and
-spoke identity. Undefined uncertainty is missing rather than zero.</p>
-<p>Save with <code><a href="../reference/save_link_session.html">save_link_session()</a></code> and load with
-<code><a href="../reference/save_link_session.html">load_link_session()</a></code>. Append explicit evidence with
-<code><a href="../reference/start_link_session.html">resume_link_session()</a></code>. The old evidence prefix and frozen
-inputs must remain identical. Resuming unchanged input reuses the exact
-accepted fit. Changing an estimator requires a new session prepared from
-compatible Phase A data.</p>
+<p>Use <code><a href="../reference/save_link_session.html">save_link_session()</a></code> and
+<code><a href="../reference/save_link_session.html">load_link_session()</a></code> to save and restore your work. To add
+comparisons, keep all previous rows in their original order, append the
+new rows, prepare the updated input, and call
+<code><a href="../reference/start_link_session.html">resume_link_session()</a></code>. Reusing unchanged input returns the
+saved fit. Changing the method, Phase A results, judge settings or
+numerical settings requires a new session.</p>
+<p>Several spokes can share one hub. Each link is fitted separately, and
+E2/E3 may update the hub scores differently for each spoke. Reports
+identify the spoke so you can keep those results separate.</p>
+<p>To reuse human rubric scores from the hub, see the <a href="rubric-calibration.html">rubric calibration guide</a>. The saved
+calibration stays attached to the original reference set; new target
+labels are not needed to apply it.</p>
 </div>
 <div class="section level2">
-<h2 id="restart-an-old-session">Restart an old session<a class="anchor" aria-label="anchor" href="#restart-an-old-session"></a>
+<h2 id="restart-a-session-from-an-older-version">Restart a session from an older version<a class="anchor" aria-label="anchor" href="#restart-a-session-from-an-older-version"></a>
 </h2>
-<p>The anchored-joint estimator and its controls have been removed.
-Saved Phase B sessions using it raise
-<code>pairwiseLLM_unsupported_legacy_link_state</code>, with a restart
-message. They cannot resume, silently select E1–E3, or donate their
-Phase B posterior as a new estimator’s Phase A input.</p>
-<p>Recover the original Phase A artifacts/evidence, validate them
-through <code><a href="../reference/prepare_link_input.html">prepare_link_input()</a></code>, choose E1, E2 or E3
-explicitly, and create a fresh session. Supply the original cross
-observations intentionally as explicit evidence. Missing covariance or
-raw observations must be recovered from their original source.</p>
-<p>No provider calls are needed for explicit-evidence fitting or the
-session examples.</p>
+<p>Version 1.6.0 removes the anchored-joint linking method. Saved Phase
+B sessions from that method cannot be resumed. The error message asks
+you to restart from the original Phase A results.</p>
+<p>Choose E1, E2 or E3, recover the Phase A information it requires, and
+start a fresh session. You can reuse compatible historical Phase A
+artifacts by passing <code>list(artifact = artifact)</code> for each
+set. Supply the original between-set judgments intentionally as
+<code>cross</code>. An already-linked Phase B result cannot replace an
+original Phase A result. Missing draws or original comparisons must be
+recovered from their source.</p>
 </div>
 <div class="section level2">
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>

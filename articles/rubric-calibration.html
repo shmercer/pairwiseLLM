@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.6.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,7 +40,7 @@
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
-    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Explicit-evidence Linking Sessions</a></li>
+    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Linking Saved Comparisons</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
@@ -84,11 +84,13 @@
 
     
     
-<p>Rubric calibration converts completed comparative-judgment (CJ)
-results into ordered performance levels. The ordinal methods learn the
-relationship between CJ quality and human rubric scores. Percentile
-scoring matches a chosen marginal distribution without learning rubric
-criteria.</p>
+<p>Rubric calibration turns writing-quality scores from pairwise
+comparisons into ordered levels such as “developing”, “proficient” and
+“advanced”. Comparing samples two at a time is called
+<strong>comparative judgment (CJ)</strong>. The ordinal methods use
+human rubric scores to learn where the levels belong on the CJ scale.
+Percentile scoring instead assigns levels according to proportions you
+choose.</p>
 <p><strong>You need:</strong> a completed Bayesian CJ analysis and, for
 ordinal calibration, human rubric labels for some of its items.
 <strong>You get:</strong> a rubric label for each eligible item, full
@@ -121,53 +123,55 @@ criteria.</p>
 <td>
 <code>percentile</code>, <code>same_set</code>
 </td>
-<td>Norm-referenced, distribution-matched levels</td>
+<td>Levels describe relative standing in this set</td>
 </tr>
 <tr class="even">
-<td>Human labels for a subset of one completed CJ analysis</td>
+<td>Human labels for some samples in one completed CJ analysis</td>
 <td>
 <code>ordinal_linear</code>, <code>same_set</code>
 </td>
-<td>Default two-stage calibration on that analysis’s scale</td>
+<td>The default calibration learns from those human scores</td>
 </tr>
 <tr class="odd">
-<td>A human-scored historical reference and new target responses</td>
+<td>A human-scored reference and new samples</td>
 <td>
 <code>ordinal_linear</code>, <code>linked_anchors</code>
 </td>
-<td>Reusable calibration after existing Phase B linking</td>
+<td>Reuse the saved calibration after linking the sets</td>
 </tr>
 <tr class="even">
-<td>Evidence of curvature in the CJ-to-rubric relationship</td>
-<td>Explicit <code>ordinal_monotone</code>, either ordinal design</td>
-<td>Nondecreasing nonlinear calibration, assessed with held-out
-labels</td>
+<td>A curved relationship between CJ scores and rubric levels</td>
+<td>
+<code>ordinal_monotone</code>, either ordinal design</td>
+<td>A more flexible curve that must be checked on separate human
+scores</td>
 </tr>
 </tbody>
 </table>
-<p><code>same_set</code> means that labeled and unlabeled items
-participated in <strong>one CJ fit</strong>. It is a two-stage
-procedure, not a joint CJ/rubric likelihood. Both ordinal methods retain
-the common cumulative-effect assumption; a curved fit alone does not
-resolve a proportional-odds violation. There is no automatic method
-selector.</p>
+<p><code>same_set</code> means that samples with and without human
+scores participated in <strong>one CJ analysis</strong>. Calibration
+uses its completed scores; it does not change the pairwise analysis.
+Both ordinal methods assume the effect of CJ quality is shared across
+rubric boundaries. Allowing a curve does not remove that assumption. You
+choose the method; the package does not choose one automatically.</p>
 </div>
 <div class="section level2">
 <h2 id="start-from-completed-cj-results">Start from completed CJ results<a class="anchor" aria-label="anchor" href="#start-from-completed-cj-results"></a>
 </h2>
 <p>Use a completed <code><a href="../reference/fit_bayes_btl_mcmc.html">fit_bayes_btl_mcmc()</a></code> result, a completed
 within-set <code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code> result (or its state), or an
-import-ready Phase A artifact. Raw score tables and intermediate
-adaptive states are rejected. Fixed fits with multiple refits use the
-last refit. All four Bayesian variants, <code>btl</code>,
-<code>btl_e</code>, <code>btl_b</code>, and <code>btl_e_b</code>, use
-the same calibration interface. For fixed-pair results, live versus
-batch collection is provenance only.</p>
-<p>Inspect CJ reliability, connectivity, and estimation diagnostics
-before calibration. Upstream failures remain visible; calibration does
-not repair weak CJ measurement. Import readiness follows existing Phase
-A quality rules and does not by itself certify that the originating run
-stopped successfully.</p>
+import-ready Phase A artifact. Supply the completed result, not just a
+table of scores or an unfinished adaptive run. If a fixed-pair analysis
+was fitted several times, calibration uses its last fit. All four
+Bayesian variants, <code>btl</code>, <code>btl_e</code>,
+<code>btl_b</code>, and <code>btl_e_b</code>, use the same calibration
+functions. Whether fixed comparisons were collected live or in batches
+does not change calibration.</p>
+<p>Before calibration, check that the samples are connected through
+comparisons and that the CJ estimates and diagnostics are adequate for
+your purpose. Rubric calibration cannot repair a weak ranking. A saved
+Phase A result being ready to import does not, by itself, show that its
+original run finished successfully.</p>
 <p>For constructing these inputs, see <a href="bayesian-btl.html">Standalone Bayesian BTL</a>, <a href="adaptive-pairing.html">Guide: Adaptive Pairing</a>, and <a href="adaptive-linking.html">Guide: Adaptive Linking</a>. Rubric
 functions do not generate pairs, collect judgments, or control adaptive
 stopping.</p>
@@ -226,13 +230,13 @@ validation):</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">training_labels</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.csv</a></span><span class="op">(</span><span class="st">"training_labels.csv"</span>, colClasses <span class="op">=</span> <span class="st">"character"</span><span class="op">)</span></span>
 <span><span class="va">evaluation_labels</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.csv</a></span><span class="op">(</span><span class="st">"evaluation_labels.csv"</span>, colClasses <span class="op">=</span> <span class="st">"character"</span><span class="op">)</span></span></code></pre></div>
-<p>Declare levels from lowest to highest quality. Numeric scores can
-infer ascending levels, and ordered factors retain their declared
-levels. Character scores need explicit <code>levels</code>. One fit has
-one category structure (<code>K &gt;= 3</code>, commonly 3–6). Every
-intended category must occur among training labels; missing categories
-fail rather than being collapsed. Higher CJ and rubric scores must both
-mean better performance.</p>
+<p>List levels from lowest to highest quality. For text labels, supply
+<code>levels</code> explicitly. Numeric scores are ordered from low to
+high; ordered factors keep their declared order. Use at least three
+levels, commonly three to six. Every intended level must appear in the
+training labels. The package stops if a level is missing rather than
+silently combining levels. Higher CJ and rubric scores must both mean
+better performance.</p>
 <p>Choose calibration responses that cover the CJ range, including its
 extremes, and check category counts. There is no universal sufficient
 number of labels. Keep evaluation labels separate before fitting:
@@ -254,18 +258,18 @@ held-out accuracy.</p>
 <span>  <span class="va">calibration</span><span class="op">$</span><span class="va">calibration_range</span></span>
 <span>  <span class="va">calibration</span><span class="op">$</span><span class="va">transformation</span></span>
 <span><span class="op">}</span></span></code></pre></div>
-<p>Only labeled training items determine the stored mean and sample SD
-used in <code>z = (theta - center) / scale</code>. Linear calibration
-estimates <code>logit P(Y &lt;= k) = tau[k] - beta * z</code>. A
-positive slope means that higher CJ quality favors higher rubric
-categories. Nonpositive slopes warn; the software does not reverse
-coding. Sparse categories, separation, and numerical or identification
-problems require review even if a fit is returned.</p>
-<p><code>predict(calibration)</code> scores every original item,
-including unlabeled items. Explicit same-set <code>newdata</code> may
-only reuse the original completed result with unchanged items, accepted
-scores/uncertainty, and fit evidence; reordering is allowed. Independent
-cohorts and refits require a different deployment analysis.</p>
+<p>The model learns from samples with training labels and saves their
+score scale for future predictions. Higher CJ scores should favor higher
+rubric levels. A warning about a zero or negative slope means this
+relationship needs review; the package does not reverse your scoring
+direction automatically. Also inspect warnings about sparse categories
+or an unstable fit. The formal model and scaling rules are documented in
+<code><a href="../reference/fit_rubric_calibration.html">?fit_rubric_calibration</a></code>.</p>
+<p><code>predict(calibration)</code> scores every original sample,
+including those without human labels. If you supply <code>newdata</code>
+for a same-set calibration, it must be the original completed result;
+changing row order is fine, but changing the samples or their fit is
+not. Use the linked-reference workflow below for a separate set.</p>
 </div>
 <div class="section level2">
 <h2 id="read-probabilities-and-hard-scores">Read probabilities and hard scores<a class="anchor" aria-label="anchor" href="#read-probabilities-and-hard-scores"></a>
@@ -277,20 +281,18 @@ cohorts and refits require a different deployment analysis.</p>
 <span>  <span class="va">scores</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"median_category"</span>, <span class="st">"modal_category"</span>, <span class="st">"expected_level"</span><span class="op">)</span><span class="op">]</span></span>
 <span>  <span class="va">modal_scores</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">calibration</span>, hard_score <span class="op">=</span> <span class="st">"mode"</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
-<p>Each <code>probabilities</code> entry is a full K-vector named by the
-original ordered labels. The default hard score is the <strong>median
-category</strong>: the first category whose cumulative probability
-reaches 0.5. Equality selects the lower category. The mode selects the
-largest probability; ties select the lowest category. Changing
-<code>hard_score</code> changes <code>category</code> and
-<code>rubric_score</code>, while retaining all probabilities and both
-decision summaries.</p>
-<p><code>expected_level</code> averages internal indices
-<code>1:K</code>, not arbitrary numeric label values. It is a continuous
-summary, not a replacement for the ordinal outcome.
-<code>extrapolated</code> marks scores outside the labeled training
-range, even among original same-set items. Endpoints are inside the
-range.</p>
+<p>Each <code>probabilities</code> entry gives the probability of every
+rubric level, named by its label. The default single score is the
+<strong>median category</strong>: starting from the lowest level, add
+probabilities until the total reaches 0.5. If it equals 0.5 exactly, use
+that lower category. With <code>hard_score = "mode"</code>, use the most
+probable category instead; ties go to the lower category. Both summaries
+and all probabilities remain available whichever score you report.</p>
+<p><code>expected_level</code> is an average of category positions (1,
+2, 3, and so on), not an average of your numeric labels. It is a summary
+rather than an assigned rubric level. <code>extrapolated</code> flags
+scores outside the range covered by training labels, even for samples in
+the original analysis.</p>
 <p>For an illustrative probability vector
 <code>(developing = 0.20, proficient = 0.55, advanced = 0.25)</code>,
 cumulative probability first reaches 0.5 at “proficient”, so that is the
@@ -317,34 +319,31 @@ validation results with either kind of output.</p>
 <span>  <span class="va">assessment</span><span class="op">$</span><span class="va">metadata</span><span class="op">$</span><span class="va">n_training_label_overlap</span></span>
 <span>  <span class="va">assessment</span><span class="op">$</span><span class="va">diagnostics</span><span class="op">$</span><span class="va">common_effect</span></span>
 <span><span class="op">}</span></span></code></pre></div>
-<p>Normalized ranked probability score (<code>rps</code>) is the primary
-probabilistic metric; lower is better. It averages squared
-cumulative-probability errors over the <code>K - 1</code> boundaries.
-Log loss is secondary. Hard-score summaries include exact and within-one
-accuracy, mean absolute category error, and quadratic weighted kappa.
-Distances use internal category indices. Undefined kappa and unavailable
-probability metrics have explicit unavailable values/reasons.</p>
-<p>Evaluation aligns IDs, excludes and counts missing labels, and
-reports training overlap and extrapolation. Evaluation categories may be
-absent even though all categories were required for training.
-<code>assessment$calibration</code> compares observed and predicted
-cumulative frequencies in probability and theta bins; ties stay
-together. These summaries can reveal where predictions disagree with
-labels.</p>
-<p>Diagnostics are off by default. When requested, linear fits use a
-threshold-varying alternative for a proportional-odds likelihood-ratio
-diagnostic. Monotone fits provide descriptive boundary checks, not an
-omnibus test. Failed diagnostic refits return an unavailable status and
-preserve the production fit. Formal and descriptive checks use training
-data; held-out evaluation labels do not refit the calibration or its
-training diagnostics.</p>
-<p>For repeated label-only validation, keep completed CJ evidence fixed,
-hide held-out rubric labels, and refit all calibration scaling and
-parameters in each training fold. Ensure every fold’s training data
-retain all intended categories. The package’s CV machinery is internal;
-the exported evaluator supports explicit holdout workflows. Model/tuning
-selection using validation results needs a separate outer assessment to
-avoid optimistic reported performance.</p>
+<p>Start with ranked probability score (<code>rps</code>): lower values
+indicate better predictions, accounting for how far a prediction falls
+from the observed level. Log loss is another probability-based check.
+For the assigned categories, inspect exact agreement, agreement within
+one level, average category error and weighted kappa (agreement adjusted
+for chance). Distances count category steps. If a metric cannot be
+calculated, the output explains why.</p>
+<p>Evaluation matches samples by ID, counts missing labels and reports
+any overlap with training labels. Unlike training, an evaluation set
+need not contain every category. <code>assessment$calibration</code>
+groups similar predictions and compares them with observed human scores,
+helping you see where the model is too optimistic or too
+pessimistic.</p>
+<p>Diagnostics are off by default. For the linear method, they check the
+assumption that CJ quality has a shared effect across rubric boundaries.
+For the curved method, they provide descriptive boundary checks. These
+checks use training data; the separate evaluation labels do not change
+your fitted calibration. If a check fails to run, it is marked
+unavailable and the original fit is preserved.</p>
+<p>For repeated validation, keep the completed CJ analysis fixed.
+Repeatedly set aside some human labels, fit a fresh calibration using
+only the remaining labels, and evaluate the labels you set aside. Every
+training group must still include all rubric levels. If you use those
+results to choose a model or its settings, reserve another independent
+evaluation set for your final report.</p>
 </div>
 <div class="section level2">
 <h2 id="explicit-monotone-alternative">Explicit monotone alternative<a class="anchor" aria-label="anchor" href="#explicit-monotone-alternative"></a>
@@ -362,20 +361,18 @@ avoid optimistic reported performance.</p>
 <span>  <span class="op">)</span></span>
 <span>  <span class="va">monotone_assessment</span><span class="op">$</span><span class="va">metrics</span></span>
 <span><span class="op">}</span></span></code></pre></div>
-<p>This fits a nondecreasing penalized cubic spline using
-<code><a href="https://rdrr.io/pkg/mgcv/man/scasm.html" class="external-link">mgcv::scasm()</a></code> and <code><a href="https://rdrr.io/pkg/mgcv/man/ocat.html" class="external-link">mgcv::ocat()</a></code>. The default
-basis dimension is <code>k = 6</code>; it must be at least five and is
-reduced with a warning if there are fewer unique labeled scores. Fewer
-than five unique scores fail. This is a backend feasibility constraint,
-not a sample-size recommendation. Smoothing is estimated unless a
-positive fixed <code>sp</code> is supplied. No unconstrained smoother
-replaces a failed monotone fit.</p>
-<p>Inspect convergence, probability behavior, and held-out performance
-before preferring the more flexible model. Numerical cutpoints can be
-unavailable for flat or unresolved crossings; scoring still uses
-probabilities. Predictions outside the labeled range retain spline
-extrapolation and are flagged, without establishing rubric calibration
-there.</p>
+<p>This fits a smooth curve that can bend while never decreasing as CJ
+quality increases. <code>k</code> controls how much flexibility is
+available; its default is 6 and it must be at least 5. The package may
+reduce it with a warning when too few distinct training scores are
+available. At least five distinct scores are needed to fit this curve,
+but that minimum does not guarantee enough data for useful calibration.
+See the function help for smoothing controls.</p>
+<p>Check fit diagnostics and performance on separate human labels before
+preferring the more flexible method. A flat part of the curve may make a
+category cutpoint unavailable; predictions still use category
+probabilities. Scores outside the training range are flagged because the
+curve is being extended beyond the scores used to learn it.</p>
 </div>
 <div class="section level2">
 <h2 id="percentile-levels-without-human-labels">Percentile levels without human labels<a class="anchor" aria-label="anchor" href="#percentile-levels-without-human-labels"></a>
@@ -390,46 +387,50 @@ there.</p>
 <span><span class="va">percentile_calibration</span><span class="op">$</span><span class="va">backend</span><span class="op">$</span><span class="va">achieved_proportions</span></span>
 <span><span class="va">percentile_calibration</span><span class="op">$</span><span class="va">backend</span><span class="op">$</span><span class="va">cutpoints</span></span>
 <span><span class="va">percentile_calibration</span><span class="op">$</span><span class="va">backend</span><span class="op">$</span><span class="va">cutpoint_tie_counts</span></span></code></pre></div>
-<p>Omit <code>target_distribution</code> for equal proportions;
-<code>K</code> may replace explicit level names. Quantiles use fixed R
-type 8. A score equal to an internal cutpoint enters the higher
-category. All ties stay together, so requested proportions can be
-unattainable and some categories can be empty. If all scores are
-identical, all items enter the highest category under this boundary
-convention.</p>
-<p>These are <strong>norm-referenced, distribution-matched CJ-derived
-performance levels</strong>. Using a historical rubric distribution does
-not show individual agreement with human rubric raters. Percentile fits
-support original-result reuse only, not independent cohorts or
-<code>linked_anchors</code>. They return deterministic categories, not
-category probabilities; evaluation supplies hard metrics only.</p>
+<p>The example asks for 20% of samples in the lowest level, 50% in the
+middle and 30% in the highest. Omit <code>target_distribution</code> for
+equal proportions. You can supply the number of levels with
+<code>K</code> instead of naming them.</p>
+<p>Tied scores stay together. This means the achieved proportions may
+differ from what you requested, and some categories may be empty. A
+score exactly on a boundary enters the higher category; if all scores
+are identical, this rule puts every sample in the highest category.
+Always inspect the achieved proportions.</p>
+<p>These levels describe <strong>relative standing within this
+set</strong>. Matching a historical rubric distribution does not
+establish agreement with human raters for individual samples. Percentile
+scoring reuses only the original analysis; it cannot transport levels to
+a separate cohort through <code>linked_anchors</code>. It returns
+categories without category probabilities, so evaluation uses only
+category-based metrics.</p>
 </div>
 <div class="section level2">
-<h2 id="reuse-a-historical-rubric-reference-through-phase-b">Reuse a historical rubric reference through Phase B<a class="anchor" aria-label="anchor" href="#reuse-a-historical-rubric-reference-through-phase-b"></a>
+<h2 id="reuse-a-historical-rubric-reference-for-a-new-set">Reuse a historical rubric reference for a new set<a class="anchor" aria-label="anchor" href="#reuse-a-historical-rubric-reference-for-a-new-set"></a>
 </h2>
-<p>The <code>rubric_reference_set</code> is the human-scored set whose
-CJ metric supports the calibration. A Phase B <strong>hub
-anchor</strong> is a hub item selected for routing recurring
-comparisons, not a known true rubric score.</p>
+<p>You can use a human-scored reference set to score new writing samples
+after linking both sets onto a common scale. The reference is the
+<strong>hub</strong> and the new set is the <strong>spoke</strong>.
+<strong>Phase A</strong> means ranking each set separately;
+<strong>Phase B</strong> links them using comparisons between sets. A
+hub sample is a reference for comparison, not a sample whose writing
+quality is known without uncertainty.</p>
 <ol style="list-style-type: decimal">
-<li>Run trait-specific Phase A for the reference, retaining its ready
-artifact.</li>
-<li>Fit and save its ordinal calibration and retain the original
-reference artifact.</li>
-<li>Run compatible Phase A for each new target set.</li>
-<li>Explicitly select E1, E2, or E3 and fit the active cross-set
-evidence.</li>
-<li>Apply the saved calibration to the valid, identified common-scale
-result.</li>
+<li>Rank the reference samples on the chosen trait and keep the original
+Phase A result.</li>
+<li>Fit and save the rubric calibration using that result and its human
+scores.</li>
+<li>Rank the new samples using compatible settings and keep their Phase
+A result.</li>
+<li>Choose E1, E2 or E3 and link the sets using between-set
+comparisons.</li>
+<li>Check the link, then apply the saved calibration to the linked
+target scores.</li>
 </ol>
-<p>In the <a href="adaptive-linking.html">linking guide</a>, ready
-artifacts are available in
-<code>reference_run$phase_a$manifest[["1"]]</code> and
-<code>target_run$phase_a$manifest[["2"]]</code> for reference set 1 and
-target set 2. Extract the artifact list for fitting; the rubric fitter
-does not take a path or the whole Phase A manifest. The following
-assumes <code>reference_phase_a</code> contains that original artifact
-and <code>reference_labels</code> contains its human scores.</p>
+<p>The following example assumes <code>reference_phase_a</code> contains
+the original reference artifact (the saved Phase A result) and
+<code>reference_labels</code> contains its human scores. Read a saved
+artifact with <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code> first; supply the artifact itself,
+not a filename or the entire collection of saved-run metadata.</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">linked_calibration</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_rubric_calibration.html">fit_rubric_calibration</a></span><span class="op">(</span></span>
@@ -439,14 +440,14 @@ and <code>reference_labels</code> contains its human scores.</p>
 <span>  <span class="op">)</span></span>
 <span>  <span class="va">reference_scores</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">linked_calibration</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
-<p>The reference and target Phase A contracts must match the selected
-BTL variant. The <a href="linking-sessions.html">explicit-evidence
-linking guide</a> describes evidence preparation and exact save/resume.
-This example explicitly chooses E2, which requires posterior item draws
-in both artifacts. <code>active_cross</code> contains only active
-cross-set observations; <code>frozen_judge</code> records the shared
-Phase A judge parameters. No provider calls or adaptive stopping are
-implicit in this fit.</p>
+<p>Use the same BTL model variant for the reference and target rankings.
+The <a href="linking-sessions.html">linking sessions guide</a> explains
+the required input tables and how to save and resume work. Here we
+explicitly choose E2, which needs saved joint posterior draws in both
+artifacts. <code>active_cross</code> holds the comparisons to use for
+fitting; <code>frozen_judge</code> holds the shared bias and lapse
+settings from Phase A. Keep comparisons reserved for checking accuracy
+in a separate table.</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">link_input</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_link_input.html">prepare_link_input</a></span><span class="op">(</span></span>
 <span>  estimator <span class="op">=</span> <span class="st">"gaussian_posterior_bridge"</span>,</span>
@@ -459,35 +460,42 @@ implicit in this fit.</p>
 <span>  cross <span class="op">=</span> <span class="va">active_cross</span>, judge <span class="op">=</span> <span class="va">frozen_judge</span></span>
 <span><span class="op">)</span></span>
 <span><span class="va">completed_phase_b</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/start_link_session.html">start_link_session</a></span><span class="op">(</span><span class="va">link_input</span><span class="op">)</span></span></code></pre></div>
-<p>For several targets, pass a list of prepared inputs sharing the same
-hub and judge to <code><a href="../reference/start_link_session.html">start_link_session()</a></code>. E2/E3 can update hub
-shapes; rubric calibration remains attached to the original Phase A hub
-artifact. Rubric labels are not required during linking. Held-out probe
-outcomes must stay outside <code>active_cross</code>.</p>
+<p>For several target sets, prepare one linking input per set and pass
+the list to <code><a href="../reference/start_link_session.html">start_link_session()</a></code>. All use the same hub,
+judge settings and chosen method. E2 and E3 can update hub scores during
+linking, but the rubric calibration stays attached to the original
+reference result. You do not need target rubric labels to link the sets
+or apply the saved calibration.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">target_scores</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">linked_calibration</span>, newdata <span class="op">=</span> <span class="va">completed_phase_b</span><span class="op">)</span></span>
 <span>  <span class="va">target_scores</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"global_item_id"</span>, <span class="st">"set_id"</span>, <span class="st">"rubric_score"</span>, <span class="st">"theta_sd"</span>, <span class="st">"extrapolated"</span><span class="op">)</span><span class="op">]</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">target_scores</span>, <span class="st">"linking"</span><span class="op">)</span><span class="op">$</span><span class="va">diagnostics</span></span>
 <span><span class="op">}</span></span></code></pre></div>
-<p>Explicit linked prediction returns targets only;
-<code>newdata = NULL</code> predicts the original reference items. Every
-spoke needs a valid, cross-set identified fit. The public
-<code>theta_link_eap</code> field aliases <code>theta_link_mean</code>:
-posterior means for E1 and E3-MCMC, MAP locations for E2/E3 Laplace. E1
-uncertainty is conditional on fixed shapes; E2/E3 include shapes and
-offset. Predictions restore the original hub location origin using its
-frozen Phase A mean. Estimator identity, uncertainty scope and exact
-evidence provenance accompany the output. Legacy anchored-joint Phase B
-sessions must restart from compatible Phase A inputs.</p>
-<p>Prediction validates the original reference IDs,
-locations/uncertainty, evidence, trait, orientation, and canonical fit
-contract. A matching configuration hash alone does not establish a
-shared metric. Target-only Phase A scores, changed reference scales, and
-incompatible contracts fail explicitly. <strong>Never independently
-re-standardize the target cohort</strong>: prediction uses the stored
-labeled-reference mean and SD on accepted Phase B common-scale
-locations.</p>
+<p>The prediction contains only the target samples. Use
+<code>newdata = NULL</code> to predict scores for the original reference
+samples. Every target set needs a valid link supported by between-set
+comparisons; a fit based only on starting assumptions is
+insufficient.</p>
+<p>Linking scores are named <code>theta_link_mean</code> (also available
+as <code>theta_link_eap</code>). E1 and E3-MCMC report posterior
+averages; E2 and the usual E3 fit report the most probable joint scores
+with approximate uncertainty. E1 treats the earlier rankings as fixed.
+E2 and E3 include uncertainty in those rankings as well as the shift
+between sets. The <a href="adaptive-linking-design.html">design
+guide</a> explains these differences. Rubric prediction uses the linked
+point scores; it retains score uncertainty for inspection but does not
+propagate it through the rubric model.</p>
+<p>Prediction checks that you are using the original reference samples,
+trait, scoring direction and compatible model settings. It restores the
+original reference’s score origin before applying the saved calibration.
+<strong>Do not standardize the target set separately</strong>: doing so
+would change the meaning of its scores relative to the reference. The
+output includes information about the linking method, comparisons used
+and fit diagnostics.</p>
+<p>Old anchored-joint Phase B sessions cannot be used with this
+workflow. Restart linking from compatible original Phase A results using
+E1, E2 or E3.</p>
 <p>Reference holdout performance assesses calibration on the reference
 scale. To assess transport, use external human labels for linked
 targets:</p>

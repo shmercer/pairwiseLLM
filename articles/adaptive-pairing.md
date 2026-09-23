@@ -264,39 +264,43 @@ tree of `N - 1` allowed edges. Its schedule is shared by all predictive
 modes and pairing strategies; see [Replay a sparse
 reservoir](#replay-a-sparse-reservoir).
 
-## Choose a post-bootstrap pairing strategy
+## Choose how later pairs are selected
 
-Set `adaptive_config = list(pairing_strategy = "trueskill_p50")`, for
-example. The four choices apply after the common bootstrap:
+Every strategy starts with the same initial comparisons that connect the
+samples. After that, choose a strategy with, for example,
+`adaptive_config = list(pairing_strategy = "trueskill_p50")`.
 
-| Strategy | Partner rule |
+| Strategy | How it chooses a comparison |
 |----|----|
-| `hybrid` (default) | Staged anchor/long/mid/local selection with TrueSkill ambiguity utility. |
-| `random` | Uniform seeded choice among legal partners. |
-| `trueskill_p50` | Minimize `abs(p_ts(i > j) - 0.50)`. |
-| `trueskill_pollitt` | Minimize `min(abs(p_ts(i > j) - 1/3), abs(p_ts(i > j) - 2/3))`. |
+| `hybrid` (default) | Mixes comparisons with reference samples, nearby scores and more distant scores. |
+| `random` | Chooses randomly among allowed partners. |
+| `trueskill_p50` | Looks for a pair where each sample has about a 50% chance of winning. |
+| `trueskill_pollitt` | Looks for a pair where one sample has about a one-third or two-thirds chance of winning. |
 
-Each direct strategy first chooses a focal item uniformly from sorted
-IDs at the minimum current committed degree, using the run seed and
-committed count. It then selects a legal partner by the rule above;
-target-distance ties break by partner ID. Pollitt is
-**Pollitt-inspired**: it uses TrueSkill probabilities, whereas the
-earlier article used BTL probabilities.
+The last three are called **direct strategies**. They first choose a
+sample from those with the fewest completed comparisons, then choose its
+partner using the rule above. A fixed seed makes those choices
+reproducible. The last method is **Pollitt-inspired**: it uses TrueSkill
+probabilities, while the earlier published approach used BTL
+probabilities. The [design
+guide](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.md)
+gives the exact selection rules and tie handling.
 
-Direct strategies use no hybrid stage quotas, coverage overrides, or
-star-cap fallbacks. They allow at most two observations per unordered
-pair, preserve normal presentation balancing and reversal on repeat, and
-retry the same policy draw after invalid results. They stop if the
-chosen focal item has no legal partner, even if other pairs remain.
-These strategies currently support **ordinary within-set runs only**;
-linking runs require `hybrid`. Phase B linking remains unchanged.
+Direct strategies allow at most two judgments of a pair. They balance
+presentation order and reverse it for a repeat. An invalid result does
+not advance the selection. They stop if the chosen sample has no allowed
+partner, even if some other pairs remain. Direct strategies support
+**ordinary within-set runs only**; linking Phase A runs require
+`hybrid`. Automatic Phase B selection is unavailable pending separate
+validation. To link saved comparisons, see the [linking
+guide](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.md).
 
-In direct step logs, `round_stage` and `pair_type` are `direct_pairing`,
-`pairing_strategy` identifies the policy, and `i_id` identifies the
-focal item. `p_ij` is the pre-judgment TrueSkill probability for
-presented A over B; `target_distance` is symmetric under reversal and is
-missing for random pairing. BTL refit cadence and stopping still apply
-to every strategy.
+In the step log, `direct_pairing` identifies these comparisons,
+`pairing_strategy` records the chosen rule and `i_id` records the sample
+chosen first. `p_ij` is the predicted chance that the sample presented
+as A beats B. `target_distance` records how close a pair came to the
+desired probability; it is missing for random pairing. BTL fits and
+stopping checks continue at their usual intervals for every strategy.
 
 ## Lower-level lifecycle and offline judges
 

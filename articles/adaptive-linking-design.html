@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.6.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,7 +40,7 @@
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
-    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Explicit-evidence Linking Sessions</a></li>
+    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Linking Saved Comparisons</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
@@ -84,128 +84,334 @@
 
     
     
+<p>Linking places separately ranked sets of writing samples on a common
+scale. Within-set comparisons tell us how samples differ within their
+set, but cannot tell us how far apart two sets lie. Between-set
+comparisons supply that missing information. This article gives the
+statistical models behind the <a href="adaptive-linking.html">practical
+guide</a> and <a href="linking-sessions.html">worked examples</a>.</p>
+<p>Version 1.6.0 supports E1, E2 and E3 with <strong>explicit estimator
+selection</strong>. None is the package default. E3-MCMC is an optional
+audit/reference engine for E3. The statistical definitions follow the
+prospectively frozen <a href="https://github.com/shmercer/pairwise-linking-study/tree/2bf3f0b4a2f257b7855f965f782f05c61853aac6/docs" class="external-link">study
+contracts</a>, including D004 as amended by D006–D009. The later study
+will select a default; these implementations and examples do not
+establish one method as the winner.</p>
+<p>Use <code><a href="../reference/prepare_link_input.html">prepare_link_input()</a></code> to validate evidence,
+<code><a href="../reference/fit_link.html">fit_link()</a></code> to estimate one link, and
+<code><a href="../reference/start_link_session.html">start_link_session()</a></code> for persistent work. For Phase A
+adaptive estimation, see the <a href="within-set-adaptive-design.html">within-set design</a>.</p>
 <div class="section level2">
-<h2 id="foundational-concepts">Foundational concepts<a class="anchor" aria-label="anchor" href="#foundational-concepts"></a>
+<h2 id="coordinates-identification-and-the-judge-model">Coordinates, identification, and the judge model<a class="anchor" aria-label="anchor" href="#coordinates-identification-and-the-judge-model"></a>
 </h2>
-<p>Linking places separately estimated sets of comparative judgment (CJ)
-items on one scale. Within-set Bradley–Terry–Luce (BTL) evidence
-identifies shape, not the location difference between sets. Hub and
-spoke shapes are separately centered, and an explicit offset
-<code>delta</code> represents the missing location.</p>
-<p>The three supported estimators require explicit selection. None is
-the package default during study development. See the <a href="adaptive-linking.html">practical guide</a>, <a href="linking-sessions.html">executable session examples</a>, and <a href="within-set-adaptive-design.html">within-set design</a>.</p>
+<p>Let the hub contain
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>N</mi><mi>H</mi></msub><annotation encoding="application/x-tex">N_H</annotation></semantics></math>
+items and the spoke contain
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>N</mi><mi>S</mi></msub><annotation encoding="application/x-tex">N_S</annotation></semantics></math>
+items. For each set, choose a deterministic orthonormal Helmert basis
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>H</mi><mi>k</mi></msub><annotation encoding="application/x-tex">H_k</annotation></semantics></math>
+spanning its sum-to-zero subspace:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msubsup><mi>H</mi><mi>k</mi><mi>⊤</mi></msubsup><msub><mi>H</mi><mi>k</mi></msub><mo>=</mo><msub><mi>I</mi><mrow><msub><mi>N</mi><mi>k</mi></msub><mo>−</mo><mn>1</mn></mrow></msub><mo>,</mo><mspace width="2.0em"></mspace><msup><mn>𝟏</mn><mi>⊤</mi></msup><msub><mi>H</mi><mi>k</mi></msub><mo>=</mo><mn>0</mn><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>z</mi><mi>k</mi></msub><mo>=</mo><msub><mi>H</mi><mi>k</mi></msub><msub><mi>u</mi><mi>k</mi></msub><mo>,</mo><mspace width="1.0em"></mspace><mi>k</mi><mo>∈</mo><mo stretchy="false" form="prefix">{</mo><mi>H</mi><mo>,</mo><mi>S</mi><mo stretchy="false" form="postfix">}</mo><mi>.</mi></mrow><annotation encoding="application/x-tex">
+H_k^\top H_k=I_{N_k-1},\qquad \mathbf 1^\top H_k=0,
+\qquad z_k=H_k u_k,\quad k\in\{H,S\}.
+</annotation></semantics></math></p>
+<p>The global locations are</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>θ</mi><mi>H</mi></msub><mo>=</mo><msub><mi>z</mi><mi>H</mi></msub><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>θ</mi><mi>S</mi></msub><mo>=</mo><mi>δ</mi><mn>𝟏</mn><mo>+</mo><msub><mi>z</mi><mi>S</mi></msub><mo>,</mo><mspace width="2.0em"></mspace><mi>δ</mi><mo>∼</mo><mi>N</mi><mo stretchy="false" form="prefix">(</mo><mn>0</mn><mo>,</mo><msup><mn>5</mn><mn>2</mn></msup><mo stretchy="false" form="postfix">)</mo><mi>.</mi></mrow><annotation encoding="application/x-tex">
+\theta_H=z_H,\qquad \theta_S=\delta\mathbf 1+z_S,
+\qquad \delta\sim N(0,5^2).
+</annotation></semantics></math></p>
+<p>Here, <strong>shape</strong> means the centered differences among a
+set’s scores. The <strong>offset</strong>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>δ</mi><annotation encoding="application/x-tex">\delta</annotation></semantics></math>
+shifts the whole spoke relative to the hub. Centering each Phase A set
+separately does not provide information about that shift. The default
+offset prior is independent of both shapes; a changed prior must be
+explicitly requested and must not silently alter the frozen study’s
+primary analysis.</p>
+<p>For ordered comparison
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>r</mi><annotation encoding="application/x-tex">r</annotation></semantics></math>,
+let
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>y</mi><mi>r</mi></msub><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">y_r=1</annotation></semantics></math>
+mean A wins. Conditional on the fixed, shared Phase A judge parameters
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>β</mi><annotation encoding="application/x-tex">\beta</annotation></semantics></math>
+(presentation bias) and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>ϵ</mi><annotation encoding="application/x-tex">\epsilon</annotation></semantics></math>
+(lapse probability),</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>η</mi><mi>r</mi></msub><mo>=</mo><msub><mi>θ</mi><msub><mi>A</mi><mi>r</mi></msub></msub><mo>−</mo><msub><mi>θ</mi><msub><mi>B</mi><mi>r</mi></msub></msub><mo>+</mo><mi>β</mi><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>p</mi><mi>r</mi></msub><mo>=</mo><mfrac><mi>ϵ</mi><mn>2</mn></mfrac><mo>+</mo><mo stretchy="false" form="prefix">(</mo><mn>1</mn><mo>−</mo><mi>ϵ</mi><mo stretchy="false" form="postfix">)</mo><msup><mrow><mi mathvariant="normal">logit</mi><mo>⁡</mo></mrow><mrow><mi>−</mi><mn>1</mn></mrow></msup><mo stretchy="false" form="prefix">(</mo><msub><mi>η</mi><mi>r</mi></msub><mo stretchy="false" form="postfix">)</mo><mo>,</mo></mrow><annotation encoding="application/x-tex">
+\eta_r=\theta_{A_r}-\theta_{B_r}+\beta,\qquad
+p_r=\frac{\epsilon}{2}+(1-\epsilon)\operatorname{logit}^{-1}(\eta_r),
+</annotation></semantics></math><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>L</mi><mo stretchy="false" form="prefix">(</mo><mi>D</mi><mo>∣</mo><mi>θ</mi><mo>,</mo><mi>β</mi><mo>,</mo><mi>ϵ</mi><mo stretchy="false" form="postfix">)</mo><mo>=</mo><munder><mo>∏</mo><mrow><mi>r</mi><mo>∈</mo><mi>D</mi></mrow></munder><msubsup><mi>p</mi><mi>r</mi><msub><mi>y</mi><mi>r</mi></msub></msubsup><mo stretchy="false" form="prefix">(</mo><mn>1</mn><mo>−</mo><msub><mi>p</mi><mi>r</mi></msub><msup><mo stretchy="false" form="postfix">)</mo><mrow><mn>1</mn><mo>−</mo><msub><mi>y</mi><mi>r</mi></msub></mrow></msup><mi>.</mi></mrow><annotation encoding="application/x-tex">
+L(D\mid\theta,\beta,\epsilon)
+=\prod_{r\in D}p_r^{y_r}(1-p_r)^{1-y_r}.
+</annotation></semantics></math></p>
+<p>The model is conditional on these judge estimates; their estimation
+uncertainty is not propagated. Components absent from the selected BTL
+variant must be zero. Within-set contrasts cancel
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>δ</mi><annotation encoding="application/x-tex">\delta</annotation></semantics></math>,
+so only cross-set evidence can identify it. With zero cross-set
+observations, its posterior remains exactly its prior and identification
+is reported as <code>prior_only</code>. With
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>ϵ</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">\epsilon=1</annotation></semantics></math>,
+every comparison has probability one half; a positive-budget fit is
+<code>unidentified</code>.</p>
+<p>Presentation order matters when
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>β</mi><mo>≠</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\beta\ne0</annotation></semantics></math>.
+Swapping A/B and replacing
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>
+by
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>−</mo><mi>y</mi></mrow><annotation encoding="application/x-tex">1-y</annotation></semantics></math>
+preserves the likelihood when
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>β</mi><annotation encoding="application/x-tex">\beta</annotation></semantics></math>
+also changes sign. Negating all locations, outcomes and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>β</mi><annotation encoding="application/x-tex">\beta</annotation></semantics></math>
+reverses the estimated locations and offset. Simply swapping A/B while
+keeping nonzero bias fixed does not give complementary
+probabilities.</p>
 </div>
 <div class="section level2">
-<h2 id="phase-a-artifacts-and-validation">Phase A artifacts and validation<a class="anchor" aria-label="anchor" href="#phase-a-artifacts-and-validation"></a>
+<h2 id="e1-fixed-shape-offset">E1: fixed-shape offset<a class="anchor" aria-label="anchor" href="#e1-fixed-shape-offset"></a>
 </h2>
-<p>Phase A inputs are estimator-specific:</p>
-<table class="table">
-<colgroup>
-<col width="33%">
-<col width="33%">
-<col width="33%">
-</colgroup>
-<thead><tr class="header">
-<th>Estimator</th>
-<th>Phase A evidence</th>
-<th>Updated parameters</th>
-</tr></thead>
-<tbody>
-<tr class="odd">
-<td>
-<code>fixed_shape_offset</code> (E1)</td>
-<td>Centered point summaries</td>
-<td>Offset only</td>
-</tr>
-<tr class="even">
-<td>
-<code>gaussian_posterior_bridge</code> (E2)</td>
-<td>Joint posterior draws or full reduced-coordinate Gaussian
-bridges</td>
-<td>Shapes and offset</td>
-</tr>
-<tr class="odd">
-<td>
-<code>joint_offset</code> (E3)</td>
-<td>Raw within-set observations and the original model/prior
-contract</td>
-<td>Shapes and offset</td>
-</tr>
-</tbody>
-</table>
-<p>E1 treats shape as fixed. Its uncertainty is conditional and must not
-be presented as full item uncertainty. E2 preserves the full within-set
-covariance, including negative covariances induced by centering. E3 uses
-each Phase A observation once; a posterior derived from those same
-observations cannot also serve as its prior. E3 supports maximum a
-posteriori (MAP)/Laplace inference and an explicitly requested Markov
-chain Monte Carlo (MCMC) audit engine.</p>
-<p>Pass <code>list(artifact = artifact)</code> for each set to
-<code><a href="../reference/prepare_link_input.html">prepare_link_input()</a></code> and then call
-<code><a href="../reference/start_link_session.html">start_link_session()</a></code> on the prepared input. Historical
-artifacts are checked by their contents and evidence contracts, not by
-their age. Missing required covariance or raw evidence cannot be
-synthesized from marginal summaries.</p>
+<p>E1 (<code>fixed_shape_offset</code>) holds the separately centered
+Phase A point estimates
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msubsup><mover><mi>z</mi><mo accent="true">̂</mo></mover><mi>H</mi><mi>A</mi></msubsup><mo>,</mo><msubsup><mover><mi>z</mi><mo accent="true">̂</mo></mover><mi>S</mi><mi>A</mi></msubsup></mrow><annotation encoding="application/x-tex">\widehat z_H^A,\widehat z_S^A</annotation></semantics></math>
+fixed and targets</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>δ</mi><mo>∣</mo><msub><mi>D</mi><mi>X</mi></msub><mo>,</mo><msubsup><mover><mi>z</mi><mo accent="true">̂</mo></mover><mi>H</mi><mi>A</mi></msubsup><mo>,</mo><msubsup><mover><mi>z</mi><mo accent="true">̂</mo></mover><mi>S</mi><mi>A</mi></msubsup><mo stretchy="false" form="postfix">)</mo><mo>∝</mo><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>δ</mi><mo stretchy="false" form="postfix">)</mo><mi>L</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>D</mi><mi>X</mi></msub><mo>∣</mo><msubsup><mover><mi>z</mi><mo accent="true">̂</mo></mover><mi>H</mi><mi>A</mi></msubsup><mo>,</mo><mi>δ</mi><mo>+</mo><msubsup><mover><mi>z</mi><mo accent="true">̂</mo></mover><mi>S</mi><mi>A</mi></msubsup><mo>,</mo><mi>β</mi><mo>,</mo><mi>ϵ</mi><mo stretchy="false" form="postfix">)</mo><mi>.</mi></mrow><annotation encoding="application/x-tex">
+p(\delta\mid D_X,\widehat z_H^A,\widehat z_S^A)
+\propto p(\delta)
+L(D_X\mid\widehat z_H^A,\delta+\widehat z_S^A,\beta,\epsilon).
+</annotation></semantics></math></p>
+<p>Only the between-set comparisons
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>D</mi><mi>X</mi></msub><annotation encoding="application/x-tex">D_X</annotation></semantics></math>
+enter this likelihood. Earlier Phase A outcomes are not replayed. This
+makes E1 a one-dimensional update: it moves the spoke without changing
+the relative scores within either set.</p>
+<p>Adaptive Gauss–Kronrod quadrature computes normalized posterior
+moments and CDF-based equal-tailed 95% intervals. Both infinite tails
+are integrated; a posterior mode can stabilize integration but does not
+replace it with a Laplace approximation. Integration failure is an
+explicit E1 failure, not a switch to another method. With no informative
+cross evidence, the exact prior is returned.</p>
+<p>Conditional on the fixed shapes,</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mi mathvariant="normal">Var</mi><mo>⁡</mo></mrow><mo stretchy="false" form="prefix">(</mo><msub><mi>θ</mi><mi>H</mi></msub><mo stretchy="false" form="postfix">)</mo><mo>=</mo><mn>0</mn><mo>,</mo><mspace width="2.0em"></mspace><mrow><mi mathvariant="normal">Cov</mi><mo>⁡</mo></mrow><mo stretchy="false" form="prefix">(</mo><msub><mi>θ</mi><mi>S</mi></msub><mo stretchy="false" form="postfix">)</mo><mo>=</mo><mrow><mi mathvariant="normal">Var</mi><mo>⁡</mo></mrow><mo stretchy="false" form="prefix">(</mo><mi>δ</mi><mo stretchy="false" form="postfix">)</mo><mn>𝟏</mn><msup><mn>𝟏</mn><mi>⊤</mi></msup><mo>,</mo><mspace width="2.0em"></mspace><mrow><mi mathvariant="normal">Cov</mi><mo>⁡</mo></mrow><mo stretchy="false" form="prefix">(</mo><msub><mi>θ</mi><mi>H</mi></msub><mo>,</mo><msub><mi>θ</mi><mi>S</mi></msub><mo stretchy="false" form="postfix">)</mo><mo>=</mo><mn>0</mn><mi>.</mi></mrow><annotation encoding="application/x-tex">
+\operatorname{Var}(\theta_H)=0,\qquad
+\operatorname{Cov}(\theta_S)=\operatorname{Var}(\delta)\mathbf1\mathbf1^\top,
+\qquad \operatorname{Cov}(\theta_H,\theta_S)=0.
+</annotation></semantics></math></p>
+<p>Thus all spoke uncertainty comes from the same shift. Zero hub
+variance is a consequence of conditioning, not evidence that the hub’s
+original scores were measured perfectly. The uncertainty scope is
+<code>offset_only_conditional_on_fixed_shapes</code>.</p>
 </div>
 <div class="section level2">
-<h2 id="common-scale-identification">Common-scale identification<a class="anchor" aria-label="anchor" href="#common-scale-identification"></a>
+<h2 id="e2-full-covariance-gaussian-posterior-bridge">E2: full-covariance Gaussian posterior bridge<a class="anchor" aria-label="anchor" href="#e2-full-covariance-gaussian-posterior-bridge"></a>
 </h2>
-<p>All estimators use the shared offset prior
-<code>delta ~ Normal(0, 5^2)</code> by default. Cross-set observations
-are explicit, ordered data: item identities, A/B orientation, judge
-parameters and outcomes must agree with the input contract. With zero
-cross edges the offset remains prior-only and is reported as
-unidentified.</p>
-<p><code><a href="../reference/fit_link.html">fit_link()</a></code> returns linked means, uncertainty with an
-explicit scope, offset summaries, prediction state, covariance where
-defined, diagnostics, evidence hashes and continuation. Missing
-uncertainty stays missing. Each hub/spoke fit is separate; E2/E3 can
-update the hub differently for different spokes. Reports retain spoke
-identity and never silently pool these hub posteriors.</p>
+<p>E2 (<code>gaussian_posterior_bridge</code>) starts from joint
+posterior item draws from each Phase A fit. Center each draw separately
+and transform it to reduced coordinates:
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msubsup><mi>u</mi><mi>k</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>m</mi><mo stretchy="false" form="postfix">)</mo></mrow></msubsup><mo>=</mo><msubsup><mi>H</mi><mi>k</mi><mi>⊤</mi></msubsup><msubsup><mi>z</mi><mi>k</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>m</mi><mo stretchy="false" form="postfix">)</mo></mrow></msubsup></mrow><annotation encoding="application/x-tex">u_k^{(m)}=H_k^\top z_k^{(m)}</annotation></semantics></math>.
+Estimate the mean
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>μ</mi><mi>k</mi></msub><annotation encoding="application/x-tex">\mu_k</annotation></semantics></math>
+and full sample covariance
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi mathvariant="normal">Σ</mi><mi>k</mi></msub><annotation encoding="application/x-tex">\Sigma_k</annotation></semantics></math>,
+then approximate</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>u</mi><mi>k</mi></msub><mo>∣</mo><msub><mi>D</mi><mi>k</mi></msub><mo>≈</mo><mi>N</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>μ</mi><mi>k</mi></msub><mo>,</mo><msub><mi mathvariant="normal">Σ</mi><mi>k</mi></msub><mo stretchy="false" form="postfix">)</mo><mi>.</mi></mrow><annotation encoding="application/x-tex">
+u_k\mid D_k\approx N(\mu_k,\Sigma_k).
+</annotation></semantics></math></p>
+<p>The Phase B target is</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>δ</mi><mo>,</mo><msub><mi>u</mi><mi>H</mi></msub><mo>,</mo><msub><mi>u</mi><mi>S</mi></msub><mo>∣</mo><msub><mi>D</mi><mi>H</mi></msub><mo>,</mo><msub><mi>D</mi><mi>S</mi></msub><mo>,</mo><msub><mi>D</mi><mi>X</mi></msub><mo stretchy="false" form="postfix">)</mo><mo>∝</mo><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>δ</mi><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><mi>ϕ</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>u</mi><mi>H</mi></msub><mo>;</mo><msub><mi>μ</mi><mi>H</mi></msub><mo>,</mo><msub><mi mathvariant="normal">Σ</mi><mi>H</mi></msub><mo stretchy="false" form="postfix">)</mo><mi>ϕ</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>u</mi><mi>S</mi></msub><mo>;</mo><msub><mi>μ</mi><mi>S</mi></msub><mo>,</mo><msub><mi mathvariant="normal">Σ</mi><mi>S</mi></msub><mo stretchy="false" form="postfix">)</mo><mi>L</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>D</mi><mi>X</mi></msub><mo>∣</mo><msub><mi>H</mi><mi>H</mi></msub><msub><mi>u</mi><mi>H</mi></msub><mo>,</mo><mi>δ</mi><mo>+</mo><msub><mi>H</mi><mi>S</mi></msub><msub><mi>u</mi><mi>S</mi></msub><mo>,</mo><mi>β</mi><mo>,</mo><mi>ϵ</mi><mo stretchy="false" form="postfix">)</mo><mi>.</mi></mrow><annotation encoding="application/x-tex">
+p(\delta,u_H,u_S\mid D_H,D_S,D_X)
+\propto p(\delta)\,
+\phi(u_H;\mu_H,\Sigma_H)\phi(u_S;\mu_S,\Sigma_S)
+L(D_X\mid H_Hu_H,\delta+H_Su_S,\beta,\epsilon).
+</annotation></semantics></math></p>
+<p>Phase A information enters through the two Gaussian bridges; only new
+cross-set observations enter the likelihood. The off-diagonal
+covariances are essential: separately supplied marginal standard errors
+cannot reconstruct how the scores vary together. The public input
+requires joint draws or compatible artifacts containing them, not a
+user-supplied diagonal approximation.</p>
+<p>For each reduced covariance, the smallest successful Cholesky jitter
+is selected from</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">{</mo><mn>0</mn><mo>,</mo><msup><mn>10</mn><mrow><mi>−</mi><mn>12</mn></mrow></msup><mo>,</mo><msup><mn>10</mn><mrow><mi>−</mi><mn>10</mn></mrow></msup><mo>,</mo><msup><mn>10</mn><mrow><mi>−</mi><mn>8</mn></mrow></msup><mo>,</mo><msup><mn>10</mn><mrow><mi>−</mi><mn>6</mn></mrow></msup><mo stretchy="false" form="postfix">}</mo><mspace width="0.167em"></mspace><mi>s</mi><mo>,</mo></mrow><annotation encoding="application/x-tex">
+\{0,10^{-12},10^{-10},10^{-8},10^{-6}\}\,s,
+</annotation></semantics></math></p>
+<p>where
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math>
+is the maximum positive diagonal variance, or one when no positive scale
+is available. The selected jitter is recorded. Failure beyond this
+bounded ladder invalidates the bridge; no independent-marginal fallback
+or coordinate removal is allowed.</p>
+<p>E2 finds a MAP estimate using the exact Gaussian penalties and
+lapse-mixture likelihood, then obtains Laplace uncertainty from the
+observed Hessian. It propagates shape and offset uncertainty
+approximately, conditional on the fixed judge. With no informative cross
+evidence, it returns the independent stabilized bridges and the offset
+prior.</p>
 </div>
 <div class="section level2">
-<h2 id="d-optimal-active-selection">D-optimal active selection<a class="anchor" aria-label="anchor" href="#d-optimal-active-selection"></a>
+<h2 id="e3-single-use-joint-offset-model">E3: single-use joint-offset model<a class="anchor" aria-label="anchor" href="#e3-single-use-joint-offset-model"></a>
 </h2>
-<p>Adaptive Phase B selection is unavailable for every estimator,
-including E3-MCMC, pending a separate selector-validation study.
-Posterior covariance alone does not validate a D-optimal selection rule.
-No legacy selector or estimator fallback exists. Within-set and Phase A
-adaptive ranking retain their existing behavior.</p>
+<p>E3 (<code>joint_offset</code>) returns to the raw hub and spoke Phase
+A comparisons and uses independent original shape priors in reduced
+coordinates:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>u</mi><mi>H</mi></msub><mo>∼</mo><mi>N</mi><mo stretchy="false" form="prefix">(</mo><mn>0</mn><mo>,</mo><msub><mi>I</mi><mrow><msub><mi>N</mi><mi>H</mi></msub><mo>−</mo><mn>1</mn></mrow></msub><mo stretchy="false" form="postfix">)</mo><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>u</mi><mi>S</mi></msub><mo>∼</mo><mi>N</mi><mo stretchy="false" form="prefix">(</mo><mn>0</mn><mo>,</mo><msub><mi>I</mi><mrow><msub><mi>N</mi><mi>S</mi></msub><mo>−</mo><mn>1</mn></mrow></msub><mo stretchy="false" form="postfix">)</mo><mo>,</mo><mspace width="2.0em"></mspace><mi>δ</mi><mo>∼</mo><mi>N</mi><mo stretchy="false" form="prefix">(</mo><mn>0</mn><mo>,</mo><msup><mn>5</mn><mn>2</mn></msup><mo stretchy="false" form="postfix">)</mo><mi>.</mi></mrow><annotation encoding="application/x-tex">
+u_H\sim N(0,I_{N_H-1}),\qquad
+u_S\sim N(0,I_{N_S-1}),\qquad \delta\sim N(0,5^2).
+</annotation></semantics></math><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>δ</mi><mo>,</mo><msub><mi>u</mi><mi>H</mi></msub><mo>,</mo><msub><mi>u</mi><mi>S</mi></msub><mo>∣</mo><msub><mi>D</mi><mi>H</mi></msub><mo>,</mo><msub><mi>D</mi><mi>S</mi></msub><mo>,</mo><msub><mi>D</mi><mi>X</mi></msub><mo stretchy="false" form="postfix">)</mo><mo>∝</mo><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>δ</mi><mo stretchy="false" form="postfix">)</mo><mi>p</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>u</mi><mi>H</mi></msub><mo stretchy="false" form="postfix">)</mo><mi>p</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>u</mi><mi>S</mi></msub><mo stretchy="false" form="postfix">)</mo><mi>L</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>D</mi><mi>H</mi></msub><mo>∣</mo><msub><mi>H</mi><mi>H</mi></msub><msub><mi>u</mi><mi>H</mi></msub><mo>,</mo><mi>β</mi><mo>,</mo><mi>ϵ</mi><mo stretchy="false" form="postfix">)</mo><mi>L</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>D</mi><mi>S</mi></msub><mo>∣</mo><msub><mi>H</mi><mi>S</mi></msub><msub><mi>u</mi><mi>S</mi></msub><mo>,</mo><mi>β</mi><mo>,</mo><mi>ϵ</mi><mo stretchy="false" form="postfix">)</mo><mi>L</mi><mo stretchy="false" form="prefix">(</mo><msub><mi>D</mi><mi>X</mi></msub><mo>∣</mo><msub><mi>H</mi><mi>H</mi></msub><msub><mi>u</mi><mi>H</mi></msub><mo>,</mo><mi>δ</mi><mo>+</mo><msub><mi>H</mi><mi>S</mi></msub><msub><mi>u</mi><mi>S</mi></msub><mo>,</mo><mi>β</mi><mo>,</mo><mi>ϵ</mi><mo stretchy="false" form="postfix">)</mo><mi>.</mi></mrow><annotation encoding="application/x-tex">
+p(\delta,u_H,u_S\mid D_H,D_S,D_X)
+\propto p(\delta)p(u_H)p(u_S)
+L(D_H\mid H_Hu_H,\beta,\epsilon)
+L(D_S\mid H_Su_S,\beta,\epsilon)
+L(D_X\mid H_Hu_H,\delta+H_Su_S,\beta,\epsilon).
+</annotation></semantics></math></p>
+<p>Each observation enters exactly once. These shape priors are the
+reduced, sum-to-zero representation of the original iid standard-Normal
+raw-location prior. Inputs must be compatible with that Phase A model;
+the linker cannot reconstruct or validate an undocumented external prior
+from an outcome table.</p>
+<p>A Phase A posterior cannot also be used as a prior when its
+generating outcomes are included in this likelihood. That would count
+the same information twice. Artifact scores and draws can remain part of
+provenance, but are not an additional statistical input to E3. E3
+therefore requires more original-data retention than E2.</p>
+<div class="section level3">
+<h3 id="maplaplace-calculation">MAP/Laplace calculation<a class="anchor" aria-label="anchor" href="#maplaplace-calculation"></a>
+</h3>
+<p>For E2 and E3, write
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>q</mi><mo>=</mo><mo stretchy="false" form="prefix">(</mo><mi>δ</mi><mo>,</mo><msubsup><mi>u</mi><mi>H</mi><mi>⊤</mi></msubsup><mo>,</mo><msubsup><mi>u</mi><mi>S</mi><mi>⊤</mi></msubsup><msup><mo stretchy="false" form="postfix">)</mo><mi>⊤</mi></msup></mrow><annotation encoding="application/x-tex">q=(\delta,u_H^\top,u_S^\top)^\top</annotation></semantics></math>,
+and let
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>ℓ</mi><mo stretchy="false" form="prefix">(</mo><mi>q</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\ell(q)</annotation></semantics></math>
+be the negative log posterior. At an accepted stationary mode,</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover><mi>q</mi><mo accent="true">̂</mo></mover><mo>=</mo><mrow><mi mathvariant="normal">arg</mi><mo>⁡</mo></mrow><munder><mi mathvariant="normal">min</mi><mi>q</mi></munder><mi>ℓ</mi><mo stretchy="false" form="prefix">(</mo><mi>q</mi><mo stretchy="false" form="postfix">)</mo><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>V</mi><mi>q</mi></msub><mo>=</mo><mo stretchy="false" form="prefix">{</mo><msup><mi>∇</mi><mn>2</mn></msup><mi>ℓ</mi><mo stretchy="false" form="prefix">(</mo><mover><mi>q</mi><mo accent="true">̂</mo></mover><mo stretchy="false" form="postfix">)</mo><msup><mo stretchy="false" form="postfix">}</mo><mrow><mi>−</mi><mn>1</mn></mrow></msup><mi>.</mi></mrow><annotation encoding="application/x-tex">
+\widehat q=\arg\min_q\ell(q),\qquad
+V_q=\{\nabla^2\ell(\widehat q)\}^{-1}.
+</annotation></semantics></math></p>
+<p>The implementation uses deterministic multistart optimization in
+whitened coordinates, analytic derivatives and gradient/convergence
+checks. The observed Hessian must be positive definite without further
+regularization. A finite set of starts cannot guarantee finding the
+global mode of a multimodal lapse-mixture posterior; failures remain
+visible in diagnostics.</p>
+<p>With the linear item transformation
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>,</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>θ</mi><mo>=</mo><mi>T</mi><mi>q</mi><mo>,</mo><mspace width="2.0em"></mspace><mover><mi>θ</mi><mo accent="true">̂</mo></mover><mo>=</mo><mi>T</mi><mover><mi>q</mi><mo accent="true">̂</mo></mover><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>V</mi><mi>θ</mi></msub><mo>=</mo><mi>T</mi><msub><mi>V</mi><mi>q</mi></msub><msup><mi>T</mi><mi>⊤</mi></msup><mi>.</mi></mrow><annotation encoding="application/x-tex">
+\theta=Tq,\qquad \widehat\theta=T\widehat q,\qquad
+V_\theta=TV_qT^\top.
+</annotation></semantics></math></p>
+<p>Item and offset intervals use the corresponding Normal approximation.
+The public <code>theta_link_mean</code> field is the MAP/Laplace center
+for E2 and E3, and a posterior mean for E1 and E3-MCMC.
+<code>theta_link_eap</code> is an identical compatibility alias, not a
+promise that all engines return an exact posterior expectation.</p>
+</div>
+<div class="section level3">
+<h3 id="e3-mcmc-audit-engine">E3-MCMC audit engine<a class="anchor" aria-label="anchor" href="#e3-mcmc-audit-engine"></a>
+</h3>
+<p>Explicit
+<code>control = list(estimator = list(engine = "mcmc", cmdstan = ...))</code>
+requests the optional Stan/CmdStan model with the <strong>same
+likelihood, priors, coordinates and fixed judge</strong>. It returns
+empirical posterior means, covariance and equal-tailed intervals, with
+chain-indexed draws retained for prediction and persistence. Supply a
+seed for repeatability within a fixed toolchain.</p>
+<p>Sampler diagnostics include R-hat, effective sample sizes,
+divergences, treedepth, energy diagnostics and the audit gate. A failed
+audit does not silently become a MAP fit or trigger an automatic repair.
+See <code><a href="../reference/fit_link.html">?fit_link</a></code> for the exact diagnostic thresholds and
+controls. The provider-free real-sampler tests compare Stan log
+densities to an independent R objective and check parity on well-behaved
+examples.</p>
+<p>At zero cross edges, offset summaries use the exact independent
+Normal prior, with zero between-block covariance. Within-shape moments
+are sampled; spoke intervals combine shape draws with the independent
+offset distribution. Saving a result preserves the necessary numerical
+draws without depending on original CmdStan CSV files.</p>
+</div>
 </div>
 <div class="section level2">
-<h2 id="probes-and-calibration">Probes and calibration<a class="anchor" aria-label="anchor" href="#probes-and-calibration"></a>
+<h2 id="evidence-prediction-and-uncertainty-contracts">Evidence, prediction, and uncertainty contracts<a class="anchor" aria-label="anchor" href="#evidence-prediction-and-uncertainty-contracts"></a>
 </h2>
-<p>Pair selection is external to estimation. Held-out probes remain
-separate from active cross evidence. Common prediction hooks preserve
-A/B orientation and judge parameters. Probe caches bind predictions to
-estimator, evidence and input identity. Linked rubric calibration uses
-compatible common results and the exact Phase A hub reference; it does
-not reinterpret a removed estimator’s posterior.</p>
+<p>Each judgment has a unique <code>observation_id</code>. Genuine
+repeated judgments of a pair have different IDs and contribute repeated
+likelihood information. Reusing an ID within or across raw evidence
+blocks is rejected. E1/E2 consume zero Phase A <em>likelihood</em> rows;
+their source-observation counts are recorded separately and remain
+missing when unknown.</p>
+<p>Items are normalized to deterministic ID order. Observation order is
+retained: likelihood estimates are invariant to row permutation, but the
+versioned <code>link-v1-rlang</code> payload hashes are order-sensitive.
+Exact artifact hashes, asserted source hashes, normalized evidence
+hashes and configuration hashes have different roles; none should be
+substituted for another. The producing rlang version and supplied
+package commit are recorded.</p>
+<p><code><a href="../reference/predict_link.html">predict_link()</a></code> returns</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mi mathvariant="normal">Pr</mi><mo>⁡</mo></mrow><mo stretchy="false" form="prefix">(</mo><mi>A</mi><mrow><mspace width="0.333em"></mspace><mtext mathvariant="normal"> wins</mtext></mrow><mo>∣</mo><mi>D</mi><mo stretchy="false" form="postfix">)</mo><mo>=</mo><mfrac><mi>ϵ</mi><mn>2</mn></mfrac><mo>+</mo><mo stretchy="false" form="prefix">(</mo><mn>1</mn><mo>−</mo><mi>ϵ</mi><mo stretchy="false" form="postfix">)</mo><mi>E</mi><mrow><mo stretchy="true" form="prefix">[</mo><msup><mrow><mi mathvariant="normal">logit</mi><mo>⁡</mo></mrow><mrow><mi>−</mi><mn>1</mn></mrow></msup><mo stretchy="false" form="prefix">(</mo><msub><mi>θ</mi><mi>A</mi></msub><mo>−</mo><msub><mi>θ</mi><mi>B</mi></msub><mo>+</mo><mi>β</mi><mo stretchy="false" form="postfix">)</mo><mo>∣</mo><mi>D</mi><mo stretchy="true" form="postfix">]</mo></mrow><mi>.</mi></mrow><annotation encoding="application/x-tex">
+\Pr(A\text{ wins}\mid D)=
+\frac{\epsilon}{2}+(1-\epsilon)
+E\left[\operatorname{logit}^{-1}(\theta_A-\theta_B+\beta)\mid D\right].
+</annotation></semantics></math></p>
+<p>E1 integrates over its offset posterior; E2/E3 Laplace integrate the
+Gaussian contrast distribution; E3-MCMC averages over retained draws.
+Prediction accepts identities and presentation order, without outcomes.
+Missing uncertainty is <code>NA</code>, never silently replaced by zero.
+E2/E3 uncertainty is labeled <code>joint_shapes_and_offset</code>,
+conditional on the fixed judge and model assumptions.</p>
 </div>
 <div class="section level2">
-<h2 id="stopping-blockers-and-freezing">Stopping, blockers, and freezing<a class="anchor" aria-label="anchor" href="#stopping-blockers-and-freezing"></a>
+<h2 id="selection-probes-and-stopping">Selection, probes, and stopping<a class="anchor" aria-label="anchor" href="#selection-probes-and-stopping"></a>
 </h2>
-<p>Explicit sessions use caller-supplied <code>active</code>,
-<code>probe</code>, or <code>frozen</code> reporting status. These
-labels do not change which observations are fitted. Frozen spokes cannot
-append evidence until explicitly reactivated. No adaptive stopping rule
-is enabled by these sessions. Conditional E1 uncertainty does not
-establish full-uncertainty reliability, and prior-only identification
-cannot pass linking stopping criteria.</p>
+<p>Link estimation accepts explicit evidence independently of pair
+selection. Adaptive Phase B D-optimal execution is unavailable for all
+estimators pending separate selector validation. Having a covariance
+matrix does not validate a selection rule. Phase A and ordinary
+within-set adaptive ranking remain available.</p>
+<p>Held-out probe and final-test observations stay outside the fitted
+<code>cross</code> table. Source partitioning is the caller’s
+responsibility, particularly when Phase A is supplied only as summaries
+or draws. Internal probe checks reject overlap in IDs and unordered base
+pairs, including reversed presentations. Prediction caches bind to the
+estimator, spoke, evidence and input identity.</p>
+<p>Internal adapters supply covariance and gradients of the ordered
+latent contrast
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>θ</mi><mi>A</mi></msub><mo>−</mo><msub><mi>θ</mi><mi>B</mi></msub></mrow><annotation encoding="application/x-tex">\theta_A-\theta_B</annotation></semantics></math>,
+not gradients of posterior-average probabilities. Their per-refit
+stopping assessments do not enable automatic stopping. Prior-only or
+invalid fits, missing history, and unavailable required uncertainty
+block those assessments. E1’s conditional uncertainty cannot satisfy a
+full-uncertainty reliability criterion. Session statuses
+<code>active</code>, <code>probe</code> and <code>frozen</code> are
+reporting metadata; changing a status does not remove likelihood
+rows.</p>
 </div>
 <div class="section level2">
-<h2 id="persistence-and-resume">Persistence and resume<a class="anchor" aria-label="anchor" href="#persistence-and-resume"></a>
+<h2 id="persistence-multiple-spokes-and-rubric-transport">Persistence, multiple spokes, and rubric transport<a class="anchor" aria-label="anchor" href="#persistence-multiple-spokes-and-rubric-transport"></a>
 </h2>
-<p><code><a href="../reference/save_link_session.html">save_link_session()</a></code> and <code><a href="../reference/save_link_session.html">load_link_session()</a></code>
-preserve exact common results, input hashes and continuation state.
-Identical resume is a no-op; new evidence must extend the old prefix
-without changing Phase A, item order, judge or numerical mode.</p>
-<p>Saved anchored-joint Phase B sessions are unsupported. Loading,
-resuming or reporting them raises
-<code>pairwiseLLM_unsupported_legacy_link_state</code> and directs the
-caller to restart from compatible Phase A artifacts/evidence with an
-explicit estimator. The Phase B posterior is never migrated and no
-estimator ID is backfilled.</p>
+<p>Sessions preserve exact results, hashes, diagnostics and continuation
+inputs. Unchanged resume is a no-op. New evidence must extend the old
+ordered prefix; Phase A, estimator, judge and numerical settings must
+remain the same. Refitting uses the original evidence/priors and the
+cumulative cross table, never a previous Phase B posterior as a new
+prior.</p>
+<p>Each hub/spoke fit is separate. E2/E3 can update the hub differently
+for different spokes. Reports preserve spoke identity; they do not
+invent a pooled hub posterior or cross-spoke covariance. Rubric
+transport uses the exact original Phase A hub calibration, restoring its
+original location origin. It conditions on linked point locations and
+does not propagate CJ uncertainty through the rubric model.</p>
+</div>
+<div class="section level2">
+<h2 id="why-old-phase-b-sessions-cannot-resume">Why old Phase B sessions cannot resume<a class="anchor" aria-label="anchor" href="#why-old-phase-b-sessions-cannot-resume"></a>
+</h2>
+<p>The removed anchored-joint method used Phase A information both in
+data-derived priors and replayed likelihood, and treated separately
+centered locations as information about the global offset. E1–E3 enforce
+single-use evidence and explicit offset identification instead.</p>
+<p>Saved anchored-joint Phase B states raise
+<code>pairwiseLLM_unsupported_legacy_link_state</code>. They cannot be
+reinterpreted as E1–E3 posteriors. Compatible historical Phase A
+artifacts may be reused if they contain the chosen method’s required
+information. Restart with those original inputs and intentionally
+supplied cross-set observations; there is no hidden legacy fallback.</p>
 </div>
 <div class="section level2">
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>

@@ -5,13 +5,13 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>Explicit-evidence linking sessions • pairwiseLLM</title>
+<title>Guide: Linking Saved Comparisons • pairwiseLLM</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
 <script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
-<meta property="og:title" content="Explicit-evidence linking sessions">
+<meta property="og:title" content="Guide: Linking Saved Comparisons">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.6.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -40,7 +40,7 @@
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
-    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Explicit-evidence Linking Sessions</a></li>
+    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Linking Saved Comparisons</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
@@ -75,7 +75,7 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
 
-      <h1>Explicit-evidence linking sessions</h1>
+      <h1>Guide: Linking Saved Comparisons</h1>
             
       
       <small class="dont-index">Source: <a href="https://github.com/shmercer/pairwiseLLM/blob/master/vignettes/linking-sessions.Rmd" class="external-link"><code>vignettes/linking-sessions.Rmd</code></a></small>
@@ -84,23 +84,55 @@
 
     
     
-<p>E1–E3 estimate a separately centered hub shape, a separately centered
-spoke shape, and a spoke offset. Choose an estimator explicitly:
-<code>fixed_shape_offset</code> (E1),
-<code>gaussian_posterior_bridge</code> (E2), or
-<code>joint_offset</code> (E3). These APIs accept explicit evidence
-independently of adaptive pair selection or stopping.</p>
+<p>This guide shows how to put two separately ranked sets of writing
+samples on a common scale using comparisons you already have. It uses
+small, invented data and makes no provider requests. You need only
+<code>pairwiseLLM</code> for the runnable examples.</p>
+<p>The reference set is the <strong>hub</strong> and the other set is
+the <strong>spoke</strong>. Their original, separate rankings are called
+<strong>Phase A</strong>. Linking them is called <strong>Phase
+B</strong>. Read the <a href="adaptive-linking.html">linking
+overview</a> for help choosing inputs, or the <a href="adaptive-linking-design.html">design guide</a> for the statistical
+models.</p>
+<div class="section level2">
+<h2 id="start-with-the-samples-and-their-comparisons">Start with the samples and their comparisons<a class="anchor" aria-label="anchor" href="#start-with-the-samples-and-their-comparisons"></a>
+</h2>
+<p>Each set has two samples. The IDs below identify samples within their
+own set. Add unique <code>global_item_id</code> values if you will later
+reuse a rubric calibration.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/shmercer/pairwiseLLM" class="external-link">pairwiseLLM</a></span><span class="op">)</span></span>
 <span><span class="va">hub</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>set_id <span class="op">=</span> <span class="st">"hub"</span>, items <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>item_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"h1"</span>, <span class="st">"h2"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">spoke</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>set_id <span class="op">=</span> <span class="st">"spoke"</span>, items <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>item_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"s1"</span>, <span class="st">"s2"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">cross</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>observation_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"cross-1"</span>, <span class="st">"cross-2"</span><span class="op">)</span>,</span>
+<span><span class="va">cross</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  observation_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"cross-1"</span>, <span class="st">"cross-2"</span><span class="op">)</span>,</span>
 <span>  A_set <span class="op">=</span> <span class="st">"hub"</span>, A_item <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"h1"</span>, <span class="st">"h2"</span><span class="op">)</span>,</span>
-<span>  B_set <span class="op">=</span> <span class="st">"spoke"</span>, B_item <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"s1"</span>, <span class="st">"s2"</span><span class="op">)</span>, y_A <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0L</span>, <span class="fl">1L</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">phase_a</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hub <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>points <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>h1 <span class="op">=</span> <span class="op">-</span><span class="fl">1</span>, h2 <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  spoke <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>points <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>s1 <span class="op">=</span> <span class="op">-</span><span class="fl">.5</span>, s2 <span class="op">=</span> <span class="fl">.5</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">judge</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>beta <span class="op">=</span> <span class="fl">0</span>, epsilon <span class="op">=</span> <span class="fl">0</span>, model_variant <span class="op">=</span> <span class="st">"btl"</span>,</span>
-<span>  link <span class="op">=</span> <span class="st">"logit"</span>, source <span class="op">=</span> <span class="st">"frozen Phase A"</span><span class="op">)</span></span>
+<span>  B_set <span class="op">=</span> <span class="st">"spoke"</span>, B_item <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"s1"</span>, <span class="st">"s2"</span><span class="op">)</span>, y_A <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0L</span>, <span class="fl">1L</span><span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>Each row describes one judgment: <code>y_A = 1</code> means sample A
+won and <code>y_A = 0</code> means sample B won. Retain the order in
+which samples were presented. Give a new judgment a new ID even when the
+same pair is compared again. Keep any comparisons reserved for checking
+accuracy outside this table.</p>
+<p>For this example, assume there is no presentation-order bias or
+random lapse. For an analysis, use the shared judge settings estimated
+in Phase A; keep them fixed when linking.</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">judge</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>beta <span class="op">=</span> <span class="fl">0</span>, epsilon <span class="op">=</span> <span class="fl">0</span>, model_variant <span class="op">=</span> <span class="st">"btl"</span>,</span>
+<span>  link <span class="op">=</span> <span class="st">"logit"</span>, source <span class="op">=</span> <span class="st">"invented example: no bias or lapses"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="choose-a-method-and-fit-the-first-comparison">Choose a method and fit the first comparison<a class="anchor" aria-label="anchor" href="#choose-a-method-and-fit-the-first-comparison"></a>
+</h2>
+<p>There is no default method. We start with E1
+(<code>fixed_shape_offset</code>) to illustrate the workflow. It keeps
+the original within-set score differences fixed and estimates how much
+to shift the spoke scores.</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">phase_a</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>  hub <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>points <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>h1 <span class="op">=</span> <span class="op">-</span><span class="fl">1</span>, h2 <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  spoke <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>points <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>s1 <span class="op">=</span> <span class="op">-</span><span class="fl">.5</span>, s2 <span class="op">=</span> <span class="fl">.5</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
 <span><span class="va">input</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_link_input.html">prepare_link_input</a></span><span class="op">(</span><span class="st">"fixed_shape_offset"</span>, <span class="va">hub</span>, <span class="va">spoke</span>, <span class="va">phase_a</span>,</span>
 <span>  <span class="va">cross</span><span class="op">[</span><span class="fl">1</span>, <span class="op">]</span>, <span class="va">judge</span><span class="op">)</span></span>
 <span><span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/start_link_session.html">start_link_session</a></span><span class="op">(</span><span class="va">input</span><span class="op">)</span></span>
@@ -109,7 +141,7 @@ independently of adaptive pair selection or stopping.</p>
 <span><span class="co">##   Offset: 3.47948 (SD 3.36821); cross_set; valid: TRUE</span></span>
 <span><span class="co">##   Uncertainty: offset_only_conditional_on_fixed_shapes</span></span>
 <span><span class="co">##   Phase A: points/points payloads 2/2; raw rows used 0/0; cross rows 1</span></span></code></pre>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/summarize_items.html">summarize_items</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## <span style="color: #949494;"># A tibble: 4 × 12</span></span></span>
 <span><span class="co">##   set_id item_id global_item_id theta_link_mean theta_link_sd theta_link_lower</span></span>
@@ -121,25 +153,27 @@ independently of adaptive pair selection or stopping.</p>
 <span><span class="co">## <span style="color: #949494;"># ℹ 6 more variables: theta_link_upper &lt;dbl&gt;, theta_link_eap &lt;dbl&gt;,</span></span></span>
 <span><span class="co">## <span style="color: #949494;">#   estimator_id &lt;chr&gt;, uncertainty_scope &lt;chr&gt;, rank_link &lt;dbl&gt;,</span></span></span>
 <span><span class="co">## <span style="color: #949494;">#   link_spoke_id &lt;chr&gt;</span></span></span></code></pre>
-<p>E1 consumes only point summaries; its uncertainty is conditional on
-those fixed shapes. E2 consumes full posterior item draws, and E3
-consumes exact raw within-set outcomes. Both include shape and offset
-uncertainty. Historical Phase A artifacts can be supplied with
-<code>list(artifact = artifact)</code> if they contain the method’s
-required payload. Summaries cannot substitute for E2 draws or E3 raw
-rows. The artifact’s exact hash is retained, while irrelevant evidence
-is excluded from the normalized statistical input.</p>
-<p><code>theta_link_mean</code> is a posterior mean for E1 quadrature
-and E3-MCMC and a MAP location for E2/E3 Laplace.
-<code>theta_link_eap</code> remains an identical compatibility alias.
-Every item carries estimator ID, uncertainty scope, SD, interval and
-rank; unavailable uncertainty is <code>NA</code>.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<p>Higher <code>theta_link_mean</code> values mean stronger estimated
+writing on the chosen trait. <code>theta_link_sd</code> describes
+uncertainty; it is not a rubric grade. For E1, this uncertainty concerns
+only the shift between sets. The earlier scores are treated as fixed, so
+the hub’s zero uncertainty here does <strong>not</strong> mean its
+original scores were known perfectly.</p>
+<p><code>theta_link_eap</code> is another name for
+<code>theta_link_mean</code>, retained for compatibility. E1 reports
+posterior averages. E2 and the usual E3 fit report the most probable
+joint scores, with approximate uncertainty. See the design guide before
+comparing uncertainty across methods.</p>
+</div>
+<div class="section level2">
+<h2 id="save-your-work-and-add-the-next-comparison">Save your work and add the next comparison<a class="anchor" aria-label="anchor" href="#save-your-work-and-add-the-next-comparison"></a>
+</h2>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".rds"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/save_link_session.html">save_link_session</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">path</span><span class="op">)</span></span>
 <span><span class="va">restored</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/save_link_session.html">load_link_session</a></span><span class="op">(</span><span class="va">path</span>, input <span class="op">=</span> <span class="va">input</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">restored</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="fu"><a href="../reference/start_link_session.html">resume_link_session</a></span><span class="op">(</span><span class="va">restored</span>, <span class="va">input</span><span class="op">)</span>, <span class="va">restored</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
 <span><span class="va">next_input</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_link_input.html">prepare_link_input</a></span><span class="op">(</span><span class="st">"fixed_shape_offset"</span>, <span class="va">hub</span>, <span class="va">spoke</span>, <span class="va">phase_a</span>,</span>
 <span>  <span class="va">cross</span>, <span class="va">judge</span><span class="op">)</span></span>
 <span><span class="va">continued</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/start_link_session.html">resume_link_session</a></span><span class="op">(</span><span class="va">restored</span>, <span class="va">next_input</span><span class="op">)</span></span>
@@ -150,102 +184,153 @@ rank; unavailable uncertainty is <code>NA</code>.</p>
 <span><span class="co">##   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                         <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>          <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>                     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span></span></span>
 <span><span class="co">## <span style="color: #BCBCBC;">1</span> fixed_shape_offset        -<span style="color: #BB0000;">4.71</span><span style="color: #949494;">e</span><span style="color: #BB0000;">-18</span>           1.68                         2</span></span>
 <span><span class="co">## <span style="color: #949494;"># ℹ 3 more variables: uncertainty_scope &lt;chr&gt;, fit_valid &lt;lgl&gt;, status &lt;chr&gt;</span></span></span></code></pre>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span><span class="va">path</span><span class="op">)</span></span></code></pre></div>
-<p>Resume preserves exact estimator/version, canonical item order,
-configuration, Phase A evidence/artifact identity and the old
-cross-evidence prefix. Only new cross observations can be appended.
-Changing the estimator, numerical controls, judge or Phase A requires a
-fresh session. Continuation restores numerical warm-start data, never a
-posterior-as-prior update. Passing the identical input is a no-op,
-including for explicitly selected E3-MCMC. Saving MCMC sessions
-preserves draws and prediction data without requiring the original
-CmdStan files.</p>
-<p><code><a href="../reference/save_adaptive_session.html">save_adaptive_session()</a></code> and
-<code><a href="../reference/load_adaptive_session.html">load_adaptive_session()</a></code> also accept these sessions using a
-dedicated <code>link-session.rds</code> file. Session directories cannot
-mix the two formats. <code><a href="../reference/adaptive_get_logs.html">adaptive_get_logs()</a></code> returns the common
-link-stage log. Source counts are distinct from raw likelihood rows
-consumed (zero Phase A rows for E1/E2). Unknown external source
-hashes/counts remain missing. Computed payload and configuration hashes
-are always retained.</p>
-<p>For multiple spokes, pass a list of prepared inputs to
-<code><a href="../reference/start_link_session.html">start_link_session()</a></code>. They must share the exact hub
-evidence, hub identities, judge and estimator. Each result retains its
-own hub posterior; <code><a href="../reference/summarize_items.html">summarize_items()</a></code> includes
-<code>link_spoke_id</code> to keep those distinct. No cross-spoke
-covariance or pooled hub posterior is invented. Status
-(<code>active</code>, <code>probe</code>, <code>frozen</code>) is
-externally supplied reporting metadata, not a new stopping rule.
-Held-out probe outcomes must never be included in the estimator’s active
-<code>cross</code> table.</p>
-<p>For rubric transport, fit <code><a href="../reference/fit_rubric_calibration.html">fit_rubric_calibration()</a></code> with
-the labeled Phase A hub artifact and
-<code>calibration_design = "linked_anchors"</code>. Prepare linking
-inputs with that exact hub artifact, then pass the common result or
-session to <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>. Global item IDs are required. Only
-spoke scores are returned. The frozen hub calibration is reused, with
-the original hub mean restoring the reference origin; no target labels,
-cohort rescaling or updated hub posterior refit the calibration. Invalid
-or unidentified links fail. The prediction’s <code>linking</code>
-attribute retains estimator identity, uncertainty scope, evidence
-provenance and diagnostics.</p>
-<p>Saved anchored-joint Phase B sessions are unsupported and fail with a
-restart message. Compatible historical Phase A artifacts remain
-reusable. The old execution code and controls have been removed. Restart
-with an explicit E1–E3 estimator using the original Phase A
-artifacts/evidence and intentional cross observations.</p>
+<p><code>delta_spoke_mean</code> is the estimated shift from hub to
+spoke; positive values put the spoke higher. <code>delta_spoke_sd</code>
+describes uncertainty in that shift.
+<code>phase_b_active_edges_used</code> counts judgments used for
+fitting, including legitimate repeated judgments. Check
+<code>fit_valid</code> and the uncertainty description before
+interpreting the scores.</p>
+<p>When adding data, supply all previous rows in their original order
+followed by the new rows. Keep the same Phase A inputs, method and
+settings. Reusing unchanged input returns the saved fit without fitting
+again. Start a new session if you need to change those inputs or
+settings. <code>adaptive_get_logs(continued)</code> provides the record
+of the fits made along the way.</p>
+</div>
 <div class="section level2">
-<h2 id="adaptive-selection-restriction">Adaptive selection restriction<a class="anchor" aria-label="anchor" href="#adaptive-selection-restriction"></a>
+<h2 id="use-saved-uncertainty-with-e2">Use saved uncertainty with E2<a class="anchor" aria-label="anchor" href="#use-saved-uncertainty-with-e2"></a>
 </h2>
-<p>Adaptive Phase B D-optimal execution is unavailable for all E1–E3
-estimators, including the E3-MCMC audit engine, until the separate
-selector study validates an information criterion. Legacy D-optimal
-aliases also fail explicitly. The availability of posterior covariance
-does not validate a selector, and there is no fallback to
-anchored-joint. Phase A and ordinary within-set ranking are still
-available. Use the explicit-evidence workflow above for fixed evidence
-prefixes, without candidate generation, adaptive utility, or automatic
-stopping.</p>
-<p>Keep held-out outcomes outside <code>input$cross</code>. A session’s
-<code>status = "probe"</code> is a reporting label, not an evidence
-partition: it does not remove rows from the likelihood. Probe
-observation IDs and both orientations of each base pair must remain
-disjoint from active evidence. Original source-data partitions remain
-the caller’s responsibility when Phase A supplies only
-summaries/draws.</p>
-<p>Internal orchestration adapters now resolve a common result for one
-explicit spoke. They supply linked means, <code><a href="../reference/predict_link.html">predict_link()</a></code>
-probabilities, named free-coordinate covariance, and the gradient of the
-ordered latent contrast <code>theta_A - theta_B</code>. This gradient is
-not the derivative of a posterior-average probability. E1 exposes only
-the offset coordinate; E2/E3 expose centered shape coordinates and
-offset. No covariance is converted into a selection criterion. Adaptive
-item adapters require explicit unique <code>global_item_id</code>
-values.</p>
-<p>Probe and stopping assessments retain estimator ID/version, spoke and
-hub IDs, uncertainty scope, and active/probe evidence hashes. Probe
-metrics use the common prediction API in the actual presentation
-orientation. Reversing presentation is not complementary when position
-bias is nonzero. Lagged comparisons require the same spoke, frozen
-inputs and an unchanged cumulative evidence prefix.</p>
-<p>The internal stopping adapter reports <strong>per-refit
-criteria</strong>, not a final stopping decision or automatic session
-transition. Existing thresholds and probe quality diagnostics and the
-active-item reliability domain (all spoke items plus directly evidenced
-hub items) are preserved; the existing rolling-window controller remains
-separate. Invalid or prior-only fits, missing lag history, and missing
-required uncertainty block the criteria. E1’s conditional uncertainty is
-never reported as full Phase A uncertainty or used to pass
-full-uncertainty reliability. Multiple spokes retain distinct hub
-posteriors and histories; they are never averaged into one implicit hub
-fit. These interfaces do not constitute scientific validation of
-adaptive selection or stopping for the new estimators.</p>
+<p>E2 (<code>gaussian_posterior_bridge</code>) uses joint posterior
+draws from each Phase A fit. Each row is one plausible set of scores;
+columns identify samples. The tiny matrices below are invented to
+demonstrate the required format, not recommended sample sizes.</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">hub_draws</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>h1 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">1</span>, <span class="op">-</span><span class="fl">2</span>, <span class="op">-</span><span class="fl">.5</span>, <span class="op">-</span><span class="fl">1.5</span><span class="op">)</span>, h2 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span>, <span class="fl">.5</span>, <span class="fl">1.5</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">spoke_draws</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>s1 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">.3</span>, <span class="op">-</span><span class="fl">.7</span>, <span class="op">-</span><span class="fl">.4</span>, <span class="op">-</span><span class="fl">.6</span><span class="op">)</span>, s2 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">.3</span>, <span class="fl">.7</span>, <span class="fl">.4</span>, <span class="fl">.6</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">e2_input</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_link_input.html">prepare_link_input</a></span><span class="op">(</span><span class="st">"gaussian_posterior_bridge"</span>, <span class="va">hub</span>, <span class="va">spoke</span>,</span>
+<span>  phase_a <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hub <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>draws <span class="op">=</span> <span class="va">hub_draws</span><span class="op">)</span>, spoke <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>draws <span class="op">=</span> <span class="va">spoke_draws</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  cross <span class="op">=</span> <span class="va">cross</span>, judge <span class="op">=</span> <span class="va">judge</span><span class="op">)</span></span>
+<span><span class="va">e2_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_link.html">fit_link</a></span><span class="op">(</span><span class="va">e2_input</span><span class="op">)</span></span>
+<span><span class="va">e2_fit</span><span class="op">$</span><span class="va">offset</span></span></code></pre></div>
+<pre><code><span><span class="co">## $delta_mean</span></span>
+<span><span class="co">## [1] -1.562499e-13</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## $delta_sd</span></span>
+<span><span class="co">## [1] 1.517156</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## $delta_lower</span></span>
+<span><span class="co">## [1] -2.973571</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## $delta_upper</span></span>
+<span><span class="co">## [1] 2.973571</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## $identification</span></span>
+<span><span class="co">## [1] "cross_set"</span></span></code></pre>
+<p>E2 can update both sets’ scores and the shift between them. It needs
+the joint draws to retain relationships among uncertain scores. Separate
+standard errors cannot replace them. It does not fit the original Phase
+A comparisons a second time.</p>
+</div>
+<div class="section level2">
+<h2 id="return-to-the-original-comparisons-with-e3">Return to the original comparisons with E3<a class="anchor" aria-label="anchor" href="#return-to-the-original-comparisons-with-e3"></a>
+</h2>
+<p>E3 (<code>joint_offset</code>) fits the original within-set
+comparisons together with the between-set comparisons, using each
+judgment once. It requires compatibility with the original Phase A
+model, including its prior assumptions. Saved scores alone are
+insufficient. These invented within-set rows use the same format as
+<code>cross</code>.</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">within_hub</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>observation_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"hub-1"</span>, <span class="st">"hub-2"</span><span class="op">)</span>,</span>
+<span>  A_set <span class="op">=</span> <span class="st">"hub"</span>, A_item <span class="op">=</span> <span class="st">"h1"</span>, B_set <span class="op">=</span> <span class="st">"hub"</span>, B_item <span class="op">=</span> <span class="st">"h2"</span>, y_A <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0L</span>, <span class="fl">1L</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">within_spoke</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>observation_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"spoke-1"</span>, <span class="st">"spoke-2"</span><span class="op">)</span>,</span>
+<span>  A_set <span class="op">=</span> <span class="st">"spoke"</span>, A_item <span class="op">=</span> <span class="st">"s1"</span>, B_set <span class="op">=</span> <span class="st">"spoke"</span>, B_item <span class="op">=</span> <span class="st">"s2"</span>, y_A <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0L</span>, <span class="fl">0L</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">e3_input</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_link_input.html">prepare_link_input</a></span><span class="op">(</span><span class="st">"joint_offset"</span>, <span class="va">hub</span>, <span class="va">spoke</span>,</span>
+<span>  phase_a <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hub <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>observations <span class="op">=</span> <span class="va">within_hub</span><span class="op">)</span>,</span>
+<span>    spoke <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>observations <span class="op">=</span> <span class="va">within_spoke</span><span class="op">)</span><span class="op">)</span>, cross <span class="op">=</span> <span class="va">cross</span>, judge <span class="op">=</span> <span class="va">judge</span><span class="op">)</span></span>
+<span><span class="va">e3_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_link.html">fit_link</a></span><span class="op">(</span><span class="va">e3_input</span><span class="op">)</span></span>
+<span><span class="va">e3_fit</span><span class="op">$</span><span class="va">offset</span></span></code></pre></div>
+<pre><code><span><span class="co">## $delta_mean</span></span>
+<span><span class="co">## [1] 0</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## $delta_sd</span></span>
+<span><span class="co">## [1] 1.360828</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## $delta_lower</span></span>
+<span><span class="co">## [1] -2.667173</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## $delta_upper</span></span>
+<span><span class="co">## [1] 2.667173</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## $identification</span></span>
+<span><span class="co">## [1] "cross_set"</span></span></code></pre>
+<p>The usual E3 fit needs no sampler. An optional MCMC engine provides a
+more expensive statistical audit and requires CmdStan. It must be
+requested explicitly; see <code><a href="../reference/fit_link.html">?fit_link</a></code> and the design guide.
+It is not selected automatically when a fit fails.</p>
+<p>The three examples illustrate input formats. Their invented Phase A
+summaries were not estimated from the same comparisons, so their
+numerical results should not be used to judge which method works
+best.</p>
+</div>
+<div class="section level2">
+<h2 id="predict-a-comparison-and-check-the-result">Predict a comparison and check the result<a class="anchor" aria-label="anchor" href="#predict-a-comparison-and-check-the-result"></a>
+</h2>
+<p>To predict a winner, provide sample identities in their presentation
+order, without an outcome column:</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">pairs_to_predict</span> <span class="op">&lt;-</span> <span class="va">cross</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"observation_id"</span>, <span class="st">"A_set"</span>, <span class="st">"A_item"</span>, <span class="st">"B_set"</span>, <span class="st">"B_item"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="fu"><a href="../reference/predict_link.html">predict_link</a></span><span class="op">(</span><span class="va">e3_fit</span>, <span class="va">pairs_to_predict</span><span class="op">)</span></span></code></pre></div>
+<pre><code><span><span class="co">## [1] 0.5 0.5</span></span></code></pre>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">e3_fit</span><span class="op">$</span><span class="va">diagnostics</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"fit_valid"</span>, <span class="st">"failure_code"</span>, <span class="st">"uncertainty_scope"</span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
+<pre><code><span><span class="co">## $fit_valid</span></span>
+<span><span class="co">## [1] TRUE</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## $failure_code</span></span>
+<span><span class="co">## [1] NA</span></span>
+<span><span class="co">## </span></span>
+<span><span class="co">## $uncertainty_scope</span></span>
+<span><span class="co">## [1] "joint_shapes_and_offset"</span></span></code></pre>
+<p>Predictions are probabilities that A wins. They average over the
+method’s estimated uncertainty. Keep observed outcomes for checking
+those predictions in a separate table. An offset fitted without
+between-set comparisons reflects only its starting assumption and does
+not establish a link. Failed fits or unavailable uncertainty need
+investigation before you use the results.</p>
+</div>
+<div class="section level2">
+<h2 id="use-saved-phase-a-results-or-several-spokes">Use saved Phase A results or several spokes<a class="anchor" aria-label="anchor" href="#use-saved-phase-a-results-or-several-spokes"></a>
+</h2>
+<p>Instead of supplying points, draws or raw observations directly, you
+can supply <code>list(artifact = artifact)</code> for each set’s Phase A
+input. Read saved files with <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code> first. The artifact
+must contain what the selected method needs and must describe the
+original Phase A fit. Compatible older Phase A results remain usable;
+linked Phase B results cannot substitute for them.</p>
+<p>For several spokes, prepare one input per spoke and pass the list to
+<code><a href="../reference/start_link_session.html">start_link_session()</a></code>. All must share the same hub
+information, judge settings and estimator. Reports include
+<code>link_spoke_id</code>: keep the separate hub estimates associated
+with their spokes. The package does not combine them into one hub
+fit.</p>
+<p>The optional status labels <code>active</code>, <code>probe</code>
+and <code>frozen</code> help record your workflow. They do not decide
+when enough comparisons have been collected. A frozen spoke must be
+explicitly reactivated before adding observations. Automatic Phase B
+selection and stopping remain unavailable pending validation.</p>
+<p>The <a href="rubric-calibration.html">rubric guide</a> explains how
+to apply a saved hub calibration to linked spoke scores. Old
+anchored-joint Phase B sessions must be restarted from compatible Phase
+A results; they cannot be resumed as E1, E2 or E3.</p>
 </div>
 <div class="section level2">
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
-<p>Mercer, S. H. (2026). Explicit-evidence linking sessions. In
+<p>Mercer, S. H. (2026). <em>Guide: Linking Saved Comparisons</em>. In
 <em>pairwiseLLM</em> [R package vignette]. Comprehensive R Archive
 Network. <a href="https://doi.org/10.32614/CRAN.package.pairwiseLLM" class="external-link uri">https://doi.org/10.32614/CRAN.package.pairwiseLLM</a></p>
 </div>

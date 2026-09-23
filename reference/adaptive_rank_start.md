@@ -151,9 +151,10 @@ uncertainty, EAP reliability, diagnostics, stopping, and the existing
 `global_identified` signal. This signal can affect later hybrid tapering
 and routing; selection is not wholly independent of BTL. Direct
 within-set strategies use their documented partner targets after the
-common bootstrap. Phase B selection and prior rules are unchanged.
-Linking Phase B refits use Bayesian posterior estimation and posterior
-summaries/diagnostics are logged per spoke at each linking refit.
+common bootstrap. Automatic Phase B selection is unavailable pending
+separate validation. Linking Phase B refits use Bayesian posterior
+estimation and posterior summaries/diagnostics are logged per spoke at
+each linking refit.
 
 The returned state contains canonical logs:
 

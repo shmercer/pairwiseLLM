@@ -4,9 +4,11 @@ This article describes the algorithm currently implemented by
 `pairwiseLLM` for adaptively ranking one set of items. The default
 hybrid procedure also produces canonical within-set artifacts inside
 linking Phase A. Direct strategies currently require ordinary within-set
-runs; compatible artifacts from those runs can be imported. Phase B
-selection and priors are unchanged by 1.4.0 and are outside this
-article’s scope. For an operational tutorial, begin with [Guide:
+runs; compatible artifacts from those runs can be imported. Version
+1.6.0 requires an explicit E1–E3 linking estimator and gates adaptive
+Phase B selection pending validation; see the [linking
+design](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.md)
+for those models. For an operational tutorial, begin with [Guide:
 Adaptive
 Pairing](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.html).
 The public entry points are

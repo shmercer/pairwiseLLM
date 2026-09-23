@@ -1,23 +1,64 @@
-# Explicit-evidence linking sessions
+# Guide: Linking Saved Comparisons
 
-E1–E3 estimate a separately centered hub shape, a separately centered
-spoke shape, and a spoke offset. Choose an estimator explicitly:
-`fixed_shape_offset` (E1), `gaussian_posterior_bridge` (E2), or
-`joint_offset` (E3). These APIs accept explicit evidence independently
-of adaptive pair selection or stopping.
+This guide shows how to put two separately ranked sets of writing
+samples on a common scale using comparisons you already have. It uses
+small, invented data and makes no provider requests. You need only
+`pairwiseLLM` for the runnable examples.
+
+The reference set is the **hub** and the other set is the **spoke**.
+Their original, separate rankings are called **Phase A**. Linking them
+is called **Phase B**. Read the [linking
+overview](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.md)
+for help choosing inputs, or the [design
+guide](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.md)
+for the statistical models.
+
+## Start with the samples and their comparisons
+
+Each set has two samples. The IDs below identify samples within their
+own set. Add unique `global_item_id` values if you will later reuse a
+rubric calibration.
 
 ``` r
 
 library(pairwiseLLM)
 hub <- list(set_id = "hub", items = data.frame(item_id = c("h1", "h2")))
 spoke <- list(set_id = "spoke", items = data.frame(item_id = c("s1", "s2")))
-cross <- data.frame(observation_id = c("cross-1", "cross-2"),
+cross <- data.frame(
+  observation_id = c("cross-1", "cross-2"),
   A_set = "hub", A_item = c("h1", "h2"),
-  B_set = "spoke", B_item = c("s1", "s2"), y_A = c(0L, 1L))
-phase_a <- list(hub = list(points = c(h1 = -1, h2 = 1)),
-  spoke = list(points = c(s1 = -.5, s2 = .5)))
+  B_set = "spoke", B_item = c("s1", "s2"), y_A = c(0L, 1L)
+)
+```
+
+Each row describes one judgment: `y_A = 1` means sample A won and
+`y_A = 0` means sample B won. Retain the order in which samples were
+presented. Give a new judgment a new ID even when the same pair is
+compared again. Keep any comparisons reserved for checking accuracy
+outside this table.
+
+For this example, assume there is no presentation-order bias or random
+lapse. For an analysis, use the shared judge settings estimated in Phase
+A; keep them fixed when linking.
+
+``` r
+
 judge <- list(beta = 0, epsilon = 0, model_variant = "btl",
-  link = "logit", source = "frozen Phase A")
+  link = "logit", source = "invented example: no bias or lapses")
+```
+
+## Choose a method and fit the first comparison
+
+There is no default method. We start with E1 (`fixed_shape_offset`) to
+illustrate the workflow. It keeps the original within-set score
+differences fixed and estimates how much to shift the spoke scores.
+
+``` r
+
+phase_a <- list(
+  hub = list(points = c(h1 = -1, h2 = 1)),
+  spoke = list(points = c(s1 = -.5, s2 = .5))
+)
 input <- prepare_link_input("fixed_shape_offset", hub, spoke, phase_a,
   cross[1, ], judge)
 state <- start_link_session(input)
@@ -45,19 +86,18 @@ summarize_items(state)
     ## #   estimator_id <chr>, uncertainty_scope <chr>, rank_link <dbl>,
     ## #   link_spoke_id <chr>
 
-E1 consumes only point summaries; its uncertainty is conditional on
-those fixed shapes. E2 consumes full posterior item draws, and E3
-consumes exact raw within-set outcomes. Both include shape and offset
-uncertainty. Historical Phase A artifacts can be supplied with
-`list(artifact = artifact)` if they contain the method’s required
-payload. Summaries cannot substitute for E2 draws or E3 raw rows. The
-artifact’s exact hash is retained, while irrelevant evidence is excluded
-from the normalized statistical input.
+Higher `theta_link_mean` values mean stronger estimated writing on the
+chosen trait. `theta_link_sd` describes uncertainty; it is not a rubric
+grade. For E1, this uncertainty concerns only the shift between sets.
+The earlier scores are treated as fixed, so the hub’s zero uncertainty
+here does **not** mean its original scores were known perfectly.
 
-`theta_link_mean` is a posterior mean for E1 quadrature and E3-MCMC and
-a MAP location for E2/E3 Laplace. `theta_link_eap` remains an identical
-compatibility alias. Every item carries estimator ID, uncertainty scope,
-SD, interval and rank; unavailable uncertainty is `NA`.
+`theta_link_eap` is another name for `theta_link_mean`, retained for
+compatibility. E1 reports posterior averages. E2 and the usual E3 fit
+report the most probable joint scores, with approximate uncertainty. See
+the design guide before comparing uncertainty across methods.
+
+## Save your work and add the next comparison
 
 ``` r
 
@@ -65,7 +105,7 @@ path <- tempfile(fileext = ".rds")
 save_link_session(state, path)
 restored <- load_link_session(path, input = input)
 stopifnot(identical(state, restored))
-stopifnot(identical(resume_link_session(restored, input), restored))
+
 next_input <- prepare_link_input("fixed_shape_offset", hub, spoke, phase_a,
   cross, judge)
 continued <- resume_link_session(restored, next_input)
@@ -84,108 +124,167 @@ summary(continued)[c("estimator_id", "delta_spoke_mean", "delta_spoke_sd",
 unlink(path)
 ```
 
-Resume preserves exact estimator/version, canonical item order,
-configuration, Phase A evidence/artifact identity and the old
-cross-evidence prefix. Only new cross observations can be appended.
-Changing the estimator, numerical controls, judge or Phase A requires a
-fresh session. Continuation restores numerical warm-start data, never a
-posterior-as-prior update. Passing the identical input is a no-op,
-including for explicitly selected E3-MCMC. Saving MCMC sessions
-preserves draws and prediction data without requiring the original
-CmdStan files.
+`delta_spoke_mean` is the estimated shift from hub to spoke; positive
+values put the spoke higher. `delta_spoke_sd` describes uncertainty in
+that shift. `phase_b_active_edges_used` counts judgments used for
+fitting, including legitimate repeated judgments. Check `fit_valid` and
+the uncertainty description before interpreting the scores.
 
-[`save_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_adaptive_session.md)
-and
-[`load_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/load_adaptive_session.md)
-also accept these sessions using a dedicated `link-session.rds` file.
-Session directories cannot mix the two formats.
-[`adaptive_get_logs()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_get_logs.md)
-returns the common link-stage log. Source counts are distinct from raw
-likelihood rows consumed (zero Phase A rows for E1/E2). Unknown external
-source hashes/counts remain missing. Computed payload and configuration
-hashes are always retained.
+When adding data, supply all previous rows in their original order
+followed by the new rows. Keep the same Phase A inputs, method and
+settings. Reusing unchanged input returns the saved fit without fitting
+again. Start a new session if you need to change those inputs or
+settings. `adaptive_get_logs(continued)` provides the record of the fits
+made along the way.
 
-For multiple spokes, pass a list of prepared inputs to
+## Use saved uncertainty with E2
+
+E2 (`gaussian_posterior_bridge`) uses joint posterior draws from each
+Phase A fit. Each row is one plausible set of scores; columns identify
+samples. The tiny matrices below are invented to demonstrate the
+required format, not recommended sample sizes.
+
+``` r
+
+hub_draws <- cbind(h1 = c(-1, -2, -.5, -1.5), h2 = c(1, 2, .5, 1.5))
+spoke_draws <- cbind(s1 = c(-.3, -.7, -.4, -.6), s2 = c(.3, .7, .4, .6))
+e2_input <- prepare_link_input("gaussian_posterior_bridge", hub, spoke,
+  phase_a = list(hub = list(draws = hub_draws), spoke = list(draws = spoke_draws)),
+  cross = cross, judge = judge)
+e2_fit <- fit_link(e2_input)
+e2_fit$offset
+```
+
+    ## $delta_mean
+    ## [1] -1.562499e-13
+    ## 
+    ## $delta_sd
+    ## [1] 1.517156
+    ## 
+    ## $delta_lower
+    ## [1] -2.973571
+    ## 
+    ## $delta_upper
+    ## [1] 2.973571
+    ## 
+    ## $identification
+    ## [1] "cross_set"
+
+E2 can update both sets’ scores and the shift between them. It needs the
+joint draws to retain relationships among uncertain scores. Separate
+standard errors cannot replace them. It does not fit the original Phase
+A comparisons a second time.
+
+## Return to the original comparisons with E3
+
+E3 (`joint_offset`) fits the original within-set comparisons together
+with the between-set comparisons, using each judgment once. It requires
+compatibility with the original Phase A model, including its prior
+assumptions. Saved scores alone are insufficient. These invented
+within-set rows use the same format as `cross`.
+
+``` r
+
+within_hub <- data.frame(observation_id = c("hub-1", "hub-2"),
+  A_set = "hub", A_item = "h1", B_set = "hub", B_item = "h2", y_A = c(0L, 1L))
+within_spoke <- data.frame(observation_id = c("spoke-1", "spoke-2"),
+  A_set = "spoke", A_item = "s1", B_set = "spoke", B_item = "s2", y_A = c(0L, 0L))
+e3_input <- prepare_link_input("joint_offset", hub, spoke,
+  phase_a = list(hub = list(observations = within_hub),
+    spoke = list(observations = within_spoke)), cross = cross, judge = judge)
+e3_fit <- fit_link(e3_input)
+e3_fit$offset
+```
+
+    ## $delta_mean
+    ## [1] 0
+    ## 
+    ## $delta_sd
+    ## [1] 1.360828
+    ## 
+    ## $delta_lower
+    ## [1] -2.667173
+    ## 
+    ## $delta_upper
+    ## [1] 2.667173
+    ## 
+    ## $identification
+    ## [1] "cross_set"
+
+The usual E3 fit needs no sampler. An optional MCMC engine provides a
+more expensive statistical audit and requires CmdStan. It must be
+requested explicitly; see
+[`?fit_link`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md)
+and the design guide. It is not selected automatically when a fit fails.
+
+The three examples illustrate input formats. Their invented Phase A
+summaries were not estimated from the same comparisons, so their
+numerical results should not be used to judge which method works best.
+
+## Predict a comparison and check the result
+
+To predict a winner, provide sample identities in their presentation
+order, without an outcome column:
+
+``` r
+
+pairs_to_predict <- cross[, c("observation_id", "A_set", "A_item", "B_set", "B_item")]
+predict_link(e3_fit, pairs_to_predict)
+```
+
+    ## [1] 0.5 0.5
+
+``` r
+
+e3_fit$diagnostics[c("fit_valid", "failure_code", "uncertainty_scope")]
+```
+
+    ## $fit_valid
+    ## [1] TRUE
+    ## 
+    ## $failure_code
+    ## [1] NA
+    ## 
+    ## $uncertainty_scope
+    ## [1] "joint_shapes_and_offset"
+
+Predictions are probabilities that A wins. They average over the
+method’s estimated uncertainty. Keep observed outcomes for checking
+those predictions in a separate table. An offset fitted without
+between-set comparisons reflects only its starting assumption and does
+not establish a link. Failed fits or unavailable uncertainty need
+investigation before you use the results.
+
+## Use saved Phase A results or several spokes
+
+Instead of supplying points, draws or raw observations directly, you can
+supply `list(artifact = artifact)` for each set’s Phase A input. Read
+saved files with [`readRDS()`](https://rdrr.io/r/base/readRDS.html)
+first. The artifact must contain what the selected method needs and must
+describe the original Phase A fit. Compatible older Phase A results
+remain usable; linked Phase B results cannot substitute for them.
+
+For several spokes, prepare one input per spoke and pass the list to
 [`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md).
-They must share the exact hub evidence, hub identities, judge and
-estimator. Each result retains its own hub posterior;
-[`summarize_items()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_items.md)
-includes `link_spoke_id` to keep those distinct. No cross-spoke
-covariance or pooled hub posterior is invented. Status (`active`,
-`probe`, `frozen`) is externally supplied reporting metadata, not a new
-stopping rule. Held-out probe outcomes must never be included in the
-estimator’s active `cross` table.
+All must share the same hub information, judge settings and estimator.
+Reports include `link_spoke_id`: keep the separate hub estimates
+associated with their spokes. The package does not combine them into one
+hub fit.
 
-For rubric transport, fit
-[`fit_rubric_calibration()`](https://shmercer.github.io/pairwiseLLM/reference/fit_rubric_calibration.md)
-with the labeled Phase A hub artifact and
-`calibration_design = "linked_anchors"`. Prepare linking inputs with
-that exact hub artifact, then pass the common result or session to
-[`predict()`](https://rdrr.io/r/stats/predict.html). Global item IDs are
-required. Only spoke scores are returned. The frozen hub calibration is
-reused, with the original hub mean restoring the reference origin; no
-target labels, cohort rescaling or updated hub posterior refit the
-calibration. Invalid or unidentified links fail. The prediction’s
-`linking` attribute retains estimator identity, uncertainty scope,
-evidence provenance and diagnostics.
+The optional status labels `active`, `probe` and `frozen` help record
+your workflow. They do not decide when enough comparisons have been
+collected. A frozen spoke must be explicitly reactivated before adding
+observations. Automatic Phase B selection and stopping remain
+unavailable pending validation.
 
-Saved anchored-joint Phase B sessions are unsupported and fail with a
-restart message. Compatible historical Phase A artifacts remain
-reusable. The old execution code and controls have been removed. Restart
-with an explicit E1–E3 estimator using the original Phase A
-artifacts/evidence and intentional cross observations.
-
-## Adaptive selection restriction
-
-Adaptive Phase B D-optimal execution is unavailable for all E1–E3
-estimators, including the E3-MCMC audit engine, until the separate
-selector study validates an information criterion. Legacy D-optimal
-aliases also fail explicitly. The availability of posterior covariance
-does not validate a selector, and there is no fallback to
-anchored-joint. Phase A and ordinary within-set ranking are still
-available. Use the explicit-evidence workflow above for fixed evidence
-prefixes, without candidate generation, adaptive utility, or automatic
-stopping.
-
-Keep held-out outcomes outside `input$cross`. A session’s
-`status = "probe"` is a reporting label, not an evidence partition: it
-does not remove rows from the likelihood. Probe observation IDs and both
-orientations of each base pair must remain disjoint from active
-evidence. Original source-data partitions remain the caller’s
-responsibility when Phase A supplies only summaries/draws.
-
-Internal orchestration adapters now resolve a common result for one
-explicit spoke. They supply linked means,
-[`predict_link()`](https://shmercer.github.io/pairwiseLLM/reference/predict_link.md)
-probabilities, named free-coordinate covariance, and the gradient of the
-ordered latent contrast `theta_A - theta_B`. This gradient is not the
-derivative of a posterior-average probability. E1 exposes only the
-offset coordinate; E2/E3 expose centered shape coordinates and offset.
-No covariance is converted into a selection criterion. Adaptive item
-adapters require explicit unique `global_item_id` values.
-
-Probe and stopping assessments retain estimator ID/version, spoke and
-hub IDs, uncertainty scope, and active/probe evidence hashes. Probe
-metrics use the common prediction API in the actual presentation
-orientation. Reversing presentation is not complementary when position
-bias is nonzero. Lagged comparisons require the same spoke, frozen
-inputs and an unchanged cumulative evidence prefix.
-
-The internal stopping adapter reports **per-refit criteria**, not a
-final stopping decision or automatic session transition. Existing
-thresholds and probe quality diagnostics and the active-item reliability
-domain (all spoke items plus directly evidenced hub items) are
-preserved; the existing rolling-window controller remains separate.
-Invalid or prior-only fits, missing lag history, and missing required
-uncertainty block the criteria. E1’s conditional uncertainty is never
-reported as full Phase A uncertainty or used to pass full-uncertainty
-reliability. Multiple spokes retain distinct hub posteriors and
-histories; they are never averaged into one implicit hub fit. These
-interfaces do not constitute scientific validation of adaptive selection
-or stopping for the new estimators.
+The [rubric
+guide](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.md)
+explains how to apply a saved hub calibration to linked spoke scores.
+Old anchored-joint Phase B sessions must be restarted from compatible
+Phase A results; they cannot be resumed as E1, E2 or E3.
 
 ## Citation
 
-Mercer, S. H. (2026). Explicit-evidence linking sessions. In
+Mercer, S. H. (2026). *Guide: Linking Saved Comparisons*. In
 *pairwiseLLM* \[R package vignette\]. Comprehensive R Archive Network.
 <https://doi.org/10.32614/CRAN.package.pairwiseLLM>

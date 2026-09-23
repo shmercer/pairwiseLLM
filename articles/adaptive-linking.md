@@ -1,91 +1,128 @@
 # Guide: Adaptive Linking
 
-Linking now uses explicit-evidence E1–E3 sessions. Choose the estimator
-explicitly; there is no study-development default. The
-[design](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.md)
-explains the evidence and uncertainty contracts, and [linking
-sessions](https://shmercer.github.io/pairwiseLLM/articles/linking-sessions.md)
-provides executable examples of supported estimation, persistence,
-reporting and rubric interoperability.
+Linking helps you compare writing samples that were originally ranked in
+separate sets. For example, you might have ranked last year’s samples
+and this year’s samples separately. Each ranking describes differences
+*within* its own set. Comparisons between the two sets are needed to put
+their scores on a common scale.
 
-## Prepare Phase A inputs
+The reference set is called the **hub**; each set you want to connect to
+it is a **spoke**. **Phase A** means ranking each set separately.
+**Phase B** means using comparisons between sets to link their scores.
 
-Keep the separately estimated hub and spoke artifacts and their item
-identities. Pass `list(artifact = artifact)` for each set in the
-`phase_a` argument of
-[`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md).
-It validates the payload required by the chosen estimator. E2 needs
-joint covariance information; E3 needs raw within-set evidence and the
-original prior/model contract. A historical Phase A artifact remains
-reusable when it supplies the required inputs. A Phase B posterior is
-not a Phase A artifact.
+In version 1.6.0, you supply the between-set comparisons yourself and
+choose one of three linking methods. Automatic selection of Phase B
+comparisons is unavailable while it awaits separate validation. Ordinary
+adaptive ranking within a set remains available. The [linking sessions
+guide](https://shmercer.github.io/pairwiseLLM/articles/linking-sessions.md)
+walks through a complete example using invented results, without an API
+key or provider request.
 
-Ordinary within-set adaptive ranking is unchanged. Linking Phase A
-preparation through
-[`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md)
-requires an explicit `adaptive_config$link_estimation_mode` of
-`fixed_shape_offset`, `gaussian_posterior_bridge`, or `joint_offset`.
-Adaptive Phase B selection is unavailable pending separate validation;
-use the explicit session path below.
+## Choose what to retain from Phase A
 
-## Fit explicit cross-set observations
+Keep the original Phase A results for both sets, including sample IDs
+and the settings used to fit them. The three methods need different
+parts of those results:
 
-1.  Declare the hub/spoke item identities and frozen judge parameters.
-2.  Prepare ordered cross-set observations, excluding held-out probes.
-3.  Call
+| Method | What you need from each set | What the method does |
+|----|----|----|
+| E1: `fixed_shape_offset` | Estimated scores | Keeps within-set score differences fixed and estimates how far to shift the spoke |
+| E2: `gaussian_posterior_bridge` | Saved joint posterior draws | Uses the saved uncertainty to update both sets and their separation |
+| E3: `joint_offset` | Original comparison outcomes and compatible original model/prior settings | Fits both sets and their separation together, using each comparison once |
+
+Posterior draws are saved sets of plausible scores from a Bayesian fit.
+E2 needs them together because uncertainty in one sample’s score is
+related to uncertainty in other scores. A table of scores and separate
+standard errors is not enough. E3 needs the original outcomes because it
+rebuilds the fit from those comparisons.
+
+There is **no default linking method** yet. The study will determine
+that choice. The examples choose a method to show how to use it, without
+recommending a winner. The [design
+guide](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.md)
+explains the statistical differences.
+
+## Prepare your comparisons
+
+Choose one writing trait, such as organization, and use compatible Phase
+A models for both sets. Keep the same shared judge settings for linking:
+`beta` describes presentation-order bias and `epsilon` describes random
+lapses. These settings come from Phase A and are held fixed during
+linking.
+
+Record each between-set judgment with the IDs of the samples shown as A
+and B, the set each belongs to, and the winner. Give every judgment its
+own `observation_id`. If a pair was judged more than once, retain
+separate rows and separate judgment IDs. Do not accidentally import the
+same judgment twice.
+
+Keep comparisons reserved for checking accuracy in a separate table.
+Only pass comparisons intended for fitting in `cross`. A session label
+such as `"probe"` does not exclude observations from the fit.
+
+## Fit and inspect the link
+
+1.  Use
     [`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md)
-    with an explicit estimator and its compatible Phase A inputs.
-4.  Call
+    to supply both sets, their Phase A information, the between-set
+    comparisons and your chosen method.
+2.  Use
     [`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md)
-    for one fit, or
+    for a single fit, or
     [`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md)
-    for a persistent session.
-5.  Inspect identification, diagnostics and uncertainty scope before
-    interpreting linked scores. Zero-edge fits are prior-only, not
-    identified links.
+    if you want to save the work and add comparisons later.
+3.  Inspect the offset, scores, uncertainty and fit diagnostics before
+    using results.
 
-E1 estimates only the offset conditional on fixed shapes. E2 updates
-full Gaussian posterior bridges. E3 combines raw Phase A and cross
-evidence once under the original model/prior contract, using MAP/Laplace
-by default; MCMC is an explicit audit engine.
+The **offset** is the estimated shift from the hub to the spoke.
+Positive values place the spoke higher on the common scale. Without any
+between-set comparisons, the offset reflects only the starting
+assumption, not an established link. By default that assumption is a
+Normal distribution with mean 0 and SD 5.
 
-## Report and resume
+E1’s uncertainty describes the shift while treating the earlier scores
+as fixed. It does not include uncertainty in those earlier rankings. E2
+and E3 include uncertainty in both the scores and the shift, using
+approximations explained in the design guide. Missing uncertainty is
+reported as `NA`; a failed fit should not be treated as a completed
+link.
+
+## Save, add comparisons, and reuse a reference
 
 Use
-[`summarize_items()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_items.md),
-[`summary()`](https://rdrr.io/r/base/summary.html),
-[`adaptive_get_logs()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_get_logs.md)
-and [`print()`](https://rdrr.io/r/base/print.html) on common sessions.
-Multi-spoke reports preserve each fit’s hub estimates and spoke
-identity. Undefined uncertainty is missing rather than zero.
-
-Save with
 [`save_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_link_session.md)
-and load with
-[`load_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_link_session.md).
-Append explicit evidence with
+and
+[`load_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_link_session.md)
+to save and restore your work. To add comparisons, keep all previous
+rows in their original order, append the new rows, prepare the updated
+input, and call
 [`resume_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md).
-The old evidence prefix and frozen inputs must remain identical.
-Resuming unchanged input reuses the exact accepted fit. Changing an
-estimator requires a new session prepared from compatible Phase A data.
+Reusing unchanged input returns the saved fit. Changing the method,
+Phase A results, judge settings or numerical settings requires a new
+session.
 
-## Restart an old session
+Several spokes can share one hub. Each link is fitted separately, and
+E2/E3 may update the hub scores differently for each spoke. Reports
+identify the spoke so you can keep those results separate.
 
-The anchored-joint estimator and its controls have been removed. Saved
-Phase B sessions using it raise
-`pairwiseLLM_unsupported_legacy_link_state`, with a restart message.
-They cannot resume, silently select E1–E3, or donate their Phase B
-posterior as a new estimator’s Phase A input.
+To reuse human rubric scores from the hub, see the [rubric calibration
+guide](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.md).
+The saved calibration stays attached to the original reference set; new
+target labels are not needed to apply it.
 
-Recover the original Phase A artifacts/evidence, validate them through
-[`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
-choose E1, E2 or E3 explicitly, and create a fresh session. Supply the
-original cross observations intentionally as explicit evidence. Missing
-covariance or raw observations must be recovered from their original
+## Restart a session from an older version
+
+Version 1.6.0 removes the anchored-joint linking method. Saved Phase B
+sessions from that method cannot be resumed. The error message asks you
+to restart from the original Phase A results.
+
+Choose E1, E2 or E3, recover the Phase A information it requires, and
+start a fresh session. You can reuse compatible historical Phase A
+artifacts by passing `list(artifact = artifact)` for each set. Supply
+the original between-set judgments intentionally as `cross`. An
+already-linked Phase B result cannot replace an original Phase A result.
+Missing draws or original comparisons must be recovered from their
 source.
-
-No provider calls are needed for explicit-evidence fitting or the
-session examples.
 
 ## Citation
 

@@ -184,9 +184,9 @@ adaptive_rank(
       directed-table replay, use `2L` with
       [`make_adaptive_judge_replay()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_judge_replay.md)
       for two collected orientations. The ordinary ceiling remains two;
-      direct strategies already cap at two. Phase B retains its existing
-      ceiling. This setting persists; sparse reservoirs independently
-      enforce a one-use ceiling.
+      direct strategies already cap at two. Automatic Phase B selection
+      is unavailable. This setting persists; sparse reservoirs
+      independently enforce a one-use ceiling.
 
   `global_identified_reliability_min`
 
@@ -203,8 +203,8 @@ adaptive_rank(
 
   :   Lower bound for long-link win probability gating after global
       identification. Within-set/Phase-A hybrid uses TrueSkill
-      throughout. Phase B retains its posterior gate with TrueSkill
-      fallback. Default is `0.10`.
+      throughout. Automatic Phase B selection is unavailable. Default is
+      `0.10`.
 
   `p_long_high`
 
@@ -273,8 +273,10 @@ adaptive_rank(
 
   :   Explicit estimator identity for linking Phase A preparation:
       `fixed_shape_offset`, `gaussian_posterior_bridge`, or
-      `joint_offset`. There is no default. Adaptive Phase B selection is
-      unavailable pending validation. Use
+      `joint_offset`. E1 needs earlier scores, E2 needs joint posterior
+      draws, and E3 needs original within-set comparisons under
+      compatible model/prior settings. There is no default. Adaptive
+      Phase B selection is unavailable pending validation. Use
       [`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
       [`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md),
       and
@@ -745,7 +747,11 @@ uncertainty, EAP reliability, diagnostics, stopping, and the existing
 `global_identified` signal. That signal can change later hybrid tapering
 and routing, so selection is not wholly independent of BTL. The
 within-set/Phase-A long-link gate uses TrueSkill probabilities
-throughout. Phase B selection and prior rules are unchanged.
+throughout. Automatic linking Phase B selection is unavailable pending
+validation; use
+[`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md)
+and
+[`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md).
 
 Resume behavior: when `resume = TRUE` and `session_dir` already contains
 adaptive artifacts, failed session loads abort with an actionable error
@@ -820,10 +826,10 @@ head(out$logs$step_log)
 #> # A tibble: 4 × 97
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-09-23 05:10:28       1     1     4 S01   S04       4     1 S04  
-#> 2       2 2026-09-23 05:10:28       2     4     8 S04   S08       8     4 S08  
-#> 3       3 2026-09-23 05:10:28       3     8     2 S08   S02       2     8 S02  
-#> 4       4 2026-09-23 05:10:29       4     2     6 S02   S06       6     2 S06  
+#> 1       1 2026-09-23 17:08:18       1     1     4 S01   S04       4     1 S04  
+#> 2       2 2026-09-23 17:08:18       2     4     8 S04   S08       8     4 S08  
+#> 3       3 2026-09-23 17:08:18       3     8     2 S08   S02       2     8 S02  
+#> 4       4 2026-09-23 17:08:18       4     2     6 S02   S06       6     2 S06  
 #> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,

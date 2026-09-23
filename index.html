@@ -23,7 +23,7 @@
 
     <a class="navbar-brand me-2" href="index.html">pairwiseLLM</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.6.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,7 +42,7 @@
     <li><a class="dropdown-item" href="articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
-    <li><a class="dropdown-item" href="articles/linking-sessions.html">Guide: Explicit-evidence Linking Sessions</a></li>
+    <li><a class="dropdown-item" href="articles/linking-sessions.html">Guide: Linking Saved Comparisons</a></li>
     <li><a class="dropdown-item" href="articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
@@ -82,7 +82,7 @@
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
-<p>Version 1.5.2 requires <strong>R &gt;= 4.4</strong>. Install the CRAN release with:</p>
+<p>The package requires <strong>R &gt;= 4.4</strong>. Install the published CRAN release with:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"pairwiseLLM"</span><span class="op">)</span></span></code></pre></div>
 <p>For the development version on GitHub:</p>
@@ -287,7 +287,9 @@
 <li>
 <a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.html">Guide: Adaptive Linking</a> — place separately ranked sets on a common scale with a practical hub-and-spoke workflow.</li>
 <li>
-<a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.html">Design: Adaptive Linking</a> — understand E1–E3 estimation, Phase A evidence, and session restart.</li>
+<a href="https://shmercer.github.io/pairwiseLLM/articles/linking-sessions.html">Guide: Linking Saved Comparisons</a> — fit a link with saved comparisons, inspect the scores, and save or resume your work.</li>
+<li>
+<a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.html">Design: Adaptive Linking</a> — understand the three linking models, their assumptions, and uncertainty.</li>
 </ul>
 </div>
 <div class="section level3">
@@ -372,7 +374,7 @@
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <blockquote>
-<p>Mercer, S. H. (2026). <em>pairwiseLLM: Pairwise writing quality comparisons with large language models</em> (Version 1.5.2) [R package; Computer software]. <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
+<p>Mercer, S. H. (2026). <em>pairwiseLLM: Pairwise writing quality comparisons with large language models</em> (Version 1.6.0) [R package; Computer software]. <a href="https://github.com/shmercer/pairwiseLLM" class="external-link uri">https://github.com/shmercer/pairwiseLLM</a></p>
 </blockquote>
 </div>
 </div>
