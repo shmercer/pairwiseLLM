@@ -9,9 +9,12 @@ reservoir_fixture <- function() {
 }
 
 reservoir_start <- function(f, strategy = "random", mode = "cold", seed = 87L) {
+  # This stateless clock must not serialize the development test environment.
+  clock <- function() as.POSIXct("2026-09-18", tz = "UTC")
+  environment(clock) <- baseenv()
   adaptive_rank_start(f$ids, seed = seed, replay_reservoir = f$reservoir,
     warm_start_mode = mode, warm_start_prior = if (mode == "cold") NULL else f$prior,
-    now_fn = function() as.POSIXct("2026-09-18", tz = "UTC"),
+    now_fn = clock,
     adaptive_config = list(pairing_strategy = strategy))
 }
 
