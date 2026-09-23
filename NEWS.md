@@ -1,5 +1,9 @@
 # pairwiseLLM (development version)
 
+* Rubric Phase A imports now verify evidence hashes against the original stored
+  table before normalization, preserving valid artifacts whose table attributes
+  serialize differently. Tampered evidence still fails validation.
+
 * Removed the anchored-joint linking estimator, its priors, initialization and
   accepted-state/Fisher machinery. Legacy Phase B sessions fail with a targeted
   restart error; compatible Phase A artifacts remain reusable. Linking requires

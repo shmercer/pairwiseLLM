@@ -215,3 +215,35 @@ test_that("current fixed and adaptive entry points produce accepted rubric input
       if (extra == 0L) "btl_converged" else "max_pairs_after_stop_exhausted")
   }
 })
+
+test_that("Phase A rubric imports verify stored evidence before table normalization", {
+  state <- rubric_test_link_state(2L)
+  original <- state$linking$phase_a$artifacts[["1"]]
+  normalize <- pairwiseLLM:::.rubric_normalize_cj
+  hash <- pairwiseLLM:::.adaptive_phase_a_hash_object
+  expected <- normalize(original, "trait")
+  for (table_class in c("tibble", "data.frame")) {
+    for (field in c("phase_a_within_set_evidence", "within_set_evidence")) {
+      artifact <- original
+      rows <- artifact$phase_a_within_set_evidence
+      if (table_class == "data.frame") rows <- as.data.frame(rows)
+      # Equal observations can have different serialized table attributes.
+      attributes(rows) <- rev(attributes(rows))
+      artifact$phase_a_within_set_evidence <- NULL
+      artifact[[field]] <- rows
+      artifact$phase_a_within_set_evidence_hash <- hash(rows)
+      canonical <- pairwiseLLM:::.adaptive_phase_a_artifact_resolve_within_set_evidence(
+        artifact, state, 1L, state$controller)
+      expect_false(identical(hash(rows), hash(canonical)))
+      before <- serialize(artifact, NULL)
+      out <- normalize(artifact, "trait")
+      expect_identical(out$items, expected$items)
+      expect_identical(out$reference$evidence, canonical)
+      expect_identical(out$reference$evidence_hash, hash(canonical))
+      expect_no_error(pairwiseLLM:::.rubric_reference_identity(out$reference))
+      expect_identical(serialize(artifact, NULL), before)
+      artifact[[field]]$y_A <- 1L - artifact[[field]]$y_A
+      expect_error(normalize(artifact, "trait"), "evidence hash does not match")
+    }
+  }
+})

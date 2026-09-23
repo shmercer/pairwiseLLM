@@ -39,6 +39,14 @@
   surface <- .rubric_phase_a_metadata(artifact)
   state <- state %||% .rubric_phase_a_context(artifact, surface)
   controller <- controller %||% .adaptive_controller_resolve(state)
+  # Artifact hashes describe the stored representation, before normalization can
+  # change table attributes/row names without changing the observations.
+  stored_evidence <- artifact$phase_a_within_set_evidence %||% artifact$within_set_evidence %||%
+    .adaptive_phase_a_within_set_evidence_from_state(state, artifact$set_id)
+  if (!is.null(artifact$phase_a_within_set_evidence_hash) &&
+    !identical(artifact$phase_a_within_set_evidence_hash, .adaptive_phase_a_hash_object(stored_evidence))) {
+    rlang::abort("Phase A reference evidence hash does not match its evidence.")
+  }
   .adaptive_phase_a_validate_imported_artifact(artifact, state, artifact$set_id, controller, source = "import")
   if (!.adaptive_phase_a_set_stop_passed(artifact, "import", controller)) {
     rlang::abort("Phase A reference is not import-ready under the existing diagnostics/reliability gate.")
@@ -46,12 +54,8 @@
   # Require exact reference evidence; the existing validator checks IDs/counts.
   evidence <- .adaptive_phase_a_artifact_resolve_within_set_evidence(
     artifact, state, artifact$set_id, controller)
-  evidence_hash <- .adaptive_phase_a_hash_object(evidence)
-  if (!is.null(artifact$phase_a_within_set_evidence_hash) &&
-    !identical(artifact$phase_a_within_set_evidence_hash, evidence_hash)) {
-    rlang::abort("Phase A reference evidence hash does not match its evidence.")
-  }
-  list(surface = surface, evidence = evidence, evidence_hash = evidence_hash)
+  # The rubric reference stores normalized rows, so give it a matching hash.
+  list(surface = surface, evidence = evidence, evidence_hash = .adaptive_phase_a_hash_object(evidence))
 }
 
 .rubric_reference <- function(artifact, validated) {
