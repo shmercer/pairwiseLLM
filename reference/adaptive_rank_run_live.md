@@ -194,15 +194,14 @@ anchors, pair probabilities, and utility \$\$U_0 = p\_{ij}(1 -
 p\_{ij})\$\$. The long-link probability gate uses TrueSkill throughout
 within-set/Phase-A hybrid selection. Direct strategies apply their
 partner targets after the same connected shuffled bootstrap and
-currently require ordinary within-set mode. In linking Phase B,
-anchor/strata routing uses linking-global scores built from Phase A
-summaries and the accepted anchored-joint state. Linking Phase B routing
-ranks eligible cross-set candidates by ridge-stabilized D-optimal
-log-det information gain on the active linking parameter block using
-order-averaged Model D probabilities. Linking inference parameters
-remain inference-only (diagnostics and stopping) and are not direct
-pair-selection objectives. Phase B uses a hard-lock hub-fixed fit and a
-deterministic accepted state before the first linking refit.
+currently require ordinary within-set mode. Adaptive Phase B selection
+is unavailable pending separate validation. Use
+[`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
+[`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md),
+and
+[`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md)
+with explicit cross-set evidence and an explicit E1–E3 estimator. Legacy
+Phase B posteriors cannot be resumed or migrated into a new estimator.
 Exploration/exploitation routing and fallback handling are recorded in
 `step_log`.
 
@@ -352,16 +351,16 @@ run_summary
 #> 1       8               6               6        0 FALSE             
 #> # ℹ 1 more variable: last_stop_reason <chr>
 head(step_view)
-#> # A tibble: 6 × 99
+#> # A tibble: 6 × 97
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-09-23 03:46:00       1     1     5 S01   S05       5     1 S05  
-#> 2       2 2026-09-23 03:46:00       2     5     8 S05   S08       8     5 S08  
-#> 3       3 2026-09-23 03:46:00       3     8     6 S08   S06       6     8 S06  
-#> 4       4 2026-09-23 03:46:00       4     6     2 S06   S02       2     6 S02  
-#> 5       5 2026-09-23 03:46:00       5     2     4 S02   S04       4     2 S04  
-#> 6       6 2026-09-23 03:46:00       6     4     3 S04   S03       3     4 S03  
-#> # ℹ 89 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
+#> 1       1 2026-09-23 05:10:30       1     1     5 S01   S05       5     1 S05  
+#> 2       2 2026-09-23 05:10:30       2     5     8 S05   S08       8     5 S08  
+#> 3       3 2026-09-23 05:10:30       3     8     6 S08   S06       6     8 S06  
+#> 4       4 2026-09-23 05:10:30       4     6     2 S06   S02       2     6 S02  
+#> 5       5 2026-09-23 05:10:30       5     2     4 S02   S04       4     2 S04  
+#> 6       6 2026-09-23 05:10:30       6     4     3 S04   S03       3     4 S03  
+#> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,
 #> #   llm_status_code <int>, llm_error_message <chr>, llm_custom_id <chr>,

@@ -54,7 +54,9 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="pairwisellm-development-version">pairwiseLLM (development version)<a class="anchor" aria-label="anchor" href="#pairwisellm-development-version"></a></h2>
-<div class="section level3">
+<ul><li><p>Rubric Phase A imports now verify evidence hashes against the original stored table before normalization, preserving valid artifacts whose table attributes serialize differently. Tampered evidence still fails validation.</p></li>
+<li><p>Removed the anchored-joint linking estimator, its priors, initialization and accepted-state/Fisher machinery. Legacy Phase B sessions fail with a targeted restart error; compatible Phase A artifacts remain reusable. Linking requires an explicit E1–E3 estimator, with no study-development default. Adaptive Phase B remains gated pending selector validation. The linking guides now describe supported explicit-evidence sessions.</p></li>
+</ul><div class="section level3">
 <h3 id="linking-orchestration-and-selector-restriction-development-version">Linking orchestration and selector restriction<a class="anchor" aria-label="anchor" href="#linking-orchestration-and-selector-restriction-development-version"></a></h3>
 <ul><li>Adaptive Phase B D-optimal execution now fails explicitly for every estimator and legacy alias pending the separate selector validation study (<a href="https://github.com/shmercer/pairwiseLLM/issues/280" class="external-link">#280</a>). Direct E1–E3 fitting and session continuation remain available; E3-MCMC is an audit engine. Internal orchestration hooks use common results for routing, ordered prediction, covariance, contrast gradients, and held-out probe/stopping metrics. Probe outcomes remain outside fitting, and E1 conditional uncertainty cannot satisfy a full-uncertainty reliability criterion.</li>
 </ul></div>

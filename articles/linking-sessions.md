@@ -131,9 +131,9 @@ evidence provenance and diagnostics.
 
 Saved anchored-joint Phase B sessions are unsupported and fail with a
 restart message. Compatible historical Phase A artifacts remain
-reusable. Adaptive selection integration and removal of the remaining
-old execution code are separate epic work; use the explicit-evidence
-APIs above for E1–E3 sessions.
+reusable. The old execution code and controls have been removed. Restart
+with an explicit E1–E3 estimator using the original Phase A
+artifacts/evidence and intentional cross observations.
 
 ## Adaptive selection restriction
 

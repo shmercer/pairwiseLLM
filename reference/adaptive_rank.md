@@ -269,29 +269,18 @@ adaptive_rank(
 
   :   Hub `set_id` for linking modes. Default is `1L`.
 
-  Phase B estimation
+  `link_estimation_mode`
 
-  :   Linking modes use anchored-joint estimation with a hard-locked
-      hub, global-shared judge parameters, concurrent spokes, and
-      fail-fast Phase A artifact import. Historical transform/free-lock
-      config fields are normalized only when loading older sessions or
-      Phase A artifacts; they are not accepted as new `adaptive_config`
-      keys.
-
-  `anchored_joint_spoke_prior_scale`
-
-  :   Scale multiplier for anchored- joint spoke priors. Default is
-      `1.0`.
-
-  `anchored_joint_sd_floor`
-
-  :   Lower bound applied to anchored-joint spoke prior SDs derived from
-      Phase A artifacts. Default is `0.02`.
-
-  `anchored_joint_spoke_prior_fallback_sd`
-
-  :   Fallback anchored-joint spoke prior SD used when artifact-level
-      SDs are unavailable. Default is `1.0`.
+  :   Explicit estimator identity for linking Phase A preparation:
+      `fixed_shape_offset`, `gaussian_posterior_bridge`, or
+      `joint_offset`. There is no default. Adaptive Phase B selection is
+      unavailable pending validation. Use
+      [`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
+      [`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md),
+      and
+      [`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md)
+      for explicit-evidence linking. Legacy Phase B posteriors cannot be
+      migrated; restart from compatible Phase A inputs.
 
   `link_identified_reliability_min`
 
@@ -724,11 +713,13 @@ Linking run modes: `run_mode = "within_set"` is the single-set workflow.
 `run_mode = "link_one_spoke"` and `run_mode = "link_multi_spoke"`
 require multi-set input (`set_id`/`global_item_id`), enforce
 hub\<-\>spoke routing defaults, and preserve Phase A artifact gating
-before Phase B cross-set comparisons begin. Phase B uses anchored-joint
-estimation with a hard-locked hub and global-shared judge parameters.
-Every wrapper call returns canonical `phase_a` outputs that can be fed
-back into a later linking run through
-`adaptive_config$phase_a_artifacts`.
+before Phase B cross-set comparisons begin. An explicit
+`link_estimation_mode` is required. Adaptive Phase B is unavailable
+pending selector validation; use
+[`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md)
+with explicit evidence for E1–E3 estimation. Every wrapper call returns
+canonical `phase_a` outputs that can be fed back into a later linking
+run through `adaptive_config$phase_a_artifacts`.
 
 Selection semantics: selection uses one-pair transactional steps after
 the connected shuffled bootstrap. In the default hybrid strategy,
@@ -772,9 +763,9 @@ Predictive BTL priors apply only in `btl_only` and `both`, including
 run-required linking Phase A. TrueSkill initialization applies in
 `trueskill_only` and `both`. Imported Phase-A artifacts retain their own
 generation identity and are not rerun because predictive input exists.
-Transform, anchored-joint, and pooled judge refits keep their existing
-prior rules; predictive evidence is not injected into Phase B priors,
-D-optimal selection, or probes. Custom BTL fit functions should consume
+Linking and pooled judge refits keep their existing prior rules;
+predictive evidence is not injected into Phase B priors, D-optimal
+selection, or probes. Custom BTL fit functions should consume
 `state$predictive_prior` only when `state$meta$warm_start_mode` is
 `btl_only` or `both`; its presence alone does not imply BTL warming.
 Resume preserves saved predictions, current TrueSkill state, mode,
@@ -826,14 +817,14 @@ out$summary
 #> 1       8               4               4        0 FALSE             
 #> # ℹ 1 more variable: last_stop_reason <chr>
 head(out$logs$step_log)
-#> # A tibble: 4 × 99
+#> # A tibble: 4 × 97
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-09-23 03:45:59       1     1     4 S01   S04       4     1 S04  
-#> 2       2 2026-09-23 03:45:59       2     4     8 S04   S08       8     4 S08  
-#> 3       3 2026-09-23 03:45:59       3     8     2 S08   S02       2     8 S02  
-#> 4       4 2026-09-23 03:46:00       4     2     6 S02   S06       6     2 S06  
-#> # ℹ 89 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
+#> 1       1 2026-09-23 05:10:28       1     1     4 S01   S04       4     1 S04  
+#> 2       2 2026-09-23 05:10:28       2     4     8 S04   S08       8     4 S08  
+#> 3       3 2026-09-23 05:10:28       3     8     2 S08   S02       2     8 S02  
+#> 4       4 2026-09-23 05:10:29       4     2     6 S02   S06       6     2 S06  
+#> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,
 #> #   llm_status_code <int>, llm_error_message <chr>, llm_custom_id <chr>,

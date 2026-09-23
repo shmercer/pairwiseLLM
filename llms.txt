@@ -182,8 +182,7 @@ stopping criteria.
   hub-and-spoke workflow.
 - [Design: Adaptive
   Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.html)
-  — understand anchored-joint estimation, candidate selection, probes,
-  and stopping.
+  — understand E1–E3 estimation, Phase A evidence, and session restart.
 
 ### Modeling and bias
 

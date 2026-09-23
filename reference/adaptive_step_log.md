@@ -90,8 +90,8 @@ Other adaptive logs:
 ``` r
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
 adaptive_step_log(state)
-#> # A tibble: 0 × 99
-#> # ℹ 99 variables: step_id <int>, timestamp <dttm>, pair_id <int>, i <int>,
+#> # A tibble: 0 × 97
+#> # ℹ 97 variables: step_id <int>, timestamp <dttm>, pair_id <int>, i <int>,
 #> #   j <int>, i_id <chr>, j_id <chr>, A <int>, B <int>, A_id <chr>, B_id <chr>,
 #> #   unordered_key <chr>, ordered_key <chr>, Y <int>, status <chr>,
 #> #   judge_backend <chr>, judge_model <chr>, judge_endpoint <chr>,

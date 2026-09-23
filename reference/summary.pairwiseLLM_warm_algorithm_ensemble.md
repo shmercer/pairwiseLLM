@@ -238,7 +238,7 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 #> 
 #> 
 #> $digest
-#> [1] "5bae688cb1315d2106159b013b3e01ab"
+#> [1] "a0aca7b7c2a1345acb0ffcef4132c189"
 #> 
 #> attr(,"class")
 #> [1] "pairwiseLLM_warm_prior"

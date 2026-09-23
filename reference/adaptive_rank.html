@@ -290,25 +290,13 @@ multi-set inputs with <code>set_id</code> and <code>global_item_id</code> in <co
 <dt><code>hub_id</code></dt>
 <dd><p>Hub <code>set_id</code> for linking modes. Default is <code>1L</code>.</p></dd>
 
-<dt>Phase B estimation</dt>
-<dd><p>Linking modes use anchored-joint estimation with
-a hard-locked hub, global-shared judge parameters, concurrent spokes, and
-fail-fast Phase A artifact import. Historical transform/free-lock config
-fields are normalized only when loading older sessions or Phase A
-artifacts; they are not accepted as new <code>adaptive_config</code> keys.</p></dd>
-
-<dt><code>anchored_joint_spoke_prior_scale</code></dt>
-<dd><p>Scale multiplier for anchored-
-joint spoke priors. Default is <code>1.0</code>.</p></dd>
-
-<dt><code>anchored_joint_sd_floor</code></dt>
-<dd><p>Lower bound applied to anchored-joint
-spoke prior SDs derived from Phase A artifacts. Default is <code>0.02</code>.</p></dd>
-
-<dt><code>anchored_joint_spoke_prior_fallback_sd</code></dt>
-<dd><p>Fallback anchored-joint
-spoke prior SD used when artifact-level SDs are unavailable. Default is
-<code>1.0</code>.</p></dd>
+<dt><code>link_estimation_mode</code></dt>
+<dd><p>Explicit estimator identity for linking Phase A
+preparation: <code>fixed_shape_offset</code>, <code>gaussian_posterior_bridge</code>, or
+<code>joint_offset</code>. There is no default. Adaptive Phase B selection is
+unavailable pending validation. Use <code><a href="prepare_link_input.html">prepare_link_input()</a></code>, <code><a href="fit_link.html">fit_link()</a></code>,
+and <code><a href="start_link_session.html">start_link_session()</a></code> for explicit-evidence linking. Legacy Phase B
+posteriors cannot be migrated; restart from compatible Phase A inputs.</p></dd>
 
 
 <dt><code>link_identified_reliability_min</code></dt>
@@ -691,8 +679,9 @@ Use <code>adaptive_config</code> for identifiability-gated controller behavior a
 <code>run_mode = "link_one_spoke"</code> and <code>run_mode = "link_multi_spoke"</code> require
 multi-set input (<code>set_id</code>/<code>global_item_id</code>), enforce hub&lt;-&gt;spoke routing
 defaults, and preserve Phase A artifact gating before Phase B cross-set
-comparisons begin. Phase B uses anchored-joint estimation with a hard-locked
-hub and global-shared judge parameters. Every wrapper call returns canonical
+comparisons begin. An explicit <code>link_estimation_mode</code> is required. Adaptive
+Phase B is unavailable pending selector validation; use <code><a href="start_link_session.html">start_link_session()</a></code>
+with explicit evidence for E1–E3 estimation. Every wrapper call returns canonical
 <code>phase_a</code> outputs that can be fed back into a later linking run through
 <code>adaptive_config$phase_a_artifacts</code>.</p>
 <p>Selection semantics:
@@ -731,7 +720,7 @@ determine TrueSkill sigma. No historical training-score units are restored.</p>
 <p>Predictive BTL priors apply only in <code>btl_only</code> and <code>both</code>, including run-required
 linking Phase A. TrueSkill initialization applies in <code>trueskill_only</code> and <code>both</code>.
 Imported Phase-A artifacts retain their own generation identity and are not
-rerun because predictive input exists. Transform, anchored-joint, and pooled
+rerun because predictive input exists. Linking and pooled
 judge refits keep their existing prior rules; predictive evidence is not
 injected into Phase B priors, D-optimal selection, or probes.
 Custom BTL fit functions should consume <code>state$predictive_prior</code> only when
@@ -779,14 +768,14 @@ state, mode, strategy, and bootstrap progress; omit all warm-start arguments.</p
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       8               4               4        0 FALSE             </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 1 more variable: last_stop_reason &lt;chr&gt;</span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">out</span><span class="op">$</span><span class="va">logs</span><span class="op">$</span><span class="va">step_log</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 4 × 99</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 4 × 97</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-23 <span style="color: #949494;">03:45:59</span>       1     1     4 S01   S04       4     1 S04  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-23 <span style="color: #949494;">03:45:59</span>       2     4     8 S04   S08       8     4 S08  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-23 <span style="color: #949494;">03:45:59</span>       3     8     2 S08   S02       2     8 S02  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-23 <span style="color: #949494;">03:46:00</span>       4     2     6 S02   S06       6     2 S06  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 89 more variables: B_id &lt;chr&gt;, unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;,</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-09-23 <span style="color: #949494;">05:10:28</span>       1     1     4 S01   S04       4     1 S04  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-09-23 <span style="color: #949494;">05:10:28</span>       2     4     8 S04   S08       8     4 S08  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-09-23 <span style="color: #949494;">05:10:28</span>       3     8     2 S08   S02       2     8 S02  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-09-23 <span style="color: #949494;">05:10:29</span>       4     2     6 S02   S06       6     2 S06  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 87 more variables: B_id &lt;chr&gt;, unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   Y &lt;int&gt;, status &lt;chr&gt;, judge_backend &lt;chr&gt;, judge_model &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   judge_endpoint &lt;chr&gt;, judge_valid &lt;lgl&gt;, judge_invalid_reason &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   llm_status_code &lt;int&gt;, llm_error_message &lt;chr&gt;, llm_custom_id &lt;chr&gt;,</span></span>

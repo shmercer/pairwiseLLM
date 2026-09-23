@@ -137,25 +137,23 @@ Pair selection in this framework is stepwise and uncertainty-aware.
 Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling
 anchors, pair probabilities, and base utility \$\$U_0 = p\_{ij}(1 -
 p\_{ij})\$\$ where \\p\_{ij}\\ is the current TrueSkill win probability
-for pair \\\\i, j\\\\. In linking Phase B, anchor/strata routing uses a
-linking-global score derived from Phase A raw summaries and the accepted
-Phase B linking state. In linking Phase B, eligible cross-set candidates
-are ranked by ridge-stabilized D-optimal log-det information gain on the
-active linking parameter block using order-averaged Model D
-probabilities. In the spoke free block with the hub fixed. Linking
-inference parameters are used for inference/diagnostics/stopping, not as
-direct selection objectives. Phase B uses pooled within-set Phase A
-judge-parameter estimates, using the configured BTL model variant, as
-the accepted shared source for fixed `beta`/`epsilon` constants. The
-within-set/Phase-A hybrid long-link gate uses TrueSkill throughout.
-Bayesian BTL supplies item estimates, posterior uncertainty, EAP
-reliability, diagnostics, stopping, and the existing `global_identified`
-signal. This signal can affect later hybrid tapering and routing;
-selection is not wholly independent of BTL. Direct within-set strategies
-use their documented partner targets after the common bootstrap. Phase B
-selection and prior rules are unchanged. Linking Phase B refits use
-Bayesian posterior estimation and posterior summaries/diagnostics are
-logged per spoke at each linking refit.
+for pair \\\\i, j\\\\. Linking Phase A preparation requires an explicit
+`adaptive_config$link_estimation_mode`. Adaptive Phase B selection
+remains unavailable pending separate validation. Use
+[`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
+[`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md),
+and
+[`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md)
+with explicit cross-set evidence and frozen shared judge parameters for
+E1–E3 linking. The within-set/Phase-A hybrid long-link gate uses
+TrueSkill throughout. Bayesian BTL supplies item estimates, posterior
+uncertainty, EAP reliability, diagnostics, stopping, and the existing
+`global_identified` signal. This signal can affect later hybrid tapering
+and routing; selection is not wholly independent of BTL. Direct
+within-set strategies use their documented partner targets after the
+common bootstrap. Phase B selection and prior rules are unchanged.
+Linking Phase B refits use Bayesian posterior estimation and posterior
+summaries/diagnostics are logged per spoke at each linking refit.
 
 The returned state contains canonical logs:
 
@@ -181,9 +179,9 @@ Predictive BTL priors apply only in `btl_only` and `both`, including
 run-required linking Phase A. TrueSkill initialization applies in
 `trueskill_only` and `both`. Imported Phase-A artifacts retain their own
 generation identity and are not rerun because predictive input exists.
-Transform, anchored-joint, and pooled judge refits keep their existing
-prior rules; predictive evidence is not injected into Phase B priors,
-D-optimal selection, or probes. Custom BTL fit functions should consume
+Linking and pooled judge refits keep their existing prior rules;
+predictive evidence is not injected into Phase B priors, D-optimal
+selection, or probes. Custom BTL fit functions should consume
 `state$predictive_prior` only when `state$meta$warm_start_mode` is
 `btl_only` or `both`; its presence alone does not imply BTL warming.
 Resume preserves saved predictions, current TrueSkill state, mode,
