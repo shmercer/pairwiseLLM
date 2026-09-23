@@ -107,7 +107,7 @@
   top_band_n <- as.integer(ceiling(top_band_pct * n))
   top_band_n <- max(1L, min(n, top_band_n))
   top_band_ids <- ids_sorted[seq_len(top_band_n)]
-  rest_ids <- ids_sorted[(top_band_n + 1L):n]
+  rest_ids <- if (top_band_n < n) ids_sorted[seq.int(top_band_n + 1L, n)] else character()
   rest_ids <- rest_ids[!is.na(rest_ids)]
 
   top_k <- max(1L, min(top_band_bins, top_band_n))

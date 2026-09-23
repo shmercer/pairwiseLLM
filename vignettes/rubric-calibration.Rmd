@@ -14,10 +14,11 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-Rubric calibration converts completed comparative-judgment (CJ) results into
-ordered performance levels. The ordinal methods learn the relationship between
-CJ quality and human rubric scores. Percentile scoring matches a chosen marginal
-distribution without learning rubric criteria.
+Rubric calibration turns writing-quality scores from pairwise comparisons into
+ordered levels such as “developing”, “proficient” and “advanced”. Comparing samples
+two at a time is called **comparative judgment (CJ)**. The ordinal methods use human
+rubric scores to learn where the levels belong on the CJ scale. Percentile scoring
+instead assigns levels according to proportions you choose.
 
 **You need:** a completed Bayesian CJ analysis and, for ordinal calibration,
 human rubric labels for some of its items. **You get:** a rubric label for each
@@ -34,29 +35,31 @@ they do not establish mastery of rubric criteria.
 
 | Available evidence | Method and design | Interpretation |
 |---|---|---|
-| Completed CJ, no human rubric labels | `percentile`, `same_set` | Norm-referenced, distribution-matched levels |
-| Human labels for a subset of one completed CJ analysis | `ordinal_linear`, `same_set` | Default two-stage calibration on that analysis's scale |
-| A human-scored historical reference and new target responses | `ordinal_linear`, `linked_anchors` | Reusable calibration after existing Phase B linking |
-| Evidence of curvature in the CJ-to-rubric relationship | Explicit `ordinal_monotone`, either ordinal design | Nondecreasing nonlinear calibration, assessed with held-out labels |
+| Completed CJ, no human rubric labels | `percentile`, `same_set` | Levels describe relative standing in this set |
+| Human labels for some samples in one completed CJ analysis | `ordinal_linear`, `same_set` | The default calibration learns from those human scores |
+| A human-scored reference and new samples | `ordinal_linear`, `linked_anchors` | Reuse the saved calibration after linking the sets |
+| A curved relationship between CJ scores and rubric levels | `ordinal_monotone`, either ordinal design | A more flexible curve that must be checked on separate human scores |
 
-`same_set` means that labeled and unlabeled items participated in **one CJ fit**.
-It is a two-stage procedure, not a joint CJ/rubric likelihood. Both ordinal
-methods retain the common cumulative-effect assumption; a curved fit alone does
-not resolve a proportional-odds violation. There is no automatic method selector.
+`same_set` means that samples with and without human scores participated in
+**one CJ analysis**. Calibration uses its completed scores; it does not change the
+pairwise analysis. Both ordinal methods assume the effect of CJ quality is shared
+across rubric boundaries. Allowing a curve does not remove that assumption.
+You choose the method; the package does not choose one automatically.
 
 ## Start from completed CJ results
 
 Use a completed `fit_bayes_btl_mcmc()` result, a completed within-set
 `adaptive_rank()` result (or its state), or an import-ready Phase A artifact.
-Raw score tables and intermediate adaptive states are rejected. Fixed fits with
-multiple refits use the last refit. All four Bayesian variants, `btl`, `btl_e`,
-`btl_b`, and `btl_e_b`, use the same calibration interface. For fixed-pair results,
-live versus batch collection is provenance only.
+Supply the completed result, not just a table of scores or an unfinished adaptive
+run. If a fixed-pair analysis was fitted several times, calibration uses its last
+fit. All four Bayesian variants, `btl`, `btl_e`, `btl_b`, and `btl_e_b`, use the
+same calibration functions. Whether fixed comparisons were collected live or in
+batches does not change calibration.
 
-Inspect CJ reliability, connectivity, and estimation diagnostics before
-calibration. Upstream failures remain visible; calibration does not repair weak
-CJ measurement. Import readiness follows existing Phase A quality rules and
-does not by itself certify that the originating run stopped successfully.
+Before calibration, check that the samples are connected through comparisons and
+that the CJ estimates and diagnostics are adequate for your purpose. Rubric
+calibration cannot repair a weak ranking. A saved Phase A result being ready to
+import does not, by itself, show that its original run finished successfully.
 
 For constructing these inputs, see [Standalone Bayesian BTL](bayesian-btl.html),
 [Guide: Adaptive Pairing](adaptive-pairing.html), and
@@ -106,12 +109,12 @@ training_labels <- read.csv("training_labels.csv", colClasses = "character")
 evaluation_labels <- read.csv("evaluation_labels.csv", colClasses = "character")
 ```
 
-Declare levels from lowest to highest quality. Numeric scores can infer ascending
-levels, and ordered factors retain their declared levels. Character scores need
-explicit `levels`. One fit has one category structure (`K >= 3`, commonly 3--6).
-Every intended category must occur among training labels; missing categories
-fail rather than being collapsed. Higher CJ and rubric scores must both mean
-better performance.
+List levels from lowest to highest quality. For text labels, supply `levels`
+explicitly. Numeric scores are ordered from low to high; ordered factors keep
+their declared order. Use at least three levels, commonly three to six. Every
+intended level must appear in the training labels. The package stops if a level
+is missing rather than silently combining levels. Higher CJ and rubric scores
+must both mean better performance.
 
 Choose calibration responses that cover the CJ range, including its extremes,
 and check category counts. There is no universal sufficient number of labels.
@@ -134,17 +137,17 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
 }
 ```
 
-Only labeled training items determine the stored mean and sample SD used in
-`z = (theta - center) / scale`. Linear calibration estimates
-`logit P(Y <= k) = tau[k] - beta * z`. A positive slope means that higher CJ
-quality favors higher rubric categories. Nonpositive slopes warn; the software
-does not reverse coding. Sparse categories, separation, and numerical or
-identification problems require review even if a fit is returned.
+The model learns from samples with training labels and saves their score scale
+for future predictions. Higher CJ scores should favor higher rubric levels.
+A warning about a zero or negative slope means this relationship needs review;
+the package does not reverse your scoring direction automatically. Also inspect
+warnings about sparse categories or an unstable fit. The formal model and
+scaling rules are documented in `?fit_rubric_calibration`.
 
-`predict(calibration)` scores every original item, including unlabeled items.
-Explicit same-set `newdata` may only reuse the original completed result with
-unchanged items, accepted scores/uncertainty, and fit evidence; reordering is
-allowed. Independent cohorts and refits require a different deployment analysis.
+`predict(calibration)` scores every original sample, including those without human
+labels. If you supply `newdata` for a same-set calibration, it must be the original
+completed result; changing row order is fine, but changing the samples or their
+fit is not. Use the linked-reference workflow below for a separate set.
 
 ## Read probabilities and hard scores
 
@@ -157,17 +160,17 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
 }
 ```
 
-Each `probabilities` entry is a full K-vector named by the original ordered
-labels. The default hard score is the **median category**: the first category
-whose cumulative probability reaches 0.5. Equality selects the lower category.
-The mode selects the largest probability; ties select the lowest category.
-Changing `hard_score` changes `category` and `rubric_score`, while retaining all
-probabilities and both decision summaries.
+Each `probabilities` entry gives the probability of every rubric level, named by
+its label. The default single score is the **median category**: starting from the
+lowest level, add probabilities until the total reaches 0.5. If it equals 0.5
+exactly, use that lower category. With `hard_score = "mode"`, use the most probable
+category instead; ties go to the lower category. Both summaries and all
+probabilities remain available whichever score you report.
 
-`expected_level` averages internal indices `1:K`, not arbitrary numeric label
-values. It is a continuous summary, not a replacement for the ordinal outcome.
-`extrapolated` marks scores outside the labeled training range, even among
-original same-set items. Endpoints are inside the range.
+`expected_level` is an average of category positions (1, 2, 3, and so on), not an
+average of your numeric labels. It is a summary rather than an assigned rubric
+level. `extrapolated` flags scores outside the range covered by training labels,
+even for samples in the original analysis.
 
 For an illustrative probability vector `(developing = 0.20, proficient = 0.55,
 advanced = 0.25)`, cumulative probability first reaches 0.5 at “proficient”, so
@@ -195,32 +198,30 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
 }
 ```
 
-Normalized ranked probability score (`rps`) is the primary probabilistic metric;
-lower is better. It averages squared cumulative-probability errors over the
-`K - 1` boundaries. Log loss is secondary. Hard-score summaries include exact and
-within-one accuracy, mean absolute category error, and quadratic weighted kappa.
-Distances use internal category indices. Undefined kappa and unavailable
-probability metrics have explicit unavailable values/reasons.
+Start with ranked probability score (`rps`): lower values indicate better
+predictions, accounting for how far a prediction falls from the observed level.
+Log loss is another probability-based check. For the assigned categories, inspect
+exact agreement, agreement within one level, average category error and weighted
+kappa (agreement adjusted for chance). Distances count category steps. If a metric
+cannot be calculated, the output explains why.
 
-Evaluation aligns IDs, excludes and counts missing labels, and reports training
-overlap and extrapolation. Evaluation categories may be absent even though all
-categories were required for training. `assessment$calibration` compares observed
-and predicted cumulative frequencies in probability and theta bins; ties stay
-together. These summaries can reveal where predictions disagree with labels.
+Evaluation matches samples by ID, counts missing labels and reports any overlap
+with training labels. Unlike training, an evaluation set need not contain every
+category. `assessment$calibration` groups similar predictions and compares them
+with observed human scores, helping you see where the model is too optimistic or
+too pessimistic.
 
-Diagnostics are off by default. When requested, linear fits use a
-threshold-varying alternative for a proportional-odds likelihood-ratio diagnostic.
-Monotone fits provide descriptive boundary checks, not an omnibus test. Failed
-diagnostic refits return an unavailable status and preserve the production fit.
-Formal and descriptive checks use training data; held-out evaluation labels do
-not refit the calibration or its training diagnostics.
+Diagnostics are off by default. For the linear method, they check the assumption
+that CJ quality has a shared effect across rubric boundaries. For the curved
+method, they provide descriptive boundary checks. These checks use training data;
+the separate evaluation labels do not change your fitted calibration. If a
+check fails to run, it is marked unavailable and the original fit is preserved.
 
-For repeated label-only validation, keep completed CJ evidence fixed, hide
-held-out rubric labels, and refit all calibration scaling and parameters in each
-training fold. Ensure every fold's training data retain all intended categories.
-The package's CV machinery is internal; the exported evaluator supports explicit
-holdout workflows. Model/tuning selection using validation results needs a
-separate outer assessment to avoid optimistic reported performance.
+For repeated validation, keep the completed CJ analysis fixed. Repeatedly set
+aside some human labels, fit a fresh calibration using only the remaining labels,
+and evaluate the labels you set aside. Every training group must still include
+all rubric levels. If you use those results to choose a model or its settings,
+reserve another independent evaluation set for your final report.
 
 ## Explicit monotone alternative
 
@@ -239,18 +240,18 @@ if (requireNamespace("mgcv", quietly = TRUE) &&
 }
 ```
 
-This fits a nondecreasing penalized cubic spline using `mgcv::scasm()` and
-`mgcv::ocat()`. The default basis dimension is `k = 6`; it must be at least five
-and is reduced with a warning if there are fewer unique labeled scores. Fewer
-than five unique scores fail. This is a backend feasibility constraint, not a
-sample-size recommendation. Smoothing is estimated unless a positive fixed `sp`
-is supplied. No unconstrained smoother replaces a failed monotone fit.
+This fits a smooth curve that can bend while never decreasing as CJ quality
+increases. `k` controls how much flexibility is available; its default is 6 and
+it must be at least 5. The package may reduce it with a warning when too few
+distinct training scores are available. At least five distinct scores are needed
+to fit this curve, but that minimum does not guarantee enough data for useful
+calibration. See the function help for smoothing controls.
 
-Inspect convergence, probability behavior, and held-out performance before
-preferring the more flexible model. Numerical cutpoints can be unavailable for
-flat or unresolved crossings; scoring still uses probabilities. Predictions
-outside the labeled range retain spline extrapolation and are flagged, without
-establishing rubric calibration there.
+Check fit diagnostics and performance on separate human labels before preferring
+the more flexible method. A flat part of the curve may make a category cutpoint
+unavailable; predictions still use category probabilities. Scores outside the
+training range are flagged because the curve is being extended beyond the scores
+used to learn it.
 
 ## Percentile levels without human labels
 
@@ -266,36 +267,39 @@ percentile_calibration$backend$cutpoints
 percentile_calibration$backend$cutpoint_tie_counts
 ```
 
-Omit `target_distribution` for equal proportions; `K` may replace explicit level
-names. Quantiles use fixed R type 8. A score equal to an internal cutpoint enters
-the higher category. All ties stay together, so requested proportions can be
-unattainable and some categories can be empty. If all scores are identical,
-all items enter the highest category under this boundary convention.
+The example asks for 20% of samples in the lowest level, 50% in the middle and
+30% in the highest. Omit `target_distribution` for equal proportions. You can
+supply the number of levels with `K` instead of naming them.
 
-These are **norm-referenced, distribution-matched CJ-derived performance levels**.
-Using a historical rubric distribution does not show individual agreement with
-human rubric raters. Percentile fits support original-result reuse only, not
-independent cohorts or `linked_anchors`. They return deterministic categories,
-not category probabilities; evaluation supplies hard metrics only.
+Tied scores stay together. This means the achieved proportions may differ from
+what you requested, and some categories may be empty. A score exactly on a
+boundary enters the higher category; if all scores are identical, this rule puts
+every sample in the highest category. Always inspect the achieved proportions.
 
-## Reuse a historical rubric reference through Phase B
+These levels describe **relative standing within this set**. Matching a historical
+rubric distribution does not establish agreement with human raters for individual
+samples. Percentile scoring reuses only the original analysis; it cannot transport
+levels to a separate cohort through `linked_anchors`. It returns categories without
+category probabilities, so evaluation uses only category-based metrics.
 
-The `rubric_reference_set` is the human-scored set whose CJ metric supports the
-calibration. A Phase B **hub anchor** is a hub item selected for routing recurring
-comparisons, not a known true rubric score.
+## Reuse a historical rubric reference for a new set
 
-1. Run trait-specific Phase A for the reference, retaining its ready artifact.
-2. Fit and save its ordinal calibration and retain the original reference artifact.
-3. Run compatible Phase A for each new target set.
-4. Explicitly select E1, E2, or E3 and fit the active cross-set evidence.
-5. Apply the saved calibration to the valid, identified common-scale result.
+You can use a human-scored reference set to score new writing samples after linking
+both sets onto a common scale. The reference is the **hub** and the new set is the
+**spoke**. **Phase A** means ranking each set separately; **Phase B** links them
+using comparisons between sets. A hub sample is a reference for comparison, not a
+sample whose writing quality is known without uncertainty.
 
-In the [linking guide](adaptive-linking.html), ready artifacts are available in
-`reference_run$phase_a$manifest[["1"]]` and
-`target_run$phase_a$manifest[["2"]]` for reference set 1 and target set 2.
-Extract the artifact list for fitting; the rubric fitter does not take a path or
-the whole Phase A manifest. The following assumes `reference_phase_a` contains
-that original artifact and `reference_labels` contains its human scores.
+1. Rank the reference samples on the chosen trait and keep the original Phase A result.
+2. Fit and save the rubric calibration using that result and its human scores.
+3. Rank the new samples using compatible settings and keep their Phase A result.
+4. Choose E1, E2 or E3 and link the sets using between-set comparisons.
+5. Check the link, then apply the saved calibration to the linked target scores.
+
+The following example assumes `reference_phase_a` contains the original reference
+artifact (the saved Phase A result) and `reference_labels` contains its human
+scores. Read a saved artifact with `readRDS()` first; supply the artifact itself,
+not a filename or the entire collection of saved-run metadata.
 
 ```{r linked-calibration, eval=FALSE}
 if (requireNamespace("ordinal", quietly = TRUE)) {
@@ -308,12 +312,12 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
 }
 ```
 
-The reference and target Phase A contracts must match the selected BTL variant.
-The [explicit-evidence linking guide](linking-sessions.html) describes evidence
-preparation and exact save/resume. This example explicitly chooses E2, which
-requires posterior item draws in both artifacts. `active_cross` contains only
-active cross-set observations; `frozen_judge` records the shared Phase A judge
-parameters. No provider calls or adaptive stopping are implicit in this fit.
+Use the same BTL model variant for the reference and target rankings. The
+[linking sessions guide](linking-sessions.html) explains the required input tables
+and how to save and resume work. Here we explicitly choose E2, which needs saved
+joint posterior draws in both artifacts. `active_cross` holds the comparisons to
+use for fitting; `frozen_judge` holds the shared bias and lapse settings from Phase A.
+Keep comparisons reserved for checking accuracy in a separate table.
 
 ```{r phase-b-workflow, eval=FALSE}
 link_input <- prepare_link_input(
@@ -329,10 +333,11 @@ link_input <- prepare_link_input(
 completed_phase_b <- start_link_session(link_input)
 ```
 
-For several targets, pass a list of prepared inputs sharing the same hub and
-judge to `start_link_session()`. E2/E3 can update hub shapes; rubric calibration
-remains attached to the original Phase A hub artifact. Rubric labels are not
-required during linking. Held-out probe outcomes must stay outside `active_cross`.
+For several target sets, prepare one linking input per set and pass the list to
+`start_link_session()`. All use the same hub, judge settings and chosen method.
+E2 and E3 can update hub scores during linking, but the rubric calibration stays
+attached to the original reference result. You do not need target rubric labels
+to link the sets or apply the saved calibration.
 
 ```{r linked-prediction, eval=FALSE}
 if (requireNamespace("ordinal", quietly = TRUE)) {
@@ -342,21 +347,28 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
 }
 ```
 
-Explicit linked prediction returns targets only; `newdata = NULL` predicts the
-original reference items. Every spoke needs a valid, cross-set identified fit.
-The public `theta_link_eap` field aliases `theta_link_mean`: posterior means for
-E1 and E3-MCMC, MAP locations for E2/E3 Laplace. E1 uncertainty is conditional on
-fixed shapes; E2/E3 include shapes and offset. Predictions restore the original
-hub location origin using its frozen Phase A mean. Estimator identity,
-uncertainty scope and exact evidence provenance accompany the output. Legacy
-anchored-joint Phase B sessions must restart from compatible Phase A inputs.
+The prediction contains only the target samples. Use `newdata = NULL` to predict
+scores for the original reference samples. Every target set needs a valid link
+supported by between-set comparisons; a fit based only on starting assumptions
+is insufficient.
 
-Prediction validates the original reference IDs, locations/uncertainty, evidence,
-trait, orientation, and canonical fit contract. A matching configuration hash
-alone does not establish a shared metric. Target-only Phase A scores, changed
-reference scales, and incompatible contracts fail explicitly. **Never independently
-re-standardize the target cohort**: prediction uses the stored labeled-reference
-mean and SD on accepted Phase B common-scale locations.
+Linking scores are named `theta_link_mean` (also available as `theta_link_eap`).
+E1 and E3-MCMC report posterior averages; E2 and the usual E3 fit report the most
+probable joint scores with approximate uncertainty. E1 treats the earlier rankings
+as fixed. E2 and E3 include uncertainty in those rankings as well as the shift
+between sets. The [design guide](adaptive-linking-design.html) explains these
+differences. Rubric prediction uses the linked point scores; it retains score
+uncertainty for inspection but does not propagate it through the rubric model.
+
+Prediction checks that you are using the original reference samples, trait,
+scoring direction and compatible model settings. It restores the original
+reference's score origin before applying the saved calibration. **Do not
+standardize the target set separately**: doing so would change the meaning of its
+scores relative to the reference. The output includes information about the
+linking method, comparisons used and fit diagnostics.
+
+Old anchored-joint Phase B sessions cannot be used with this workflow. Restart
+linking from compatible original Phase A results using E1, E2 or E3.
 
 Reference holdout performance assesses calibration on the reference scale. To
 assess transport, use external human labels for linked targets:

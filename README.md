@@ -1,5 +1,5 @@
 
-<!-- README-source-md5: aa26a536bab5d22bfb85a04737f1512e -->
+<!-- README-source-md5: 0d24bf3d3a2d07dd60d30134cfef5063 -->
 
 <img src="man/figures/pairwiseLLM-banner.jpg"
      alt="pairwiseLLM: comparing two writing samples" width="100%">
@@ -34,7 +34,8 @@ for a step-by-step walkthrough using your own data.
 
 ## Installation
 
-Version 1.5.2 requires **R \>= 4.4**. Install the CRAN release with:
+The package requires **R \>= 4.4**. Install the published CRAN release
+with:
 
 ``` r
 install.packages("pairwiseLLM")
@@ -195,9 +196,14 @@ stopping criteria.
   Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.html)
   — place separately ranked sets on a common scale with a practical
   hub-and-spoke workflow.
+- [Guide: Linking Saved
+  Comparisons](https://shmercer.github.io/pairwiseLLM/articles/linking-sessions.html)
+  — fit a link with saved comparisons, inspect the scores, and save or
+  resume your work.
 - [Design: Adaptive
   Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.html)
-  — understand E1--E3 estimation, Phase A evidence, and session restart.
+  — understand the three linking models, their assumptions, and
+  uncertainty.
 
 ### Modeling and bias
 
@@ -281,5 +287,5 @@ MIT License. See `LICENSE`.
 ## Citation
 
 > Mercer, S. H. (2026). *pairwiseLLM: Pairwise writing quality
-> comparisons with large language models* (Version 1.5.2) \[R package;
+> comparisons with large language models* (Version 1.6.0) \[R package;
 > Computer software\]. <https://github.com/shmercer/pairwiseLLM>

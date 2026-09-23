@@ -260,7 +260,7 @@ test_that("release documentation keeps navigation and citation contracts", {
   })
 
   version <- unname(description[1L, "Version"])
-  expect_identical(version, "1.5.2")
+  expect_identical(version, "1.6.0")
   citation <- paste(readLines(file.path(root, "inst", "CITATION")), collapse = "\n")
   codemeta <- jsonlite::fromJSON(file.path(root, "codemeta.json"))
   news <- readLines(file.path(root, "NEWS.md"))
@@ -514,8 +514,7 @@ test_that("linking guides advertise only supported explicit-evidence workflows",
   for (path in paths) {
     text <- paste(readLines(path, warn = FALSE), collapse = "\n")
     for (term in c("prepare_link_input()", "fit_link()", "start_link_session()",
-        "fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset",
-        "pairwiseLLM_unsupported_legacy_link_state")) expect_match(text, term, fixed = TRUE)
+        "fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset")) expect_match(text, term, fixed = TRUE)
     expect_false(grepl("anchored_joint_spoke_prior|anchored_joint_sd_floor|hard-locked hub", text))
   }
 })
@@ -665,13 +664,13 @@ test_that("adaptive-linking design vignette tracks the normative Phase A/B contr
   expect_true(grepl("within-set-adaptive-design.html", text, fixed = TRUE))
 
   required_sections <- c(
-    "## Foundational concepts",
-    "## Phase A artifacts and validation",
-    "## Common-scale identification",
-    "## D-optimal active selection",
-    "## Probes and calibration",
-    "## Stopping, blockers, and freezing",
-    "## Persistence and resume"
+    "## Coordinates, identification, and the judge model",
+    "## E1: fixed-shape offset",
+    "## E2: full-covariance Gaussian posterior bridge",
+    "## E3: single-use joint-offset model",
+    "## Evidence, prediction, and uncertainty contracts",
+    "## Selection, probes, and stopping",
+    "## Persistence, multiple spokes, and rubric transport"
   )
   expect_true(all(vapply(
     required_sections,
@@ -683,7 +682,7 @@ test_that("adaptive-linking design vignette tracks the normative Phase A/B contr
     expect_match(text, id, fixed = TRUE)
     expect_match(practical, id, fixed = TRUE)
   }
-  expect_match(text, "Phase B posterior is never migrated", fixed = TRUE)
-  expect_match(text, "Adaptive Phase B selection is unavailable", fixed = TRUE)
+  expect_match(text, "pairwiseLLM_unsupported_legacy_link_state", fixed = TRUE)
+  expect_match(text, "Adaptive Phase B D-optimal execution is unavailable", fixed = TRUE)
   expect_null(pairwiseLLM:::.adaptive_controller_defaults(300L)$link_estimation_mode)
 })

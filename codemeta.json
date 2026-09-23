@@ -8,7 +8,7 @@
   "codeRepository": "https://github.com/shmercer/pairwiseLLM",
   "issueTracker": "https://github.com/shmercer/pairwiseLLM/issues",
   "license": "https://spdx.org/licenses/MIT",
-  "version": "1.5.2",
+  "version": "1.6.0",
   "programmingLanguage": {
     "@type": "ComputerLanguage",
     "name": "R",
@@ -443,7 +443,7 @@
       ],
       "name": "pairwiseLLM: Pairwise comparison tools for large language model-based writing evaluation",
       "url": "https://doi.org/10.32614/CRAN.package.pairwiseLLM",
-      "description": "R package version 1.5.2"
+      "description": "R package version 1.6.0"
     }
   ],
   "releaseNotes": "https://github.com/shmercer/pairwiseLLM/blob/master/NEWS.md",

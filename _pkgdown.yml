@@ -42,7 +42,7 @@ navbar:
           href: articles/adaptive-pairing.html
         - text: "Guide: Adaptive Warm Start"
           href: articles/adaptive-warm-start.html
-        - text: "Guide: Explicit-evidence Linking Sessions"
+        - text: "Guide: Linking Saved Comparisons"
           href: articles/linking-sessions.html
         - text: "Guide: Adaptive Linking"
           href: articles/adaptive-linking.html
@@ -168,8 +168,8 @@ reference:
       - save_adaptive_session
       - validate_session_dir
       - load_adaptive_session
-  - title: "Link sets from explicit evidence (development)"
-    desc: "Fit, inspect, save and resume E1–E3 on explicit evidence; estimator selection is required."
+  - title: "Link separately ranked sets"
+    desc: "Use saved comparisons to link sets, inspect results, and save your work; choose a method explicitly."
     contents:
       - prepare_link_input
       - start_link_session

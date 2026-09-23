@@ -868,121 +868,14 @@ run_one_step <- function(state, judge, ...) {
   controller <- .adaptive_controller_resolve(state)
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   .adaptive_assert_step_entry_invariants(state, controller = controller, phase_ctx = phase_ctx)
-  if (.adaptive_link_mode_active(controller) &&
-    identical(phase_ctx$phase, "phase_b") &&
-    isTRUE(.adaptive_link_all_spokes_stopped(state))) {
-    return(state)
-  }
-  if (.adaptive_link_mode_active(controller) && identical(phase_ctx$phase, "phase_b")) {
-    active_phase_b_spokes <- .adaptive_link_effective_active_spokes(
-      state = state,
-      controller = controller,
-      refit_id = .adaptive_link_refit_window_id(state),
-      exclude_exhausted = TRUE
-    )
-    if (length(active_phase_b_spokes) < 1L) {
-      return(state)
-    }
-    state$controller <- controller
-    current_refit_id <- as.integer(.adaptive_link_refit_window_id(state))
-    cached_refit_id <- as.integer(state$controller$link_budget_refit_id %||% NA_integer_)
-    cached_budget_map <- state$controller$link_budget_map %||% list()
-    if (!identical(cached_refit_id, current_refit_id) || length(cached_budget_map) < 1L) {
-      state$controller$link_budget_refit_id <- current_refit_id
-      state$controller$link_budget_map <- .adaptive_link_budget_map_for_refit(
-        state = state,
-        controller = state$controller,
-        eligible_spoke_ids = as.integer(active_phase_b_spokes)
-      )
-    }
-    controller <- state$controller
-    state <- .adaptive_link_probe_ensure_panels(
-      state,
-      controller = controller,
-      spoke_ids = as.integer(active_phase_b_spokes)
-    )
-    state <- .adaptive_link_refit_summary_ensure_current_entries(
-      state = state,
-      spoke_ids = as.integer(active_phase_b_spokes),
-      refit_id = current_refit_id
-    )
-  }
 
   if (.adaptive_warm_start_active(state)) {
     selection <- .adaptive_warm_start_selection(state, step_id = step_id)
   } else {
-    maybe_replace_with_holdout <- function(selection, allow_when_active, eligible_spoke_ids) {
-      probe_spoke_id <- .adaptive_link_probe_next_holdout_spoke(
-        state,
-        controller,
-        eligible_spoke_ids = eligible_spoke_ids,
-        allow_when_active = allow_when_active
-      )
-      if (!is.na(probe_spoke_id)) {
-        probe_selection <- .adaptive_link_probe_select_holdout(
-          state,
-          step_id = step_id,
-          spoke_id = probe_spoke_id
-        )
-        if (!is.null(probe_selection) && nrow(tibble::as_tibble(probe_selection)) != 0L) {
-          active_fallback_path <- as.character(selection$fallback_path %||% NA_character_)
-          active_fallback_path <- active_fallback_path[!is.na(active_fallback_path) & nzchar(active_fallback_path)]
-          fallback_suffix <- if (isTRUE(allow_when_active)) {
-            "probe_panel_fixed_refit"
-          } else {
-            "probe_panel_after_active_unavailable"
-          }
-          probe_selection$fallback_used <- fallback_suffix
-          probe_selection$fallback_path <- paste(
-            c(active_fallback_path, fallback_suffix),
-            collapse = ">"
-          )
-          return(probe_selection)
-        }
-      }
-      selection
-    }
-
     if (.adaptive_pairing_strategy(state) == "hybrid") {
       state <- .adaptive_refresh_round_anchors(state)
     }
     selection <- select_next_pair(state, step_id = step_id)
-    if (.adaptive_link_mode_active(controller) &&
-      identical(phase_ctx$phase, "phase_b")) {
-      if (isTRUE(selection$candidate_starved)) {
-        selection <- maybe_replace_with_holdout(
-          selection = selection,
-          allow_when_active = FALSE,
-          eligible_spoke_ids = .adaptive_link_effective_active_spokes(
-            state = state,
-            controller = controller,
-            refit_id = .adaptive_link_refit_window_id(state),
-            exclude_exhausted = TRUE
-          )
-        )
-      } else {
-        active_spoke_id <- as.integer(selection$link_spoke_id_selected %||% NA_integer_)
-        if (is.na(active_spoke_id) &&
-          !is.na(selection$i %||% NA_integer_) &&
-          !is.na(selection$j %||% NA_integer_)) {
-          set_i <- as.integer(state$items$set_id[[selection$i]])
-          set_j <- as.integer(state$items$set_id[[selection$j]])
-          hub_id <- as.integer(controller$hub_id %||% 1L)
-          if (identical(set_i, hub_id) && !identical(set_j, hub_id)) {
-            active_spoke_id <- set_j
-          } else if (identical(set_j, hub_id) && !identical(set_i, hub_id)) {
-            active_spoke_id <- set_i
-          }
-        }
-        if (!is.na(active_spoke_id)) {
-          selection <- maybe_replace_with_holdout(
-            selection = selection,
-            allow_when_active = TRUE,
-            eligible_spoke_ids = as.integer(active_spoke_id)
-          )
-        }
-      }
-    }
   }
 
   is_valid <- FALSE

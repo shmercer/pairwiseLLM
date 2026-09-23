@@ -108,66 +108,68 @@ test_that("regression matrix preserves ordinary ranking and explicit E1--E3 resu
 })
 
 test_that("phase A workflow matrix executes run/import/mixed paths", {
-  withr::local_seed(20260214)
-  items <- matrix_two_set_items()
-  judge <- matrix_score_judge(c(h1 = -0.4, h2 = 0.0, h3 = 0.6, s21 = -0.3, s22 = 0.2, s23 = 0.8))
-  base <- adaptive_rank_start(items, seed = 91L)
-  base$warm_start_done <- TRUE
-  base$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
-  artifacts <- matrix_import_artifacts(base, spoke_shift = -1)
-  fit_stub <- make_deterministic_fit_fn(as.character(base$item_ids))
+  for (estimator in link_release_ids) {
+    withr::local_seed(20260214)
+    items <- matrix_two_set_items()
+    judge <- matrix_score_judge(c(h1 = -0.4, h2 = 0.0, h3 = 0.6, s21 = -0.3, s22 = 0.2, s23 = 0.8))
+    base <- adaptive_rank_start(items, seed = 91L)
+    base$warm_start_done <- TRUE
+    base$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
+    artifacts <- matrix_import_artifacts(base, spoke_shift = -1)
+    fit_stub <- make_deterministic_fit_fn(as.character(base$item_ids))
 
-  # import
-  expect_error(adaptive_rank_run_live(
-    state = base,
-    judge = judge,
-    n_steps = 1L,
-    fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
-      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
-      hub_id = 1L,
-      phase_a_mode = "import",
-      phase_a_artifacts = artifacts
-    ),
-    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
-    progress = "none"
-  ), class = "pairwiseLLM_link_selector_unvalidated")
+    # import
+    expect_error(adaptive_rank_run_live(
+      state = base,
+      judge = judge,
+      n_steps = 1L,
+      fit_fn = fit_stub$fit_fn,
+      adaptive_config = list(
+        run_mode = "link_one_spoke", link_estimation_mode = estimator,
+        hub_id = 1L,
+        phase_a_mode = "import",
+        phase_a_artifacts = artifacts
+      ),
+      btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
+      progress = "none"
+    ), class = "pairwiseLLM_link_selector_unvalidated")
 
-  # run
-  out_run <- adaptive_rank_run_live(
-    state = adaptive_rank_start(items, seed = 92L),
-    judge = judge,
-    n_steps = 1L,
-    fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
-      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
-      hub_id = 1L,
-      phase_a_mode = "run"
-    ),
-    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
-    progress = "none"
-  )
-  status_run <- tibble::as_tibble(out_run$linking$phase_a$set_status)
-  expect_true(all(status_run$source == "run"))
+    # run
+    out_run <- adaptive_rank_run_live(
+      state = adaptive_rank_start(items, seed = 92L),
+      judge = judge,
+      n_steps = 1L,
+      fit_fn = fit_stub$fit_fn,
+      adaptive_config = list(
+        run_mode = "link_one_spoke", link_estimation_mode = estimator,
+        hub_id = 1L,
+        phase_a_mode = "run"
+      ),
+      btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
+      progress = "none"
+    )
+    status_run <- tibble::as_tibble(out_run$linking$phase_a$set_status)
+    expect_true(all(status_run$source == "run"))
 
-  # mixed
-  out_mixed <- adaptive_rank_run_live(
-    state = adaptive_rank_start(items, seed = 93L),
-    judge = judge,
-    n_steps = 1L,
-    fit_fn = fit_stub$fit_fn,
-    adaptive_config = list(
-      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
-      hub_id = 1L,
-      phase_a_mode = "mixed",
-      phase_a_artifacts = list(`1` = artifacts[["1"]])
-    ),
-    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
-    progress = "none"
-  )
-  status_mixed <- tibble::as_tibble(out_mixed$linking$phase_a$set_status)
-  expect_identical(status_mixed$source[match(1L, status_mixed$set_id)], "import")
-  expect_identical(status_mixed$source[match(2L, status_mixed$set_id)], "run")
+    # mixed
+    out_mixed <- adaptive_rank_run_live(
+      state = adaptive_rank_start(items, seed = 93L),
+      judge = judge,
+      n_steps = 1L,
+      fit_fn = fit_stub$fit_fn,
+      adaptive_config = list(
+        run_mode = "link_one_spoke", link_estimation_mode = estimator,
+        hub_id = 1L,
+        phase_a_mode = "mixed",
+        phase_a_artifacts = list(`1` = artifacts[["1"]])
+      ),
+      btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
+      progress = "none"
+    )
+    status_mixed <- tibble::as_tibble(out_mixed$linking$phase_a$set_status)
+    expect_identical(status_mixed$source[match(1L, status_mixed$set_id)], "import")
+    expect_identical(status_mixed$source[match(2L, status_mixed$set_id)], "run")
+  }
 })
 
 test_that("phase-a scoped lag eligibility resets by active set domain history", {
@@ -175,7 +177,8 @@ test_that("phase-a scoped lag eligibility resets by active set domain history", 
   state <- adaptive_rank_start(
     items,
     seed = 121L,
-    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
+      hub_id = 1L, phase_a_mode = "run")
   )
   ids <- as.character(state$item_ids)
   draws <- matrix(
@@ -222,7 +225,8 @@ test_that("freeze state in regression matrix remains one-way across subsequent u
   state <- adaptive_rank_start(
     items,
     seed = 141L,
-    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "import")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
+      hub_id = 1L, phase_a_mode = "import")
   )
   state$warm_start_done <- TRUE
   state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
@@ -258,7 +262,8 @@ test_that("E1 frozen spokes are removed from active and probe routing", {
   state <- adaptive_rank_start(
     matrix_two_set_items(),
     seed = 142L,
-    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "import")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
+      hub_id = 1L, phase_a_mode = "import")
   )
   state$warm_start_done <- TRUE
   state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())

@@ -89,7 +89,7 @@ test_that("real asymmetric E3 MCMC respects sign, presentation, and item relabel
       if (change == "relabel") {
         x$A_item <- unname(rename[x$A_item])
         x$B_item <- unname(rename[x$B_item])
-        return(x[nrow(x):1, ])
+        return(x[rev(seq_len(nrow(x))), ])
       }
       if (change == "presentation") {
         old <- x
@@ -148,4 +148,59 @@ test_that("real singleton Stan fits support both lapse boundaries", {
       expect_lt(fit$offset$delta_sd, 2)
     }
   }
+})
+
+test_that("real MCMC release gate covers repeatability, row order and repeated likelihood", {
+  skip_if(Sys.getenv("PAIRWISELLM_TEST_E3_STAN") != "true", "set PAIRWISELLM_TEST_E3_STAN=true for real E3 Stan parity")
+  skip_if_not_installed("cmdstanr")
+  skip_if_not_installed("posterior")
+  args <- link_e3_args(symmetric = TRUE)
+  args$control <- list(estimator = list(engine = "mcmc", cmdstan = list(
+    chains = 4L, parallel_chains = 2L, iter_warmup = 1000L, iter_sampling = 2000L,
+    adapt_delta = .95, max_treedepth = 15L, seed = 28101L, output_dir = withr::local_tempdir())))
+  base_input <- do.call(prepare_link_input, args)
+  base <- fit_link(base_input)
+  expect_true(base$diagnostics$fit_valid)
+  repeated_run <- fit_link(base_input)
+  expect_identical(base$prediction$state$free_draws, repeated_run$prediction$state$free_draws)
+  expect_identical(base$provenance$hashes, repeated_run$provenance$hashes)
+  reordered <- args
+  for (k in c("hub", "spoke")) {
+    reordered[[k]]$items <- args[[k]]$items[3:1, , drop = FALSE]
+    rows <- args$phase_a[[k]]$observations
+    reordered$phase_a[[k]]$observations <- rows[rev(seq_len(nrow(rows))), ]
+  }
+  reordered$cross <- args$cross[rev(seq_len(nrow(args$cross))), ]
+  permuted_input <- do.call(prepare_link_input, reordered)
+  permuted <- fit_link(permuted_input)
+  expect_true(permuted$diagnostics$fit_valid)
+  expect_false(identical(base$provenance$hashes$cross, permuted$provenance$hashes$cross))
+  expect_true(all(abs(base$items$theta_link_mean - permuted$items$theta_link_mean) < .06))
+  expect_identical(base$provenance$counts, permuted$provenance$counts)
+
+  # Additional judgments have fresh IDs and contribute another likelihood factor.
+  for (k in c("hub", "spoke")) {
+    rows <- args$phase_a[[k]]$observations
+    rows$observation_id <- paste0("repeat-", rows$observation_id)
+    args$phase_a[[k]]$observations <- rbind(args$phase_a[[k]]$observations, rows)
+  }
+  rows <- args$cross
+  rows$observation_id <- paste0("repeat-", rows$observation_id)
+  args$cross <- rbind(args$cross, rows)
+  input <- do.call(prepare_link_input, args)
+  sampled <- pairwiseLLM:::.link_e3_sample(pairwiseLLM:::.link_e3_stan_data(input),
+    pairwiseLLM:::.link_e3_controls(input$control$estimator))
+  local_mocked_bindings(.link_e3_sample = function(...) sampled, .package = "pairwiseLLM")
+  doubled <- fit_link(input)
+  expect_true(doubled$diagnostics$fit_valid)
+  expect_identical(doubled$provenance$counts$cross, 2L * base$provenance$counts$cross)
+  expect_identical(doubled$provenance$counts$phase_a_hub, 2L * base$provenance$counts$phase_a_hub)
+  expect_lt(doubled$offset$delta_sd, base$offset$delta_sd)
+  free <- pairwiseLLM:::.link_e3_free_draws(sampled$fit, input)
+  lp <- sampled$fit$draws(variables = "lp__", format = "draws_array")
+  at <- c(1L, 27L, 101L)
+  oracle <- link_e3_objective(input)
+  r_logp <- vapply(at, function(i) -oracle(free[i, 1, ]), numeric(1))
+  s_logp <- as.double(lp[at, 1, 1])
+  expect_true(all(abs((r_logp - r_logp[1]) - (s_logp - s_logp[1])) < 5e-4))
 })
