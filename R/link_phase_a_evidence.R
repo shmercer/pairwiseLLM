@@ -31,7 +31,9 @@
   }
   rows <- a$phase_a_within_set_evidence %||% a$within_set_evidence
   .link_check(is.data.frame(rows), "E3 requires exact raw within-set rows; summaries/draws alone are insufficient.")
-  hash <- .adaptive_phase_a_hash_object(tibble::as_tibble(rows))
+  # Historical artifacts hash the stored table itself. Rebuilding a tibble can
+  # change attribute order/row names and hence serialization without changing rows.
+  hash <- .adaptive_phase_a_hash_object(rows)
   if (!is.null(a$phase_a_within_set_evidence_hash) && !is.na(a$phase_a_within_set_evidence_hash)) {
     .link_check(identical(a$phase_a_within_set_evidence_hash, hash), "Phase A artifact raw evidence hash mismatch.")
   }

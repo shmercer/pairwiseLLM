@@ -2,12 +2,12 @@ link_import_fixture <- function(estimator = "joint_offset") {
   args <- link_contract_args(estimator, 2L)
   artifacts <- lapply(c("hub", "spoke"), function(k) {
     id <- args[[k]]
-    rows <- data.frame(pair_id = 1L, step_id = 1L, A_item = "a", B_item = "b", y_A = 1L)
+    rows <- tibble::tibble(pair_id = 1L, step_id = 1L, A_item = "a", B_item = "b", y_A = 1L)
     list(set_id = id$set_id, fit_model_id = "btl_e_b", n_items = 2L, n_pairs_committed = 1L,
       items = data.frame(item_id = c("a", "b"), theta_raw_mean = c(-1, 1)),
       posterior_draws = cbind(a = c(-1, -2, -1.5), b = c(1, 2, 1.5)),
       phase_a_within_set_evidence = rows,
-      phase_a_within_set_evidence_hash = pairwiseLLM:::.adaptive_phase_a_hash_object(tibble::as_tibble(rows)))
+      phase_a_within_set_evidence_hash = pairwiseLLM:::.adaptive_phase_a_hash_object(rows))
   })
   args$phase_a <- stats::setNames(lapply(artifacts, function(a) list(artifact = a)), c("hub", "spoke"))
   args
@@ -89,4 +89,28 @@ test_that("optional artifact labels do not invalidate historical missing metadat
   input <- do.call(prepare_link_input, args)
   expect_identical(input$phase_a$hub$source$orientation, "higher_is_better")
   expect_identical(input$phase_a$hub$source$trait, "organization")
+})
+
+
+test_that("E3 verifies the stored evidence representation before normalizing rows", {
+  for (table_class in c("tibble", "data.frame")) {
+    args <- link_import_fixture()
+    a <- args$phase_a$hub$artifact
+    rows <- a$phase_a_within_set_evidence
+    if (table_class == "data.frame") rows <- as.data.frame(rows)
+    # Equivalent tables need not serialize identically. Historical artifacts hash
+    # the original representation, including its attribute order and row names.
+    attributes(rows) <- rev(attributes(rows))
+    hash <- pairwiseLLM:::.adaptive_phase_a_hash_object(rows)
+    expect_false(identical(hash,
+      pairwiseLLM:::.adaptive_phase_a_hash_object(tibble::as_tibble(rows))))
+    a$phase_a_within_set_evidence <- rows
+    a$phase_a_within_set_evidence_hash <- hash
+    args$phase_a$hub$artifact <- a
+    input <- do.call(prepare_link_input, args)
+    expect_identical(input$phase_a$hub$source$evidence_hash, hash)
+    expect_identical(input$phase_a$hub$value$y_A, rows$y_A)
+    args$phase_a$hub$artifact$phase_a_within_set_evidence$y_A <- 0L
+    expect_error(do.call(prepare_link_input, args), "raw evidence hash mismatch")
+  }
 })

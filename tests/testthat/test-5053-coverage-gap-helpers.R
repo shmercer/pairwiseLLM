@@ -2106,17 +2106,9 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
     phase_a_within_edges_hub_used = NA_integer_,
     phase_a_within_edges_spoke_used = NA_integer_,
     phase_b_active_edges_used = NA_integer_,
-    anchored_joint_hub_items_fixed_count = NA_integer_,
     theta_global_rmse_lagged = 0.02,
     theta_global_rmse_max_used = 0.05,
-    theta_global_rmse_pass = TRUE,
-    anchored_joint_init_state_method = NA_character_,
-    anchored_joint_spoke_prior_scale_used = NA_real_,
-    anchored_joint_sd_floor_used = NA_real_,
-    anchored_joint_spoke_prior_fallback_used = NA,
-    anchored_joint_spoke_prior_fallback_sd_used = NA_real_,
-    judge_params_fixed_for_anchored_joint = NA,
-    anchored_joint_free_block_dim = NA_integer_
+    theta_global_rmse_pass = TRUE
   )
   expect_error(
     pairwiseLLM:::.adaptive_assert_link_stage_budget_invariants(bad_realized),
@@ -2171,15 +2163,15 @@ test_that("link-stage validators and transform helpers cover uncovered error bra
     "key fields refit_id/spoke_id/hub_id"
   )
 
-  mode_na <- bad_realized
-  mode_na$link_estimation_mode <- "anchored_joint"
-  mode_na$link_transform_policy <- NA_character_
-  mode_na$link_refit_mode <- NA_character_
-  mode_na$hub_lock_mode <- "hard_lock"
-  mode_na$link_transform_state <- NA_character_
+  # Mode validation must be isolated from the deliberately invalid budget above.
+  valid_row <- bad_realized
+  valid_row$stage_budget_unfilled <- 1L
+  expect_invisible(pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(valid_row))
+  mode_na <- valid_row
+  mode_na$hub_lock_mode <- NA_character_
   expect_error(
     pairwiseLLM:::.adaptive_assert_link_stage_rows_completeness(mode_na),
-    "anchored_joint rows: required columns must be populated"
+    "mode fields must be populated"
   )
 
   logical_na <- bad_realized

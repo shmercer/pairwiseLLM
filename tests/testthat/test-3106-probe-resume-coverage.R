@@ -54,17 +54,27 @@ test_that("probe resume rejects inconsistent persisted identities and constructi
 
 test_that("fresh-process E1--E3 resume preserves exact session identity", {
   dir <- withr::local_tempdir()
+  package_path <- getNamespaceInfo(asNamespace("pairwiseLLM"), "path")
+  # Use the same package as the parent process, including covr's temporary
+  # installed library. Installed packages do not contain load_all()-ready source.
+  loader <- if (pkgload::is_dev_package("pairwiseLLM")) {
+    paste0("pkgload::load_all(", deparse(package_path), ", quiet = TRUE); ")
+  } else {
+    paste0("library(pairwiseLLM, lib.loc = ", deparse(dirname(package_path)), "); ")
+  }
   for (id in c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset")) {
     state <- start_link_session(link_contract_input(id, 2L))
     path <- file.path(dir, paste0(id, ".rds"))
     save_link_session(state, path)
     output_path <- file.path(dir, "restored.rds")
-    code <- paste0("pkgload::load_all(", deparse(normalizePath(testthat::test_path("..", ".."))),
-      ", quiet = TRUE); x <- pairwiseLLM::load_link_session(", deparse(path),
-      "); saveRDS(x, ", deparse(output_path), ")")
+    code <- paste0(".libPaths(", paste(deparse(.libPaths()), collapse = ""), "); ", loader,
+      "x <- pairwiseLLM::load_link_session(", deparse(path), "); ",
+      "x <- pairwiseLLM::resume_link_session(x, ",
+      "x$linking$estimator$accepted_state_by_spoke[[1L]]$continuation$input); ",
+      "saveRDS(x, ", deparse(output_path), ")")
     output <- system2(file.path(R.home("bin"), "Rscript"),
       c("--vanilla", "-e", shQuote(code)), stdout = TRUE, stderr = TRUE)
     expect_null(attr(output, "status"), info = paste(output, collapse = "\n"))
-    expect_identical(readRDS(output_path), state)
+    if (is.null(attr(output, "status"))) expect_identical(readRDS(output_path), state)
   }
 })
