@@ -53,6 +53,7 @@ Suggests:
     parallelly,
     pkgload,
     pls,
+    posterior,
     purrr,
     readr,
     rmarkdown,
@@ -133,6 +134,9 @@ Collate:
     'link_coordinates.R'
     'link_fixed_shape.R'
     'link_gaussian_bridge.R'
+    'link_joint_mcmc.R'
+    'link_joint_offset.R'
+    'link_likelihood.R'
     'link_phase_a_draws.R'
     'link_phase_a_points.R'
     'link_result.R'

@@ -37,5 +37,7 @@ at zero and the logistic transition (bounded to plus/minus eight SDs to avoid
 excessively long finite intervals); both infinite tails are integrated.
 Degenerate zero-variance contrasts use the exact conditional probability.
 Repeated calls do not sample or mutate state. Integration failure raises
-\code{pairwiseLLM_e2_numerical_error}. E3 remains unavailable.
+\code{pairwiseLLM_e2_numerical_error}. E3 MAP uses the same integration with
+\code{pairwiseLLM_e3_numerical_error} on failure. E3-MCMC averages the conditional
+probability over its retained raw draws, without new sampling.
 }
