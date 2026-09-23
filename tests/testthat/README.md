@@ -163,3 +163,8 @@ Issue #281 reserves 5093–5095 for the shared release invariant matrix,
 evidence single-use regressions, and deterministic known-offset simulations.
 The real E3-MCMC release gate remains opt-in in 6021; synthetic sampler fixtures
 validate plumbing only and are not numerical evidence for MCMC correctness.
+
+Issue #281 coverage follow-up reserves 5096–5099 for release helper boundaries,
+refit diagnostics, candidate handling, and recovery regressions. Tests keep all
+Phase B selector gates intact; synthetic capacity snapshots test allocation
+arithmetic only and do not establish selector validity.

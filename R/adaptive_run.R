@@ -4609,21 +4609,6 @@ adaptive_rank_run_live <- function(state,
       btl_config = btl_cfg,
       controller = .adaptive_controller_resolve(state)
     )
-    if (isTRUE(.adaptive_link_all_spokes_exhausted(
-      state,
-      refit_id = .adaptive_link_refit_window_id(state)
-    ))) {
-      state$meta$stop_decision <- TRUE
-      state$meta$stop_reason <- "all_spokes_exhausted"
-      persist_session(force = TRUE)
-      return(state)
-    }
-    if (isTRUE(.adaptive_link_all_spokes_stopped(state))) {
-      state$meta$stop_decision <- TRUE
-      state$meta$stop_reason <- "all_spokes_stopped"
-      persist_session(force = TRUE)
-      return(state)
-    }
     budget_status <- .adaptive_stop_boundary_budget_status(state)
     if (isTRUE(budget_status$active) && isTRUE(budget_status$exhausted)) {
       state$meta$stop_decision <- TRUE
@@ -4690,22 +4675,10 @@ adaptive_rank_run_live <- function(state,
         } else {
           controller <- .adaptive_controller_resolve(state)
           phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
-          is_link_phase_b <- .adaptive_link_mode_active(controller) &&
-            identical(as.character(phase_ctx$phase %||% "phase_a"), "phase_b")
-          if (isTRUE(is_link_phase_b)) {
-            refit_id <- .adaptive_link_refit_window_id(state)
-            if (isTRUE(.adaptive_link_all_spokes_exhausted(state, refit_id = refit_id))) {
-              state$meta$stop_decision <- TRUE
-              state$meta$stop_reason <- "all_spokes_exhausted"
-              persist_session(force = TRUE)
-              return(state)
-            }
-          } else {
-            state$meta$stop_decision <- TRUE
-            state$meta$stop_reason <- "candidate_starvation"
-            persist_session(force = TRUE)
-            return(state)
-          }
+          state$meta$stop_decision <- TRUE
+          state$meta$stop_reason <- "candidate_starvation"
+          persist_session(force = TRUE)
+          return(state)
         }
       }
     } else if (isTRUE(step_row$candidate_starved[[1L]])) {
@@ -4725,30 +4698,8 @@ adaptive_rank_run_live <- function(state,
         state = state,
         refit_context = refit_out$refit_context
       )
-      controller_after_link_refit <- .adaptive_controller_resolve(state)
-      phase_b_global_draws <- if (isTRUE(.adaptive_link_phase_b_active(
-        state,
-        controller = controller_after_link_refit
-      ))) {
-        .adaptive_phase_b_global_metric_draws(state, controller = controller_after_link_refit)
-      } else {
-        NULL
-      }
-      state <- .adaptive_phase_b_global_metric_history_update(
-        state = state,
-        refit_id = as.integer(nrow(state$round_log %||% tibble::tibble()) + 1L),
-        draws = phase_b_global_draws
-      )
       cfg$stop_thresholds <- refit_out$config
-      metrics <- if (is.null(phase_b_global_draws)) {
-        compute_stop_metrics(state, config = refit_out$config)
-      } else {
-        compute_stop_metrics(
-          state,
-          config = refit_out$config,
-          phase_b_global_draws = phase_b_global_draws
-        )
-      }
+      metrics <- compute_stop_metrics(state, config = refit_out$config)
       state$stop_metrics <- metrics
       state <- .adaptive_maybe_enter_phase3(state, metrics, refit_out$config)
       stop_decision <- should_stop(metrics, config = refit_out$config)
@@ -4791,14 +4742,7 @@ adaptive_rank_run_live <- function(state,
         refit_id = as.integer(round_row$refit_id),
         refit_context = refit_out$refit_context
       )
-      if (nrow(link_rows) > 0L) {
-        .adaptive_assert_link_stage_rows_completeness(link_rows)
-        state$link_stage_log <- append_link_stage_log(
-          state$link_stage_log %||% new_link_stage_log(),
-          link_rows
-        )
-        state <- .adaptive_link_apply_stop_state(state, link_rows)
-      }
+
       item_log_tbl <- .adaptive_build_item_log_refit(
         state,
         refit_id = round_row$refit_id
@@ -4850,21 +4794,6 @@ adaptive_rank_run_live <- function(state,
           persist_session(force = TRUE)
           return(state)
         }
-      }
-      if (isTRUE(.adaptive_link_all_spokes_exhausted(
-        state,
-        refit_id = as.integer(round_row$refit_id %||% NA_integer_)
-      ))) {
-        state$meta$stop_decision <- TRUE
-        state$meta$stop_reason <- "all_spokes_exhausted"
-        persist_session(force = TRUE)
-        return(state)
-      }
-      if (isTRUE(.adaptive_link_all_spokes_stopped(state))) {
-        state$meta$stop_decision <- TRUE
-        state$meta$stop_reason <- "all_spokes_stopped"
-        persist_session(force = TRUE)
-        return(state)
       }
     }
     state <- .adaptive_phase_a_prepare(state)

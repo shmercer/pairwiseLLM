@@ -71,6 +71,9 @@
 
 ## Bug fixes
 
+* Keep each item in exactly one ranking band when the top band includes every
+  item. Added regression tests for recovery, diagnostics and numerical failures,
+  and removed unreachable execution code behind the Phase B selection gate.
 * Rubric Phase A imports verify evidence hashes against the original stored table
   before normalization, preserving valid artifacts with different serialized table
   attributes. Tampered evidence still fails validation.
