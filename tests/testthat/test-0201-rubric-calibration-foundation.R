@@ -135,5 +135,5 @@ test_that("calibration fit designs require the correct source scale", {
   expect_identical(object$cj$scale_status, "phase_a_reference")
   expect_equal(object$reference$items$theta, unname(fixed$fit$theta_mean))
   expect_equal(object$calibration_range, c(-1.5, 0.5))
-  expect_error(prepare(rubric_test_linked(2L), rubric, trait = "trait"), "Unsupported legacy")
+  expect_error(prepare(rubric_test_legacy_linked(2L), rubric, trait = "trait"), "Unsupported legacy")
 })

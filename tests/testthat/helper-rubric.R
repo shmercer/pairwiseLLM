@@ -56,7 +56,9 @@ rubric_test_link_state <- function(n_sets = 3L) {
   state
 }
 
-rubric_test_linked <- function(n_sets = 3L) {
+# Historical Phase B session for rejection tests only. Construct its recorded
+# identity and evidence directly: current code must not execute a legacy refit.
+rubric_test_legacy_linked <- function(n_sets = 3L) {
   state <- rubric_test_link_state(n_sets)
   for (k in seq.int(2L, n_sets)) {
     i <- match(state$items$item_id[state$items$set_id == k][1L], state$item_ids)
@@ -68,8 +70,6 @@ rubric_test_linked <- function(n_sets = 3L) {
       is_probe_step = FALSE))
   }
   state$refit_meta$link_cross_edges_cache_built <- FALSE
-  state <- pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
-  state$item_log <- list(pairwiseLLM:::.adaptive_build_item_log_refit(state, 1L))
   # Simulated terminal budget exhaustion, not a claim that one edge meets stopping precision.
   state$meta$stop_decision <- TRUE
   state$meta$stop_reason <- "all_spokes_exhausted"

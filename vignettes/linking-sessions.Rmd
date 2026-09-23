@@ -94,6 +94,47 @@ message. Compatible historical Phase A artifacts remain reusable. Adaptive
 selection integration and removal of the remaining old execution code are
 separate epic work; use the explicit-evidence APIs above for E1--E3 sessions.
 
+## Adaptive selection restriction
+
+Adaptive Phase B D-optimal execution is unavailable for all E1--E3 estimators,
+including the E3-MCMC audit engine, until the separate selector study validates
+an information criterion. Legacy D-optimal aliases also fail explicitly. The
+availability of posterior covariance does not validate a selector, and there
+is no fallback to anchored-joint. Phase A and ordinary within-set ranking are
+still available. Use the explicit-evidence workflow above for fixed evidence
+prefixes, without candidate generation, adaptive utility, or automatic stopping.
+
+Keep held-out outcomes outside `input$cross`. A session's `status = "probe"`
+is a reporting label, not an evidence partition: it does not remove rows from
+the likelihood. Probe observation IDs and both orientations of each base pair
+must remain disjoint from active evidence. Original source-data partitions
+remain the caller's responsibility when Phase A supplies only summaries/draws.
+
+Internal orchestration adapters now resolve a common result for one explicit
+spoke. They supply linked means, `predict_link()` probabilities, named
+free-coordinate covariance, and the gradient of the ordered latent contrast
+`theta_A - theta_B`. This gradient is not the derivative of a posterior-average
+probability. E1 exposes only the offset coordinate; E2/E3 expose centered shape
+coordinates and offset. No covariance is converted into a selection criterion.
+Adaptive item adapters require explicit unique `global_item_id` values.
+
+Probe and stopping assessments retain estimator ID/version, spoke and hub IDs,
+uncertainty scope, and active/probe evidence hashes. Probe metrics use the common
+prediction API in the actual presentation orientation. Reversing presentation
+is not complementary when position bias is nonzero. Lagged comparisons require
+the same spoke, frozen inputs and an unchanged cumulative evidence prefix.
+
+The internal stopping adapter reports **per-refit criteria**, not a final
+stopping decision or automatic session transition. Existing thresholds and
+probe quality diagnostics and the active-item reliability domain (all spoke
+items plus directly evidenced hub items) are preserved; the existing rolling-window controller
+remains separate. Invalid or prior-only fits, missing lag history, and missing
+required uncertainty block the criteria. E1's conditional uncertainty is never
+reported as full Phase A uncertainty or used to pass full-uncertainty reliability.
+Multiple spokes retain distinct hub posteriors and histories; they are never
+averaged into one implicit hub fit. These interfaces do not constitute scientific
+validation of adaptive selection or stopping for the new estimators.
+
 ## Citation
 
 Mercer, S. H. (2026). Explicit-evidence linking sessions. In *pairwiseLLM*

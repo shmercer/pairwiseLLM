@@ -95,33 +95,6 @@ test_that("print.adaptive_state exposes linking phase and controller state conci
   expect_false(any(grepl("transform_state=", output)))
 })
 
-test_that("print.adaptive_state uses current live fixed probe details", {
-  state <- make_positive_probe_acceleration_runtime_state()
-  latest_rows <- pairwiseLLM:::.adaptive_latest_link_stage_rows(state)
-  all_rows <- tibble::as_tibble(state$link_stage_log)
-  expect_gt(nrow(all_rows), 0L)
-
-  probe_mode <- pairwiseLLM:::.adaptive_print_compact_values(
-    latest_rows$probe_acceleration_mode_used
-  )
-
-  output <- capture.output(print(state))
-
-  expect_true(any(grepl("^link review: ", output)))
-  expect_true(any(grepl(paste0("probe_accel=", probe_mode), output, fixed = TRUE)))
-  probe_floor <- pairwiseLLM:::.adaptive_print_compact_values(
-    as.integer(latest_rows$probe_active_floor_used)
-  )
-  probe_caps <- paste0(
-    as.integer(latest_rows$probe_effort_base_cap),
-    "->",
-    as.integer(latest_rows$probe_effort_effective_cap)
-  )
-  probe_cap <- pairwiseLLM:::.adaptive_print_compact_values(probe_caps)
-  expect_true(any(grepl(paste0("probe_floor=", probe_floor), output, fixed = TRUE)))
-  expect_true(any(grepl(paste0("probe_cap=", probe_cap), output, fixed = TRUE)))
-})
-
 test_that("common link sessions print estimator and uncertainty without obsolete controls", {
   state <- start_link_session(link_contract_input(edges = 2L), "frozen")
   output <- capture.output(print(state))

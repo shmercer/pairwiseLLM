@@ -10,6 +10,13 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
+**Development restriction (#280):** Adaptive Phase B D-optimal execution is
+currently unavailable for every estimator and legacy alias, pending the separate
+selector validation study. Use [explicit-evidence linking sessions](linking-sessions.html)
+for E1--E3. The adaptive Phase B descriptions below are historical and are not
+an enabled or validated workflow; the full documentation replacement is tracked
+in #281. Phase A and ordinary within-set ranking remain available.
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
@@ -189,7 +196,7 @@ anchored-joint or pooled-judge priors, D-optimal selection, or probes.
 A practical workflow often ranks the hub and each spoke in separate jobs. Each call below starts
 from raw samples and writes a reusable canonical artifact under its session directory.
 
-```{r phase-a-runs, eval=isTRUE(get0("run_cmdstan_examples", ifnotfound=FALSE))}
+```{r phase-a-runs, eval=FALSE}
 phase_a_root <- tempfile("pairwisellm-phase-a-")
 
 hub_run <- adaptive_rank(
@@ -231,7 +238,7 @@ passing MCMC diagnostics, and EAP reliability at or above
 that same session with more steps until its quality criteria pass. Phase B never begins merely
 because an artifact file exists.
 
-```{r phase-a-inspection, eval=isTRUE(get0("run_cmdstan_examples", ifnotfound=FALSE))}
+```{r phase-a-inspection, eval=FALSE}
 hub_artifact <- hub_run$phase_a$manifest[["1"]]
 
 names(hub_artifact)
@@ -257,7 +264,7 @@ silence a failed real study.
 > demonstration artifacts. Do not copy this override into a real study as a way
 > to bypass failed reliability or diagnostic checks.
 
-```{r trusted-simulation-artifacts, eval=isTRUE(get0("run_cmdstan_examples", ifnotfound=FALSE))}
+```{r trusted-simulation-artifacts, eval=FALSE}
 phase_a_artifacts <- list(
   `1` = hub_run$phase_a$manifest[["1"]],
   `2` = spoke_2_run$phase_a$manifest[["2"]]
@@ -272,7 +279,7 @@ phase_a_artifacts <- lapply(phase_a_artifacts, function(artifact) {
 Now combine the hub and one spoke and request import mode. Phase B compares hub items only with
 spoke items; it does not schedule spoke--spoke pairs.
 
-```{r one-spoke-link, eval=isTRUE(get0("run_cmdstan_examples", ifnotfound=FALSE))}
+```{r one-spoke-link, eval=FALSE}
 one_spoke_samples <- linking_samples[linking_samples$set_id %in% c(1L, 2L), ]
 one_spoke_session <- tempfile("pairwisellm-one-spoke-")
 
@@ -306,7 +313,7 @@ one_spoke <- adaptive_rank(
 `theta_link_eap` and `rank_link` describe the common hub scale after an accepted Phase B refit.
 Lower rank numbers are better; the latent score has no external unit.
 
-```{r one-spoke-results, eval=isTRUE(get0("run_cmdstan_examples", ifnotfound=FALSE))}
+```{r one-spoke-results, eval=FALSE}
 one_spoke$summary
 
 one_spoke$items[, c(
@@ -321,7 +328,7 @@ to report.
 
 ### Logs, probes, and blockers
 
-```{r one-spoke-logs, eval=isTRUE(get0("run_cmdstan_examples", ifnotfound=FALSE))}
+```{r one-spoke-logs, eval=FALSE}
 names(one_spoke$logs)
 
 cross_set_steps <- one_spoke$logs$step_log[
@@ -383,7 +390,7 @@ this does not enable direct selection inside a linking run.
 Mixed mode imports the sets you supply and runs Phase A for every remaining set. Here the hub is
 imported and spoke 3 is run locally:
 
-```{r mixed-mode, eval=isTRUE(get0("run_cmdstan_examples", ifnotfound=FALSE))}
+```{r mixed-mode, eval=FALSE}
 mixed_samples <- linking_samples[linking_samples$set_id %in% c(1L, 3L), ]
 
 mixed <- adaptive_rank(
@@ -442,7 +449,7 @@ because the fixture and its deterministic truth are under our control.
 > **Simulation only:** this third artifact uses the same explicit quality-gate
 > override as the tiny one-spoke demonstration.
 
-```{r third-artifact, eval=isTRUE(get0("run_cmdstan_examples", ifnotfound=FALSE))}
+```{r third-artifact, eval=FALSE}
 spoke_3_run <- adaptive_rank(
   data = spoke_3_samples,
   id_col = "ID",
@@ -465,7 +472,7 @@ multi_artifacts <- c(phase_a_artifacts, list(`3` = spoke_3_artifact))
 `link_multi_spoke` is the only multi-spoke run mode. All active spokes share the judge parameters,
 but each has its own evidence counts, allocation, diagnostics, blockers, and frozen state.
 
-```{r multi-spoke, eval=isTRUE(get0("run_cmdstan_examples", ifnotfound=FALSE))}
+```{r multi-spoke, eval=FALSE}
 multi_spoke <- adaptive_rank(
   data = linking_samples,
   id_col = "ID",
@@ -517,7 +524,7 @@ Phase A artifacts, and optional per-refit item logs. Writes are atomic at the in
 level. Completed refits, terminal events, the end of an ordinary call, and configured checkpoints
 are saved. An abrupt process termination can lose attempts since the most recent checkpoint.
 
-```{r linking-persistence, eval=isTRUE(get0("run_cmdstan_examples", ifnotfound=FALSE))}
+```{r linking-persistence, eval=FALSE}
 validate_session_dir(one_spoke_session)[c(
   "schema_version", "package_version", "n_items"
 )]

@@ -193,6 +193,10 @@
 #' @noRd
 .adaptive_normalize_link_estimation_mode <- function(mode = NULL) {
   value <- mode %||% "transform"
+  if (is.character(value) && length(value) == 1L && !is.na(value) &&
+      value %in% c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset")) {
+    .link_selector_unvalidated()
+  }
   if (!is.character(value) || length(value) != 1L || is.na(value) || value == "") {
     rlang::abort("Link estimation mode must be a single non-empty string.")
   }
@@ -873,6 +877,12 @@
     rlang::abort("`adaptive_config` must be a named list with non-empty names.")
   }
 
+  requested_estimator <- adaptive_config$link_estimation_mode
+  if (is.character(requested_estimator) && length(requested_estimator) == 1L &&
+      !is.na(requested_estimator) && requested_estimator %in%
+        c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset")) {
+    .link_selector_unvalidated()
+  }
   allowed <- .adaptive_controller_public_keys()
   unknown <- setdiff(cfg_names, allowed)
   if (length(unknown) > 0L) {

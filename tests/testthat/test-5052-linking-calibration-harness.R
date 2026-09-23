@@ -1,94 +1,10 @@
-test_that("offline linking calibration is deterministic and writes required artifacts", {
-  out_dir <- withr::local_tempdir()
-
-  run_a <- pairwiseLLM:::.adaptive_linking_calibrate_offline(
-    replicates = 2L,
-    seed = 11L,
-    set_sizes = c(10L, 6L),
-    true_delta = -0.4,
-    true_alpha = 1.1,
-    judge_b = 0.05,
-    judge_eps = 0.03,
-    n_steps = 30L,
-    btl_config = test_link_btl_config(),
-    output_dir = out_dir,
-    progress = "none"
-  )
-  run_b <- pairwiseLLM:::.adaptive_linking_calibrate_offline(
-    replicates = 2L,
-    seed = 11L,
-    set_sizes = c(10L, 6L),
-    true_delta = -0.4,
-    true_alpha = 1.1,
-    judge_b = 0.05,
-    judge_eps = 0.03,
-    n_steps = 30L,
-    btl_config = test_link_btl_config(),
-    output_dir = withr::local_tempdir(),
-    progress = "none"
-  )
-
-  expect_identical(
-    as.character(run_a$sidecar$ppc_calibration_id),
-    as.character(run_b$sidecar$ppc_calibration_id)
-  )
-  expect_equal(
-    as.double(run_a$sidecar$cross_set_ppc_brier_max),
-    as.double(run_b$sidecar$cross_set_ppc_brier_max),
-    tolerance = 1e-12
-  )
-
-  expect_true(file.exists(run_a$files$summary_csv))
-  expect_true(file.exists(run_a$files$replicates_csv))
-  expect_true(file.exists(run_a$files$sidecar_json))
-
-  summary_tbl <- utils::read.csv(run_a$files$summary_csv, stringsAsFactors = FALSE)
-  expect_true(all(c("ppc_calibration_id", "cross_set_ppc_brier_max", "quantile_p95") %in% names(summary_tbl)))
-
-  rep_tbl <- utils::read.csv(run_a$files$replicates_csv, stringsAsFactors = FALSE)
-  expect_true(all(c("replicate_id", "refit_id", "spoke_id", "ppc_brier_cross_active", "eligible") %in% names(rep_tbl)))
-
-  sidecar <- jsonlite::read_json(run_a$files$sidecar_json, simplifyVector = TRUE)
-  expect_true(all(c(
-    "cross_set_ppc_brier_max", "ppc_calibration_id", "calibration_quantile",
-    "run_metadata", "summary_stats", "config"
-  ) %in% names(sidecar)))
-  expect_true(all(c("lambda", "ordering_mode") %in% names(sidecar$config$d_opt_knobs)))
-  expect_true("probe_pairs_per_refit_per_spoke" %in% names(sidecar$config))
-  expect_true(all(c("b", "eps", "model") %in% names(sidecar$config$judge_settings)))
-})
-
-test_that("offline calibration reuses canonical production selection utilities", {
-  calls <- new.env(parent = emptyenv())
-  calls$generate <- 0L
-  calls$select <- 0L
-
-  orig_generate <- getFromNamespace("generate_stage_candidates_from_state", "pairwiseLLM")
-  orig_select <- getFromNamespace("select_next_pair", "pairwiseLLM")
-
-  testthat::local_mocked_bindings(
-    generate_stage_candidates_from_state = function(...) {
-      calls$generate <- as.integer(calls$generate + 1L)
-      orig_generate(...)
-    },
-    select_next_pair = function(...) {
-      calls$select <- as.integer(calls$select + 1L)
-      orig_select(...)
-    },
-    .package = "pairwiseLLM"
-  )
-
-  pairwiseLLM:::.adaptive_linking_calibrate_offline(
-    replicates = 2L,
-    seed = 17L,
-    set_sizes = c(10L, 6L),
-    n_steps = 50L,
-    btl_config = test_link_btl_config(),
-    progress = "none"
-  )
-
-  expect_gt(calls$generate, 0L)
-  expect_gt(calls$select, 0L)
+test_that("legacy adaptive calibration fails before writing fitted selector thresholds", {
+  directory <- withr::local_tempdir()
+  expect_error(pairwiseLLM:::.adaptive_linking_calibrate_offline(replicates = 1L,
+    seed = 280L, set_sizes = c(10L, 6L), n_steps = 1L,
+    btl_config = test_link_btl_config(), output_dir = directory, progress = "none"),
+    class = "pairwiseLLM_link_selector_unvalidated")
+  expect_length(list.files(directory), 0L)
 })
 
 test_that("calibration helper branches validate inputs and fallback behavior", {

@@ -28,11 +28,11 @@ task09_link_state <- function() {
   state$linking$phase_a$phase <- "phase_b"
   state$linking$phase_a$active_phase_a_set <- NA_integer_
   state$warm_start_done <- TRUE
-  state
+  add_test_link_results(state)
 }
 
-# Pass this only to retained internal transform contracts. Fresh public runs stay
-# anchored-joint; no controller-normalization or selection helper is mocked.
+# Pass this only to retained internal transform contracts. Adaptive Phase B execution is gated; no controller-normalization or selection
+# helper is mocked.
 task09_transform_controller <- function(state, mode = "shift_only") {
   controller <- state$controller
   controller$link_estimation_mode <- "transform"

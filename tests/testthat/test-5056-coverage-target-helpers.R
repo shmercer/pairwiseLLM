@@ -1138,22 +1138,8 @@ test_that("adaptive select posterior and predictive helpers cover remaining edge
     c(TRUE, TRUE, FALSE)
   )
 
-  theta_map <- testthat::with_mocked_bindings(
-    .adaptive_link_phase_a_theta_map = function(...) c(h1 = 0.3),
-    .adaptive_anchored_joint_artifact_copy_init = function(...) {
-      list(theta_spoke_global_mean = c(s1 = 0.1))
-    },
-    .adaptive_link_theta_global_map_for_items(
-      state = list(
-        items = tibble::tibble(item_id = c("h1", "s1"), set_id = c(1L, 2L)),
-        linking = list(anchored_joint = list())
-      ),
-      controller = list(link_estimation_mode = "anchored_joint", hub_id = 1L),
-      item_ids = c("h1", "s1")
-    ),
-    .package = "pairwiseLLM"
-  )
-  expect_identical(theta_map, c(h1 = 0.3, s1 = 0.1))
+  expect_error(.adaptive_link_theta_global_map_for_items(list(), list(), "h1"),
+    "common E1--E3")
 
   expect_identical(
     .adaptive_link_model_d_prob_vec(
@@ -1176,74 +1162,12 @@ test_that("adaptive select posterior and predictive helpers cover remaining edge
     logdet_start = NA_real_,
     ridge = 0
   )))
-  expect_error(
-    .adaptive_link_d_opt_matrix_dim(
-      transform_mode = "shift_only",
-      link_estimation_mode = "anchored_joint",
-      free_block_dim = 0L
-    ),
-    "positive `free_block_dim`"
-  )
-
-  cand <- tibble::tibble(i = "h1", j = "s1")
-  missing_theta <- testthat::with_mocked_bindings(
-    .adaptive_link_theta_global_map_for_items = function(...) c(h1 = 0.2),
-    .adaptive_link_attach_predictive_utility(
-      candidates = cand,
-      state = list(items = tibble::tibble(item_id = c("h1", "s1"), set_id = c(1L, 2L))),
-      controller = list(),
-      spoke_id = 2L
-    ),
-    .package = "pairwiseLLM"
-  )
-  expect_true(all(is.na(missing_theta$link_u)))
-
-  predictive <- testthat::with_mocked_bindings(
-    .adaptive_link_theta_global_map_for_items = function(...) c(h1 = 0.2, s1 = 0.1),
-    .adaptive_link_phase_b_startup_gap_for_spoke = function(...) FALSE,
-    .adaptive_link_judge_params = function(...) list(epsilon = Inf, beta = -Inf),
-    .adaptive_link_transform_state_for_spoke = function(...) "shift_only",
-    .adaptive_link_d_opt_state_get = function(...) list(it = matrix(1, nrow = 1L, ncol = 1L)),
-    .adaptive_link_safe_theta_map = function(...) c(h1 = 0.2, s1 = 0.1),
-    .adaptive_link_refit_window_id = function(...) 1L,
-    .adaptive_link_attach_predictive_utility(
-      candidates = cand,
-      state = list(items = tibble::tibble(item_id = c("h1", "s1"), set_id = c(1L, 2L))),
-      controller = list(
-        hub_id = 1L,
-        link_refit_stats_by_spoke = list(`2` = list(delta_spoke_mean = Inf))
-      ),
-      spoke_id = 2L
-    ),
-    .package = "pairwiseLLM"
-  )
-  expect_true(is.finite(predictive$link_p[[1L]]))
-  expect_true(is.finite(predictive$link_d_opt_gain[[1L]]))
-
-  expect_true(is.na(testthat::with_mocked_bindings(
-    .adaptive_link_theta_global_map_for_items = function(...) c(h1 = 0.1),
-    .adaptive_link_predictive_prob_oriented(
-      state = list(),
-      controller = list(),
-      spoke_id = 2L,
-      A_id = "h1",
-      B_id = "s1"
-    ),
-    .package = "pairwiseLLM"
-  )))
-  expect_true(is.na(testthat::with_mocked_bindings(
-    .adaptive_link_theta_global_map_for_items = function(...) c(h1 = NA_real_, s1 = 0.1),
-    .adaptive_link_phase_b_startup_gap_for_spoke = function(...) FALSE,
-    .adaptive_link_judge_params = function(...) list(epsilon = Inf, beta = Inf),
-    .adaptive_link_predictive_prob_oriented(
-      state = list(),
-      controller = list(),
-      spoke_id = 2L,
-      A_id = "h1",
-      B_id = "s1"
-    ),
-    .package = "pairwiseLLM"
-  )))
+  expect_error(.adaptive_link_d_opt_matrix_dim("shift_only", "anchored_joint", 0L),
+    class = "pairwiseLLM_link_selector_unvalidated")
+  expect_error(.adaptive_link_attach_predictive_utility(NULL, list(), list(), 2L),
+    class = "pairwiseLLM_link_selector_unvalidated")
+  expect_error(.adaptive_link_predictive_prob_oriented(list(), list(), 2L, "h1", "s1"),
+    "common E1--E3")
 })
 
 test_that("adaptive round candidate helper guards cover remaining empty and invalid branches", {

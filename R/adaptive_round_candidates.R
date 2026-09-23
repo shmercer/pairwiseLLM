@@ -424,116 +424,13 @@
   theta_vals
 }
 
-.adaptive_link_phase_b_routing_scores <- function(state, controller, active_ids, hub_id) {
-  active_ids <- as.character(active_ids)
-  set_map <- stats::setNames(as.integer(state$items$set_id), as.character(state$items$item_id))
-  link_refit_mode <- as.character(controller$link_refit_mode %||% "shift_only")
-  use_current_theta <- identical(link_refit_mode, "joint_refit")
-  link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
-  active_sets <- sort(unique(as.integer(set_map[active_ids])))
-  active_sets <- active_sets[!is.na(active_sets)]
-  if (length(active_sets) < 1L) {
-    return(stats::setNames(numeric(), character()))
-  }
-
-  link_stats <- controller$link_refit_stats_by_spoke %||% list()
-  scores <- stats::setNames(rep(NA_real_, length(active_ids)), active_ids)
-  for (set_id in active_sets) {
-    set_items <- active_ids[as.integer(set_map[active_ids]) == as.integer(set_id)]
-    phase_a_theta <- function() {
-      .adaptive_link_require_phase_a_theta_map(
-        state = state,
-        set_id = set_id,
-        field = "theta_raw_mean",
-        required_item_ids = set_items,
-        helper_name = "Linking routing"
-      )
-    }
-    raw_theta <- if (isTRUE(use_current_theta)) {
-      current_theta <- .adaptive_link_theta_mean_map(state, set_id = set_id)
-      current_vals <- as.double(current_theta[set_items])
-      names(current_vals) <- as.character(set_items)
-      missing_current <- !is.finite(current_vals)
-      if (any(missing_current)) {
-        phase_vals <- as.double(phase_a_theta()[set_items])
-        names(phase_vals) <- as.character(set_items)
-        current_vals[missing_current] <- phase_vals[missing_current]
-      }
-      current_vals
-    } else {
-      phase_vals <- as.double(phase_a_theta()[set_items])
-      names(phase_vals) <- as.character(set_items)
-      phase_vals
-    }
-    names(raw_theta) <- as.character(set_items)
-    if (identical(link_estimation_mode, "anchored_joint") &&
-      as.integer(set_id) == as.integer(hub_id)) {
-      raw_theta <- as.double(phase_a_theta()[set_items])
-      names(raw_theta) <- as.character(set_items)
-    }
-    if (any(!is.finite(raw_theta))) {
-      source_label <- if (isTRUE(use_current_theta)) "current theta_mean" else "Phase A theta_raw_mean"
-      rlang::abort(
-        sprintf(
-          "Linking routing invariant failed: %s missing/non-finite for set_id=%s.",
-          source_label,
-          as.integer(set_id)
-        )
-      )
-    }
-
-    if (as.integer(set_id) == as.integer(hub_id)) {
-      scores[set_items] <- as.double(raw_theta)
-      next
-    }
-
-    if (identical(link_estimation_mode, "anchored_joint")) {
-      accepted_map <- (state$linking$anchored_joint %||% list())$accepted_state_by_spoke %||% list()
-      accepted_state <- accepted_map[[as.character(set_id)]] %||% NULL
-      if (is.null(accepted_state)) {
-        accepted_state <- .adaptive_anchored_joint_artifact_copy_init(
-          state = state,
-          spoke_id = as.integer(set_id),
-          controller = controller
-        )
-      }
-      spoke_scores <- as.double(accepted_state$theta_spoke_global_mean[set_items])
-      names(spoke_scores) <- as.character(set_items)
-      if (any(!is.finite(spoke_scores))) {
-        rlang::abort(
-          sprintf(
-            "Anchored-joint routing invariant failed: accepted spoke scores missing/non-finite for set_id=%s.",
-            as.integer(set_id)
-          )
-        )
-      }
-      scores[set_items] <- spoke_scores
-      next
-    }
-
-    mode <- .adaptive_link_transform_state_for_spoke(controller, spoke_id = as.integer(set_id))
-    stats_row <- link_stats[[as.character(set_id)]] %||% list()
-    delta <- as.double(stats_row$delta_spoke_mean %||% 0)
-    if (!is.finite(delta)) {
-      delta <- 0
-    }
-    alpha <- 1
-    if (identical(mode, "shift_scale")) {
-      log_alpha <- as.double(stats_row$log_alpha_spoke_mean %||% 0)
-      if (!is.finite(log_alpha)) {
-        log_alpha <- 0
-      }
-      alpha <- exp(log_alpha)
-    }
-    scores[set_items] <- as.double(delta + alpha * raw_theta)
-  }
-
-  if (any(!is.finite(scores[active_ids]))) {
-    rlang::abort("Linking routing score invariant failed: non-finite routing scores in phase_b.")
-  }
-  out <- as.double(scores[active_ids])
-  names(out) <- as.character(active_ids)
-  out
+.adaptive_link_phase_b_routing_scores <- function(state, controller, active_ids, hub_id,
+                                                  spoke_id = NULL) {
+  result <- .link_orchestration_result(state, spoke_id)
+  .link_check(identical(as.character(hub_id), result$continuation$input$hub$set_id),
+    "Routing hub identity does not match the selected spoke result.")
+  stats::setNames(.link_routing_scores(result, .link_adaptive_global_ids(state, active_ids)),
+    as.character(active_ids))
 }
 
 .adaptive_link_phase_b_hub_anchors <- function(state, hub_ids, hub_scores, defaults) {
@@ -872,7 +769,8 @@
     state = state,
     controller = controller,
     active_ids = unique(c(hub_ids, spoke_ids)),
-    hub_id = hub_id
+    hub_id = hub_id,
+    spoke_id = spoke_id
   )
   hub_anchors <- .adaptive_link_phase_b_hub_anchors(
     state = state,
@@ -2453,6 +2351,9 @@ generate_stage_candidates_from_state <- function(state,
                                               utility_mode = "linking_d_optimal_transform",
                                               stage_name = NA_character_,
                                               spoke_id = NA_integer_) {
+  if (.adaptive_is_linking_d_optimal_mode(utility_mode, allow_legacy = TRUE)) {
+    .link_selector_unvalidated()
+  }
   cand <- tibble::as_tibble(candidates)
   if (nrow(cand) == 0L) {
     return(integer())

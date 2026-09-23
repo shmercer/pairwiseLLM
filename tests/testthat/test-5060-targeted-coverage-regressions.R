@@ -820,7 +820,7 @@ test_that("adaptive run helper fallbacks cover remaining probe and phase-scope b
       controller = state_independent$controller,
       eligible_spoke_ids = c(2L, 3L)
     ),
-    "Missing Phase A artifact"
+    "common E1--E3"
   )
 
   expect_null(.adaptive_link_probe_select_holdout(make_covr_link_probe_state(), step_id = 1L, spoke_id = 2L))

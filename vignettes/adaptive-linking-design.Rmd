@@ -10,6 +10,13 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
+**Development restriction (#280):** Adaptive Phase B D-optimal execution is
+currently unavailable for every estimator and legacy alias, pending the separate
+selector validation study. Use [explicit-evidence linking sessions](linking-sessions.html)
+for E1--E3. The adaptive Phase B descriptions below are historical and are not
+an enabled or validated workflow; the full documentation replacement is tracked
+in #281. Phase A and ordinary within-set ranking remain available.
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
