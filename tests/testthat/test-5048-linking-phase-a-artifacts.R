@@ -208,7 +208,7 @@ test_that("pooled Phase A judge state supports all BTL model variants", {
   state <- make_phase_a_ready_state_with_evidence()
   state <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
   art2 <- .adaptive_phase_a_build_artifact(state, set_id = 2L)
@@ -305,7 +305,7 @@ test_that("pooled Phase A judge state round-trips through persistence", {
   art2$quality_gate_accepted <- TRUE
   state <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -341,19 +341,19 @@ test_that("pooled Phase A judge state round-trips through persistence", {
   expect_equal(pooled$epsilon_mean, state$linking$phase_a$pooled_judge_state$epsilon_mean)
 })
 
-test_that("anchored-joint import validation rejects summary-only artifacts without exact evidence", {
+test_that("E1 Phase A import accepts compatible summary-only artifacts", {
   state <- make_phase_a_ready_state()
   state <- .adaptive_apply_controller_config(
     state,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
   source_state <- .adaptive_apply_controller_config(
     make_phase_a_ready_state_with_evidence(),
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -365,22 +365,15 @@ test_that("anchored-joint import validation rejects summary-only artifacts witho
   artifact$n_pairs_committed <- 1L
   controller <- .adaptive_controller_resolve(state)
 
-  expect_error(
-    .adaptive_phase_a_validate_imported_artifact(
-      artifact,
-      state,
-      set_id = 1L,
-      controller = controller
-    ),
-    "exact within-set committed-edge history is unavailable"
-  )
+  expect_identical(.adaptive_phase_a_validate_imported_artifact(
+    artifact, state, set_id = 1L, controller = controller), artifact)
 })
 
-test_that("phase_a_prepare scaffolds anchored-joint artifact-copy accepted states", {
+test_that("phase_a_prepare retains artifacts without constructing a Phase B posterior", {
   state <- .adaptive_apply_controller_config(
     make_phase_a_ready_state_with_evidence(),
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import"
     )
@@ -396,16 +389,12 @@ test_that("phase_a_prepare scaffolds anchored-joint artifact-copy accepted state
   )
 
   state <- .adaptive_phase_a_prepare(state)
-  accepted <- state$linking$anchored_joint$accepted_state_by_spoke[["2"]]
-  fisher_t0 <- state$linking$anchored_joint$fisher_t0_by_spoke[["2"]]
-
   expect_identical(state$linking$phase_a$phase, "phase_b")
-  expect_identical(accepted$anchored_joint_init_state_method, "artifact_copy_init")
-  expect_equal(unname(accepted$theta_hub_fixed[c("a1", "a2")]), c(1.05, 0.85), tolerance = 1e-8)
-  expect_equal(unname(accepted$theta_spoke_global_mean[c("b1", "b2")]), c(-0.45, -0.65), tolerance = 1e-8)
-  expect_true(isTRUE(fisher_t0$I_s_t0_zero))
-  expect_identical(fisher_t0$n_link_active_pairs, 0L)
-  expect_identical(fisher_t0$anchored_joint_init_state_method, "artifact_copy_init")
+  expect_identical(state$linking$phase_a$artifacts, list(`1` = art1, `2` = art2))
+  expect_null(state$linking$anchored_joint)
+  expect_null(state$linking$estimator)
+  expect_error(.adaptive_linking_refit_update_state(state, list()),
+    class = "pairwiseLLM_link_selector_unvalidated")
 })
 
 test_that("phase A import validation rejects each required failure mode", {
@@ -542,7 +531,7 @@ test_that("phase A import ignores Phase B-only legacy surface mismatches", {
 
   state_current <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   controller <- .adaptive_controller_resolve(state_current)
   expect_no_error(
@@ -560,7 +549,7 @@ test_that("phase A run artifacts prefer the latest available refit for the set",
   state <- .adaptive_apply_controller_config(
     state,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "run",
       phase_a_required_reliability_min = 0
@@ -612,7 +601,7 @@ test_that("phase A prepare memo reuses unchanged run-set preparation results", {
   state <- .adaptive_apply_controller_config(
     state,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "run",
       phase_a_required_reliability_min = 0
@@ -650,7 +639,7 @@ test_that("phase A prepare invalidates memo on committed within-set evidence cha
   state <- .adaptive_apply_controller_config(
     state,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "run",
       phase_a_required_reliability_min = 0
@@ -699,7 +688,7 @@ test_that("phase A prepare invalidates memo on set-local refit changes", {
   state <- .adaptive_apply_controller_config(
     state,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "run",
       phase_a_required_reliability_min = 0
@@ -746,7 +735,7 @@ test_that("phase A prepare invalidates memo on imported artifact replacement", {
   state <- .adaptive_apply_controller_config(
     state,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_required_reliability_min = 0,
@@ -787,7 +776,7 @@ test_that("phase A prepare ignores stale removed judge-mode metadata", {
   state <- .adaptive_apply_controller_config(
     state,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_required_reliability_min = 0,
@@ -882,7 +871,7 @@ test_that("phase_a_mode=run executes Phase A within-set steps before Phase B", {
     judge,
     n_steps = 1L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "run"
     ),
@@ -902,14 +891,14 @@ test_that("phase_a_mode=run executes Phase A within-set steps before Phase B", {
   expect_true(all(out$step_log$utility_mode %in% c("pairing_trueskill_u0")))
   expect_true(all(is.na(out$step_log$log_alpha_spoke_estimate_pre)))
   expect_true(all(is.na(out$step_log$log_alpha_spoke_sd_pre)))
-  expect_true(all(is.na(out$step_log$hub_lock_mode)))
-  expect_true(all(is.na(out$step_log$hub_lock_kappa)))
+  expect_false("hub_lock_mode" %in% names(out$step_log))
+  expect_false("hub_lock_kappa" %in% names(out$step_log))
 })
 
 test_that("phase A gate allows pending run sets and blocks failed imports", {
   state <- adaptive_rank_start(make_multiset_items(), seed = 1L)
   state <- .adaptive_apply_controller_config(state, adaptive_config = list(
-    run_mode = "link_one_spoke",
+    run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
     hub_id = 1L,
     phase_a_mode = "run"
   ))
@@ -939,7 +928,7 @@ test_that("adaptive_rank_run_live rejects removed phase-specific judge mode", {
       judge,
       n_steps = 1L,
       adaptive_config = list(
-        run_mode = "link_one_spoke",
+        run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
         hub_id = 1L,
         judge_param_mode = "phase_specific",
         phase_a_mode = "import",
@@ -1046,7 +1035,7 @@ test_that("Phase B startup rejects selection even with valid shared Phase A judg
     btl_config = test_link_btl_config(),
     fit_fn = make_deterministic_fit_fn(state$item_ids, fit = state$btl_fit)$fit_fn,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = list(`1` = art1, `2` = art2)
@@ -1153,7 +1142,7 @@ test_that("phase A helper branch guards and edge paths are exercised", {
     ready_for_phase_b = FALSE,
     phase = "phase_a"
   )
-  state <- .adaptive_apply_controller_config(state, adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L))
+  state <- .adaptive_apply_controller_config(state, adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L))
   expect_error(.adaptive_phase_a_gate_or_abort(state), "cannot start until valid Phase A artifacts")
 
   empty_dir <- withr::local_tempdir()
@@ -1196,7 +1185,7 @@ test_that("resume preserves persisted phase A artifacts for linking gate", {
   restored <- .adaptive_apply_controller_config(
     restored,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_required_reliability_min = 0,
@@ -1216,7 +1205,7 @@ test_that("phase A prepare memo is runtime-only across save and load", {
   state <- .adaptive_apply_controller_config(
     state,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "run",
       phase_a_required_reliability_min = 0
@@ -1277,7 +1266,7 @@ test_that("resume preserves Phase A pending/ready semantics and warm-start state
   state <- .adaptive_apply_controller_config(
     state,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "run",
       phase_a_required_reliability_min = 0
@@ -1347,12 +1336,12 @@ test_that("phase A helper utilities cover fallback and phase-context branches", 
   state$linking$phase_a$set_status <- .adaptive_phase_a_empty_state(c(1L, 2L))
   ctx <- .adaptive_link_phase_context(
     state,
-    controller = utils::modifyList(controller, list(run_mode = "link_one_spoke", hub_id = 1L))
+    controller = utils::modifyList(controller, list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L))
   )
   expect_identical(ctx$phase, "phase_a")
   state <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   expect_error(.adaptive_phase_a_gate_or_abort(state), "cannot start until valid Phase A artifacts")
 
@@ -1392,7 +1381,7 @@ test_that("phase A helper utilities cover fallback and phase-context branches", 
   state2 <- .adaptive_apply_controller_config(
     state2,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import"
     )
@@ -1405,7 +1394,7 @@ test_that("phase A helper utilities cover fallback and phase-context branches", 
   state3 <- state
   state3 <- .adaptive_apply_controller_config(
     state3,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state3$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -1426,7 +1415,7 @@ test_that("phase_a_mode=run does not mark set ready before within-set finalizati
   state <- make_phase_a_ready_state()
   state <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
 
   prepared <- .adaptive_phase_a_prepare(state)
@@ -1449,7 +1438,7 @@ test_that("run set transition to ready overwrites stale pending_finalization mes
   )
   state <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
 
   art1 <- .adaptive_phase_a_build_artifact(state, set_id = 1L)
@@ -1483,7 +1472,7 @@ test_that("phase B gate aborts when hub/spoke artifacts are missing", {
   state <- make_phase_a_ready_state()
   state <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -1523,7 +1512,7 @@ test_that("linking warm-start sync helper covers phase and scope transitions", {
   art2$quality_gate_accepted <- TRUE
   ready <- .adaptive_apply_controller_config(
     ready,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "import")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "import")
   )
   ready$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -1549,7 +1538,7 @@ test_that("linking warm-start sync helper covers phase and scope transitions", {
   # Phase_a branch should scope warm-start to active set.
   phase_a <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   phase_a$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -1589,7 +1578,7 @@ test_that("phase A prepare preserves warm-start scope metadata", {
   state <- adaptive_rank_start(items, seed = 5L)
   state <- .adaptive_apply_controller_config(
     state,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   state$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -1623,7 +1612,7 @@ test_that("phase A finalize reuses prepared stop-pass state when complete", {
   state <- .adaptive_apply_controller_config(
     state,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "run",
       phase_a_required_reliability_min = 0
@@ -1680,7 +1669,7 @@ test_that("phase A validation and gate exercise failure branches for edge comple
 
   state_link <- pairwiseLLM:::.adaptive_apply_controller_config(
     state,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state_link$linking$phase_a <- list(
     set_status = tibble::tibble(

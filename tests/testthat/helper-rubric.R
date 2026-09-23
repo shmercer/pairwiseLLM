@@ -60,6 +60,8 @@ rubric_test_link_state <- function(n_sets = 3L) {
 # identity and evidence directly: current code must not execute a legacy refit.
 rubric_test_legacy_linked <- function(n_sets = 3L) {
   state <- rubric_test_link_state(n_sets)
+  state$controller$link_estimation_mode <- "anchored_joint"
+  state$linking$estimator <- NULL
   for (k in seq.int(2L, n_sets)) {
     i <- match(state$items$item_id[state$items$set_id == k][1L], state$item_ids)
     step <- as.integer(k - 1L)
@@ -153,7 +155,7 @@ rubric_linked_fixture <- function(n_sets = 2L, variant = "btl", target_shift = 0
   now_fn <- function() as.POSIXct("2026-09-12", tz = "UTC")
   environment(now_fn) <- baseenv()
   state <- pairwiseLLM::adaptive_rank_start(items, seed = 9200L, now_fn = now_fn,
-    adaptive_config = list(run_mode = if (n_sets == 2L) "link_one_spoke" else "link_multi_spoke", hub_id = 1L))
+    adaptive_config = list(run_mode = if (n_sets == 2L) "link_one_spoke" else "link_multi_spoke", link_estimation_mode = estimator, hub_id = 1L))
   state$config$btl_config$model_variant <- variant
   state$trait <- "organization"
   draws <- outer(c(-0.3, -0.1, 0.1, 0.3), theta, `+`)

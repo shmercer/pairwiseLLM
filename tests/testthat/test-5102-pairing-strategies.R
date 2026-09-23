@@ -30,11 +30,12 @@ test_that("strategy validation is exact and historical default stays hybrid", {
   for (mode in c("link_one_spoke", "link_multi_spoke")) {
     for (strategy in c("random", "trueskill_p50", "trueskill_pollitt")) {
       expect_error(adaptive_rank_start(letters[1:3],
-        adaptive_config = list(run_mode = mode, pairing_strategy = strategy)), "requires.*within_set")
+        adaptive_config = list(run_mode = mode, link_estimation_mode = "fixed_shape_offset", pairing_strategy = strategy)), "requires.*within_set")
     }
   }
   state <- strategy_state_5102("random")
   state$controller$run_mode <- "link_one_spoke"
+  state$controller$link_estimation_mode <- "fixed_shape_offset"
   expect_error(pairwiseLLM:::select_next_pair(state), "requires.*within_set")
   expect_error(pairwiseLLM:::select_next_pair(strategy_state_5102(), step_id = NA_integer_), "step_id")
   state <- strategy_state_5102("random")

@@ -50,19 +50,14 @@ test_that("pooled judge inputs require artifacts and preserve the observed prese
   expect_true(pooled$diagnostics$no_phase_a_within_set_edges)
 })
 
-test_that("anchored scaffolding repairs fresh metadata but rejects corruption on resume", {
-  state <- .adaptive_anchored_joint_sync_scaffolding(task09_link_state())
-  base <- state$linking$anchored_joint$fisher_t0_by_spoke[["2"]]
-  changes <- list(free_block_dim = 9L, n_link_active_pairs = -1L,
-    anchored_joint_init_state_method = "invalid")
-  for (field in names(changes)) {
-    bad <- state
-    bad$linking$anchored_joint$fisher_t0_by_spoke[["2"]][[field]] <- changes[[field]]
-    repaired <- .adaptive_anchored_joint_sync_scaffolding(bad)
-    expect_identical(repaired$linking$anchored_joint$fisher_t0_by_spoke[["2"]][[field]],
-      base[[field]])
-    bad$meta$resumed_from_session <- TRUE
-    expect_error(.adaptive_anchored_joint_sync_scaffolding(bad), "resume anchored-joint invariant")
+test_that("canonical state has common results without legacy information scaffolding", {
+  state <- task10_link_state()
+  expect_null(state$linking$anchored_joint)
+  expect_false(any(grepl("anchored_joint", names(state$controller))))
+  expect_null(state$linking$fisher_t0_by_spoke)
+  for (result in state$linking$estimator$accepted_state_by_spoke) {
+    expect_identical(result$estimator_id, "fixed_shape_offset")
+    expect_true(result$diagnostics$fit_valid)
   }
 })
 test_that("pooled judge refit is reused until authoritative evidence changes", {

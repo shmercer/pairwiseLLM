@@ -18,8 +18,8 @@ test_that("new_adaptive_state builds a stable adaptive scaffold", {
   expect_true(tibble::is_tibble(state$round_log))
   expect_true(is.list(state$item_log))
   expect_true(tibble::is_tibble(state$item_step_log))
-  expect_identical(state$controller$link_estimation_mode, "anchored_joint")
-  expect_identical(state$controller$hub_lock_mode, "hard_lock")
+  expect_null(state$controller$link_estimation_mode)
+  expect_null(state$controller$hub_lock_mode)
   expect_identical(state$controller$link_state_frozen_by_spoke, list())
 })
 
@@ -63,7 +63,7 @@ test_that("adaptive_rank_start stores linking run metadata", {
     items,
     seed = 1L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -83,7 +83,7 @@ test_that("adaptive_rank_start defaults multi-spoke linking to concurrent mode",
     items,
     seed = 2L,
     adaptive_config = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -91,7 +91,7 @@ test_that("adaptive_rank_start defaults multi-spoke linking to concurrent mode",
   expect_identical(state$controller$multi_spoke_mode, "concurrent")
 })
 
-test_that("adaptive_rank_start normalizes anchored-joint defaults", {
+test_that("adaptive_rank_start retains explicit E1 identity without old prior controls", {
   items <- tibble::tibble(
     item_id = c("h1", "h2", "s21", "s22"),
     set_id = c(1L, 1L, 2L, 2L),
@@ -101,17 +101,17 @@ test_that("adaptive_rank_start normalizes anchored-joint defaults", {
     items,
     seed = 3L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
 
-  expect_identical(state$controller$link_estimation_mode, "anchored_joint")
-  expect_identical(state$controller$hub_lock_mode, "hard_lock")
+  expect_identical(state$controller$link_estimation_mode, "fixed_shape_offset")
+  expect_null(state$controller$hub_lock_mode)
   expect_true(is.na(state$controller$link_transform_policy))
   expect_true(is.na(state$controller$link_refit_mode))
   expect_true(is.na(state$controller$shift_only_theta_treatment))
-  expect_identical(state$controller$anchored_joint_spoke_prior_scale, 1.0)
-  expect_identical(state$controller$anchored_joint_sd_floor, 0.02)
-  expect_identical(state$controller$anchored_joint_spoke_prior_fallback_sd, 1.0)
+  expect_null(state$controller$anchored_joint_spoke_prior_scale)
+  expect_null(state$controller$anchored_joint_sd_floor)
+  expect_null(state$controller$anchored_joint_spoke_prior_fallback_sd)
 })

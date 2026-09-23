@@ -21,9 +21,12 @@ task07_fixture <- function(pattern = "good", n = 8L) {
 }
 
 task07_start <- function(fixture, mode = "both", strategy = "hybrid", config = list()) {
+  # Persist only the stateless clock, not the development test environment.
+  now_fn <- function() as.POSIXct("2026-09-11", tz = "UTC")
+  environment(now_fn) <- baseenv()
   pairwiseLLM::adaptive_rank_start(fixture$ids, seed = 71L, warm_start_mode = mode,
     warm_start_prior = if (mode == "cold") NULL else fixture$prior,
-    now_fn = function() as.POSIXct("2026-09-11", tz = "UTC"),
+    now_fn = now_fn,
     adaptive_config = c(list(pairing_strategy = strategy, dup_max_obs_relaxed = 2L), config))
 }
 

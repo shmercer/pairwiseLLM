@@ -32,11 +32,14 @@ test_that("public Phase B execution rejects before provider or fit callbacks", {
     progress = "none"), class = "pairwiseLLM_link_selector_unvalidated")
   expect_identical(calls, 0L)
   for (id in c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset")) {
-    expect_error(.adaptive_normalize_link_estimation_mode(id),
-      class = "pairwiseLLM_link_selector_unvalidated")
-    expect_error(adaptive_rank_start(items, seed = 280L,
-      adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = id)),
-      class = "pairwiseLLM_link_selector_unvalidated")
+    expect_identical(.adaptive_normalize_link_estimation_mode(id), id)
+    phase_a <- adaptive_rank_start(items, seed = 280L,
+      adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = id))
+    expect_identical(phase_a$controller$link_estimation_mode, id)
+    phase_a$linking$phase_a$phase <- "phase_b"
+    phase_a$linking$phase_a$ready_for_phase_b <- TRUE
+    phase_a$linking$phase_a$set_status$status[] <- "ready"
+    expect_error(select_next_pair(phase_a), class = "pairwiseLLM_link_selector_unvalidated")
   }
 })
 

@@ -104,7 +104,7 @@ test_that("concurrent all-spoke infeasible starvation marks stage exhaustion per
     items,
     seed = 901L,
     adaptive_config = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )

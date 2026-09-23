@@ -54,7 +54,7 @@ test_that("sparse connected graphs share a seeded tree across modes and strategi
   expect_error(adaptive_rank_start(c(ids, "z"), replay_reservoir = reservoir), "panel exactly")
   expect_error(adaptive_rank_start(tibble::tibble(item_id = ids, set_id = c(1L, 1L, 2L, 2L, 2L)),
     replay_reservoir = reservoir,
-    adaptive_config = list(run_mode = "link_one_spoke")), "within_set")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset")), "within_set")
 })
 
 test_that("reservoir judges preserve presentation and consume only committed history", {

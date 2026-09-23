@@ -32,7 +32,7 @@ test_that("controller validation reports contradictory thresholds before startin
   expect_error(validate(list(1)), "non-empty names")
   cases <- list(
     list(hub_anchor_required_phase_b = NA),
-    list(run_mode = "link_multi_spoke", hub_id = 9L),
+    list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 9L),
     list(stability_passes_required = 4L, stability_window_refits = 2L),
     list(probe_near_boundary_low = 0.8, probe_near_boundary_high = 0.2),
     list(probe_extreme_low = 0.8, probe_extreme_high = 0.2),
@@ -86,7 +86,7 @@ test_that("link review exposes stopped and frozen spokes with audit effort metad
   row <- lapply(schema_link_stage_log, .adaptive_schema_typed_na)
   row$spoke_id <- 2L
   row$refit_id <- 1L
-  row$link_estimation_mode <- "anchored_joint"
+  row$link_estimation_mode <- "joint_offset"
   row$link_fit_method <- "map_laplace"
   row$link_uncertainty_approximation <- "laplace_hessian"
   row$phase_b_global_metric_uncertainty_approximation <- "marginal_quantile_reconstruction"
@@ -119,17 +119,7 @@ test_that("link item summaries preserve ordered hub and accepted-spoke uncertain
     .adaptive_link_item_raw_link_summaries(
       s, ids, sets, means, sds, quantiles, is_link_phase_a = phase_a)
   }
-  out <- f(state)
-  expect_identical(colnames(out$theta_link_quantiles), ids)
-  expect_equal(out$theta_link_eap[sets == 1L], means[sets == 1L])
-  expect_identical(out$theta_link_sd[sets == 1L], c(0, 0))
-  for (spoke in 2:3) {
-    accepted <- state$linking$anchored_joint$accepted_state_by_spoke[[as.character(spoke)]]
-    expect_equal(out$theta_link_eap[sets == spoke],
-      unname(accepted$theta_spoke_global_mean[ids[sets == spoke]]))
-    expect_equal(out$theta_link_sd[sets == spoke],
-      unname(accepted$theta_spoke_global_sd[ids[sets == spoke]]))
-  }
+  expect_error(f(state), class = "pairwiseLLM_link_selector_unvalidated")
   phase_a <- f(state, TRUE)
   expect_identical(phase_a$theta_link_eap, rep(NA_real_, length(ids)))
   expect_identical(phase_a$theta_link_sd, rep(NA_real_, length(ids)))

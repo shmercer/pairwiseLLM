@@ -416,7 +416,7 @@ test_that("validate_state enforces linking identifiers and mode guards", {
     items,
     seed = 1L,
     adaptive_config = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -452,11 +452,8 @@ test_that("validate_state enforces linking identifiers and mode guards", {
   bad_concurrent$linking$run_mode <- "link_multi_spoke"
   bad_concurrent$controller$link_refit_mode <- "joint_refit"
   bad_concurrent$controller$hub_lock_mode <- "free"
-  expect_no_error(pairwiseLLM:::validate_state(bad_concurrent))
-  resolved_bad <- pairwiseLLM:::.adaptive_controller_resolve(bad_concurrent)
-  expect_identical(resolved_bad$link_estimation_mode, "anchored_joint")
-  expect_identical(resolved_bad$hub_lock_mode, "hard_lock")
-  expect_identical(resolved_bad$multi_spoke_mode, "concurrent")
+  expect_error(pairwiseLLM:::validate_state(bad_concurrent),
+    class = "pairwiseLLM_unsupported_link_estimator")
 })
 
 test_that("controller config rejects removed Phase B mode fields for new runs", {
@@ -469,7 +466,7 @@ test_that("controller config rejects removed Phase B mode fields for new runs", 
   expect_no_error(
     pairwiseLLM:::.adaptive_validate_controller_config(
       adaptive_config = list(
-        run_mode = "link_one_spoke",
+        run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
         hub_id = 1L
       ),
       n_items = nrow(items),
@@ -478,7 +475,6 @@ test_that("controller config rejects removed Phase B mode fields for new runs", 
   )
 
   removed <- c(
-    "link_estimation_mode",
     "link_transform_policy",
     "link_transform_mode",
     "link_refit_mode",
@@ -497,7 +493,7 @@ test_that("controller config rejects removed Phase B mode fields for new runs", 
     "phase_a_set_source"
   )
   for (field in removed) {
-    cfg <- list(run_mode = "link_one_spoke", hub_id = 1L)
+    cfg <- list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
     cfg[[field]] <- "removed"
     expect_false(field %in% pairwiseLLM:::.adaptive_controller_public_keys())
     expect_error(
@@ -516,23 +512,15 @@ test_that("controller config rejects removed Phase B mode fields for new runs", 
   }
 })
 
-test_that("state validation retains legacy errors before fixed controller modes", {
+test_that("state validation rejects unsupported estimator identities before normalization", {
   state <- task10_link_state()
   state$controller$link_estimation_mode <- "transform"
-  state$controller$link_transform_policy <- "bad-policy"
-  expect_error(validate_state(state), "policy")
-  state$controller$link_transform_policy <- "auto"
-  state$controller$shift_only_theta_treatment <- "bad-treatment"
-  expect_error(validate_state(state), "shift_only_theta_treatment")
-  state$controller$shift_only_theta_treatment <- "normal_prior"
+  expect_error(validate_state(state), class = "pairwiseLLM_unsupported_link_estimator")
+  state$controller$link_estimation_mode <- "fixed_shape_offset"
   state$controller$probe_acceleration_mode <- "bad-probe"
   expect_error(validate_state(state), "Probe acceleration mode")
   state$controller$probe_acceleration_mode <- "fixed_per_refit"
   expect_invisible(validate_state(state))
-  resolved <- .adaptive_controller_resolve(state)
-  expect_identical(resolved$link_estimation_mode, "anchored_joint")
-  expect_identical(resolved$hub_lock_mode, "hard_lock")
-  expect_identical(resolved$multi_spoke_mode, "concurrent")
 })
 
 test_that("controller config exposes only current public Phase B fields", {
@@ -568,7 +556,7 @@ test_that("linking probe defaults scale with spoke set size", {
   state <- pairwiseLLM::adaptive_rank_start(
     items,
     seed = 7L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   validated <- state$controller
 

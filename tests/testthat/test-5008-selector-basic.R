@@ -86,7 +86,7 @@ test_that("Phase A selector stays inside the active within-set scope", {
   state <- adaptive_rank_start(
     items,
     seed = 41L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   state$linking$phase_a$phase <- "phase_a"
   state$linking$phase_a$set_status <- tibble::tibble(

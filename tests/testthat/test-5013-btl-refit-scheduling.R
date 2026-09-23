@@ -61,7 +61,7 @@ test_that("linking phase A refit target uses active set size", {
   state <- adaptive_rank_start(
     items,
     seed = 1L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   target <- pairwiseLLM:::.adaptive_refit_pairs_target(state, list())
   expect_identical(target, 25L)
@@ -77,7 +77,7 @@ test_that("linking phase B default refit target uses the Phase B window floor", 
   state <- adaptive_rank_start(
     items,
     seed = 7L,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$linking$phase_a$phase <- "phase_b"
   state$linking$phase_a$ready_spokes <- c(2L, 3L)
@@ -105,7 +105,7 @@ test_that("linking phase A refit cadence is tracked per active set", {
   state <- adaptive_rank_start(
     items,
     seed = 22L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   state$warm_start_done <- TRUE
   state$round$staged_active <- TRUE

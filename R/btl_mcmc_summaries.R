@@ -22,6 +22,7 @@
 }
 
 .adaptive_summary_extract_source <- function(state) {
+  .link_reject_legacy(state)
   if (inherits(state, "adaptive_state")) {
     is_canonical_runtime <- !is.null(state$item_ids) &&
       !is.null(state$step_log) &&

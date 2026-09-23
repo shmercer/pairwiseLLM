@@ -170,7 +170,7 @@ test_that("held-out probe commits do not mutate the shared history-state cache",
     items,
     seed = 19L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -372,7 +372,7 @@ test_that("invalid linking step does not mutate controller link routing state", 
     items,
     seed = 8L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )

@@ -218,6 +218,7 @@ test_that("linking anchor refresh changes source only in Phase A", {
   state <- make_test_state(items, trueskill_state)
   state$controller <- pairwiseLLM:::.adaptive_controller_defaults(length(state$item_ids))
   state$controller$run_mode <- "link_one_spoke"
+  state$controller$link_estimation_mode <- "fixed_shape_offset"
   state$controller$hub_id <- 1L
   state$btl_fit <- list(
     theta_mean = stats::setNames(seq(1, 10), as.character(items$item_id))
@@ -391,7 +392,7 @@ test_that("Phase A scoped direct builders stay inside the active set and match r
   state <- adaptive_rank_start(
     items,
     seed = 23L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   state$trueskill_state <- make_test_trueskill_state(
     items,
@@ -561,7 +562,7 @@ test_that("large-N Phase A scoped bounded construction matches reference subsamp
   state <- adaptive_rank_start(
     items,
     seed = 31L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   state$trueskill_state <- make_test_trueskill_state(items, mu = rev(seq_len(320L)))
   state$linking$phase_a <- list(

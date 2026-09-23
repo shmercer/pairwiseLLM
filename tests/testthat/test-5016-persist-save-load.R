@@ -8,7 +8,7 @@ make_probe_resume_state <- function() {
     items,
     seed = 61L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -74,7 +74,7 @@ make_probe_resume_state <- function() {
   state
 }
 
-make_anchored_joint_resume_state <- function() {
+make_phase_a_resume_state <- function() {
   items <- tibble::tibble(
     item_id = c("a1", "a2", "b1", "b2"),
     set_id = c(1L, 1L, 2L, 2L),
@@ -84,7 +84,7 @@ make_anchored_joint_resume_state <- function() {
     items,
     seed = 71L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import"
     )
@@ -200,7 +200,7 @@ test_that("save_adaptive_session and load_adaptive_session round-trip adaptive a
 })
 
 test_that("save/load rebuilds the Phase A committed-pair cache from canonical history", {
-  state <- make_anchored_joint_resume_state()
+  state <- make_phase_a_resume_state()
   state$linking$phase_a$phase <- "phase_a"
   state$refit_meta$phase_a_committed_pairs_by_set <- c(`1` = 99L, `2` = 0L)
 
@@ -360,7 +360,7 @@ test_that("save_adaptive_session overwrite preserves existing item-log files", {
 })
 
 test_that("save_adaptive_session overwrite preserves existing phase-a artifact files", {
-  state <- make_anchored_joint_resume_state()
+  state <- make_phase_a_resume_state()
   state$linking$phase_a$phase <- "phase_a"
   session_dir <- withr::local_tempdir()
 
@@ -736,6 +736,7 @@ test_that("load_adaptive_session normalizes legacy link_stage_log transform colu
     "refit_id", "spoke_id", "hub_id", "link_transform_mode",
     setdiff(names(legacy), c("refit_id", "spoke_id", "hub_id", "link_transform_mode"))
   )]
+  legacy$hub_lock_mode <- character()
   legacy <- tibble::add_row(
     legacy,
     refit_id = 1L,
@@ -777,13 +778,13 @@ test_that("load_adaptive_session normalizes legacy link_stage_log transform colu
 
   restored <- load_adaptive_session(session_dir)
   expect_false("link_transform_mode" %in% names(restored$link_stage_log))
-  expect_identical(as.character(restored$link_stage_log$link_estimation_mode[[1L]]), "transform")
+  expect_true(is.na(restored$link_stage_log$link_estimation_mode[[1L]]))
   expect_identical(as.character(restored$link_stage_log$link_transform_policy[[1L]]), "fixed_shift_only")
   expect_identical(as.character(restored$link_stage_log$link_transform_state[[1L]]), "shift_only")
 })
 
 test_that("save/load preserves legacy broad-surface Phase A artifact reuse without manual hash allowlists", {
-  state <- make_anchored_joint_resume_state()
+  state <- make_phase_a_resume_state()
   state$linking$phase_a$phase <- "phase_a"
   artifacts <- state$linking$phase_a$artifacts
 
@@ -813,7 +814,7 @@ test_that("save/load preserves legacy broad-surface Phase A artifact reuse witho
   restored <- .adaptive_apply_controller_config(
     restored,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = list()
@@ -828,13 +829,15 @@ test_that("save/load preserves legacy broad-surface Phase A artifact reuse witho
 })
 
 test_that("legacy Phase B files reject before schema backfill or posterior reconstruction", {
-  state <- make_anchored_joint_resume_state()
+  state <- make_phase_a_resume_state()
+  state$controller$link_estimation_mode <- "anchored_joint"
   expect_error(save_adaptive_session(state, withr::local_tempdir()),
     class = "pairwiseLLM_unsupported_legacy_link_state")
   # Start with a complete valid Phase A directory, then reproduce old Phase B
   # state metadata. Logs may have obsolete columns: rejection must precede repair.
   phase_a <- state
   phase_a$linking$phase_a$phase <- "phase_a"
+  phase_a$controller$link_estimation_mode <- "fixed_shape_offset"
   dir <- withr::local_tempdir()
   save_adaptive_session(phase_a, dir)
   saveRDS(state, file.path(dir, "state.rds"))
@@ -856,7 +859,7 @@ test_that("load_adaptive_session preserves cleaned linking controller state acro
     items,
     seed = 17L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import"
     )
@@ -947,7 +950,7 @@ test_that("load_adaptive_session normalizes legacy controller freeze fields into
     items,
     seed = 23L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )

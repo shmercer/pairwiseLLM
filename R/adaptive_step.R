@@ -600,9 +600,7 @@ validate_judge_result <- function(result, A_id, B_id) {
       "link_transform_state",
       "cross_set_utility_pre",
       "log_alpha_spoke_estimate_pre",
-      "log_alpha_spoke_sd_pre",
-      "hub_lock_mode",
-      "hub_lock_kappa"
+      "log_alpha_spoke_sd_pre"
     )
     link_col_present <- function(col) {
       if (!col %in% names(row) || length(row[[col]]) < 1L) {
@@ -1083,8 +1081,8 @@ run_one_step <- function(state, judge, ...) {
   link_transform_policy <- as.character(controller$link_transform_policy %||% NA_character_)
   link_transform_state <- .adaptive_default_link_transform_state(link_transform_policy)
   utility_mode <- as.character(selection$utility_mode %||% NA_character_)
-  hub_lock_mode <- as.character(controller$hub_lock_mode %||% NA_character_)
-  hub_lock_kappa <- as.double(controller$hub_lock_kappa %||% NA_real_)
+
+
   set_i <- if (!is.na(selection$i)) {
     as.integer(state$items$set_id[[selection$i]])
   } else {
@@ -1234,21 +1232,6 @@ run_one_step <- function(state, judge, ...) {
   } else {
     NA_real_
   }
-  hub_lock_mode <- if (isTRUE(is_cross_set)) {
-    hub_lock_mode
-  } else {
-    NA_character_
-  }
-  hub_lock_kappa <- if (isTRUE(is_cross_set)) {
-    if (identical(hub_lock_mode, "soft_lock")) {
-      hub_lock_kappa
-    } else {
-      NA_real_
-    }
-  } else {
-    NA_real_
-  }
-
   step_row <- list(
     step_id = step_id,
     timestamp = timestamp,
@@ -1346,9 +1329,7 @@ run_one_step <- function(state, judge, ...) {
     cross_set_utility_pre = cross_set_utility_pre,
     utility_mode = utility_mode,
     log_alpha_spoke_estimate_pre = log_alpha_spoke_estimate_pre,
-    log_alpha_spoke_sd_pre = log_alpha_spoke_sd_pre,
-    hub_lock_mode = hub_lock_mode,
-    hub_lock_kappa = hub_lock_kappa
+    log_alpha_spoke_sd_pre = log_alpha_spoke_sd_pre
   )
   .adaptive_assert_step_row_linking_completeness(step_row)
 

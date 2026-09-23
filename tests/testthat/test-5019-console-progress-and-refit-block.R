@@ -51,7 +51,7 @@ test_that("adaptive progress Phase B denominator uses allocated refit budget", {
   )
   state <- adaptive_rank_start(
     items,
-    adaptive_config = list(run_mode = "link_multi_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   state$linking$phase_a <- list(
     ready_for_phase_b = TRUE,
@@ -122,7 +122,7 @@ test_that("adaptive progress step events distinguish active linking from probe f
   active <- tibble::tibble(
     step_id = 3L,
     round_stage = "mid_link",
-    run_mode = "link_one_spoke",
+    run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
     is_probe_step = FALSE,
     is_holdout_probe_step = FALSE,
     is_drift_probe_step = FALSE,
@@ -140,13 +140,12 @@ test_that("adaptive progress step events distinguish active linking from probe f
   expect_false(grepl("probe=", active_msg))
 })
 
-test_that("adaptive progress Phase B spoke lines label anchored-joint mode without transform state", {
+test_that("adaptive progress Phase B spoke lines label common-estimator mode without transform state", {
   lines <- pairwiseLLM:::.adaptive_progress_phase_b_spoke_lines(
     link_stage_rows = tibble::tibble(
       spoke_id = 2L,
-      link_estimation_mode = "anchored_joint",
+      link_estimation_mode = "joint_offset",
       link_transform_state = NA_character_,
-      anchored_joint_init_state_method = "artifact_copy_init",
       link_state_frozen = TRUE,
       link_state_frozen_refit_id = 4L
     ),
@@ -155,12 +154,12 @@ test_that("adaptive progress Phase B spoke lines label anchored-joint mode witho
     stability_passes_required = 2L
   )
 
-  expect_true(any(grepl("mode=anchored_joint", lines)))
-  expect_true(any(grepl("init_state=artifact_copy_init", lines)))
+  expect_true(any(grepl("mode=joint_offset", lines)))
+  expect_false(any(grepl("init_state=", lines)))
   expect_false(any(grepl("^\\s+state=", lines)))
 })
 
-test_that("adaptive progress diagnostics use deterministic link contract for anchored-joint fits", {
+test_that("adaptive progress diagnostics use deterministic link contract for common-estimator fits", {
   lines <- pairwiseLLM:::.adaptive_progress_diagnostics_lines(
     row = tibble::tibble(diagnostics_pass = TRUE),
     link_stage_rows = tibble::tibble(

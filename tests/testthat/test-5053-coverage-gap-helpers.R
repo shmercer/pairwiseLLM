@@ -8,7 +8,7 @@ make_link_probe_state <- function() {
     items,
     seed = 101L,
     adaptive_config = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -754,7 +754,7 @@ test_that("Phase B refit target scales for concurrent probe-active floors", {
   state <- pairwiseLLM::adaptive_rank_start(
     items,
     adaptive_config = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L
     )
   )
@@ -1254,7 +1254,7 @@ test_that("concurrent probe progress guard does not impose a cross-spoke startup
     items,
     seed = 808L,
     adaptive_config = list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       min_cross_set_pairs_per_spoke_per_refit = 1L
     )
@@ -1375,7 +1375,7 @@ test_that("concurrent probe progress guard does not impose a cross-spoke startup
 
   single_spoke_guard <- pairwiseLLM:::.adaptive_link_probe_active_progress_guard(
     state,
-    controller = utils::modifyList(state$controller, list(run_mode = "link_one_spoke")),
+    controller = utils::modifyList(state$controller, list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset")),
     eligible_spoke_ids = 2L
   )
   expect_false(isTRUE(single_spoke_guard$block_probes))
@@ -1654,7 +1654,7 @@ test_that("candidate ranking and refit-stop helpers cover remaining routing and 
       global_item_id = c("ga1", "ga2", "gb1", "gb2")
     ),
     seed = 55L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   phase_a_state$linking$phase_a <- list(
     set_status = tibble::tibble(
@@ -2047,7 +2047,7 @@ test_that("probe panel planned ranks interleave bins for early fixed-cap realiza
     items,
     seed = 101L,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       hub_anchor_required_phase_b = FALSE,
       probe_panel_edges = 100L,
@@ -2189,6 +2189,7 @@ test_that("remaining candidate-generation and budget helpers cover edge branches
 
   one_spoke_state <- cached_state
   one_spoke_state$controller$run_mode <- "link_one_spoke"
+  one_spoke_state$controller$link_estimation_mode <- "fixed_shape_offset"
   one_spoke_state$controller$link_budget_refit_id <- NA_integer_
   one_spoke_state$controller$link_budget_map <- list()
   expect_error(pairwiseLLM:::.adaptive_link_budget_map_for_refit(
@@ -2456,7 +2457,7 @@ test_that("feasibility snapshot and holdout ordering match history-state rebuild
       set_j = 2L,
       is_cross_set = TRUE,
       link_spoke_id = 2L,
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       round_stage = "anchor_link",
       link_stage = "anchor_link",
       is_probe_step = FALSE
@@ -2693,6 +2694,8 @@ test_that("routing, probe-panel, and candidate helper guards cover remaining bra
     state, state$controller, c("s21", "s22"), 1L, 2L), before)
   expect_error(pairwiseLLM:::.adaptive_link_phase_b_routing_scores(
     state, state$controller, c("h1", "missing_item"), 1L, 2L), "Unknown adaptive")
+  expect_error(.adaptive_controller_resolve(state), class = "pairwiseLLM_unsupported_legacy_link_state")
+  state$linking$anchored_joint <- NULL
 
   empty_hub_anchors <- testthat::with_mocked_bindings(
     .adaptive_select_rolling_anchors = function(scores, defaults) character(),
@@ -2973,7 +2976,7 @@ test_that("routing, probe-panel, and candidate helper guards cover remaining bra
       global_item_id = c("gh1", "gh2", "gs1", "gs2")
     ),
     seed = 801L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   expect_error(
     testthat::with_mocked_bindings(
@@ -3030,7 +3033,7 @@ test_that("routing, probe-panel, and candidate helper guards cover remaining bra
       global_item_id = c("gh1", "gh2", "gs1")
     ),
     seed = 802L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L)
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L)
   )
   phase_a_empty <- testthat::with_mocked_bindings(
     .adaptive_link_phase_context = function(state, controller = NULL) {

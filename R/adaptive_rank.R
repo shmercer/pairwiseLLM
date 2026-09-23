@@ -826,8 +826,9 @@ make_adaptive_judge_llm <- function(
 #' `run_mode = "link_one_spoke"` and `run_mode = "link_multi_spoke"` require
 #' multi-set input (`set_id`/`global_item_id`), enforce hub<->spoke routing
 #' defaults, and preserve Phase A artifact gating before Phase B cross-set
-#' comparisons begin. Phase B uses anchored-joint estimation with a hard-locked
-#' hub and global-shared judge parameters. Every wrapper call returns canonical
+#' comparisons begin. An explicit `link_estimation_mode` is required. Adaptive
+#' Phase B is unavailable pending selector validation; use [start_link_session()]
+#' with explicit evidence for E1--E3 estimation. Every wrapper call returns canonical
 #' `phase_a` outputs that can be fed back into a later linking run through
 #' `adaptive_config$phase_a_artifacts`.
 #'
@@ -963,18 +964,12 @@ make_adaptive_judge_llm <- function(
 #'     multiple spokes). Default is `"within_set"`. Linking modes require
 #'     multi-set inputs with `set_id` and `global_item_id` in `data`.}
 #'   \item{`hub_id`}{Hub `set_id` for linking modes. Default is `1L`.}
-#'   \item{Phase B estimation}{Linking modes use anchored-joint estimation with
-#'     a hard-locked hub, global-shared judge parameters, concurrent spokes, and
-#'     fail-fast Phase A artifact import. Historical transform/free-lock config
-#'     fields are normalized only when loading older sessions or Phase A
-#'     artifacts; they are not accepted as new `adaptive_config` keys.}
-#'   \item{`anchored_joint_spoke_prior_scale`}{Scale multiplier for anchored-
-#'     joint spoke priors. Default is `1.0`.}
-#'   \item{`anchored_joint_sd_floor`}{Lower bound applied to anchored-joint
-#'     spoke prior SDs derived from Phase A artifacts. Default is `0.02`.}
-#'   \item{`anchored_joint_spoke_prior_fallback_sd`}{Fallback anchored-joint
-#'     spoke prior SD used when artifact-level SDs are unavailable. Default is
-#'     `1.0`.}
+#'   \item{`link_estimation_mode`}{Explicit estimator identity for linking Phase A
+#'     preparation: `fixed_shape_offset`, `gaussian_posterior_bridge`, or
+#'     `joint_offset`. There is no default. Adaptive Phase B selection is
+#'     unavailable pending validation. Use [prepare_link_input()], [fit_link()],
+#'     and [start_link_session()] for explicit-evidence linking. Legacy Phase B
+#'     posteriors cannot be migrated; restart from compatible Phase A inputs.}
 #'
 #'   \item{`link_identified_reliability_min`}{Minimum
 #'     `reliability_link_global` value on the linking-active item domain used
@@ -1311,7 +1306,7 @@ make_adaptive_judge_llm <- function(
 #' Predictive BTL priors apply only in `btl_only` and `both`, including run-required
 #' linking Phase A. TrueSkill initialization applies in `trueskill_only` and `both`.
 #' Imported Phase-A artifacts retain their own generation identity and are not
-#' rerun because predictive input exists. Transform, anchored-joint, and pooled
+#' rerun because predictive input exists. Linking and pooled
 #' judge refits keep their existing prior rules; predictive evidence is not
 #' injected into Phase B priors, D-optimal selection, or probes.
 #' Custom BTL fit functions should consume `state$predictive_prior` only when
@@ -1420,6 +1415,7 @@ adaptive_rank <- function(
       loaded_state <- tryCatch(
         adaptive_rank_resume(session_dir),
         error = function(e) {
+          if (inherits(e, "pairwiseLLM_unsupported_legacy_link_state")) stop(e)
           rlang::abort(
             c(
               "Failed to resume adaptive session from `session_dir`.",

@@ -10,6 +10,7 @@
 }
 
 .link_guard_adaptive_selection <- function(state, controller = NULL) {
+  .link_reject_legacy(state)
   if (inherits(state, c("pairwiseLLM_link_session", "pairwiseLLM_link_result"))) {
     .link_selector_unvalidated()
   }

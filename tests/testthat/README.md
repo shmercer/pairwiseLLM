@@ -154,3 +154,7 @@ reporting, Phase A imports, and rubric interoperability; verified unused on
 Issue #280 reserves 5090–5091 for estimator-neutral orchestration and selector
 gates (verified unused on 2026-09-22). Tests remain provider-free; E3-MCMC
 orchestration uses the synthetic sampler fixture, never real sampling.
+
+Issue #274 reserves 5092 for legacy Phase B rejection, explicit estimator selection,
+compatible Phase A reuse and removal of executable legacy branches (verified unused
+on 2026-09-22). Test 5050 now exercises E1--E3 refits instead of skipped legacy modes.

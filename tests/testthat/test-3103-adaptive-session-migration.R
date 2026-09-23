@@ -173,7 +173,7 @@ test_that("state validation precedes legacy controller repair and preserves link
     expect_error(load_adaptive_session(session), "controller|pairing_strategy")
   }
   bad <- saved
-  bad$controller <- list(run_mode = "link_one_spoke", pairing_strategy = "random")
+  bad$controller <- list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", pairing_strategy = "random")
   saveRDS(bad, path)
   expect_error(load_adaptive_session(session), "within_set")
   bad <- saved

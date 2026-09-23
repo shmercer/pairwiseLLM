@@ -136,6 +136,7 @@ Collate:
     'link_gaussian_bridge.R'
     'link_joint_mcmc.R'
     'link_joint_offset.R'
+    'link_legacy.R'
     'link_likelihood.R'
     'link_orchestration.R'
     'link_phase_a_draws.R'

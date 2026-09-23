@@ -4,7 +4,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-<!-- README-source-md5: 17fb66a1a50b3952bfb4beed393c74a5 -->
+<!-- README-source-md5: aa26a536bab5d22bfb85a04737f1512e -->
 
 <img src="man/figures/pairwiseLLM-banner.jpg"
      alt="pairwiseLLM: comparing two writing samples" width="100%">
@@ -179,7 +179,7 @@ explain the estimators, selection rules, assumptions, and stopping criteria.
 - [Guide: Adaptive Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.html) —
   place separately ranked sets on a common scale with a practical hub-and-spoke workflow.
 - [Design: Adaptive Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking-design.html) —
-  understand anchored-joint estimation, candidate selection, probes, and stopping.
+  understand E1--E3 estimation, Phase A evidence, and session restart.
 
 ### Modeling and bias
 

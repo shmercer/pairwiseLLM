@@ -406,7 +406,7 @@ make_positive_probe_acceleration_runtime_state <- function() {
     ))
 
     adaptive_config <- list(
-      run_mode = "link_multi_spoke",
+      run_mode = "link_multi_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       min_cross_set_pairs_per_spoke_per_refit = 1L,
       phase_a_mode = "import",

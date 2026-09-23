@@ -124,7 +124,7 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
     n_steps = 1L,
     fit_fn = fit_stub$fit_fn,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "import",
       phase_a_artifacts = artifacts
@@ -140,7 +140,7 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
     n_steps = 1L,
     fit_fn = fit_stub$fit_fn,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "run"
     ),
@@ -157,7 +157,7 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
     n_steps = 1L,
     fit_fn = fit_stub$fit_fn,
     adaptive_config = list(
-      run_mode = "link_one_spoke",
+      run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset",
       hub_id = 1L,
       phase_a_mode = "mixed",
       phase_a_artifacts = list(`1` = artifacts[["1"]])
@@ -175,7 +175,7 @@ test_that("phase-a scoped lag eligibility resets by active set domain history", 
   state <- adaptive_rank_start(
     items,
     seed = 121L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run")
   )
   ids <- as.character(state$item_ids)
   draws <- matrix(
@@ -222,7 +222,7 @@ test_that("freeze state in regression matrix remains one-way across subsequent u
   state <- adaptive_rank_start(
     items,
     seed = 141L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "import")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "import")
   )
   state$warm_start_done <- TRUE
   state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
@@ -254,11 +254,11 @@ test_that("freeze state in regression matrix remains one-way across subsequent u
   expect_equal(frozen_twice$controller$link_transform_frozen_delta_by_spoke[["2"]], 0.22, tolerance = 1e-12)
 })
 
-test_that("anchored-joint frozen spokes are removed from active and probe routing", {
+test_that("E1 frozen spokes are removed from active and probe routing", {
   state <- adaptive_rank_start(
     matrix_two_set_items(),
     seed = 142L,
-    adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "import")
+    adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "import")
   )
   state$warm_start_done <- TRUE
   state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
@@ -283,8 +283,7 @@ test_that("anchored-joint frozen spokes are removed from active and probe routin
     realized_pair_id = NA_integer_,
     realized_run_mode = NA_character_
   )
-  state$controller$link_estimation_mode <- "anchored_joint"
-  state$controller$hub_lock_mode <- "hard_lock"
+  state$controller$link_estimation_mode <- "fixed_shape_offset"
 
   frozen <- pairwiseLLM:::.adaptive_link_apply_stop_state(
     state,

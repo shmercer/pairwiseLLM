@@ -161,18 +161,12 @@ overrides allowed by the near-tie rule. Default is \code{1L}.}
 multiple spokes). Default is \code{"within_set"}. Linking modes require
 multi-set inputs with \code{set_id} and \code{global_item_id} in \code{data}.}
 \item{\code{hub_id}}{Hub \code{set_id} for linking modes. Default is \code{1L}.}
-\item{Phase B estimation}{Linking modes use anchored-joint estimation with
-a hard-locked hub, global-shared judge parameters, concurrent spokes, and
-fail-fast Phase A artifact import. Historical transform/free-lock config
-fields are normalized only when loading older sessions or Phase A
-artifacts; they are not accepted as new \code{adaptive_config} keys.}
-\item{\code{anchored_joint_spoke_prior_scale}}{Scale multiplier for anchored-
-joint spoke priors. Default is \code{1.0}.}
-\item{\code{anchored_joint_sd_floor}}{Lower bound applied to anchored-joint
-spoke prior SDs derived from Phase A artifacts. Default is \code{0.02}.}
-\item{\code{anchored_joint_spoke_prior_fallback_sd}}{Fallback anchored-joint
-spoke prior SD used when artifact-level SDs are unavailable. Default is
-\code{1.0}.}
+\item{\code{link_estimation_mode}}{Explicit estimator identity for linking Phase A
+preparation: \code{fixed_shape_offset}, \code{gaussian_posterior_bridge}, or
+\code{joint_offset}. There is no default. Adaptive Phase B selection is
+unavailable pending validation. Use \code{\link[=prepare_link_input]{prepare_link_input()}}, \code{\link[=fit_link]{fit_link()}},
+and \code{\link[=start_link_session]{start_link_session()}} for explicit-evidence linking. Legacy Phase B
+posteriors cannot be migrated; restart from compatible Phase A inputs.}
 
 \item{\code{link_identified_reliability_min}}{Minimum
 \code{reliability_link_global} value on the linking-active item domain used
@@ -439,8 +433,9 @@ Linking run modes:
 \code{run_mode = "link_one_spoke"} and \code{run_mode = "link_multi_spoke"} require
 multi-set input (\code{set_id}/\code{global_item_id}), enforce hub<->spoke routing
 defaults, and preserve Phase A artifact gating before Phase B cross-set
-comparisons begin. Phase B uses anchored-joint estimation with a hard-locked
-hub and global-shared judge parameters. Every wrapper call returns canonical
+comparisons begin. An explicit \code{link_estimation_mode} is required. Adaptive
+Phase B is unavailable pending selector validation; use \code{\link[=start_link_session]{start_link_session()}}
+with explicit evidence for E1--E3 estimation. Every wrapper call returns canonical
 \code{phase_a} outputs that can be fed back into a later linking run through
 \code{adaptive_config$phase_a_artifacts}.
 
@@ -486,7 +481,7 @@ determine TrueSkill sigma. No historical training-score units are restored.
 Predictive BTL priors apply only in \code{btl_only} and \code{both}, including run-required
 linking Phase A. TrueSkill initialization applies in \code{trueskill_only} and \code{both}.
 Imported Phase-A artifacts retain their own generation identity and are not
-rerun because predictive input exists. Transform, anchored-joint, and pooled
+rerun because predictive input exists. Linking and pooled
 judge refits keep their existing prior rules; predictive evidence is not
 injected into Phase B priors, D-optimal selection, or probes.
 Custom BTL fit functions should consume \code{state$predictive_prior} only when

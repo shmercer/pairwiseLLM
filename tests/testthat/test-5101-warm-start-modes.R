@@ -166,7 +166,7 @@ test_that("run-required linking Phase A shares initialization and scoped BTL gat
   states <- lapply(c("cold", "btl_only", "trueskill_only", "both"), function(mode) {
     state <- adaptive_rank_start(items, seed = 82, warm_start_mode = mode,
       warm_start_prior = if (mode == "cold") NULL else prior,
-      adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "run"))
+      adaptive_config = list(run_mode = "link_one_spoke", link_estimation_mode = "fixed_shape_offset", hub_id = 1L, phase_a_mode = "run"))
     expect_identical(state$controller$link_phase, "phase_a")
     if (mode %in% c("both", "trueskill_only")) {
       expect_identical(state$trueskill_state$items$mu, 25 + (25 / 3) * prior$prior_mean)
