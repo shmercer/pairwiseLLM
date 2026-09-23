@@ -104,46 +104,21 @@ test_that("Phase A context rejects malformed scalar set IDs with a deliberate co
   expect_error(pairwiseLLM:::.rubric_cj_phase_a(bad, "trait"), "fit_model_id")
 })
 
-test_that("linked normalization retains validated reuse provenance and diagnostic tri-state", {
-  withr::local_seed(2072L)
-  normalize <- pairwiseLLM:::.rubric_normalize_cj
-  state <- rubric_test_linked(3L)
-  map <- normalize(state, "trait")
-  expect_identical(map$provenance$estimation_method, "map_laplace")
-  expect_identical(map$provenance$uncertainty_approximation, "laplace_hessian")
-  for (spoke in c("2", "3")) {
-    state$controller$link_refit_stats_by_spoke[[spoke]]$fit_contract$estimation_method <- "accepted_state_reuse"
-    state$controller$link_refit_stats_by_spoke[[spoke]]$fit_contract$uncertainty_approximation <- "accepted_state"
-    out <- normalize(state, "trait")
-    expect_identical(out$items, map$items)
-    expect_identical(out$provenance$estimation_method,
-      if (spoke == "2") c("accepted_state_reuse", "map_laplace") else "accepted_state_reuse")
-    expect_identical(out$provenance$uncertainty_approximation,
-      if (spoke == "2") c("accepted_state", "laplace_hessian") else "accepted_state")
-    expect_null(out$posterior_draws)
-  }
-  state$controller$link_refit_stats_by_spoke[["3"]]$link_diagnostics_pass <- NULL
-  expect_no_warning(out <- normalize(state, "trait"))
-  expect_identical(out$diagnostics$diagnostics_pass, NA)
-  state$controller$link_refit_stats_by_spoke[["2"]]$link_diagnostics_pass <- FALSE
-  expect_warning(out <- normalize(state, "trait"), class = "pairwiseLLM_rubric_cj_diagnostics")
-  expect_false(out$diagnostics$diagnostics_pass)
-  expect_identical(out$items, map$items)
-})
-
-test_that("linked completion rejects missing reference, summary and Phase B metadata", {
-  withr::local_seed(2073L)
-  normalize <- pairwiseLLM:::.rubric_normalize_cj
-  state <- rubric_test_linked(2L)
-  for (set in c("1", "2")) {
-    bad <- state
-    bad$linking$phase_a$artifacts[[set]] <- NULL
-    expect_error(normalize(bad, "trait"), "explicit fit-contract metadata")
-  }
-  bad <- state
-  bad$item_log[[1L]]$theta_link_sd <- NULL
-  expect_error(normalize(bad, "trait"), "aligned accepted common-scale")
-  bad <- state
-  bad$controller$link_refit_stats_by_spoke[["2"]]$fit_contract <- NULL
-  expect_error(normalize(bad, "trait"), "missing its Phase B fit contract")
+test_that("linked rubric normalization validates every result before exposing scores", {
+  data <- rubric_linked_fixture(n_sets = 3L)
+  reference <- pairwiseLLM:::.rubric_normalize_cj(data$reference)$reference
+  normalize <- function(x) pairwiseLLM:::.rubric_cj_estimator(x, reference, "organization")
+  out <- normalize(data$state)
+  expect_identical(out$provenance$estimator_id, "fixed_shape_offset")
+  expect_null(out$posterior_draws)
+  expect_true(out$diagnostics$diagnostics_pass)
+  bad <- data$state
+  bad$linking$estimator$diagnostics_by_spoke[["2"]]$fit_valid <- FALSE
+  expect_error(normalize(bad), "identity hash mismatch")
+  bad <- data$state
+  bad$linking$estimator$accepted_state_by_spoke[["2"]]$items$theta_link_sd <- NULL
+  expect_error(normalize(bad), "identity hash mismatch")
+  bad <- data$state
+  bad$linking$estimator$accepted_state_by_spoke[["2"]]$provenance <- NULL
+  expect_error(normalize(bad), "identity hash mismatch")
 })

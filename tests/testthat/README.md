@@ -146,3 +146,7 @@ Task 09 renamed the following files; earlier completion reports retain historica
 | `test-warm-start-adaptive.R` | `test-5100-warm-start-adaptive.R` |
 | `test-btl-warm-start.R` | `test-6100-btl-warm-start.R` |
 | `test-warm-start-bundle-workflow.R` | `test-9100-warm-start-bundle-workflow.R` |
+
+Issue #279 reserves 5086--5089 for linking session identity/resume, common
+reporting, Phase A imports, and rubric interoperability; verified unused on
+2026-09-22. Tests remain deterministic and provider-free.

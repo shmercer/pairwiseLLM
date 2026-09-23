@@ -127,6 +127,9 @@
   identities$theta_link_sd <- .link_summary_vector(theta_sd, n, "theta SDs", TRUE)
   identities$theta_link_lower <- .link_summary_vector(lower, n, "theta lower intervals")
   identities$theta_link_upper <- .link_summary_vector(upper, n, "theta upper intervals")
+  identities$theta_link_eap <- identities$theta_link_mean
+  identities$estimator_id <- rep(input$estimator, n)
+  identities$uncertainty_scope <- rep(diagnostics$uncertainty_scope %||% "unavailable", n)
   identities$rank_link <- as.double(rank(-identities$theta_link_mean, ties.method = "average", na.last = "keep"))
   diagnostics <- .link_diagnostics(diagnostics, ncol(input$item_transform))
   .link_fields(delta, c("mean", "sd", "lower", "upper", "identification"), c("mean", "identification"), "delta")
@@ -165,6 +168,13 @@
   items <- result$items
   .link_check(is.data.frame(items) && all(names(expected) %in% names(items)) &&
     identical(items[, names(expected)], expected), "Result item ordering/identity mismatch.")
+  # Additive reporting fields are optional on pre-session schema-1 results.
+  metadata <- list(theta_link_eap = items$theta_link_mean,
+    estimator_id = rep(result$estimator_id, nrow(items)),
+    uncertainty_scope = rep(result$diagnostics$uncertainty_scope, nrow(items)))
+  for (k in intersect(names(metadata), names(items))) {
+    .link_check(identical(items[[k]], metadata[[k]]), "Result item estimator/uncertainty metadata mismatch.")
+  }
   for (k in c("theta_link_mean", "theta_link_sd", "theta_link_lower", "theta_link_upper")) {
     .link_check(identical(items[[k]], .link_summary_vector(items[[k]], nrow(expected), k, k == "theta_link_sd")),
       "Result summaries must use double vectors and typed missing values.")
@@ -389,6 +399,9 @@
 #' @section Result fields:
 #' `items` contains `set_id`, `item_id`, `global_item_id`, `theta_link_mean`,
 #' `theta_link_sd`, `theta_link_lower`, `theta_link_upper`, and `rank_link`.
+#' `theta_link_eap` is a compatibility alias of `theta_link_mean`; it is a
+#' posterior mean for E1 and E3-MCMC, and a MAP location for E2/E3 Laplace.
+#' `estimator_id` and `uncertainty_scope` accompany every item.
 #' `offset` contains `delta_mean`, `delta_sd`, `delta_lower`, `delta_upper`, and
 #' `identification` (`prior_only`, `cross_set`, `unidentified`, or `failed`).
 #' At zero cross edges a valid result retains the configured Normal offset prior
@@ -428,6 +441,8 @@
 #' the original normalized `input` and optional free-coordinate numerical `mode`.
 #' Results can be round-tripped with [saveRDS()] and [readRDS()].
 #' @seealso [prepare_link_input()], [predict_link()]
+#' @seealso [prepare_link_input()], [fit_link()], [predict_link()], [start_link_session()]
+#' @family linking
 #' @export
 fit_link <- function(input, previous = NULL) {
   .link_validate_input(input)
@@ -475,6 +490,8 @@ fit_link <- function(input, previous = NULL) {
 #'   `pairwiseLLM_e2_numerical_error`. E3 MAP uses the same integration with
 #'   `pairwiseLLM_e3_numerical_error` on failure. E3-MCMC averages the conditional
 #'   probability over its retained raw draws, without new sampling.
+#' @seealso [prepare_link_input()], [fit_link()], [predict_link()], [start_link_session()]
+#' @family linking
 #' @export
 predict_link <- function(result, pairs) {
   .link_validate_result(result)

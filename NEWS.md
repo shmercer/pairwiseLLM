@@ -1,5 +1,14 @@
 # pairwiseLLM (development version)
 
+## Linking sessions and rubric transport
+
+* E1--E3 explicit-evidence linking sessions now support exact save/load and
+  append-only resume, estimator-neutral logs and item summaries, and hub-only
+  rubric calibration transport. Estimator choice remains explicit. Legacy
+  anchored-joint Phase B sessions cannot be resumed or used for rubric scoring;
+  restart from compatible Phase A inputs. E3 can import exact historical raw
+  Phase A rows. See `vignette("linking-sessions")`.
+
 ## E3 joint-offset linking
 
 - Implemented `joint_offset` in the explicit-evidence linking API (#278; #273).

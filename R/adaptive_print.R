@@ -112,8 +112,7 @@
     link_refit_mode = c("shift_only", "joint_refit"),
     shift_only_theta_treatment = .adaptive_shift_only_theta_treatment_levels(),
     shift_only_theta_treatment_resolved = .adaptive_shift_only_theta_treatment_levels(),
-    hub_lock_mode = .adaptive_hub_lock_mode_levels(),
-    anchored_joint_init_state_method = .adaptive_anchored_joint_init_state_method_levels()
+    hub_lock_mode = .adaptive_hub_lock_mode_levels()
   )
 }
 
@@ -620,6 +619,10 @@
 #' @family adaptive logs
 #' @export
 adaptive_get_logs <- function(state) {
+  if (inherits(state, "pairwiseLLM_link_session")) {
+    .link_session_validate(state)
+    return(list(link_stage_log = state$link_stage_log))
+  }
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
@@ -1077,7 +1080,7 @@ summarize_adaptive <- function(state) {
   lag_open <- sum(latest_rows$link_lag_eligible %in% TRUE, na.rm = TRUE)
   frozen <- sum(latest_rows$link_state_frozen %in% TRUE, na.rm = TRUE)
   estimation_mode <- .adaptive_print_compact_values(latest_rows$link_estimation_mode)
-  init_method <- .adaptive_print_compact_values(latest_rows$anchored_joint_init_state_method)
+  init_method <- NA_character_
   phase_a_hub_edges <- sum(as.integer(latest_rows$phase_a_within_edges_hub_used %||% 0L), na.rm = TRUE)
   phase_a_spoke_edges <- sum(as.integer(latest_rows$phase_a_within_edges_spoke_used %||% 0L), na.rm = TRUE)
   phase_b_active_edges <- sum(as.integer(latest_rows$phase_b_active_edges_used %||% 0L), na.rm = TRUE)

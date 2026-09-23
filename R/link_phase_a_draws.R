@@ -10,11 +10,11 @@
     "Phase A artifact set_id mismatch.")
   .link_check(identical(normalize_model_variant(a$fit_model_id), judge$model_variant),
     "Phase A artifact model is incompatible with the frozen judge.")
-  if (!is.null(a$phase_scope) && !identical(a$phase_scope, NA_character_)) {
-    .link_check(identical(a$phase_scope, "phase_a_set"), "Artifact must contain Phase A, not Phase B draws.")
+  if (!is.null(a[["phase_scope"]]) && !identical(a[["phase_scope"]], NA_character_)) {
+    .link_check(identical(a[["phase_scope"]], "phase_a_set"), "Artifact must contain Phase A, not Phase B draws.")
   }
-  if (!is.null(a$phase_scope_set_id) && !all(is.na(a$phase_scope_set_id))) {
-    .link_check(identical(.link_ids(a$phase_scope_set_id, "artifact scope set_id"), identity$set_id),
+  if (!is.null(a[["phase_scope_set_id"]]) && !all(is.na(a[["phase_scope_set_id"]]))) {
+    .link_check(identical(.link_ids(a[["phase_scope_set_id"]], "artifact scope set_id"), identity$set_id),
       "Phase A artifact scope set_id mismatch.")
   }
   items <- a$items
@@ -36,7 +36,8 @@
   .link_check(is.matrix(a$posterior_draws), "E2 requires posterior item draws; summaries alone are insufficient.")
   source <- .link_source(list(artifact_hash = .link_hash(a),
     evidence_hash = a$phase_a_within_set_evidence_hash %||% NA_character_,
-    n_observations = a$n_pairs_committed))
+    n_observations = a$n_pairs_committed,
+    trait = .link_artifact_trait(a), orientation = .link_artifact_orientation(a)))
   supplied <- x$source %||% list()
   .link_source(supplied)
   for (k in names(supplied)) {

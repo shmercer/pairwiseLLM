@@ -89,21 +89,19 @@ for (method in c("percentile", "ordinal_linear", "ordinal_monotone")) {
 }
 
 for (method in c("ordinal_linear", "ordinal_monotone")) {
-  test_that(paste(method, "public linked output reports accepted-state reuse faithfully"), {
+  test_that(paste(method, "public linked output preserves exact resumed provenance"), {
     rubric_skip_method(method)
     withr::local_seed(92012L)
     data <- rubric_linked_fixture(n_sets = 3L)
     fit <- rubric_linked_fit(data, method)
     before <- stats::predict(fit, data$state)
-    data$state$controller$link_refit_stats_by_spoke[["2"]]$fit_contract$estimation_method <- "accepted_state_reuse"
-    data$state$controller$link_refit_stats_by_spoke[["2"]]$fit_contract$uncertainty_approximation <- "accepted_state"
-    after <- stats::predict(fit, data$state)
-    expect_identical(after$theta, before$theta)
-    expect_identical(after$probabilities, before$probabilities)
-    expect_identical(attr(after, "linking")$provenance$estimation_method,
-      c("accepted_state_reuse", "map_laplace"))
-    expect_identical(attr(after, "linking")$provenance$uncertainty_approximation,
-      c("accepted_state", "laplace_hessian"))
+    input <- data$state$linking$estimator$accepted_state_by_spoke[["2"]]$continuation$input
+    resumed <- pairwiseLLM::resume_link_session(data$state, input)
+    after <- stats::predict(fit, resumed)
+    expect_identical(after, before)
+    expect_identical(attr(after, "linking")$provenance$estimator_id, "fixed_shape_offset")
+    expect_identical(attr(after, "linking")$provenance$uncertainty_scope,
+      "offset_only_conditional_on_fixed_shapes")
     rubric <- data.frame(item_id = after$item_id, rubric_score = after$rubric_score)
     assessment <- pairwiseLLM::evaluate_rubric_predictions(fit, rubric, newdata = data$state)
     expect_identical(assessment$metadata$linking, attr(after, "linking"))

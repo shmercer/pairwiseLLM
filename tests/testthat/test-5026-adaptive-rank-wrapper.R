@@ -1123,7 +1123,7 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
   expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))
 })
 
-test_that("adaptive_rank wrapper supports mixed Phase A and strict linking resume", {
+test_that("adaptive_rank wrapper preserves mixed Phase A and rejects legacy Phase B persistence", {
   samples <- make_linking_samples_df()
   two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
   items <- dplyr::rename(two_set, item_id = ID)
@@ -1163,40 +1163,44 @@ test_that("adaptive_rank wrapper supports mixed Phase A and strict linking resum
     phase_a_mode = "import",
     phase_a_artifacts = artifacts
   )
-  first <- pairwiseLLM::adaptive_rank(
-    data = two_set,
-    id_col = "ID",
-    text_col = "text",
-    judge = judge,
-    fit_fn = fit_override$fit_fn,
-    n_steps = 6L,
-    adaptive_config = link_config,
-    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
-    session_dir = session_dir,
-    resume = FALSE,
-    progress = "none",
-    seed = 29L
-  )
-  resumed <- pairwiseLLM::adaptive_rank(
-    data = two_set,
-    id_col = "ID",
-    text_col = "text",
-    judge = judge,
-    fit_fn = fit_override$fit_fn,
-    n_steps = 2L,
-    adaptive_config = link_config,
-    btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
-    session_dir = session_dir,
-    resume = TRUE,
-    progress = "none"
+  expect_error(
+    pairwiseLLM::adaptive_rank(
+      data = two_set,
+      id_col = "ID",
+      text_col = "text",
+      judge = judge,
+      fit_fn = fit_override$fit_fn,
+      n_steps = 6L,
+      adaptive_config = link_config,
+      btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
+      session_dir = session_dir,
+      resume = FALSE,
+      progress = "none",
+      seed = 29L
+    ),
+    class = "pairwiseLLM_unsupported_legacy_link_state"
   )
 
-  expect_gte(nrow(resumed$logs$step_log), nrow(first$logs$step_log))
-  expect_equal(
-    resumed$logs$step_log[seq_len(nrow(first$logs$step_log)), , drop = FALSE],
-    first$logs$step_log
+  # Emulate a pre-refactor bundle without asking the new writer to accept it.
+  pairwiseLLM::save_adaptive_session(pairwiseLLM::adaptive_rank_start(items), session_dir)
+  legacy <- pairwiseLLM::adaptive_rank_start(items, adaptive_config = link_config, seed = 29L)
+  saveRDS(legacy, file.path(session_dir, "state.rds"))
+  expect_error(
+    pairwiseLLM::adaptive_rank(
+      data = two_set,
+      id_col = "ID",
+      text_col = "text",
+      judge = judge,
+      fit_fn = fit_override$fit_fn,
+      n_steps = 2L,
+      adaptive_config = link_config,
+      btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
+      session_dir = session_dir,
+      resume = TRUE,
+      progress = "none"
+    ),
+    "Unsupported legacy anchored-joint Phase B session"
   )
-  expect_true(any(resumed$logs$step_log$is_cross_set %in% TRUE))
 })
 
 test_that("adaptive_rank wrapper falls back to rank_raw when linked ranks are unavailable", {

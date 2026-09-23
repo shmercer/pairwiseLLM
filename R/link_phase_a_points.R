@@ -1,3 +1,18 @@
+# Artifact labels are provenance only; they never change estimator likelihoods.
+.link_artifact_trait <- function(a) {
+  values <- c(a[["trait"]], a$items[["trait"]])
+  values <- values[!is.na(values)]
+  if (!length(values)) return(NA_character_)
+  .rubric_trait(NULL, values)
+}
+
+.link_artifact_orientation <- function(a) {
+  values <- c(a[["orientation"]], a$items[["orientation"]])
+  values <- values[!is.na(values)]
+  if (!length(values)) return(NA_character_)
+  .rubric_orientation(values)
+}
+
 # Canonical Phase A artifacts enter E1 only through their item EAP means.
 .link_e1_artifact <- function(x, identity, judge) {
   if (!is.list(x) || !"artifact" %in% names(x)) return(x)
@@ -9,11 +24,11 @@
     "Phase A artifact set_id mismatch.")
   .link_check(identical(normalize_model_variant(a$fit_model_id), judge$model_variant),
     "Phase A artifact model is incompatible with the frozen judge.")
-  if (!is.null(a$phase_scope) && !identical(a$phase_scope, NA_character_)) {
-    .link_check(identical(a$phase_scope, "phase_a_set"), "Artifact must contain Phase A, not Phase B summaries.")
+  if (!is.null(a[["phase_scope"]]) && !identical(a[["phase_scope"]], NA_character_)) {
+    .link_check(identical(a[["phase_scope"]], "phase_a_set"), "Artifact must contain Phase A, not Phase B summaries.")
   }
-  if (!is.null(a$phase_scope_set_id) && !all(is.na(a$phase_scope_set_id))) {
-    .link_check(identical(.link_ids(a$phase_scope_set_id, "artifact scope set_id"), identity$set_id),
+  if (!is.null(a[["phase_scope_set_id"]]) && !all(is.na(a[["phase_scope_set_id"]]))) {
+    .link_check(identical(.link_ids(a[["phase_scope_set_id"]], "artifact scope set_id"), identity$set_id),
       "Phase A artifact scope set_id mismatch.")
   }
   items <- a$items
@@ -38,7 +53,8 @@
   # retained in the normalized input or passed to a likelihood evaluator.
   source <- .link_source(list(artifact_hash = .link_hash(a),
     evidence_hash = a$phase_a_within_set_evidence_hash %||% NA_character_,
-    n_observations = a$n_pairs_committed))
+    n_observations = a$n_pairs_committed,
+    trait = .link_artifact_trait(a), orientation = .link_artifact_orientation(a)))
   supplied <- x$source %||% list()
   .link_source(supplied)
   for (k in names(supplied)) {

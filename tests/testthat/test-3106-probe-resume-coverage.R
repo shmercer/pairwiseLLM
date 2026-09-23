@@ -52,67 +52,29 @@ test_that("probe resume rejects inconsistent persisted identities and constructi
   expect_invisible(.adaptive_link_probe_resume_validate_current_window(list(), 2L, 1L, panel))
 })
 
-test_that("fresh-process Phase B resume preserves current and legacy linking decisions", {
-  root <- withr::local_tempdir()
-  for (legacy in c(FALSE, TRUE)) {
-    state <- task10_link_state()
-    state <- .adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
-    state$controller$link_state_frozen_by_spoke <- list(`2` = TRUE)
-    state$controller$link_transform_frozen_by_spoke <- list(`2` = TRUE)
-    if (legacy) {
-      state$controller$link_estimation_mode <- "transform"
-      state$controller$link_transform_policy <- "auto"
-      state$controller$link_transform_state_by_spoke <- list(`2` = "shift_only", `3` = "shift_only")
-      state$controller$link_refit_mode <- "shift_only"
-      state$controller$shift_only_theta_treatment <- "normal_prior"
-      state$controller$multi_spoke_mode <- "independent"
-      state$controller$hub_lock_mode <- "soft_lock"
-    }
-    session <- file.path(root, if (legacy) "legacy" else "current")
-    save_adaptive_session(state, session)
-    resumed <- load_adaptive_session(session)
-    expect_identical(resumed$trueskill_state, state$trueskill_state)
-    expect_identical(resumed$history_pairs, state$history_pairs)
-    expect_identical(resumed$warm_start_pairs, state$warm_start_pairs)
-    expect_identical(resumed$warm_start_idx, state$warm_start_idx)
-    expect_identical(resumed$round, state$round)
-    inspect <- function(s) {
-      out <- pairwiseLLM:::.adaptive_linking_refit_update_state(s, list(last_refit_step = 0L))
-      list(accepted = out$linking$anchored_joint,
-        controller = out$controller, step_log = out$step_log, link_stage_log = out$link_stage_log,
-        history = out$history_pairs, trueskill = out$trueskill_state,
-        ranked = pairwiseLLM:::.adaptive_link_ranked_spokes(out, out$controller),
-        probe = pairwiseLLM:::.adaptive_link_probe_next_holdout_spoke(out, out$controller))
-    }
-    environment(inspect) <- baseenv()
-    expected <- inspect(resumed)
-    expect_false(2L %in% expected$ranked)
-    inspect_path <- file.path(root, "inspect.rds")
-    saveRDS(inspect, inspect_path)
-    output_path <- file.path(root, "result.rds")
-    quote_path <- function(x) encodeString(x, quote = "\"")
-    dev <- pkgload::is_dev_package("pairwiseLLM")
-    loader <- if (dev) {
-      paste0("pkgload::load_all(",
-        quote_path(getNamespaceInfo("pairwiseLLM", "path")), ", quiet = TRUE)")
-    } else {
-      "library(pairwiseLLM)"
-    }
-    script <- file.path(root, "resume.R")
-    writeLines(c(
-      paste0(".libPaths(c(", paste(vapply(.libPaths(), quote_path, character(1)),
-        collapse = ","), "))"),
-      loader,
-      paste0("inspect <- readRDS(", quote_path(inspect_path), ")"),
-      paste0("state <- pairwiseLLM::load_adaptive_session(", quote_path(session), ")"),
-      paste0("saveRDS(inspect(state), ", quote_path(output_path), ")")
-    ), script)
-    child <- system2(file.path(R.home("bin"), "Rscript"),
-      c("--vanilla", shQuote(script)), stdout = TRUE, stderr = TRUE)
-    status <- as.integer(attr(child, "status") %||% 0L)
-    if (status != 0L || !file.exists(output_path)) {
-      rlang::abort(paste(c("Fresh Phase B resume failed:", child), collapse = "\n"))
-    }
-    expect_equal(readRDS(output_path), expected, tolerance = 0)
+test_that("fresh-process E1--E3 resume preserves exact session identity", {
+  dir <- withr::local_tempdir()
+  package_path <- getNamespaceInfo(asNamespace("pairwiseLLM"), "path")
+  # Use the same package as the parent process, including covr's temporary
+  # installed library. Installed packages do not contain load_all()-ready source.
+  loader <- if (pkgload::is_dev_package("pairwiseLLM")) {
+    paste0("pkgload::load_all(", deparse(package_path), ", quiet = TRUE); ")
+  } else {
+    paste0("library(pairwiseLLM, lib.loc = ", deparse(dirname(package_path)), "); ")
+  }
+  for (id in c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset")) {
+    state <- start_link_session(link_contract_input(id, 2L))
+    path <- file.path(dir, paste0(id, ".rds"))
+    save_link_session(state, path)
+    output_path <- file.path(dir, "restored.rds")
+    code <- paste0(".libPaths(", paste(deparse(.libPaths()), collapse = ""), "); ", loader,
+      "x <- pairwiseLLM::load_link_session(", deparse(path), "); ",
+      "x <- pairwiseLLM::resume_link_session(x, ",
+      "x$linking$estimator$accepted_state_by_spoke[[1L]]$continuation$input); ",
+      "saveRDS(x, ", deparse(output_path), ")")
+    output <- system2(file.path(R.home("bin"), "Rscript"),
+      c("--vanilla", "-e", shQuote(code)), stdout = TRUE, stderr = TRUE)
+    expect_null(attr(output, "status"), info = paste(output, collapse = "\n"))
+    if (is.null(attr(output, "status"))) expect_identical(readRDS(output_path), state)
   }
 })

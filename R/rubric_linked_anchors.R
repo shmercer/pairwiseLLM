@@ -44,7 +44,11 @@
 }
 
 .rubric_predict_linked <- function(object, newdata, hard_score) {
-  cj <- .rubric_normalize_cj(newdata, object$trait, scale_status = "phase_b_linked", include_draws = FALSE)
+  cj <- if (inherits(newdata, "pairwiseLLM_link_result") || inherits(newdata, "pairwiseLLM_link_session")) {
+    .rubric_cj_estimator(newdata, object$reference, object$trait)
+  } else {
+    .rubric_normalize_cj(newdata, object$trait, scale_status = "phase_b_linked", include_draws = FALSE)
+  }
   if (!identical(cj$model_variant, object$cj$model_variant) ||
     !identical(cj$orientation, object$orientation) ||
     !identical(.rubric_reference_identity(cj$reference), .rubric_reference_identity(object$reference))) {

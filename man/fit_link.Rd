@@ -122,6 +122,9 @@ supply a continuation mode, and no engine reuses a posterior as a prior.
 
 \code{items} contains \code{set_id}, \code{item_id}, \code{global_item_id}, \code{theta_link_mean},
 \code{theta_link_sd}, \code{theta_link_lower}, \code{theta_link_upper}, and \code{rank_link}.
+\code{theta_link_eap} is a compatibility alias of \code{theta_link_mean}; it is a
+posterior mean for E1 and E3-MCMC, and a MAP location for E2/E3 Laplace.
+\code{estimator_id} and \code{uncertainty_scope} accompany every item.
 \code{offset} contains \code{delta_mean}, \code{delta_sd}, \code{delta_lower}, \code{delta_upper}, and
 \code{identification} (\code{prior_only}, \code{cross_set}, \code{unidentified}, or \code{failed}).
 At zero cross edges a valid result retains the configured Normal offset prior
@@ -164,4 +167,14 @@ Results can be round-tripped with \code{\link[=saveRDS]{saveRDS()}} and \code{\l
 
 \seealso{
 \code{\link[=prepare_link_input]{prepare_link_input()}}, \code{\link[=predict_link]{predict_link()}}
+
+\code{\link[=prepare_link_input]{prepare_link_input()}}, \code{\link[=fit_link]{fit_link()}}, \code{\link[=predict_link]{predict_link()}}, \code{\link[=start_link_session]{start_link_session()}}
+
+Other linking:
+\code{\link[=predict_link]{predict_link()}},
+\code{\link[=prepare_link_input]{prepare_link_input()}},
+\code{\link[=save_link_session]{save_link_session()}},
+\code{\link[=start_link_session]{start_link_session()}},
+\code{\link[=summary.pairwiseLLM_link_result]{summary.pairwiseLLM_link_result()}}
 }
+\concept{linking}

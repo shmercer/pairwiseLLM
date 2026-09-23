@@ -81,13 +81,15 @@
 }
 
 .link_source <- function(x = list()) {
-  .link_fields(x, c("artifact_hash", "evidence_hash", "n_observations"), label = "Phase A source")
+  .link_fields(x, c("artifact_hash", "evidence_hash", "n_observations", "trait", "orientation"), label = "Phase A source")
   out <- list(artifact_hash = NA_character_, evidence_hash = NA_character_, n_observations = NA_integer_)
-  for (k in intersect(names(x), c("artifact_hash", "evidence_hash"))) {
+  for (k in intersect(names(x), c("artifact_hash", "evidence_hash", "trait", "orientation"))) {
     .link_check(is.character(x[[k]]) && length(x[[k]]) == 1L &&
-      (is.na(x[[k]]) || nzchar(x[[k]])), "Source hashes must be scalar strings or NA_character_.")
+      (is.na(x[[k]]) || nzchar(x[[k]])), "Source hashes/metadata must be scalar strings or NA_character_.")
     out[[k]] <- x[[k]]
   }
+  .link_check(is.null(out$orientation) || is.na(out$orientation) || identical(out$orientation, "higher_is_better"),
+    "Phase A orientation must be higher_is_better.")
   if (!is.null(x$n_observations)) {
     n <- .link_scalar(x$n_observations, "source n_observations", 0, .Machine$integer.max, missing = TRUE)
     .link_check(is.na(n) || n == floor(n), "Source n_observations must be an integer.")
@@ -199,7 +201,8 @@
 #'   `draws` (draws by named item columns), or E3 `observations` (table as below).
 #'   Points and each draw are separately centered, with removed means recorded.
 #'   Optional `source` metadata contains `artifact_hash`, `evidence_hash`, and
-#'   `n_observations`; unavailable values remain typed missing. External source
+#'   `n_observations`, optional `trait` and `orientation` (`higher_is_better`);
+#'   unavailable values remain typed missing. External source
 #'   hashes are assertions of provenance, distinct from computed payload hashes.
 #'   E1 also accepts `list(artifact = artifact)` in either set entry, mutually
 #'   exclusive with `points`. Supply an in-memory canonical Phase A artifact
@@ -222,6 +225,14 @@
 #'   E3 requires raw within-set `observations` for both sets. It retains all raw
 #'   evidence and jointly re-estimates both centered shapes and the offset.
 #'   Every observation enters once; points/draws cannot accompany raw evidence.
+#'   E3 also accepts `list(artifact = artifact)` with exact
+#'   `phase_a_within_set_evidence` (or historical `within_set_evidence`) rows.
+#'   Historical rows use unique positive integer `pair_id` and `step_id`, item
+#'   endpoints and binary `y_A`; judgment IDs are generated from set and pair ID.
+#'   Explicit observation tables use the common columns below. Recorded row
+#'   counts and any declared raw-evidence hash must reconcile exactly. Artifact
+#'   means, SDs and draws are ignored for inference. All three artifact adapters
+#'   preserve exact artifact hashes, including historical compatible artifacts.
 #' @param cross Explicit active cross-set observations, including an empty table
 #'   at zero budget. Evidence tables contain `observation_id`, `A_set`, `A_item`,
 #'   `B_set`, `B_item`, and numeric binary `y_A` (one means A won). IDs identify
@@ -302,6 +313,8 @@
 #'     spoke = list(observations = within("S", "s1", "s1", "s2"))),
 #'   cross = cross, judge = input$judge)
 #' joint_fit <- fit_link(joint)
+#' @seealso [prepare_link_input()], [fit_link()], [predict_link()], [start_link_session()]
+#' @family linking
 #' @export
 prepare_link_input <- function(estimator, hub, spoke, phase_a, cross, judge,
                                control = list(), provenance = list()) {
@@ -321,6 +334,10 @@ prepare_link_input <- function(estimator, hub, spoke, phase_a, cross, judge,
   if (estimator == "gaussian_posterior_bridge") {
     phase_a$hub <- .link_e2_artifact(phase_a$hub, hub, judge)
     phase_a$spoke <- .link_e2_artifact(phase_a$spoke, spoke, judge)
+  }
+  if (estimator == "joint_offset") {
+    phase_a$hub <- .link_e3_artifact(phase_a$hub, hub, judge)
+    phase_a$spoke <- .link_e3_artifact(phase_a$spoke, spoke, judge)
   }
   phase_a <- list(hub = .link_phase_a(phase_a$hub, hub, backend$kind),
     spoke = .link_phase_a(phase_a$spoke, spoke, backend$kind))

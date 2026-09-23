@@ -359,6 +359,11 @@ summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {
     rlang::abort("`include_optional` must be TRUE or FALSE.")
   }
 
+  if (inherits(state, "pairwiseLLM_link_result") || inherits(state, "pairwiseLLM_link_session")) {
+    .link_reporting_results(state)
+    rows <- if (inherits(state, "pairwiseLLM_link_session")) state$link_stage_log else summary(state)
+    return(if (is.null(last_n)) rows else utils::tail(rows, last_n))
+  }
   source <- .adaptive_summary_extract_source(state)
   log <- source$round_log %||% tibble::tibble()
   if (!is.data.frame(log)) {
@@ -518,6 +523,11 @@ summarize_items <- function(state,
   }
 
   top_n <- .adaptive_summary_validate_last_n(top_n)
+  if (inherits(state, "pairwiseLLM_link_result") || inherits(state, "pairwiseLLM_link_session")) {
+    .link_check(is.null(posterior) && is.null(refit) && !bind,
+      "Linked results expose current accepted summaries; posterior/refit/bind are not supported.")
+    return(.link_item_summary(state, top_n, sort_by))
+  }
   source <- .adaptive_summary_extract_source(state)
 
   item_log_list <- NULL

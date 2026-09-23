@@ -544,6 +544,7 @@ read_log <- function(path) {
 }
 
 .adaptive_validate_state_for_resume <- function(state) {
+  .link_reject_legacy(state)
   required <- c(
     "item_ids",
     "item_index",
@@ -1151,6 +1152,12 @@ read_log <- function(path) {
 #' @family adaptive persistence
 #' @export
 validate_session_dir <- function(session_dir) {
+  if (file.exists(file.path(session_dir, "link-session.rds"))) {
+    .link_check(!file.exists(file.path(session_dir, "state.rds")), "Ambiguous mixed session directory.")
+    state <- load_link_session(file.path(session_dir, "link-session.rds"))
+    return(list(schema_version = "link-session-1", estimator_id = state$linking$estimator$id,
+      estimator_version = state$linking$estimator$version, identity_hash = state$identity_hash))
+  }
   if (!is.character(session_dir) || length(session_dir) != 1L || is.na(session_dir)) {
     rlang::abort("`session_dir` must be a single, non-missing string.")
   }
@@ -1165,7 +1172,9 @@ validate_session_dir <- function(session_dir) {
   }
 
   metadata <- .adaptive_read_session_metadata(paths)
-  state <- .adaptive_backfill_session_behavior(readRDS(paths$state), metadata)
+  state <- readRDS(paths$state)
+  .link_reject_legacy(state)
+  state <- .adaptive_backfill_session_behavior(state, metadata)
   metadata$warm_start_mode <- state$meta$warm_start_mode
   metadata$pairing_strategy <- state$controller$pairing_strategy
 
@@ -1215,7 +1224,8 @@ validate_session_dir <- function(session_dir) {
 #' \code{step_log}/\code{round_log} files keep the full canonical schemas, so
 #' resume preserves expanded audit fields without recomputation.
 #'
-#' @param state Adaptive state.
+#' @param state Adaptive state or an explicit-evidence linking session. Linking
+#'   sessions are saved exactly in `link-session.rds` using [save_link_session()].
 #' @param session_dir Directory to write session artifacts.
 #' @param overwrite Logical; overwrite existing artifacts.
 #'
@@ -1231,6 +1241,15 @@ validate_session_dir <- function(session_dir) {
 #' @family adaptive persistence
 #' @export
 save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
+  if (inherits(state, "pairwiseLLM_link_session")) {
+    .link_check(!file.exists(file.path(session_dir, "state.rds")),
+      "Cannot mix adaptive and explicit-evidence linking sessions in one directory.")
+    dir.create(session_dir, recursive = TRUE, showWarnings = FALSE)
+    return(save_link_session(state, file.path(session_dir, "link-session.rds"), overwrite))
+  }
+  .link_reject_legacy(state)
+  .link_check(!file.exists(file.path(session_dir, "link-session.rds")),
+    "Cannot mix adaptive and explicit-evidence linking sessions in one directory.")
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
@@ -1360,6 +1379,10 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
 #' @family adaptive persistence
 #' @export
 load_adaptive_session <- function(session_dir) {
+  if (file.exists(file.path(session_dir, "link-session.rds"))) {
+    .link_check(!file.exists(file.path(session_dir, "state.rds")), "Ambiguous mixed session directory.")
+    return(load_link_session(file.path(session_dir, "link-session.rds")))
+  }
   paths <- .adaptive_session_paths(session_dir)
   required <- c(paths$state, paths$step_log, paths$round_log, paths$metadata)
   missing <- required[!file.exists(required)]

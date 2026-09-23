@@ -195,9 +195,9 @@ test_that("percentile scoring preserves provenance and diagnostics across curren
   expect_identical(stats::predict(fit, artifact), stats::predict(fit))
   expect_error(stats::predict(fit, rubric_test_fixed()), "inappropriate")
   linked <- rubric_test_linked(2L)
-  expect_error(stats::predict(fit, linked), "inappropriate")
+  expect_error(stats::predict(fit, linked), "Unsupported legacy")
   expect_error(pairwiseLLM::fit_rubric_calibration(linked, method = "percentile", trait = "trait", K = 3),
-    "inappropriate")
+    "Unsupported legacy")
 })
 
 test_that("point-score binning does not invent probabilities or consume randomness", {

@@ -286,7 +286,7 @@ test_that("release documentation keeps navigation and citation contracts", {
   expect_false(grepl("template_positional_bias", pkgdown, fixed = TRUE))
   expect_true(grepl("articles/prompt-template-bias.html", pkgdown, fixed = TRUE))
 
-  expect_length(vignette_paths, 13L)
+  expect_length(vignette_paths, 14L)
   expect_true(all(vapply(vignette_text, function(text) {
     normalized <- gsub("\n> ", " ", text, fixed = TRUE)
     grepl("Citation", normalized, fixed = TRUE) &&
