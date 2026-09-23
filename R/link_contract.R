@@ -81,9 +81,10 @@
 }
 
 .link_source <- function(x = list()) {
-  .link_fields(x, c("artifact_hash", "evidence_hash", "n_observations", "trait", "orientation"), label = "Phase A source")
+  .link_fields(x, c("artifact_hash", "reference_hash", "evidence_hash", "n_observations", "trait", "orientation"),
+    label = "Phase A source")
   out <- list(artifact_hash = NA_character_, evidence_hash = NA_character_, n_observations = NA_integer_)
-  for (k in intersect(names(x), c("artifact_hash", "evidence_hash", "trait", "orientation"))) {
+  for (k in intersect(names(x), c("artifact_hash", "reference_hash", "evidence_hash", "trait", "orientation"))) {
     .link_check(is.character(x[[k]]) && length(x[[k]]) == 1L &&
       (is.na(x[[k]]) || nzchar(x[[k]])), "Source hashes/metadata must be scalar strings or NA_character_.")
     out[[k]] <- x[[k]]
@@ -200,10 +201,12 @@
 #'   exactly one statistical payload: E1 `points` (named numeric vector), E2
 #'   `draws` (draws by named item columns), or E3 `observations` (table as below).
 #'   Points and each draw are separately centered, with removed means recorded.
-#'   Optional `source` metadata contains `artifact_hash`, `evidence_hash`, and
+#'   Optional `source` metadata contains `artifact_hash`, `reference_hash`, `evidence_hash`, and
 #'   `n_observations`, optional `trait` and `orientation` (`higher_is_better`);
 #'   unavailable values remain typed missing. External source
 #'   hashes are assertions of provenance, distinct from computed payload hashes.
+#'   Use the `source` from [prepare_linked_rubric_reference()] for a frozen
+#'   standalone hub; rubric prediction checks its identity and estimator payload.
 #'   E1 also accepts `list(artifact = artifact)` in either set entry, mutually
 #'   exclusive with `points`. Supply an in-memory canonical Phase A artifact
 #'   (use [readRDS()] explicitly for files). Its `set_id`, `fit_model_id`,

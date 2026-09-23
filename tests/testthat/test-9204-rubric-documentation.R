@@ -123,3 +123,31 @@ test_that("documented historical calibration consumes actual accepted Phase B", 
   expect_identical(env$target_assessment$metadata$linking,
     attr(env$target_scores, "linking"))
 })
+
+test_that("documented standalone reference and linking snippets run offline", {
+  skip_if_not_installed("ordinal")
+  local_mocked_bindings(.fit_bayes_btl_mcmc_adaptive = rubric_reference_sampler, .package = "pairwiseLLM")
+  chunks <- rubric_documentation_chunks()
+  path <- testthat::test_path("..", "..", "vignettes", "linking-sessions.Rmd")
+  lines <- readLines(path)
+  start <- match("```{r standalone-link, eval=FALSE}", lines)
+  end <- which(seq_along(lines) > start & lines == "```")[1]
+  chunks[["standalone-link"]] <- lines[seq.int(start + 1L, end - 1L)]
+  env <- new.env(parent = asNamespace("pairwiseLLM"))
+  env$reference_comparisons <- rubric_reference_evidence()
+  env$completed_reference <- rubric_reference_completed(env$reference_comparisons)
+  reference <- rubric_reference_prepare(env$completed_reference)
+  env$reference_items <- reference$hub$items
+  env$reference_labels <- rubric_reference_labels(reference)
+  env$rubric_levels <- 1:3
+  withr::local_dir(withr::local_tempdir())
+  rubric_run_documentation(chunks, "standalone-reference", env)
+  args <- rubric_reference_link_args(env$reference, "gaussian_posterior_bridge")
+  env$active_cross <- args$cross
+  env$target_phase_a <- list(set_id = "S", n_items = 3L, n_pairs_committed = 12L,
+    items = args$spoke$items, fit_model_id = "btl", posterior_draws = args$phase_a$spoke$draws)
+  rubric_run_documentation(chunks, "standalone-link", env)
+  expect_equal(nrow(env$target_scores), 3L)
+  expect_identical(readRDS("rubric-reference.rds"), env$reference)
+  expect_identical(readRDS("rubric-calibration.rds"), env$standalone_calibration)
+})

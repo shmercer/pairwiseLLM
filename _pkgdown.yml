@@ -180,6 +180,7 @@ reference:
   - title: "Convert Bayesian rankings to rubric levels"
     desc: "Requires completed Bayesian CJ results. See the [rubric guide](../articles/rubric-calibration.html) for human labels and interpretation."
     contents:
+      - prepare_linked_rubric_reference
       - fit_rubric_calibration
       - predict.pairwiseLLM_rubric_calibration
       - evaluate_rubric_predictions

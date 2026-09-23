@@ -168,3 +168,7 @@ Issue #281 coverage follow-up reserves 5096–5099 for release helper boundaries
 refit diagnostics, candidate handling, and recovery regressions. Tests keep all
 Phase B selector gates intact; synthetic capacity snapshots test allocation
 arithmetic only and do not establish selector validity.
+
+Issue #290 reserves 0208 for verified standalone rubric-reference identities and
+9205 for provider-free standalone-reference transport and serialization. Sampler
+fixtures test interface contracts, not numerical MCMC correctness.

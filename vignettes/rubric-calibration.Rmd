@@ -312,6 +312,43 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
 }
 ```
 
+### Prepare a reference from a standalone ranking
+
+An import-ready adaptive Phase A result is one supported reference source. You
+can also use a completed standalone Bayesian ranking, including one fitted from
+pooled historical comparisons of reference samples. Freeze this reference before
+evaluating the new samples.
+
+Keep the exact comparison table supplied to `fit_bayes_btl_mcmc()`. If you fitted
+several subsets, keep the rows used for the final fit. The constructor checks
+these rows against the record saved when the fit was made. Older standalone
+results without that record must be refitted from their original comparisons;
+they remain usable for ordinary same-set calibration.
+
+```{r standalone-reference, eval=FALSE}
+reference <- prepare_linked_rubric_reference(
+  completed_reference, reference_comparisons,
+  set_id = "reference", items = reference_items, trait = "organization"
+)
+standalone_calibration <- fit_rubric_calibration(
+  reference, reference_labels, calibration_design = "linked_anchors",
+  levels = rubric_levels
+)
+saveRDS(reference, "rubric-reference.rds")
+saveRDS(standalone_calibration, "rubric-calibration.rds")
+```
+
+`reference_items` maps the fit's `item_id` values to unique `global_item_id`
+values. Use those global IDs in `reference_labels`. Omit `items` when the
+original IDs already uniquely identify your samples across sets.
+
+The [linking sessions guide](linking-sessions.html#link-a-prepared-standalone-reference)
+shows which saved reference inputs to use with E1, E2, and E3. All three retain
+the same reference identifier. The saved reference and calibration can be read
+with `readRDS()` later; the original sampler does not need to stay open.
+
+### Link the reference and new samples
+
 Use the same BTL model variant for the reference and target rankings. The
 [linking sessions guide](linking-sessions.html) explains the required input tables
 and how to save and resume work. Here we explicitly choose E2, which needs saved

@@ -253,7 +253,9 @@
   wrapper_orientation <- if (inherits(cj$state, "adaptive_state")) cj$orientation else NULL
   .rubric_orientation(wrapper_orientation)
   if (inherits(cj$state, "adaptive_state")) cj <- cj$state
-  if (inherits(cj, "adaptive_state")) {
+  if (inherits(cj, "pairwiseLLM_linked_rubric_reference")) {
+    out <- .rubric_cj_standalone_reference(cj, trait)
+  } else if (inherits(cj, "adaptive_state")) {
     trait <- .rubric_trait(trait, wrapper_trait, cj$trait, cj$meta$trait, cj$items[["trait"]])
     controller <- .adaptive_controller_resolve(cj)
     out <- if (identical(controller$run_mode, "within_set")) {

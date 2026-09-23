@@ -116,6 +116,7 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
 
 Other rubric calibration:
 \code{\link[=fit_rubric_calibration]{fit_rubric_calibration()}},
-\code{\link[=predict.pairwiseLLM_rubric_calibration]{predict.pairwiseLLM_rubric_calibration()}}
+\code{\link[=predict.pairwiseLLM_rubric_calibration]{predict.pairwiseLLM_rubric_calibration()}},
+\code{\link[=prepare_linked_rubric_reference]{prepare_linked_rubric_reference()}}
 }
 \concept{rubric calibration}
