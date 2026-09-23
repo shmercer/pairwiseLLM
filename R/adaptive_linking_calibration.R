@@ -413,6 +413,7 @@
     rlang::abort("`replicates` must be >= 1.")
   }
 
+  .link_selector_unvalidated()
   set_sizes <- .adaptive_calibration_parse_set_sizes(set_sizes)
   adaptive_cfg <- adaptive_config %||% list()
   cfg_payload <- list(

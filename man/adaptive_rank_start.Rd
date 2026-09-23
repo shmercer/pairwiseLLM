@@ -149,6 +149,16 @@ Custom BTL fit functions should consume \code{state$predictive_prior} only when
 not imply BTL warming. Resume preserves saved predictions, current TrueSkill
 state, mode, strategy, and bootstrap progress; omit all warm-start arguments.
 }
+\section{Phase B linking restriction}{
+
+Adaptive Phase B D-optimal selection is unavailable pending a separate
+selector validation study. This includes all E1--E3 engines and legacy
+D-optimal aliases; execution fails before selecting or judging a Phase B pair.
+Phase A and ordinary within-set ranking remain available. For linking, use
+\code{\link[=prepare_link_input]{prepare_link_input()}}, \code{\link[=fit_link]{fit_link()}}, and \code{\link[=start_link_session]{start_link_session()}} with explicit
+cross-set evidence and an explicit estimator choice.
+}
+
 \examples{
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 11)
 summarize_adaptive(state)

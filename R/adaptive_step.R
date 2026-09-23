@@ -634,109 +634,11 @@ validate_judge_result <- function(result, A_id, B_id) {
 #' @noRd
 .adaptive_link_d_opt_update_after_commit <- function(state_before, state_after, step_row) {
   row <- tibble::as_tibble(step_row)
-  if (nrow(row) != 1L) {
-    return(state_after)
-  }
-  if (!isTRUE(row$is_cross_set[[1L]] %||% FALSE)) {
-    return(state_after)
-  }
-  run_mode <- as.character(row$run_mode[[1L]] %||% "within_set")
-  if (!run_mode %in% c("link_one_spoke", "link_multi_spoke")) {
-    return(state_after)
-  }
-  if (.adaptive_is_linking_d_optimal_mode(
-    as.character(row$utility_mode[[1L]] %||% NA_character_),
-    allow_legacy = TRUE
-  ) &&
-    isTRUE(row$is_probe_step[[1L]] %||% FALSE)) {
-    return(state_after)
-  }
-  spoke_id <- as.integer(row$link_spoke_id[[1L]] %||% NA_integer_)
-  if (is.na(spoke_id)) {
-    return(state_after)
-  }
-  i_idx <- as.integer(row$i[[1L]] %||% NA_integer_)
-  j_idx <- as.integer(row$j[[1L]] %||% NA_integer_)
-  if (is.na(i_idx) || is.na(j_idx)) {
-    return(state_after)
-  }
-  i_id <- as.character(state_before$item_ids[[i_idx]] %||% NA_character_)
-  j_id <- as.character(state_before$item_ids[[j_idx]] %||% NA_character_)
-  if (is.na(i_id) || is.na(j_id)) {
-    return(state_after)
-  }
-  controller <- .adaptive_controller_resolve(state_after)
-  hub_id <- as.integer(controller$hub_id %||% 1L)
-  set_map <- stats::setNames(as.integer(state_before$items$set_id), as.character(state_before$items$item_id))
-  i_set <- as.integer(set_map[[i_id]] %||% NA_integer_)
-  j_set <- as.integer(set_map[[j_id]] %||% NA_integer_)
-  hub_item <- if (identical(i_set, hub_id)) i_id else if (identical(j_set, hub_id)) j_id else NA_character_
-  spoke_item <- if (identical(i_set, spoke_id)) i_id else if (identical(j_set, spoke_id)) j_id else NA_character_
-  if (is.na(hub_item) || is.na(spoke_item)) {
-    return(state_after)
-  }
-  accepted_state <- .adaptive_link_anchored_joint_resolve_state(
-    state = state_before,
-    spoke_id = as.integer(spoke_id),
-    controller = controller
-  )
-  spoke_items <- as.character(names(accepted_state$theta_spoke_global_mean))
-  spoke_idx <- as.integer(match(spoke_item, spoke_items))
-  theta_h <- as.double(accepted_state$theta_hub_fixed[[as.character(hub_item)]] %||% NA_real_)
-  theta_x <- as.double(accepted_state$theta_spoke_global_mean[[as.character(spoke_item)]] %||% NA_real_)
-  if (!is.finite(theta_h) || !is.finite(theta_x) || is.na(spoke_idx)) {
-    return(state_after)
-  }
-  judge_params <- .adaptive_link_anchored_joint_judge_params(
-    state = state_before,
-    spoke_id = as.integer(spoke_id),
-    controller = controller,
-    accepted_state = accepted_state
-  )
-  pbar <- .adaptive_link_model_d_pbar(
-    theta_h = theta_h,
-    theta_x = theta_x,
-    beta = as.double(judge_params$beta %||% 0),
-    epsilon = as.double(judge_params$epsilon %||% 0)
-  )
-  if (!is.finite(pbar)) {
-    return(state_after)
-  }
-  info_scale <- as.double(pbar * (1 - pbar))
-  refit_id <- .adaptive_link_refit_window_id(state_after)
-  d_opt_state <- .adaptive_link_d_opt_state_get(
-    controller = controller,
-    refit_id = refit_id,
-    spoke_id = as.integer(spoke_id),
-    transform_mode = NA_character_,
-    link_estimation_mode = "anchored_joint",
-    free_block_dim = length(spoke_items)
-  )
-  uses_diag <- !is.null(d_opt_state$it_diag)
-  if (!isTRUE(uses_diag) &&
-    (!is.matrix(d_opt_state$it) || any(dim(d_opt_state$it) != c(length(spoke_items), length(spoke_items))))) {
-    return(state_after)
-  }
-  d_opt_map <- controller$link_d_opt_it_by_spoke %||% list()
-  current_prefix <- paste0(as.integer(refit_id), "::")
-  map_names <- names(d_opt_map)
-  if (is.null(map_names)) {
-    d_opt_map <- list()
-  } else {
-    keep <- startsWith(as.character(map_names), current_prefix)
-    d_opt_map <- d_opt_map[keep]
-  }
-  if (isTRUE(uses_diag)) {
-    d_opt_state$it_diag[[spoke_idx]] <- as.double(d_opt_state$it_diag[[spoke_idx]] + info_scale)
-  } else {
-    d_opt_state$it[spoke_idx, spoke_idx] <- as.double(d_opt_state$it[spoke_idx, spoke_idx] + info_scale)
-    d_opt_state$it <- as.matrix((d_opt_state$it + t(d_opt_state$it)) / 2)
-  }
-  d_opt_state$it_n_pairs_accumulated <- as.integer(d_opt_state$it_n_pairs_accumulated + 1L)
-  d_opt_map[[d_opt_state$key]] <- d_opt_state
-  controller$link_d_opt_it_by_spoke <- d_opt_map
-  state_after$controller <- controller
-  state_after
+  if (nrow(row) != 1L || !isTRUE(row$is_cross_set[[1L]] %||% FALSE) ||
+      !as.character(row$run_mode[[1L]] %||% "within_set") %in%
+        c("link_one_spoke", "link_multi_spoke") ||
+      isTRUE(row$is_probe_step[[1L]] %||% FALSE)) return(state_after)
+  .link_selector_unvalidated()
 }
 
 #' @keywords internal
@@ -957,6 +859,7 @@ run_one_step <- function(state, judge, ...) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
+  .link_guard_adaptive_selection(state)
   if (!is.function(judge)) {
     rlang::abort("`judge` must be a function.")
   }

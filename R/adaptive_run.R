@@ -836,7 +836,10 @@
                                                spoke_id,
                                                refit_id = NULL) {
   link_estimation_mode <- as.character(controller$link_estimation_mode %||% "transform")
+  result <- .link_session_results(state)[[as.character(spoke_id)]]
   list(
+    estimator_state_hash = .link_hash(list(result$estimator_id, result$estimator_version,
+      result$items, result$provenance$hashes)),
     refit_id = as.integer(refit_id %||% .adaptive_link_refit_window_id(state)),
     step_id = as.integer(.adaptive_link_refit_local_step_id(state)),
     spoke_id = as.integer(spoke_id),
@@ -879,6 +882,7 @@
   entry_context <- entry_context %||% list()
   current_context <- current_context %||% list()
   compare <- list(
+    estimator_state_hash = as.character,
     refit_id = as.integer,
     step_id = as.integer,
     spoke_id = as.integer,
@@ -969,7 +973,8 @@
     state = state,
     controller = controller,
     active_ids = unique(c(hub_ids, spoke_ids)),
-    hub_id = hub_id
+    hub_id = hub_id,
+    spoke_id = spoke_id
   )
   list(
     hub_ids = as.character(hub_ids),
@@ -2674,8 +2679,7 @@
   if (nrow(pending) < 1L) {
     return(NULL)
   }
-  scored <- tryCatch(
-    .adaptive_link_attach_predictive_utility(
+  scored <- .link_attach_probe_predictions(
       candidates = tibble::tibble(
         i = as.character(pending$hub_item_id),
         j = as.character(pending$spoke_item_id)
@@ -2683,9 +2687,7 @@
       state = state,
       controller = .adaptive_controller_resolve(state),
       spoke_id = as.integer(spoke_id)
-    ),
-    error = function(e) NULL
-  )
+    )
   link_u <- if (!is.null(scored) && "link_u" %in% names(scored)) {
     as.double(scored$link_u)
   } else {
@@ -2924,59 +2926,30 @@
 .adaptive_link_probe_cache_predictions <- function(state, refit_id, spoke_id) {
   out <- state
   probe <- .adaptive_link_probe_state(out)
-  controller <- .adaptive_controller_resolve(out)
-  epoch_id <- .adaptive_link_probe_epoch_for_spoke(out, spoke_id = spoke_id)
-  panel <- .adaptive_link_probe_panel_for_spoke(
-    out,
-    spoke_id = as.integer(spoke_id),
-    epoch_id = epoch_id
-  )
-  realized_log <- .adaptive_link_probe_realized_log_for_panel(
-    out,
-    spoke_id = as.integer(spoke_id),
-    epoch_id = as.integer(epoch_id),
-    panel = panel
-  )
-  if (nrow(realized_log) > 0L) {
-    realized_idx <- match(as.character(panel$pair_key), as.character(realized_log$pair_key))
-    keep <- !is.na(realized_idx)
-    panel <- panel[keep, , drop = FALSE]
-    realized_idx <- realized_idx[keep]
-    if (nrow(panel) > 0L && "probe_panel_id" %in% names(realized_log)) {
-      realized_panel_id <- as.character(realized_log$probe_panel_id[realized_idx])
-      use_realized_id <- !is.na(realized_panel_id) & nzchar(realized_panel_id)
-      panel$probe_panel_id[use_realized_id] <- realized_panel_id[use_realized_id]
-    }
-  } else {
-    panel <- panel[0, , drop = FALSE]
-  }
-  if (nrow(panel) < 1L) {
-    out$linking$probe <- probe
-    return(out)
-  }
-  scored <- .adaptive_link_attach_predictive_utility(
-    candidates = tibble::tibble(
-      i = as.character(panel$hub_item_id),
-      j = as.character(panel$spoke_item_id)
-    ),
-    state = out,
-    controller = controller,
-    spoke_id = as.integer(spoke_id)
-  )
-  cache_rows <- tibble::tibble(
-    refit_id = as.integer(refit_id),
-    spoke_id = as.integer(spoke_id),
-    link_epoch_id = as.integer(panel$link_epoch_id %||% 1L),
-    probe_panel_id = as.character(panel$probe_panel_id %||% NA_character_),
-    pair_key = make_unordered_key(panel$hub_item_id, panel$spoke_item_id),
-    hub_item_id = as.character(panel$hub_item_id),
-    spoke_item_id = as.character(panel$spoke_item_id),
-    pred_prob = as.double(scored$link_p)
-  )
-  probe$prediction_cache <- dplyr::bind_rows(
-    probe$prediction_cache,
-    cache_rows
-  )
+  epoch_id <- .adaptive_link_probe_epoch_for_spoke(out, spoke_id)
+  realized <- .adaptive_link_probe_realized_log_for_panel(out, spoke_id, epoch_id)
+  if (nrow(realized) < 1L) return(out)
+  result <- .link_orchestration_result(out, spoke_id)
+  observations <- .link_adaptive_probe_observations(out, result, realized)
+  p <- predict_link(result, observations[, setdiff(names(observations), "y_A"), drop = FALSE])
+  input <- result$continuation$input
+  cache_rows <- tibble::tibble(refit_id = as.integer(refit_id), spoke_id = as.integer(spoke_id),
+    link_epoch_id = as.integer(epoch_id), probe_panel_id = realized$probe_panel_id,
+    pair_key = realized$pair_key, hub_item_id = realized$hub_item_id,
+    spoke_item_id = realized$spoke_item_id, pred_prob = p,
+    observation_id = observations$observation_id, y_A = observations$y_A,
+    A_set = observations$A_set, A_item = observations$A_item,
+    B_set = observations$B_set, B_item = observations$B_item,
+    estimator_id = result$estimator_id, estimator_version = result$estimator_version,
+    uncertainty_scope = result$diagnostics$uncertainty_scope,
+    input_hash = input$hashes$input, config_hash = input$hashes$config,
+    history_hash = .link_orchestration_history_hash(result),
+    active_edges = input$counts$cross, cross_evidence_hash = input$hashes$cross,
+    hub_set_id = input$hub$set_id, spoke_set_id = input$spoke$set_id)
+  cache <- probe$prediction_cache
+  # Recomputing a refit is idempotent; never count a held-out observation twice.
+  keep <- !(cache$refit_id == refit_id & cache$spoke_id == spoke_id & cache$link_epoch_id == epoch_id)
+  probe$prediction_cache <- dplyr::bind_rows(cache[keep, , drop = FALSE], cache_rows)
   out$linking$probe <- probe
   out
 }
@@ -4036,6 +4009,14 @@
 #'   Default is `NULL`.
 #' @param persist_item_log Logical; when TRUE, write per-refit item logs to disk.
 #'   Default is `FALSE`.
+#' @section Phase B linking restriction:
+#' Adaptive Phase B D-optimal selection is unavailable pending a separate
+#' selector validation study. This includes all E1--E3 engines and legacy
+#' D-optimal aliases; execution fails before selecting or judging a Phase B pair.
+#' Phase A and ordinary within-set ranking remain available. For linking, use
+#' [prepare_link_input()], [fit_link()], and [start_link_session()] with explicit
+#' cross-set evidence and an explicit estimator choice.
+#'
 #' @param checkpoint_every_steps Optional positive integer checkpoint cadence for
 #'   ordinary live persistence. If `NULL`, defaults to `100L`.
 #' @param ... Internal/testing only. Supply `now_fn` to override the clock used
@@ -4297,6 +4278,14 @@ adaptive_rank_start <- function(items,
 #'   If `NULL`, uses `state$config$session_dir`. Default is `NULL`.
 #' @param persist_item_log Logical; when TRUE, write per-refit item logs to disk.
 #'   If `NULL`, uses `state$config$persist_item_log`. Default is `NULL`.
+#' @section Phase B linking restriction:
+#' Adaptive Phase B D-optimal selection is unavailable pending a separate
+#' selector validation study. This includes all E1--E3 engines and legacy
+#' D-optimal aliases; execution fails before selecting or judging a Phase B pair.
+#' Phase A and ordinary within-set ranking remain available. For linking, use
+#' [prepare_link_input()], [fit_link()], and [start_link_session()] with explicit
+#' cross-set evidence and an explicit estimator choice.
+#'
 #' @param checkpoint_every_steps Optional positive integer checkpoint cadence for
 #'   ordinary live persistence. If `NULL`, uses the persisted state value when
 #'   present, otherwise defaults to `100L`.
@@ -4525,6 +4514,7 @@ adaptive_rank_run_live <- function(state,
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
+  .link_guard_adaptive_selection(state)
   if (!is.function(judge)) {
     rlang::abort("`judge` must be a function.")
   }
@@ -4585,6 +4575,7 @@ adaptive_rank_run_live <- function(state,
   state <- .adaptive_phase_a_finalize_if_ready(state)
   state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
   state <- .adaptive_clear_stale_global_stop_state(state)
+  .link_guard_adaptive_selection(state)
   .adaptive_phase_a_gate_or_abort(state)
   state <- .adaptive_link_sync_warm_start(state)
 
@@ -4648,6 +4639,7 @@ adaptive_rank_run_live <- function(state,
     state <- .adaptive_phase_a_prepare(state)
     state <- .adaptive_phase_a_finalize_if_ready(state)
     state <- .adaptive_clear_stale_global_stop_state(state)
+    .link_guard_adaptive_selection(state)
     .adaptive_phase_a_gate_or_abort(state)
     state <- .adaptive_phase_a_ensure_pooled_judge_state(
       state,

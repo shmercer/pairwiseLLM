@@ -951,7 +951,7 @@ test_that("adaptive_rank_run_live rejects removed phase-specific judge mode", {
   )
 })
 
-test_that("global-shared Phase B startup falls back deterministically without link judge estimates", {
+test_that("Phase B startup rejects selection even with valid shared Phase A judge estimates", {
   local_mocked_bindings(
     .btl_mcmc_require_cmdstanr = function() stop("This unit test must not invoke CmdStan.")
   )
@@ -1039,7 +1039,7 @@ test_that("global-shared Phase B startup falls back deterministically without li
   state$btl_fit$beta_within_mean <- 0.05
   state$btl_fit$epsilon_within_mean <- 0.02
 
-  out <- expect_no_error(adaptive_rank_run_live(
+  expect_error(adaptive_rank_run_live(
     state,
     judge,
     n_steps = 1L,
@@ -1052,19 +1052,7 @@ test_that("global-shared Phase B startup falls back deterministically without li
       phase_a_artifacts = list(`1` = art1, `2` = art2)
     ),
     progress = "none"
-  ))
-
-  row <- out$step_log[nrow(out$step_log), , drop = FALSE]
-  expect_true(isTRUE(row$is_cross_set[[1L]]))
-  expect_true(is.finite(row$posterior_win_prob_pre[[1L]]))
-  if (isTRUE(row$is_probe_step[[1L]])) {
-    expect_true(is.na(row$cross_set_utility_pre[[1L]]))
-  } else {
-    expect_true(is.finite(row$cross_set_utility_pre[[1L]]))
-  }
-  expect_true(is.character(row$link_stage))
-  expect_identical(as.character(row$link_stage[[1L]]), as.character(row$round_stage[[1L]]))
-  expect_true(is.integer(out$step_log$link_spoke_id))
+  ), class = "pairwiseLLM_link_selector_unvalidated")
 })
 
 test_that("phase A helper branch guards and edge paths are exercised", {

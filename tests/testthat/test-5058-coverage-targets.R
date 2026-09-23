@@ -499,45 +499,6 @@ test_that("legacy controller and resume schema normalization cover migration bra
   expect_identical(link_log$link_estimation_mode[[1L]], "transform")
 })
 
-test_that("D-opt commit update normalizes legacy state and preserves early exits", {
-  state_before <- make_5058_link_state()
-  state_after <- state_before
-  state_after$round_log <- append_round_log(
-    state_after$round_log,
-    list(refit_id = 1L, diagnostics_pass = TRUE)
-  )
-  state_after$controller$link_refit_stats_by_spoke <- list(
-    `2` = list(delta_spoke_mean = 0.1, log_alpha_spoke_mean = log(1.2))
-  )
-  step_row <- tibble::tibble(
-    is_cross_set = TRUE,
-    run_mode = "link_one_spoke",
-    utility_mode = "linking_d_optimal_transform",
-    is_probe_step = FALSE,
-    link_spoke_id = 2L,
-    i = 1L,
-    j = 4L,
-    delta_spoke_estimate_pre = 0.05,
-    log_alpha_spoke_estimate_pre = log(1.1)
-  )
-  updated <- .adaptive_link_d_opt_update_after_commit(state_before, state_after, step_row)
-  d_opt_map <- updated$controller$link_d_opt_it_by_spoke
-  expect_true(length(d_opt_map) >= 1L)
-  expect_identical(d_opt_map[[1L]]$it_n_pairs_accumulated, 1L)
-  expect_true(is.matrix(d_opt_map[[1L]]$it) || !is.null(d_opt_map[[1L]]$it_diag))
-
-  expect_identical(
-    .adaptive_link_d_opt_update_after_commit(state_before, state_after, step_row[0, ]),
-    state_after
-  )
-  non_link <- step_row
-  non_link$is_cross_set <- FALSE
-  expect_identical(.adaptive_link_d_opt_update_after_commit(state_before, state_after, non_link), state_after)
-  missing_spoke <- step_row
-  missing_spoke$link_spoke_id <- NA_integer_
-  expect_identical(.adaptive_link_d_opt_update_after_commit(state_before, state_after, missing_spoke), state_after)
-})
-
 make_5058_live_pairs <- function() {
   tibble::tibble(
     ID1 = c("A", "C"),

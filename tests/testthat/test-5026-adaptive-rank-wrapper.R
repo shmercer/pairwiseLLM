@@ -501,7 +501,7 @@ test_that("adaptive_rank summary uses persisted meta stop state, not stale round
   expect_identical(as.character(out$logs$round_log$stop_reason[[1L]]), "btl_converged")
 })
 
-test_that("adaptive_rank later linking consumes prior wrapper phase_a surfaces", {
+test_that("adaptive_rank later linking consumes prior wrapper phase_a surfaces but gates adaptive execution", {
   samples <- make_linking_samples_df()
   two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
   hub_samples <- make_linking_subset_df(1L)
@@ -537,7 +537,7 @@ test_that("adaptive_rank later linking consumes prior wrapper phase_a surfaces",
     seed = 112L
   )
 
-  link_out <- pairwiseLLM::adaptive_rank(
+  expect_error(pairwiseLLM::adaptive_rank(
     data = two_set,
     id_col = "ID",
     text_col = "text",
@@ -556,22 +556,11 @@ test_that("adaptive_rank later linking consumes prior wrapper phase_a surfaces",
     btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none",
     seed = 113L
-  )
-
-  cross <- link_out$logs$step_log[
-    link_out$logs$step_log$is_cross_set %in% TRUE &
-      !is.na(link_out$logs$step_log$pair_id),
-    ,
-    drop = FALSE
-  ]
-  expect_true(nrow(cross) > 0L)
-  expect_true(nrow(link_out$logs$link_stage_log) >= 1L)
-  status <- tibble::as_tibble(link_out$phase_a$set_status)
-  expect_true(all(status$source == "import"))
-  expect_true(all(status$status == "ready"))
+  ),
+    class = "pairwiseLLM_link_selector_unvalidated")
 })
 
-test_that("adaptive_rank reuses session_dir and artifact_dir phase_a sources after resume", {
+test_that("adaptive_rank reuses session_dir and artifact_dir phase_a sources after resume but gates adaptive execution", {
   samples <- make_linking_samples_df()
   two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
   hub_samples <- make_linking_subset_df(1L)
@@ -632,7 +621,7 @@ test_that("adaptive_rank reuses session_dir and artifact_dir phase_a sources aft
     names(first_hub$phase_a$artifact_paths)
   )
 
-  link_out <- pairwiseLLM::adaptive_rank(
+  expect_error(pairwiseLLM::adaptive_rank(
     data = two_set,
     id_col = "ID",
     text_col = "text",
@@ -651,17 +640,8 @@ test_that("adaptive_rank reuses session_dir and artifact_dir phase_a sources aft
     btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none",
     seed = 123L
-  )
-
-  cross <- link_out$logs$step_log[
-    link_out$logs$step_log$is_cross_set %in% TRUE &
-      !is.na(link_out$logs$step_log$pair_id),
-    ,
-    drop = FALSE
-  ]
-  expect_true(nrow(cross) > 0L)
-  expect_true(nrow(link_out$logs$link_stage_log) >= 1L)
-  expect_true(file.exists(first_spoke$phase_a$artifact_paths[["2"]]))
+  ),
+    class = "pairwiseLLM_link_selector_unvalidated")
 })
 
 test_that("adaptive_rank builds internal llm judge and forwards judge_call_args", {
@@ -822,7 +802,7 @@ test_that("adaptive_rank forwards adaptive_config and rejects unknown keys", {
   )
 })
 
-test_that("adaptive_rank accepts reviewed public Phase B controls", {
+test_that("adaptive_rank accepts reviewed public Phase B controls but gates adaptive execution", {
   samples <- make_linking_samples_df()
   two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
   items <- dplyr::rename(two_set, item_id = ID)
@@ -832,7 +812,7 @@ test_that("adaptive_rank accepts reviewed public Phase B controls", {
     list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
   }
 
-  out <- pairwiseLLM::adaptive_rank(
+  expect_error(pairwiseLLM::adaptive_rank(
     data = two_set,
     id_col = "ID",
     text_col = "text",
@@ -849,10 +829,8 @@ test_that("adaptive_rank accepts reviewed public Phase B controls", {
     btl_config = test_link_btl_config(list(refit_pairs_target = 5L)),
     progress = "none",
     seed = 27L
-  )
-
-  expect_false(isTRUE(out$state$controller$hub_anchor_required_phase_b))
-  expect_identical(out$state$controller$probe_panel_edges, 12L)
+  ),
+    class = "pairwiseLLM_link_selector_unvalidated")
 })
 
 test_that("adaptive_rank rejects removed Phase B public controls", {
@@ -985,7 +963,7 @@ test_that("adaptive_rank logs include documented adaptive step and refit fields"
   expect_true(all(round_cols %in% names(out$logs$round_log)))
 })
 
-test_that("adaptive_rank wrapper defaults link_one_spoke import flow to anchored-joint", {
+test_that("adaptive_rank wrapper defaults link_one_spoke import flow to anchored-joint but gates adaptive execution", {
   samples <- make_linking_samples_df()
   two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
   items <- dplyr::rename(samples, item_id = ID)
@@ -996,7 +974,7 @@ test_that("adaptive_rank wrapper defaults link_one_spoke import flow to anchored
     list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
   }
 
-  out <- pairwiseLLM::adaptive_rank(
+  expect_error(pairwiseLLM::adaptive_rank(
     data = two_set,
     id_col = "ID",
     text_col = "text",
@@ -1012,31 +990,11 @@ test_that("adaptive_rank wrapper defaults link_one_spoke import flow to anchored
     btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none",
     seed = 13L
-  )
-
-  cross <- out$logs$step_log[
-    out$logs$step_log$is_cross_set %in% TRUE & !is.na(out$logs$step_log$pair_id),
-    ,
-    drop = FALSE
-  ]
-  expect_true(nrow(cross) > 0L)
-  expect_true(all(cross$link_spoke_id == 2L))
-  expect_true(nrow(out$logs$link_stage_log) >= 1L)
-  expect_true(all(as.character(out$logs$link_stage_log$link_estimation_mode) == "anchored_joint"))
-  expect_true(all(is.na(out$logs$link_stage_log$link_transform_policy)))
-  expect_true(all(is.na(out$logs$link_stage_log$link_transform_state)))
-  expect_true(all(is.na(out$logs$link_stage_log$link_refit_mode)))
-  expect_true(all(as.character(out$logs$link_stage_log$hub_lock_mode) == "hard_lock"))
-  expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))
-  expect_true("rank_link" %in% names(out$items))
-
-  printed <- capture.output(print(out$state))
-  expect_true(any(grepl("estimation_mode=anchored_joint", printed, fixed = TRUE)))
-  expect_true(any(grepl("mode=anchored_joint", printed, fixed = TRUE)))
-  expect_false(any(grepl("transform_policy=", printed, fixed = TRUE)))
+  ),
+    class = "pairwiseLLM_link_selector_unvalidated")
 })
 
-test_that("adaptive_rank wrapper supports anchored-joint linking activation", {
+test_that("adaptive_rank wrapper supports anchored-joint linking activation but gates adaptive execution", {
   samples <- make_linking_samples_df()
   two_set <- samples[samples$set_id %in% c(1L, 2L), , drop = FALSE]
   items <- dplyr::rename(samples, item_id = ID)
@@ -1047,7 +1005,7 @@ test_that("adaptive_rank wrapper supports anchored-joint linking activation", {
     list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
   }
 
-  out <- pairwiseLLM::adaptive_rank(
+  expect_error(pairwiseLLM::adaptive_rank(
     data = two_set,
     id_col = "ID",
     text_col = "text",
@@ -1063,19 +1021,11 @@ test_that("adaptive_rank wrapper supports anchored-joint linking activation", {
     btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none",
     seed = 23L
-  )
-
-  expect_true(nrow(out$logs$link_stage_log) >= 1L)
-  expect_true(all(as.character(out$logs$link_stage_log$link_estimation_mode) == "anchored_joint"))
-  expect_true(all(is.na(out$logs$link_stage_log$link_transform_policy)))
-  expect_true(all(is.na(out$logs$link_stage_log$link_transform_state)))
-  expect_true(all(is.na(out$logs$link_stage_log$link_refit_mode)))
-  expect_true(all(as.character(out$logs$link_stage_log$hub_lock_mode) == "hard_lock"))
-  expect_false(is.null(out$state$linking$anchored_joint$accepted_state_by_spoke[["2"]]))
-  expect_true("rank_link" %in% names(out$items))
+  ),
+    class = "pairwiseLLM_link_selector_unvalidated")
 })
 
-test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
+test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow but gates adaptive execution", {
   samples <- make_linking_samples_df()
   items <- dplyr::rename(samples, item_id = ID)
   artifacts <- make_wrapper_import_artifacts(items)
@@ -1085,7 +1035,7 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
     list(is_valid = TRUE, Y = y, invalid_reason = NA_character_)
   }
 
-  out <- pairwiseLLM::adaptive_rank(
+  expect_error(pairwiseLLM::adaptive_rank(
     data = samples,
     id_col = "ID",
     text_col = "text",
@@ -1106,21 +1056,8 @@ test_that("adaptive_rank wrapper supports link_multi_spoke concurrent flow", {
     btl_config = test_link_btl_config(list(refit_pairs_target = 2L)),
     progress = "none",
     seed = 17L
-  )
-
-  cross <- out$logs$step_log[
-    out$logs$step_log$is_cross_set %in% TRUE & !is.na(out$logs$step_log$pair_id),
-    ,
-    drop = FALSE
-  ]
-  expect_true(nrow(cross) > 0L)
-  expect_true(all(sort(unique(cross$link_spoke_id)) == c(2L, 3L)))
-  expect_true(all(xor(cross$set_i == 1L, cross$set_j == 1L)))
-  expect_true(nrow(out$logs$link_stage_log) >= 2L)
-  expect_true(all(as.character(out$logs$link_stage_log$link_estimation_mode) == "anchored_joint"))
-  expect_true(all(c("link_transform_policy", "link_transform_state", "link_epoch_id") %in%
-    names(out$logs$link_stage_log)))
-  expect_true(is.function(out$state$config$btl_config$cmdstan_fit_fn))
+  ),
+    class = "pairwiseLLM_link_selector_unvalidated")
 })
 
 test_that("adaptive_rank wrapper preserves mixed Phase A and rejects legacy Phase B persistence", {
@@ -1140,7 +1077,7 @@ test_that("adaptive_rank wrapper preserves mixed Phase A and rejects legacy Phas
     text_col = "text",
     judge = judge,
     fit_fn = fit_override$fit_fn,
-    n_steps = 8L,
+    n_steps = 1L,
     adaptive_config = list(
       run_mode = "link_one_spoke",
       hub_id = 1L,

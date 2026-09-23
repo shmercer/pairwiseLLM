@@ -24,25 +24,15 @@ test_that("global posterior reconstruction aligns artifacts and applies each sav
     "persisted authoritative posterior draws")
 })
 
-test_that("heldout metrics match exact keyed outcomes and do not borrow other epochs", {
+test_that("unversioned probe caches cannot supply stopping metrics", {
   state <- task09_link_state()
   state$linking$probe$prediction_cache <- tibble::tibble(refit_id = c(1L, 1L, 2L, 2L),
     spoke_id = 2L, link_epoch_id = 1L, pair_key = rep(c("a:c", "b:d"), 2),
     pred_prob = c(0.2, 0.4, 0.3, 0.6))
   state$linking$probe$realized_edges <- tibble::tibble(spoke_id = 2L, link_epoch_id = 1L,
     pair_key = c("a:c", "b:d"), Y = c(1L, 0L))
-  expect_equal(.adaptive_link_probe_metrics_current(state, 2L, 2L),
-    list(probe_brier = mean(c(0.3^2, 0.4^2)), realized_n = 2L))
-  expect_equal(.adaptive_link_probe_pred_rmse_lagged(state, 2L, 2L, 1L, 1L),
-    sqrt(mean(c(0.1^2, 0.2^2))))
-  expect_true(is.na(.adaptive_link_probe_pred_rmse_lagged(state, 2L, 2L, 1L, 2L)))
-  expect_identical(.adaptive_link_probe_metrics_current(state, 99L, 2L)$realized_n, 0L)
-  state$linking$probe$realized_edges$link_epoch_id <- 2L
-  expect_identical(.adaptive_link_probe_metrics_current(state, 2L, 2L)$realized_n, 0L)
-  state$linking$probe$realized_edges$link_epoch_id <- 1L
-  state$linking$probe$realized_edges$Y <- NA_integer_
-  expect_identical(.adaptive_link_probe_metrics_current(state, 2L, 2L)$realized_n, 0L)
-  state$linking$probe$prediction_cache$pred_prob <- NA_real_
+  expect_identical(.adaptive_link_probe_metrics_current(state, 2L, 2L),
+    list(probe_brier = NA_real_, realized_n = 0L))
   expect_true(is.na(.adaptive_link_probe_pred_rmse_lagged(state, 2L, 2L, 1L, 1L)))
 })
 

@@ -150,3 +150,7 @@ Task 09 renamed the following files; earlier completion reports retain historica
 Issue #279 reserves 5086--5089 for linking session identity/resume, common
 reporting, Phase A imports, and rubric interoperability; verified unused on
 2026-09-22. Tests remain deterministic and provider-free.
+
+Issue #280 reserves 5090–5091 for estimator-neutral orchestration and selector
+gates (verified unused on 2026-09-22). Tests remain provider-free; E3-MCMC
+orchestration uses the synthetic sampler fixture, never real sampling.

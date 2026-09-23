@@ -1569,79 +1569,55 @@
 }
 
 .adaptive_link_probe_metrics_current <- function(state, refit_id, spoke_id) {
-  probe <- .adaptive_link_probe_state(state)
-  cache <- tibble::as_tibble(probe$prediction_cache %||% tibble::tibble())
-  realized <- tibble::as_tibble(probe$realized_edges %||% tibble::tibble())
-  if (nrow(cache) < 1L || nrow(realized) < 1L) {
-    return(list(probe_brier = NA_real_, realized_n = 0L))
-  }
-  current <- cache[
-    as.integer(cache$refit_id) == as.integer(refit_id) &
-      as.integer(cache$spoke_id) == as.integer(spoke_id),
-    ,
-    drop = FALSE
-  ]
-  if (nrow(current) < 1L) {
-    return(list(probe_brier = NA_real_, realized_n = 0L))
-  }
-  joined <- dplyr::inner_join(
-    current,
-    realized[, c("spoke_id", "link_epoch_id", "pair_key", "Y"), drop = FALSE],
-    by = c("spoke_id", "link_epoch_id", "pair_key")
-  )
-  if (nrow(joined) < 1L) {
-    return(list(probe_brier = NA_real_, realized_n = 0L))
-  }
-  y_spoke <- as.integer(joined$Y)
-  pred_spoke <- 1 - as.double(joined$pred_prob)
-  keep <- y_spoke %in% c(0L, 1L) & is.finite(pred_spoke)
-  if (!any(keep)) {
-    return(list(probe_brier = NA_real_, realized_n = 0L))
-  }
-  list(
-    probe_brier = as.double(mean((y_spoke[keep] - pred_spoke[keep])^2)),
-    realized_n = as.integer(sum(keep))
-  )
+  cache <- .adaptive_link_probe_state(state)$prediction_cache
+  # Old caches do not record presentation orientation or estimator identity.
+  required <- c("observation_id", "y_A", "estimator_id", "estimator_version", "input_hash")
+  if (!all(required %in% names(cache))) return(list(probe_brier = NA_real_, realized_n = 0L))
+  current <- cache[cache$refit_id == refit_id & cache$spoke_id == spoke_id, , drop = FALSE]
+  if (!nrow(current)) return(list(probe_brier = NA_real_, realized_n = 0L))
+  result <- .link_orchestration_result(state, spoke_id)
+  .link_check(all(current$estimator_id == result$estimator_id) &&
+    all(current$estimator_version == result$estimator_version) &&
+    all(current$input_hash == result$provenance$hashes$input), "Probe cache estimator/evidence mismatch.")
+  .link_check(!anyDuplicated(current$observation_id), "Probe cache repeats held-out observations.")
+  list(probe_brier = mean((current$y_A - current$pred_prob)^2), realized_n = nrow(current))
 }
 
 .adaptive_link_probe_pred_rmse_lagged <- function(state, refit_id, spoke_id, lag_refit_id, epoch_id) {
-  probe <- .adaptive_link_probe_state(state)
-  cache <- tibble::as_tibble(probe$prediction_cache %||% tibble::tibble())
-  if (nrow(cache) < 1L) {
-    return(NA_real_)
+  cache <- .adaptive_link_probe_state(state)$prediction_cache
+  required <- c("observation_id", "estimator_id", "estimator_version", "config_hash", "history_hash",
+    "active_edges", "cross_evidence_hash", "input_hash",
+    "hub_set_id", "spoke_set_id", "uncertainty_scope", "A_set", "A_item", "B_set", "B_item", "y_A")
+  if (!all(required %in% names(cache))) return(NA_real_)
+  rows <- cache[cache$spoke_id == spoke_id & cache$link_epoch_id == epoch_id, , drop = FALSE]
+  current <- rows[rows$refit_id == refit_id, , drop = FALSE]
+  lagged <- rows[rows$refit_id == lag_refit_id, , drop = FALSE]
+  if (!nrow(current) || !nrow(lagged)) return(NA_real_)
+  for (k in c("estimator_id", "estimator_version", "config_hash", "history_hash",
+    "hub_set_id", "spoke_set_id", "uncertainty_scope")) {
+    .link_check(length(unique(c(current[[k]], lagged[[k]]))) == 1L &&
+      !anyNA(c(current[[k]], lagged[[k]])), "Lagged probe cache identity mismatch; reset the spoke history.")
   }
-  current <- cache[
-    as.integer(cache$refit_id) == as.integer(refit_id) &
-      as.integer(cache$spoke_id) == as.integer(spoke_id) &
-      as.integer(cache$link_epoch_id) == as.integer(epoch_id),
-    ,
-    drop = FALSE
-  ]
-  lagged <- cache[
-    as.integer(cache$refit_id) == as.integer(lag_refit_id) &
-      as.integer(cache$spoke_id) == as.integer(spoke_id) &
-      as.integer(cache$link_epoch_id) == as.integer(epoch_id),
-    ,
-    drop = FALSE
-  ]
-  if (nrow(current) < 1L || nrow(lagged) < 1L) {
-    return(NA_real_)
+  result <- .link_orchestration_result(state, spoke_id)
+  input <- result$continuation$input
+  .link_check(all(current$input_hash == input$hashes$input) &&
+    all(current$history_hash == .link_orchestration_history_hash(result)),
+    "Current probe cache does not match the accepted estimator result.")
+  n_old <- unique(lagged$active_edges)
+  .link_check(length(n_old) == 1L && is.finite(n_old) && n_old >= 0L &&
+    n_old == floor(n_old) && n_old <= nrow(input$cross), "Invalid lagged active evidence count.")
+  .link_check(all(lagged$cross_evidence_hash == .link_hash(input$cross[seq_len(n_old), , drop = FALSE])),
+    "Lagged probe cache changed the active evidence prefix; reset the spoke history.")
+  .link_check(!anyDuplicated(current$observation_id) && !anyDuplicated(lagged$observation_id),
+    "Probe cache repeats held-out observations.")
+  at <- match(current$observation_id, lagged$observation_id)
+  keep <- !is.na(at)
+  if (!any(keep)) return(NA_real_)
+  for (k in c("A_set", "A_item", "B_set", "B_item", "y_A")) {
+    .link_check(identical(current[[k]][keep], lagged[[k]][at[keep]]),
+      "Lagged probe observations changed orientation or outcome.")
   }
-  joined <- dplyr::inner_join(
-    current[, c("pair_key", "pred_prob"), drop = FALSE],
-    lagged[, c("pair_key", "pred_prob"), drop = FALSE],
-    by = "pair_key",
-    suffix = c("_t", "_lag")
-  )
-  if (nrow(joined) < 1L) {
-    return(NA_real_)
-  }
-  diff <- as.double(joined$pred_prob_t) - as.double(joined$pred_prob_lag)
-  diff <- diff[is.finite(diff)]
-  if (length(diff) < 1L) {
-    return(NA_real_)
-  }
-  sqrt(mean(diff^2))
+  sqrt(mean((current$pred_prob[keep] - lagged$pred_prob[at[keep]])^2))
 }
 
 .adaptive_link_theta_global_scope_ids <- function(state, spoke_id, scope) {
@@ -3345,137 +3321,20 @@
   }, numeric(1L))))
 }
 
-.adaptive_link_probe_quality_metrics <- function(edges,
-                                                 panel,
-                                                 hub_theta,
-                                                 spoke_theta,
-                                                 delta_mean,
-                                                 log_alpha_mean = NA_real_,
+.adaptive_link_probe_quality_metrics <- function(edges, panel, hub_theta, spoke_theta,
+                                                 delta_mean, log_alpha_mean = NA_real_,
                                                  judge_params = list(beta = 0, epsilon = 0),
                                                  controller = list()) {
-  controller <- controller %||% list()
-  edges <- tibble::as_tibble(edges %||% tibble::tibble())
-  panel <- tibble::as_tibble(panel %||% tibble::tibble())
-  min_required <- max(1L, as.integer(controller$probe_edges_min_for_stop %||% 80L))
-  unique_hub_min <- as.integer(ceiling(as.double(controller$probe_unique_hub_min_frac %||% 0.60) * min_required))
-  unique_spoke_min <- as.integer(ceiling(as.double(controller$probe_unique_spoke_min_frac %||% 0.75) * min_required))
-  rank_bins <- max(1L, as.integer(controller$probe_rank_bins %||% 10L))
-  rank_bins_hub_min <- min(
-    rank_bins,
-    min_required,
-    max(1L, as.integer(controller$probe_rank_bins_hub_min %||% 8L))
-  )
-  rank_bins_spoke_min <- min(
-    rank_bins,
-    min_required,
-    max(1L, as.integer(controller$probe_rank_bins_spoke_min %||% 8L))
-  )
-  out <- list(
-    probe_near_boundary_frac = NA_real_,
-    probe_near_boundary_min_frac_used = as.double(controller$probe_near_boundary_min_frac %||% 0.35),
-    probe_near_boundary_pass = FALSE,
-    probe_extreme_frac = NA_real_,
-    probe_extreme_max_frac_used = as.double(controller$probe_extreme_max_frac %||% 0.30),
-    probe_extreme_frac_pass = FALSE,
-    probe_midrange_frac = NA_real_,
-    probe_midrange_min_frac_used = as.double(controller$probe_midrange_min_frac %||% 0.60),
-    probe_midrange_pass = FALSE,
-    probe_unique_hub_items = 0L,
-    probe_unique_hub_min_used = as.integer(unique_hub_min),
-    probe_unique_hub_pass = FALSE,
-    probe_unique_spoke_items = 0L,
-    probe_unique_spoke_min_used = as.integer(unique_spoke_min),
-    probe_unique_spoke_pass = FALSE,
-    probe_rank_bins_hub_covered = 0L,
-    probe_rank_bins_hub_min_used = as.integer(rank_bins_hub_min),
-    probe_rank_bins_hub_pass = FALSE,
-    probe_rank_bins_spoke_covered = 0L,
-    probe_rank_bins_spoke_min_used = as.integer(rank_bins_spoke_min),
-    probe_rank_bins_spoke_pass = FALSE,
-    probe_brier_near_boundary = NA_real_,
-    probe_brier_near_boundary_max_used = as.double(controller$probe_brier_near_boundary_max %||% 0.20),
-    probe_brier_near_boundary_pass = FALSE,
-    probe_ece = NA_real_,
-    probe_ece_max_used = as.double(controller$probe_ece_max %||% 0.10),
-    probe_ece_pass = FALSE,
-    probe_quality_pass = FALSE,
-    probe_quality_blocker_codes = "probe_quality_unavailable"
-  )
-  if (nrow(edges) < 1L) {
-    return(out)
-  }
-  p <- .adaptive_link_cross_probabilities(
-    edges = edges,
-    hub_theta = hub_theta,
-    spoke_theta = spoke_theta,
-    delta_mean = delta_mean,
-    log_alpha_mean = log_alpha_mean,
-    judge_params = judge_params
-  )
-  y <- as.integer(edges$y_spoke)
-  keep <- y %in% c(0L, 1L) & is.finite(p)
-  if (!any(keep)) {
-    return(out)
-  }
-  p <- as.double(p[keep])
-  y <- as.integer(y[keep])
-  edge_ok <- edges[keep, , drop = FALSE]
-  near <- p >= as.double(controller$probe_near_boundary_low %||% 0.35) &
-    p <= as.double(controller$probe_near_boundary_high %||% 0.65)
-  extreme <- p < as.double(controller$probe_extreme_low %||% 0.15) |
-    p > as.double(controller$probe_extreme_high %||% 0.85)
-  midrange <- p >= as.double(controller$probe_midrange_low %||% 0.20) &
-    p <= as.double(controller$probe_midrange_high %||% 0.80)
-  pair_key <- make_unordered_key(edge_ok$hub_item, edge_ok$spoke_item)
-  panel_match <- if (nrow(panel) > 0L && "pair_key" %in% names(panel)) {
-    panel[match(pair_key, as.character(panel$pair_key)), , drop = FALSE]
-  } else {
-    tibble::tibble()
-  }
-  hub_bins <- if (nrow(panel_match) > 0L && "hub_bin" %in% names(panel_match)) {
-    unique(as.integer(panel_match$hub_bin[!is.na(panel_match$hub_bin)]))
-  } else {
-    integer()
-  }
-  spoke_bins <- if (nrow(panel_match) > 0L && "spoke_bin" %in% names(panel_match)) {
-    unique(as.integer(panel_match$spoke_bin[!is.na(panel_match$spoke_bin)]))
-  } else {
-    integer()
-  }
-  out$probe_near_boundary_frac <- mean(near)
-  out$probe_extreme_frac <- mean(extreme)
-  out$probe_midrange_frac <- mean(midrange)
-  out$probe_unique_hub_items <- length(unique(as.character(edge_ok$hub_item)))
-  out$probe_unique_spoke_items <- length(unique(as.character(edge_ok$spoke_item)))
-  out$probe_rank_bins_hub_covered <- length(hub_bins)
-  out$probe_rank_bins_spoke_covered <- length(spoke_bins)
-  out$probe_brier_near_boundary <- if (any(near)) mean((y[near] - p[near])^2) else NA_real_
-  out$probe_ece <- .adaptive_link_probe_calibration_ece(p, y, n_bins = 5L)
-  out$probe_near_boundary_pass <- out$probe_near_boundary_frac >= out$probe_near_boundary_min_frac_used
-  out$probe_extreme_frac_pass <- out$probe_extreme_frac <= out$probe_extreme_max_frac_used
-  out$probe_midrange_pass <- out$probe_midrange_frac >= out$probe_midrange_min_frac_used
-  out$probe_unique_hub_pass <- out$probe_unique_hub_items >= out$probe_unique_hub_min_used
-  out$probe_unique_spoke_pass <- out$probe_unique_spoke_items >= out$probe_unique_spoke_min_used
-  out$probe_rank_bins_hub_pass <- out$probe_rank_bins_hub_covered >= out$probe_rank_bins_hub_min_used
-  out$probe_rank_bins_spoke_pass <- out$probe_rank_bins_spoke_covered >= out$probe_rank_bins_spoke_min_used
-  out$probe_brier_near_boundary_pass <- is.finite(out$probe_brier_near_boundary) &&
-    out$probe_brier_near_boundary <= out$probe_brier_near_boundary_max_used
-  out$probe_ece_pass <- is.finite(out$probe_ece) && out$probe_ece <= out$probe_ece_max_used
-  passes <- c(
-    probe_near_boundary = out$probe_near_boundary_pass,
-    probe_extreme_frac = out$probe_extreme_frac_pass,
-    probe_midrange = out$probe_midrange_pass,
-    probe_unique_hub = out$probe_unique_hub_pass,
-    probe_unique_spoke = out$probe_unique_spoke_pass,
-    probe_rank_bins_hub = out$probe_rank_bins_hub_pass,
-    probe_rank_bins_spoke = out$probe_rank_bins_spoke_pass,
-    probe_brier_near_boundary = out$probe_brier_near_boundary_pass,
-    probe_ece = out$probe_ece_pass
-  )
-  blockers <- names(passes)[!as.logical(passes)]
-  out$probe_quality_pass <- length(blockers) < 1L
-  out$probe_quality_blocker_codes <- if (out$probe_quality_pass) "none" else paste(blockers, collapse = ",")
-  out
+  edges <- tibble::as_tibble(edges)
+  panel <- tibble::as_tibble(panel)
+  p <- .adaptive_link_cross_probabilities(edges, hub_theta, spoke_theta,
+    delta_mean, log_alpha_mean, judge_params)
+  keep <- edges$y_spoke %in% c(0L, 1L) & is.finite(p)
+  edges <- edges[keep, , drop = FALSE]
+  match_panel <- match(make_unordered_key(edges$hub_item, edges$spoke_item), panel$pair_key)
+  .link_probe_quality(p[keep], edges$y_spoke, edges$hub_item, edges$spoke_item,
+    unique(stats::na.omit(panel$hub_bin[match_panel])),
+    unique(stats::na.omit(panel$spoke_bin[match_panel])), controller)
 }
 
 .adaptive_link_cross_probabilities <- function(edges,
@@ -4232,6 +4091,7 @@
 }
 
 .adaptive_linking_refit_update_state <- function(state, refit_context) {
+  .link_guard_adaptive_selection(state)
   if (!isTRUE(.adaptive_phase_b_refit_parallel_requested(state))) {
     return(.adaptive_linking_refit_update_state_impl(state, refit_context))
   }
@@ -4880,7 +4740,8 @@
         state = out,
         controller = controller,
         active_ids = active$active_spoke,
-        hub_id = hub_id
+        hub_id = hub_id,
+        spoke_id = spoke_id
       )
       spoke_bins <- .adaptive_link_probe_quantile_bins(active$active_spoke, score_map[active$active_spoke], bins_used)
       spoke_bin_tbl <- tibble::tibble(

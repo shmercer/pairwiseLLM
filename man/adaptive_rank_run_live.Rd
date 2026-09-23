@@ -176,6 +176,16 @@ most that many additional committed comparisons before deterministic
 termination. Round logs record
 \code{max_pairs_after_stop} and \code{pairs_committed_after_stop}.
 }
+\section{Phase B linking restriction}{
+
+Adaptive Phase B D-optimal selection is unavailable pending a separate
+selector validation study. This includes all E1--E3 engines and legacy
+D-optimal aliases; execution fails before selecting or judging a Phase B pair.
+Phase A and ordinary within-set ranking remain available. For linking, use
+\code{\link[=prepare_link_input]{prepare_link_input()}}, \code{\link[=fit_link]{fit_link()}}, and \code{\link[=start_link_session]{start_link_session()}} with explicit
+cross-set evidence and an explicit estimator choice.
+}
+
 \examples{
 # ------------------------------------------------------------------
 # Offline end-to-end workflow (fast, deterministic, CRAN-safe)

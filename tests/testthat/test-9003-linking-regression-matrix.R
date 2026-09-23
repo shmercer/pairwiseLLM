@@ -118,10 +118,10 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
   fit_stub <- make_deterministic_fit_fn(as.character(base$item_ids))
 
   # import
-  out_import <- adaptive_rank_run_live(
+  expect_error(adaptive_rank_run_live(
     state = base,
     judge = judge,
-    n_steps = 10L,
+    n_steps = 1L,
     fit_fn = fit_stub$fit_fn,
     adaptive_config = list(
       run_mode = "link_one_spoke",
@@ -131,15 +131,13 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
     ),
     btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
     progress = "none"
-  )
-  status_import <- tibble::as_tibble(out_import$linking$phase_a$set_status)
-  expect_true(all(status_import$source == "import"))
+  ), class = "pairwiseLLM_link_selector_unvalidated")
 
   # run
   out_run <- adaptive_rank_run_live(
     state = adaptive_rank_start(items, seed = 92L),
     judge = judge,
-    n_steps = 10L,
+    n_steps = 1L,
     fit_fn = fit_stub$fit_fn,
     adaptive_config = list(
       run_mode = "link_one_spoke",
@@ -156,7 +154,7 @@ test_that("phase A workflow matrix executes run/import/mixed paths", {
   out_mixed <- adaptive_rank_run_live(
     state = adaptive_rank_start(items, seed = 93L),
     judge = judge,
-    n_steps = 10L,
+    n_steps = 1L,
     fit_fn = fit_stub$fit_fn,
     adaptive_config = list(
       run_mode = "link_one_spoke",
