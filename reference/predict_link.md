@@ -52,3 +52,17 @@ sample or mutate state. Integration failure raises
 `pairwiseLLM_e3_numerical_error` on failure. E3-MCMC averages the
 conditional probability over its retained raw draws, without new
 sampling.
+
+## See also
+
+[`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
+[`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md),
+`predict_link()`,
+[`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md)
+
+Other linking:
+[`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md),
+[`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
+[`save_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_link_session.md),
+[`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md),
+[`summary.pairwiseLLM_link_result()`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_link_result.md)

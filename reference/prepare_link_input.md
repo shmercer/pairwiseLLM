@@ -44,7 +44,8 @@ prepare_link_input(
   `draws` (draws by named item columns), or E3 `observations` (table as
   below). Points and each draw are separately centered, with removed
   means recorded. Optional `source` metadata contains `artifact_hash`,
-  `evidence_hash`, and `n_observations`; unavailable values remain typed
+  `evidence_hash`, and `n_observations`, optional `trait` and
+  `orientation` (`higher_is_better`); unavailable values remain typed
   missing. External source hashes are assertions of provenance, distinct
   from computed payload hashes. E1 also accepts
   `list(artifact = artifact)` in either set entry, mutually exclusive
@@ -70,7 +71,15 @@ prepare_link_input(
   E3 requires raw within-set `observations` for both sets. It retains
   all raw evidence and jointly re-estimates both centered shapes and the
   offset. Every observation enters once; points/draws cannot accompany
-  raw evidence.
+  raw evidence. E3 also accepts `list(artifact = artifact)` with exact
+  `phase_a_within_set_evidence` (or historical `within_set_evidence`)
+  rows. Historical rows use unique positive integer `pair_id` and
+  `step_id`, item endpoints and binary `y_A`; judgment IDs are generated
+  from set and pair ID. Explicit observation tables use the common
+  columns below. Recorded row counts and any declared raw-evidence hash
+  must reconcile exactly. Artifact means, SDs and draws are ignored for
+  inference. All three artifact adapters preserve exact artifact hashes,
+  including historical compatible artifacts.
 
 - cross:
 
@@ -138,6 +147,20 @@ A versioned `pairwiseLLM_link_input` list with normalized identities,
 evidence, coordinates, controls, hashes, counts, and provenance. Raw
 Phase A likelihood counts are zero for E1/E2; source observation counts
 are separate.
+
+## See also
+
+`prepare_link_input()`,
+[`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md),
+[`predict_link()`](https://shmercer.github.io/pairwiseLLM/reference/predict_link.md),
+[`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md)
+
+Other linking:
+[`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md),
+[`predict_link()`](https://shmercer.github.io/pairwiseLLM/reference/predict_link.md),
+[`save_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_link_session.md),
+[`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md),
+[`summary.pairwiseLLM_link_result()`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_link_result.md)
 
 ## Examples
 

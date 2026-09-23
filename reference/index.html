@@ -24,6 +24,7 @@
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
+    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Explicit-evidence Linking Sessions</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
@@ -440,7 +441,7 @@
       </dl></div><div class="section level2">
       <h2 id="link-sets-from-explicit-evidence-development-">Link sets from explicit evidence (development)<a class="anchor" aria-label="anchor" href="#link-sets-from-explicit-evidence-development-"></a></h2>
 
-      <div class="section-desc"><p>Shared E1–E3 evidence and result contracts. Fitting engines are not yet available.</p></div>
+      <div class="section-desc"><p>Fit, inspect, save and resume E1–E3 on explicit evidence; estimator selection is required.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -453,6 +454,27 @@
 
         </dt>
         <dd>Prepare explicit evidence for a linking estimator</dd>
+
+        <dt>
+
+          <code><a href="start_link_session.html">start_link_session()</a></code> <code><a href="start_link_session.html">resume_link_session()</a></code>
+
+        </dt>
+        <dd>Run and resume explicit-evidence linking sessions</dd>
+
+        <dt>
+
+          <code><a href="save_link_session.html">save_link_session()</a></code> <code><a href="save_link_session.html">load_link_session()</a></code>
+
+        </dt>
+        <dd>Save and load exact linking sessions</dd>
+
+        <dt>
+
+          <code><a href="summary.pairwiseLLM_link_result.html">summary(<i>&lt;pairwiseLLM_link_result&gt;</i>)</a></code> <code><a href="summary.pairwiseLLM_link_result.html">summary(<i>&lt;pairwiseLLM_link_session&gt;</i>)</a></code> <code><a href="summary.pairwiseLLM_link_result.html">print(<i>&lt;pairwiseLLM_link_result&gt;</i>)</a></code> <code><a href="summary.pairwiseLLM_link_result.html">print(<i>&lt;pairwiseLLM_link_session&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Inspect explicit-evidence linking results and sessions</dd>
 
         <dt>
 

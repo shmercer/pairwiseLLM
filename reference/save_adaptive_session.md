@@ -12,7 +12,9 @@ save_adaptive_session(state, session_dir, overwrite = FALSE)
 
 - state:
 
-  Adaptive state.
+  Adaptive state or an explicit-evidence linking session. Linking
+  sessions are saved exactly in `link-session.rds` using
+  [`save_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_link_session.md).
 
 - session_dir:
 

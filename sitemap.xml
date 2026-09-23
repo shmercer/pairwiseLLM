@@ -11,6 +11,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/data-and-prompts.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/getting-started.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/index.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/articles/linking-sessions.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/prompt-template-bias.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html</loc></url>
@@ -119,8 +120,10 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/sample_pairs.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/sample_reverse_pairs.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/save_adaptive_session.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/save_link_session.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/save_warm_start_model.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/start_link_session.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_gemini_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.html</loc></url>
@@ -132,6 +135,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/summarize_items.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/summarize_refits.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_link_result.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_algorithm_ensemble.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_ensemble.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_warm_predictions.html</loc></url>

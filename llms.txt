@@ -414,11 +414,22 @@ guide](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md).
 
 ## Link sets from explicit evidence (development)
 
-Shared E1–E3 evidence and result contracts. Fitting engines are not yet
-available.
+Fit, inspect, save and resume E1–E3 on explicit evidence; estimator
+selection is required.
 
 - [`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md)
   : Prepare explicit evidence for a linking estimator
+- [`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md)
+  [`resume_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md)
+  : Run and resume explicit-evidence linking sessions
+- [`save_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_link_session.md)
+  [`load_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_link_session.md)
+  : Save and load exact linking sessions
+- [`summary(`*`<pairwiseLLM_link_result>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_link_result.md)
+  [`summary(`*`<pairwiseLLM_link_session>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_link_result.md)
+  [`print(`*`<pairwiseLLM_link_result>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_link_result.md)
+  [`print(`*`<pairwiseLLM_link_session>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_link_result.md)
+  : Inspect explicit-evidence linking results and sessions
 - [`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md)
   : Fit a linker using prepared explicit evidence
 - [`predict_link()`](https://shmercer.github.io/pairwiseLLM/reference/predict_link.md)
@@ -639,6 +650,8 @@ parser fixture for offline exploration.
   Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.md):
 - [Guide: Adaptive
   Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.md):
+- [Explicit-evidence linking
+  sessions](https://shmercer.github.io/pairwiseLLM/articles/linking-sessions.md):
 
 ### Modeling and Bias
 

@@ -24,6 +24,8 @@
   Start](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.md):
 - [Guide: Adaptive
   Linking](https://shmercer.github.io/pairwiseLLM/articles/adaptive-linking.md):
+- [Explicit-evidence linking
+  sessions](https://shmercer.github.io/pairwiseLLM/articles/linking-sessions.md):
 
 ### Modeling and Bias
 

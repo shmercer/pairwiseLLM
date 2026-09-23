@@ -141,13 +141,16 @@ posterior as a prior.
 
 `items` contains `set_id`, `item_id`, `global_item_id`,
 `theta_link_mean`, `theta_link_sd`, `theta_link_lower`,
-`theta_link_upper`, and `rank_link`. `offset` contains `delta_mean`,
-`delta_sd`, `delta_lower`, `delta_upper`, and `identification`
-(`prior_only`, `cross_set`, `unidentified`, or `failed`). At zero cross
-edges a valid result retains the configured Normal offset prior and
-reports `prior_only`. E1 retains fixed shapes; E2 retains independent
-full Gaussian Phase A bridges; E3 fits only the centered Phase A shape
-posterior.
+`theta_link_upper`, and `rank_link`. `theta_link_eap` is a compatibility
+alias of `theta_link_mean`; it is a posterior mean for E1 and E3-MCMC,
+and a MAP location for E2/E3 Laplace. `estimator_id` and
+`uncertainty_scope` accompany every item. `offset` contains
+`delta_mean`, `delta_sd`, `delta_lower`, `delta_upper`, and
+`identification` (`prior_only`, `cross_set`, `unidentified`, or
+`failed`). At zero cross edges a valid result retains the configured
+Normal offset prior and reports `prior_only`. E1 retains fixed shapes;
+E2 retains independent full Gaussian Phase A bridges; E3 fits only the
+centered Phase A shape posterior.
 
 `uncertainty` contains the named free-coordinate `covariance` (or
 `NULL`), `basis`, and `item_transform`. For transform T and covariance
@@ -191,3 +194,15 @@ free-coordinate numerical `mode`. Results can be round-tripped with
 
 [`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
 [`predict_link()`](https://shmercer.github.io/pairwiseLLM/reference/predict_link.md)
+
+[`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
+`fit_link()`,
+[`predict_link()`](https://shmercer.github.io/pairwiseLLM/reference/predict_link.md),
+[`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md)
+
+Other linking:
+[`predict_link()`](https://shmercer.github.io/pairwiseLLM/reference/predict_link.md),
+[`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
+[`save_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_link_session.md),
+[`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md),
+[`summary.pairwiseLLM_link_result()`](https://shmercer.github.io/pairwiseLLM/reference/summary.pairwiseLLM_link_result.md)

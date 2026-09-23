@@ -24,6 +24,7 @@
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
+    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Explicit-evidence Linking Sessions</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
@@ -53,6 +54,10 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="pairwisellm-development-version">pairwiseLLM (development version)<a class="anchor" aria-label="anchor" href="#pairwisellm-development-version"></a></h2>
+<div class="section level3">
+<h3 id="linking-sessions-and-rubric-transport-development-version">Linking sessions and rubric transport<a class="anchor" aria-label="anchor" href="#linking-sessions-and-rubric-transport-development-version"></a></h3>
+<ul><li>E1–E3 explicit-evidence linking sessions now support exact save/load and append-only resume, estimator-neutral logs and item summaries, and hub-only rubric calibration transport. Estimator choice remains explicit. Legacy anchored-joint Phase B sessions cannot be resumed or used for rubric scoring; restart from compatible Phase A inputs. E3 can import exact historical raw Phase A rows. See <code><a href="../articles/linking-sessions.html">vignette("linking-sessions")</a></code>.</li>
+</ul></div>
 <div class="section level3">
 <h3 id="e3-joint-offset-linking-development-version">E3 joint-offset linking<a class="anchor" aria-label="anchor" href="#e3-joint-offset-linking-development-version"></a></h3>
 <ul><li>Implemented <code>joint_offset</code> in the explicit-evidence linking API (<a href="https://github.com/shmercer/pairwiseLLM/issues/278" class="external-link">#278</a>; <a href="https://github.com/shmercer/pairwiseLLM/issues/273" class="external-link">#273</a>). MAP/Laplace jointly refits centered hub/spoke shapes and an explicit offset, using every raw Phase A and cross-set observation once with fixed judge parameters. Exact derivatives, deterministic multistart optimization, and unregularized observed-Hessian checks provide explicit failure diagnostics.</li>

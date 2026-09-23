@@ -32,6 +32,7 @@ or an explicitly requested MCMC audit/reference engine."></head><body>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
+    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Explicit-evidence Linking Sessions</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
@@ -104,7 +105,8 @@ exactly one statistical payload: E1 <code>points</code> (named numeric vector), 
 <code>draws</code> (draws by named item columns), or E3 <code>observations</code> (table as below).
 Points and each draw are separately centered, with removed means recorded.
 Optional <code>source</code> metadata contains <code>artifact_hash</code>, <code>evidence_hash</code>, and
-<code>n_observations</code>; unavailable values remain typed missing. External source
+<code>n_observations</code>, optional <code>trait</code> and <code>orientation</code> (<code>higher_is_better</code>);
+unavailable values remain typed missing. External source
 hashes are assertions of provenance, distinct from computed payload hashes.
 E1 also accepts <code>list(artifact = artifact)</code> in either set entry, mutually
 exclusive with <code>points</code>. Supply an in-memory canonical Phase A artifact
@@ -126,7 +128,15 @@ Phase A outcomes. Each set is Gaussianized in reduced centered coordinates
 using its sample mean and full sample covariance.
 E3 requires raw within-set <code>observations</code> for both sets. It retains all raw
 evidence and jointly re-estimates both centered shapes and the offset.
-Every observation enters once; points/draws cannot accompany raw evidence.</p></dd>
+Every observation enters once; points/draws cannot accompany raw evidence.
+E3 also accepts <code>list(artifact = artifact)</code> with exact
+<code>phase_a_within_set_evidence</code> (or historical <code>within_set_evidence</code>) rows.
+Historical rows use unique positive integer <code>pair_id</code> and <code>step_id</code>, item
+endpoints and binary <code>y_A</code>; judgment IDs are generated from set and pair ID.
+Explicit observation tables use the common columns below. Recorded row
+counts and any declared raw-evidence hash must reconcile exactly. Artifact
+means, SDs and draws are ignored for inference. All three artifact adapters
+preserve exact artifact hashes, including historical compatible artifacts.</p></dd>
 
 
 <dt id="arg-cross">cross<a class="anchor" aria-label="anchor" href="#arg-cross"></a></dt>
@@ -188,6 +198,16 @@ versioned <code><a href="https://rlang.r-lib.org/reference/hash.html" class="ext
     <p>A versioned <code>pairwiseLLM_link_input</code> list with normalized identities,
 evidence, coordinates, controls, hashes, counts, and provenance. Raw Phase A
 likelihood counts are zero for E1/E2; source observation counts are separate.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
+    <div class="dont-index"><p><code>prepare_link_input()</code>, <code><a href="fit_link.html">fit_link()</a></code>, <code><a href="predict_link.html">predict_link()</a></code>, <code><a href="start_link_session.html">start_link_session()</a></code></p>
+<p>Other linking:
+<code><a href="fit_link.html">fit_link()</a></code>,
+<code><a href="predict_link.html">predict_link()</a></code>,
+<code><a href="save_link_session.html">save_link_session()</a></code>,
+<code><a href="start_link_session.html">start_link_session()</a></code>,
+<code><a href="summary.pairwiseLLM_link_result.html">summary.pairwiseLLM_link_result()</a></code></p></div>
     </div>
 
     <div class="section level2">

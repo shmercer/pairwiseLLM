@@ -24,6 +24,7 @@
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
+    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Explicit-evidence Linking Sessions</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
@@ -101,6 +102,16 @@ Repeated calls do not sample or mutate state. Integration failure raises
 <code>pairwiseLLM_e2_numerical_error</code>. E3 MAP uses the same integration with
 <code>pairwiseLLM_e3_numerical_error</code> on failure. E3-MCMC averages the conditional
 probability over its retained raw draws, without new sampling.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
+    <div class="dont-index"><p><code><a href="prepare_link_input.html">prepare_link_input()</a></code>, <code><a href="fit_link.html">fit_link()</a></code>, <code>predict_link()</code>, <code><a href="start_link_session.html">start_link_session()</a></code></p>
+<p>Other linking:
+<code><a href="fit_link.html">fit_link()</a></code>,
+<code><a href="prepare_link_input.html">prepare_link_input()</a></code>,
+<code><a href="save_link_session.html">save_link_session()</a></code>,
+<code><a href="start_link_session.html">start_link_session()</a></code>,
+<code><a href="summary.pairwiseLLM_link_result.html">summary.pairwiseLLM_link_result()</a></code></p></div>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

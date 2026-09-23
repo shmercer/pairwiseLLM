@@ -40,6 +40,7 @@
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
+    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Explicit-evidence Linking Sessions</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
@@ -416,9 +417,9 @@ artifact.</li>
 <li>Fit and save its ordinal calibration and retain the original
 reference artifact.</li>
 <li>Run compatible Phase A for each new target set.</li>
-<li>Use the existing Phase B linking workflow with the reference as the
-fixed hub.</li>
-<li>Apply the saved calibration to the completed accepted Phase B
+<li>Explicitly select E1, E2, or E3 and fit the active cross-set
+evidence.</li>
+<li>Apply the saved calibration to the valid, identified common-scale
 result.</li>
 </ol>
 <p>In the <a href="adaptive-linking.html">linking guide</a>, ready
@@ -439,29 +440,30 @@ and <code>reference_labels</code> contains its human scores.</p>
 <span>  <span class="va">reference_scores</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">linked_calibration</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <p>The reference and target Phase A contracts must match the selected
-BTL variant and compatible settings. To collect the links, use
-<code><a href="../reference/adaptive_rank.html">adaptive_rank()</a></code> as shown below with your combined sample
-table, compatible <code>btl_config</code>, local or configured judge,
-and planned comparison budget. <code>linking_samples</code> includes
-unique <code>ID</code> and <code>global_item_id</code>,
-<code>text</code>, and <code>set_id</code> values 1 and 2. This upstream
-call is never run during documentation builds. Keep production quality
-gates and resume the session until completion; exhausting a budget alone
-does not establish precision.</p>
+BTL variant. The <a href="linking-sessions.html">explicit-evidence
+linking guide</a> describes evidence preparation and exact save/resume.
+This example explicitly chooses E2, which requires posterior item draws
+in both artifacts. <code>active_cross</code> contains only active
+cross-set observations; <code>frozen_judge</code> records the shared
+Phase A judge parameters. No provider calls or adaptive stopping are
+implicit in this fit.</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">completed_phase_b</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank.html">adaptive_rank</a></span><span class="op">(</span></span>
-<span>  data <span class="op">=</span> <span class="va">linking_samples</span>, id_col <span class="op">=</span> <span class="st">"ID"</span>, text_col <span class="op">=</span> <span class="st">"text"</span>,</span>
-<span>  judge <span class="op">=</span> <span class="va">judge</span>, n_steps <span class="op">=</span> <span class="va">comparison_budget</span>, btl_config <span class="op">=</span> <span class="va">btl_config</span>,</span>
-<span>  adaptive_config <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>    run_mode <span class="op">=</span> <span class="st">"link_one_spoke"</span>, hub_id <span class="op">=</span> <span class="fl">1L</span>, phase_a_mode <span class="op">=</span> <span class="st">"import"</span>,</span>
-<span>    phase_a_artifacts <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>`1` <span class="op">=</span> <span class="va">reference_phase_a</span>, `2` <span class="op">=</span> <span class="va">target_phase_a</span><span class="op">)</span></span>
-<span>  <span class="op">)</span>,</span>
-<span>  session_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="st">"rubric-linking-"</span><span class="op">)</span>, seed <span class="op">=</span> <span class="fl">201L</span>, progress <span class="op">=</span> <span class="st">"none"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-<p>For several targets, use the existing <code>link_multi_spoke</code>
-workflow. Phase B hard-locks hub locations and retains its shared judge
-parameters, D-optimal selection, probes, and stopping. Rubric labels are
-not required during linking.</p>
+<code class="sourceCode R"><span><span class="va">link_input</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_link_input.html">prepare_link_input</a></span><span class="op">(</span></span>
+<span>  estimator <span class="op">=</span> <span class="st">"gaussian_posterior_bridge"</span>,</span>
+<span>  hub <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>set_id <span class="op">=</span> <span class="st">"1"</span>,</span>
+<span>    items <span class="op">=</span> <span class="va">reference_phase_a</span><span class="op">$</span><span class="va">items</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"item_id"</span>, <span class="st">"global_item_id"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span>,</span>
+<span>  spoke <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>set_id <span class="op">=</span> <span class="st">"2"</span>,</span>
+<span>    items <span class="op">=</span> <span class="va">target_phase_a</span><span class="op">$</span><span class="va">items</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"item_id"</span>, <span class="st">"global_item_id"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span>,</span>
+<span>  phase_a <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hub <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>artifact <span class="op">=</span> <span class="va">reference_phase_a</span><span class="op">)</span>,</span>
+<span>    spoke <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>artifact <span class="op">=</span> <span class="va">target_phase_a</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  cross <span class="op">=</span> <span class="va">active_cross</span>, judge <span class="op">=</span> <span class="va">frozen_judge</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">completed_phase_b</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/start_link_session.html">start_link_session</a></span><span class="op">(</span><span class="va">link_input</span><span class="op">)</span></span></code></pre></div>
+<p>For several targets, pass a list of prepared inputs sharing the same
+hub and judge to <code><a href="../reference/start_link_session.html">start_link_session()</a></code>. E2/E3 can update hub
+shapes; rubric calibration remains attached to the original Phase A hub
+artifact. Rubric labels are not required during linking. Held-out probe
+outcomes must stay outside <code>active_cross</code>.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">target_scores</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">linked_calibration</span>, newdata <span class="op">=</span> <span class="va">completed_phase_b</span><span class="op">)</span></span>
@@ -470,11 +472,14 @@ not required during linking.</p>
 <span><span class="op">}</span></span></code></pre></div>
 <p>Explicit linked prediction returns targets only;
 <code>newdata = NULL</code> predicts the original reference items. Every
-spoke needs an accepted refit and committed active linking evidence. The
-accepted public <code>theta_link_eap</code> field retains its historical
-name: Phase B locations are MAP estimates with Laplace/Hessian
-uncertainty, not MCMC posterior means. Validated per-spoke provenance
-remains available, including accepted-state reuse.</p>
+spoke needs a valid, cross-set identified fit. The public
+<code>theta_link_eap</code> field aliases <code>theta_link_mean</code>:
+posterior means for E1 and E3-MCMC, MAP locations for E2/E3 Laplace. E1
+uncertainty is conditional on fixed shapes; E2/E3 include shapes and
+offset. Predictions restore the original hub location origin using its
+frozen Phase A mean. Estimator identity, uncertainty scope and exact
+evidence provenance accompany the output. Legacy anchored-joint Phase B
+sessions must restart from compatible Phase A inputs.</p>
 <p>Prediction validates the original reference IDs,
 locations/uncertainty, evidence, trait, orientation, and canonical fit
 contract. A matching configuration hash alone does not establish a

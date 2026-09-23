@@ -24,6 +24,7 @@
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
+    <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Explicit-evidence Linking Sessions</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
@@ -178,6 +179,9 @@ supply a continuation mode, and no engine reuses a posterior as a prior.</p>
 
 <p><code>items</code> contains <code>set_id</code>, <code>item_id</code>, <code>global_item_id</code>, <code>theta_link_mean</code>,
 <code>theta_link_sd</code>, <code>theta_link_lower</code>, <code>theta_link_upper</code>, and <code>rank_link</code>.
+<code>theta_link_eap</code> is a compatibility alias of <code>theta_link_mean</code>; it is a
+posterior mean for E1 and E3-MCMC, and a MAP location for E2/E3 Laplace.
+<code>estimator_id</code> and <code>uncertainty_scope</code> accompany every item.
 <code>offset</code> contains <code>delta_mean</code>, <code>delta_sd</code>, <code>delta_lower</code>, <code>delta_upper</code>, and
 <code>identification</code> (<code>prior_only</code>, <code>cross_set</code>, <code>unidentified</code>, or <code>failed</code>).
 At zero cross edges a valid result retains the configured Normal offset prior
@@ -216,7 +220,14 @@ Results can be round-tripped with <code><a href="https://rdrr.io/r/base/readRDS.
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
-    <div class="dont-index"><p><code><a href="prepare_link_input.html">prepare_link_input()</a></code>, <code><a href="predict_link.html">predict_link()</a></code></p></div>
+    <div class="dont-index"><p><code><a href="prepare_link_input.html">prepare_link_input()</a></code>, <code><a href="predict_link.html">predict_link()</a></code></p>
+<p><code><a href="prepare_link_input.html">prepare_link_input()</a></code>, <code>fit_link()</code>, <code><a href="predict_link.html">predict_link()</a></code>, <code><a href="start_link_session.html">start_link_session()</a></code></p>
+<p>Other linking:
+<code><a href="predict_link.html">predict_link()</a></code>,
+<code><a href="prepare_link_input.html">prepare_link_input()</a></code>,
+<code><a href="save_link_session.html">save_link_session()</a></code>,
+<code><a href="start_link_session.html">start_link_session()</a></code>,
+<code><a href="summary.pairwiseLLM_link_result.html">summary.pairwiseLLM_link_result()</a></code></p></div>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
