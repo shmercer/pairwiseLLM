@@ -221,6 +221,59 @@ The three examples illustrate input formats. Their invented Phase A
 summaries were not estimated from the same comparisons, so their
 numerical results should not be used to judge which method works best.
 
+## Link a prepared standalone reference
+
+For rubric scoring, the hub can be an import-ready adaptive Phase A
+result or a standalone Bayesian ranking saved with
+[`prepare_linked_rubric_reference()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_linked_rubric_reference.md).
+The [rubric
+guide](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.html#prepare-a-reference-from-a-standalone-ranking)
+shows how to prepare and save the latter, including rankings based on
+pooled historical comparisons.
+
+A prepared `reference` provides the matching hub inputs for each method:
+
+| Method | Hub input |
+|----|----|
+| E1 | `list(points = reference$points, source = reference$source)` |
+| E2 | `list(draws = reference$posterior_draws, source = reference$source)` |
+| E3, including its MCMC engine | `list(observations = reference$evidence, source = reference$source)` |
+
+Always carry `reference$source` with the hub input. It identifies the
+frozen reference across methods. The package also checks the actual hub
+inputs before applying the saved rubric calibration; copying an
+identifier onto different scores or comparisons will not work.
+
+Here is an E2 example using a prepared reference and an existing target
+Phase A artifact. `active_cross` must use the set and sample IDs in
+these inputs.
+
+``` r
+
+standalone_input <- prepare_link_input(
+  "gaussian_posterior_bridge",
+  hub = reference$hub,
+  spoke = list(set_id = target_phase_a$set_id,
+    items = target_phase_a$items[c("item_id", "global_item_id")]),
+  phase_a = list(
+    hub = list(draws = reference$posterior_draws, source = reference$source),
+    spoke = list(artifact = target_phase_a)
+  ),
+  cross = active_cross, judge = reference$judge
+)
+standalone_link <- fit_link(standalone_input)
+target_scores <- predict(standalone_calibration, standalone_link)
+```
+
+Use compatible model settings for the target ranking. `reference$judge`
+keeps the shared bias and lapse settings from the reference fit. E3 also
+requires compatible original prior assumptions, as described in the
+design guide. You do not need target rubric labels for linking or
+prediction. E2 and E3 may update hub scores during linking, but the
+saved rubric calibration stays attached to the original reference.
+Prediction restores that reference’s score origin; it does not adjust
+the scores to match the new cohort’s distribution.
+
 ## Predict a comparison and check the result
 
 To predict a winner, provide sample identities in their presentation

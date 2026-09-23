@@ -91,7 +91,8 @@ replaces its linear effect with a nondecreasing penalized cubic spline.</p>
 <dl><dt id="arg-cj">cj<a class="anchor" aria-label="anchor" href="#arg-cj"></a></dt>
 <dd><p>A completed <code><a href="fit_bayes_btl_mcmc.html">fit_bayes_btl_mcmc()</a></code> result, a completed within-set
 <code><a href="adaptive_rank.html">adaptive_rank()</a></code> result (or its <code>adaptive_state</code>), or an import-ready Phase A
-artifact list. Fixed results with several refits use the last refit.
+artifact list, or a frozen <code><a href="prepare_linked_rubric_reference.html">prepare_linked_rubric_reference()</a></code> result.
+Fixed results with several refits use the last refit.
 Raw score tables and intermediate adaptive states are not accepted.</p></dd>
 
 
@@ -258,9 +259,14 @@ the existing explicit quality-gate override. Import readiness does not assert
 that the originating adaptive run terminated. Existing CJ diagnostics are
 retained; failed diagnostics produce a warning.</p>
 <p>With <code>linked_anchors</code>, first obtain an import-ready Phase A artifact for the
-human-scored <code>rubric_reference_set</code> and fit its ordinal calibration. Next run
+human-scored <code>rubric_reference_set</code>, or prepare a completed standalone Bayesian
+ranking with <code><a href="prepare_linked_rubric_reference.html">prepare_linked_rubric_reference()</a></code>, and fit its ordinal calibration.
+Standalone references require evidence identity recorded during fitting; older
+fits must be refitted from their original comparisons before reuse as a reference.
+Their existing same-set uses remain supported. Next run
 Phase A for the target set, then explicitly select an E1–E3 estimator in
-<code><a href="prepare_link_input.html">prepare_link_input()</a></code>, supplying the reference artifact as the hub input.
+<code><a href="prepare_link_input.html">prepare_link_input()</a></code>, supplying the reference artifact or the prepared
+standalone reference's matching hub payload and <code>source</code> metadata.
 Pass the <code><a href="fit_link.html">fit_link()</a></code> result or <code><a href="start_link_session.html">start_link_session()</a></code> session to <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>.
 E1 needs points, E2 needs posterior draws, and E3 needs raw within-set rows.
 Rubric labels are used for calibration; Phase B does not require them.
@@ -292,7 +298,8 @@ CJ locations; joint CJ/rubric likelihood estimation is outside this API.</p>
 <code><a href="../articles/rubric-calibration.html">vignette("rubric-calibration", package = "pairwiseLLM")</a></code> for practical workflows.</p>
 <p>Other rubric calibration:
 <code><a href="evaluate_rubric_predictions.html">evaluate_rubric_predictions()</a></code>,
-<code><a href="predict.pairwiseLLM_rubric_calibration.html">predict.pairwiseLLM_rubric_calibration()</a></code></p></div>
+<code><a href="predict.pairwiseLLM_rubric_calibration.html">predict.pairwiseLLM_rubric_calibration()</a></code>,
+<code><a href="prepare_linked_rubric_reference.html">prepare_linked_rubric_reference()</a></code></p></div>
     </div>
 
     <div class="section level2">

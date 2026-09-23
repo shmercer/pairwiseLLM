@@ -44,12 +44,16 @@ prepare_link_input(
   `draws` (draws by named item columns), or E3 `observations` (table as
   below). Points and each draw are separately centered, with removed
   means recorded. Optional `source` metadata contains `artifact_hash`,
-  `evidence_hash`, and `n_observations`, optional `trait` and
-  `orientation` (`higher_is_better`); unavailable values remain typed
-  missing. External source hashes are assertions of provenance, distinct
-  from computed payload hashes. E1 also accepts
-  `list(artifact = artifact)` in either set entry, mutually exclusive
-  with `points`. Supply an in-memory canonical Phase A artifact (use
+  `reference_hash`, `evidence_hash`, and `n_observations`, optional
+  `trait` and `orientation` (`higher_is_better`); unavailable values
+  remain typed missing. External source hashes are assertions of
+  provenance, distinct from computed payload hashes. Use the `source`
+  from
+  [`prepare_linked_rubric_reference()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_linked_rubric_reference.md)
+  for a frozen standalone hub; rubric prediction checks its identity and
+  estimator payload. E1 also accepts `list(artifact = artifact)` in
+  either set entry, mutually exclusive with `points`. Supply an
+  in-memory canonical Phase A artifact (use
   [`readRDS()`](https://rdrr.io/r/base/readRDS.html) explicitly for
   files). Its `set_id`, `fit_model_id`, `n_items`, `n_pairs_committed`,
   and `items` are checked. Item-aligned `items$theta_raw_mean` values

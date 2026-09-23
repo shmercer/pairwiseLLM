@@ -131,7 +131,8 @@ uncertainty is not propagated through a posterior/bootstrap engine.
 
 Other rubric calibration:
 [`fit_rubric_calibration()`](https://shmercer.github.io/pairwiseLLM/reference/fit_rubric_calibration.md),
-[`predict.pairwiseLLM_rubric_calibration()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_rubric_calibration.md)
+[`predict.pairwiseLLM_rubric_calibration()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_rubric_calibration.md),
+[`prepare_linked_rubric_reference()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_linked_rubric_reference.md)
 
 ## Examples
 

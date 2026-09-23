@@ -277,15 +277,81 @@ numerical results should not be used to judge which method works
 best.</p>
 </div>
 <div class="section level2">
+<h2 id="link-a-prepared-standalone-reference">Link a prepared standalone reference<a class="anchor" aria-label="anchor" href="#link-a-prepared-standalone-reference"></a>
+</h2>
+<p>For rubric scoring, the hub can be an import-ready adaptive Phase A
+result or a standalone Bayesian ranking saved with
+<code><a href="../reference/prepare_linked_rubric_reference.html">prepare_linked_rubric_reference()</a></code>. The <a href="rubric-calibration.html#prepare-a-reference-from-a-standalone-ranking">rubric
+guide</a> shows how to prepare and save the latter, including rankings
+based on pooled historical comparisons.</p>
+<p>A prepared <code>reference</code> provides the matching hub inputs
+for each method:</p>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th>Method</th>
+<th>Hub input</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>E1</td>
+<td><code>list(points = reference$points, source = reference$source)</code></td>
+</tr>
+<tr class="even">
+<td>E2</td>
+<td><code>list(draws = reference$posterior_draws, source = reference$source)</code></td>
+</tr>
+<tr class="odd">
+<td>E3, including its MCMC engine</td>
+<td><code>list(observations = reference$evidence, source = reference$source)</code></td>
+</tr>
+</tbody>
+</table>
+<p>Always carry <code>reference$source</code> with the hub input. It
+identifies the frozen reference across methods. The package also checks
+the actual hub inputs before applying the saved rubric calibration;
+copying an identifier onto different scores or comparisons will not
+work.</p>
+<p>Here is an E2 example using a prepared reference and an existing
+target Phase A artifact. <code>active_cross</code> must use the set and
+sample IDs in these inputs.</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">standalone_input</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_link_input.html">prepare_link_input</a></span><span class="op">(</span></span>
+<span>  <span class="st">"gaussian_posterior_bridge"</span>,</span>
+<span>  hub <span class="op">=</span> <span class="va">reference</span><span class="op">$</span><span class="va">hub</span>,</span>
+<span>  spoke <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>set_id <span class="op">=</span> <span class="va">target_phase_a</span><span class="op">$</span><span class="va">set_id</span>,</span>
+<span>    items <span class="op">=</span> <span class="va">target_phase_a</span><span class="op">$</span><span class="va">items</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"item_id"</span>, <span class="st">"global_item_id"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span>,</span>
+<span>  phase_a <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    hub <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>draws <span class="op">=</span> <span class="va">reference</span><span class="op">$</span><span class="va">posterior_draws</span>, source <span class="op">=</span> <span class="va">reference</span><span class="op">$</span><span class="va">source</span><span class="op">)</span>,</span>
+<span>    spoke <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>artifact <span class="op">=</span> <span class="va">target_phase_a</span><span class="op">)</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  cross <span class="op">=</span> <span class="va">active_cross</span>, judge <span class="op">=</span> <span class="va">reference</span><span class="op">$</span><span class="va">judge</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">standalone_link</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_link.html">fit_link</a></span><span class="op">(</span><span class="va">standalone_input</span><span class="op">)</span></span>
+<span><span class="va">target_scores</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">standalone_calibration</span>, <span class="va">standalone_link</span><span class="op">)</span></span></code></pre></div>
+<p>Use compatible model settings for the target ranking.
+<code>reference$judge</code> keeps the shared bias and lapse settings
+from the reference fit. E3 also requires compatible original prior
+assumptions, as described in the design guide. You do not need target
+rubric labels for linking or prediction. E2 and E3 may update hub scores
+during linking, but the saved rubric calibration stays attached to the
+original reference. Prediction restores that reference’s score origin;
+it does not adjust the scores to match the new cohort’s
+distribution.</p>
+</div>
+<div class="section level2">
 <h2 id="predict-a-comparison-and-check-the-result">Predict a comparison and check the result<a class="anchor" aria-label="anchor" href="#predict-a-comparison-and-check-the-result"></a>
 </h2>
 <p>To predict a winner, provide sample identities in their presentation
 order, without an outcome column:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pairs_to_predict</span> <span class="op">&lt;-</span> <span class="va">cross</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"observation_id"</span>, <span class="st">"A_set"</span>, <span class="st">"A_item"</span>, <span class="st">"B_set"</span>, <span class="st">"B_item"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="fu"><a href="../reference/predict_link.html">predict_link</a></span><span class="op">(</span><span class="va">e3_fit</span>, <span class="va">pairs_to_predict</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## [1] 0.5 0.5</span></span></code></pre>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">e3_fit</span><span class="op">$</span><span class="va">diagnostics</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"fit_valid"</span>, <span class="st">"failure_code"</span>, <span class="st">"uncertainty_scope"</span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
 <pre><code><span><span class="co">## $fit_valid</span></span>
 <span><span class="co">## [1] TRUE</span></span>

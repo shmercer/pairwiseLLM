@@ -105,6 +105,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_model.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict_link.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/prepare_linked_rubric_reference.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/prepare_warm_start_model.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/print.adaptive_state.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/print.pairwiseLLM_cost_estimate.html</loc></url>

@@ -82,4 +82,5 @@ predictions and same-set output keep their existing columns and have no
 
 Other rubric calibration:
 [`evaluate_rubric_predictions()`](https://shmercer.github.io/pairwiseLLM/reference/evaluate_rubric_predictions.md),
-[`fit_rubric_calibration()`](https://shmercer.github.io/pairwiseLLM/reference/fit_rubric_calibration.md)
+[`fit_rubric_calibration()`](https://shmercer.github.io/pairwiseLLM/reference/fit_rubric_calibration.md),
+[`prepare_linked_rubric_reference()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_linked_rubric_reference.md)

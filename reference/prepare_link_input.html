@@ -104,10 +104,12 @@ hub first, then spoke, and by bytewise item ID within each set.</p></dd>
 exactly one statistical payload: E1 <code>points</code> (named numeric vector), E2
 <code>draws</code> (draws by named item columns), or E3 <code>observations</code> (table as below).
 Points and each draw are separately centered, with removed means recorded.
-Optional <code>source</code> metadata contains <code>artifact_hash</code>, <code>evidence_hash</code>, and
+Optional <code>source</code> metadata contains <code>artifact_hash</code>, <code>reference_hash</code>, <code>evidence_hash</code>, and
 <code>n_observations</code>, optional <code>trait</code> and <code>orientation</code> (<code>higher_is_better</code>);
 unavailable values remain typed missing. External source
 hashes are assertions of provenance, distinct from computed payload hashes.
+Use the <code>source</code> from <code><a href="prepare_linked_rubric_reference.html">prepare_linked_rubric_reference()</a></code> for a frozen
+standalone hub; rubric prediction checks its identity and estimator payload.
 E1 also accepts <code>list(artifact = artifact)</code> in either set entry, mutually
 exclusive with <code>points</code>. Supply an in-memory canonical Phase A artifact
 (use <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code> explicitly for files). Its <code>set_id</code>, <code>fit_model_id</code>,

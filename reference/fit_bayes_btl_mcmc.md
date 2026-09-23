@@ -157,7 +157,12 @@ A list with:
 
   List of BTL fit contracts (one per refit). Each records the actual
   per-item raw theta prior in `theta_prior`; predictive fits also
-  include compact provenance in `predictive_prior`.
+  include compact provenance in `predictive_prior`. Each new fit also
+  records `evidence_identity` (normalized fitted comparisons, item
+  domain, hash and count) and `reference_fit_config`. These let
+  [`prepare_linked_rubric_reference()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_linked_rubric_reference.md)
+  check the original comparisons before saving a reusable rubric
+  reference. Subset fits record only their fitted rows.
 
 - fit:
 

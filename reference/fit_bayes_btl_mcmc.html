@@ -201,7 +201,11 @@ a refit; <code>refit_id</code> identifies the refit.</p></dd>
 <dt>fits</dt>
 <dd><p>List of BTL fit contracts (one per refit). Each records the actual
 per-item raw theta prior in <code>theta_prior</code>; predictive fits also include
-compact provenance in <code>predictive_prior</code>.</p></dd>
+compact provenance in <code>predictive_prior</code>. Each new fit also records
+<code>evidence_identity</code> (normalized fitted comparisons, item domain, hash and
+count) and <code>reference_fit_config</code>. These let
+<code><a href="prepare_linked_rubric_reference.html">prepare_linked_rubric_reference()</a></code> check the original comparisons before
+saving a reusable rubric reference. Subset fits record only their fitted rows.</p></dd>
 
 <dt>fit</dt>
 <dd><p>Single fit contract (only when one refit is run).</p></dd>

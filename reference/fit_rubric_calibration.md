@@ -32,8 +32,10 @@ fit_rubric_calibration(
   result, a completed within-set
   [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
   result (or its `adaptive_state`), or an import-ready Phase A artifact
-  list. Fixed results with several refits use the last refit. Raw score
-  tables and intermediate adaptive states are not accepted.
+  list, or a frozen
+  [`prepare_linked_rubric_reference()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_linked_rubric_reference.md)
+  result. Fixed results with several refits use the last refit. Raw
+  score tables and intermediate adaptive states are not accepted.
 
 - rubric:
 
@@ -221,11 +223,17 @@ does not assert that the originating adaptive run terminated. Existing
 CJ diagnostics are retained; failed diagnostics produce a warning.
 
 With `linked_anchors`, first obtain an import-ready Phase A artifact for
-the human-scored `rubric_reference_set` and fit its ordinal calibration.
-Next run Phase A for the target set, then explicitly select an E1–E3
-estimator in
+the human-scored `rubric_reference_set`, or prepare a completed
+standalone Bayesian ranking with
+[`prepare_linked_rubric_reference()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_linked_rubric_reference.md),
+and fit its ordinal calibration. Standalone references require evidence
+identity recorded during fitting; older fits must be refitted from their
+original comparisons before reuse as a reference. Their existing
+same-set uses remain supported. Next run Phase A for the target set,
+then explicitly select an E1–E3 estimator in
 [`prepare_link_input()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_link_input.md),
-supplying the reference artifact as the hub input. Pass the
+supplying the reference artifact or the prepared standalone reference's
+matching hub payload and `source` metadata. Pass the
 [`fit_link()`](https://shmercer.github.io/pairwiseLLM/reference/fit_link.md)
 result or
 [`start_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/start_link_session.md)
@@ -266,7 +274,8 @@ for practical workflows.
 
 Other rubric calibration:
 [`evaluate_rubric_predictions()`](https://shmercer.github.io/pairwiseLLM/reference/evaluate_rubric_predictions.md),
-[`predict.pairwiseLLM_rubric_calibration()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_rubric_calibration.md)
+[`predict.pairwiseLLM_rubric_calibration()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_rubric_calibration.md),
+[`prepare_linked_rubric_reference()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_linked_rubric_reference.md)
 
 ## Examples
 

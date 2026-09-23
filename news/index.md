@@ -1,5 +1,19 @@
 # Changelog
 
+## pairwiseLLM (development version)
+
+- [`prepare_linked_rubric_reference()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_linked_rubric_reference.md)
+  saves a completed standalone Bayesian ranking as a reusable reference
+  for `linked_anchors` rubric calibration. This includes rankings based
+  on pooled historical comparisons. E1, E2, and E3 can use the same
+  saved reference with their respective inputs
+  ([\#290](https://github.com/shmercer/pairwiseLLM/issues/290)).
+- New standalone fits record the comparisons used in each refit so
+  reference preparation can verify them. Older standalone fits must be
+  refitted from their original comparisons before becoming reusable
+  linked references; their existing same-set uses and adaptive Phase A
+  reference support are unchanged.
+
 ## pairwiseLLM 1.6.0
 
 ### Breaking changes to linking

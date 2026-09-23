@@ -169,6 +169,8 @@ Requires completed Bayesian CJ results. See the [rubric
 guide](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.md)
 for human labels and interpretation.
 
+- [`prepare_linked_rubric_reference()`](https://shmercer.github.io/pairwiseLLM/reference/prepare_linked_rubric_reference.md)
+  : Save a standalone Bayesian ranking as a reusable rubric reference
 - [`fit_rubric_calibration()`](https://shmercer.github.io/pairwiseLLM/reference/fit_rubric_calibration.md)
   : Fit a rubric calibration to completed comparative judgments
 - [`predict(`*`<pairwiseLLM_rubric_calibration>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_rubric_calibration.md)

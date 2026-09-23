@@ -440,6 +440,43 @@ not a filename or the entire collection of saved-run metadata.</p>
 <span>  <span class="op">)</span></span>
 <span>  <span class="va">reference_scores</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">linked_calibration</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
+<div class="section level3">
+<h3 id="prepare-a-reference-from-a-standalone-ranking">Prepare a reference from a standalone ranking<a class="anchor" aria-label="anchor" href="#prepare-a-reference-from-a-standalone-ranking"></a>
+</h3>
+<p>An import-ready adaptive Phase A result is one supported reference
+source. You can also use a completed standalone Bayesian ranking,
+including one fitted from pooled historical comparisons of reference
+samples. Freeze this reference before evaluating the new samples.</p>
+<p>Keep the exact comparison table supplied to
+<code><a href="../reference/fit_bayes_btl_mcmc.html">fit_bayes_btl_mcmc()</a></code>. If you fitted several subsets, keep
+the rows used for the final fit. The constructor checks these rows
+against the record saved when the fit was made. Older standalone results
+without that record must be refitted from their original comparisons;
+they remain usable for ordinary same-set calibration.</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">reference</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_linked_rubric_reference.html">prepare_linked_rubric_reference</a></span><span class="op">(</span></span>
+<span>  <span class="va">completed_reference</span>, <span class="va">reference_comparisons</span>,</span>
+<span>  set_id <span class="op">=</span> <span class="st">"reference"</span>, items <span class="op">=</span> <span class="va">reference_items</span>, trait <span class="op">=</span> <span class="st">"organization"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">standalone_calibration</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_rubric_calibration.html">fit_rubric_calibration</a></span><span class="op">(</span></span>
+<span>  <span class="va">reference</span>, <span class="va">reference_labels</span>, calibration_design <span class="op">=</span> <span class="st">"linked_anchors"</span>,</span>
+<span>  levels <span class="op">=</span> <span class="va">rubric_levels</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">reference</span>, <span class="st">"rubric-reference.rds"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">standalone_calibration</span>, <span class="st">"rubric-calibration.rds"</span><span class="op">)</span></span></code></pre></div>
+<p><code>reference_items</code> maps the fit’s <code>item_id</code>
+values to unique <code>global_item_id</code> values. Use those global
+IDs in <code>reference_labels</code>. Omit <code>items</code> when the
+original IDs already uniquely identify your samples across sets.</p>
+<p>The <a href="linking-sessions.html#link-a-prepared-standalone-reference">linking
+sessions guide</a> shows which saved reference inputs to use with E1,
+E2, and E3. All three retain the same reference identifier. The saved
+reference and calibration can be read with <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code> later;
+the original sampler does not need to stay open.</p>
+</div>
+<div class="section level3">
+<h3 id="link-the-reference-and-new-samples">Link the reference and new samples<a class="anchor" aria-label="anchor" href="#link-the-reference-and-new-samples"></a>
+</h3>
 <p>Use the same BTL model variant for the reference and target rankings.
 The <a href="linking-sessions.html">linking sessions guide</a> explains
 the required input tables and how to save and resume work. Here we
@@ -448,7 +485,7 @@ artifacts. <code>active_cross</code> holds the comparisons to use for
 fitting; <code>frozen_judge</code> holds the shared bias and lapse
 settings from Phase A. Keep comparisons reserved for checking accuracy
 in a separate table.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">link_input</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_link_input.html">prepare_link_input</a></span><span class="op">(</span></span>
 <span>  estimator <span class="op">=</span> <span class="st">"gaussian_posterior_bridge"</span>,</span>
 <span>  hub <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>set_id <span class="op">=</span> <span class="st">"1"</span>,</span>
@@ -466,7 +503,7 @@ judge settings and chosen method. E2 and E3 can update hub scores during
 linking, but the rubric calibration stays attached to the original
 reference result. You do not need target rubric labels to link the sets
 or apply the saved calibration.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">target_scores</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">linked_calibration</span>, newdata <span class="op">=</span> <span class="va">completed_phase_b</span><span class="op">)</span></span>
 <span>  <span class="va">target_scores</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"global_item_id"</span>, <span class="st">"set_id"</span>, <span class="st">"rubric_score"</span>, <span class="st">"theta_sd"</span>, <span class="st">"extrapolated"</span><span class="op">)</span><span class="op">]</span></span>
@@ -499,7 +536,7 @@ E1, E2 or E3.</p>
 <p>Reference holdout performance assesses calibration on the reference
 scale. To assess transport, use external human labels for linked
 targets:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">target_assessment</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/evaluate_rubric_predictions.html">evaluate_rubric_predictions</a></span><span class="op">(</span></span>
 <span>    <span class="va">linked_calibration</span>, <span class="va">target_labels</span>, newdata <span class="op">=</span> <span class="va">completed_phase_b</span></span>
@@ -511,6 +548,7 @@ targets:</p>
 reference validation alone does not measure the additional error from
 linking.</p>
 </div>
+</div>
 <div class="section level2">
 <h2 id="separate-analytic-traits">Separate analytic traits<a class="anchor" aria-label="anchor" href="#separate-analytic-traits"></a>
 </h2>
@@ -520,7 +558,7 @@ overlap. Each may have different levels or a different Bayesian variant.
 Compatibility must hold within each trait’s reference/target linking
 workflow. One holistic CJ scale cannot supply multiple analytic trait
 calibrations.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ordinal"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">evidence_calibration</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_rubric_calibration.html">fit_rubric_calibration</a></span><span class="op">(</span></span>
 <span>    <span class="va">evidence_cj</span>, <span class="va">evidence_training_labels</span>, trait <span class="op">=</span> <span class="st">"evidence"</span>,</span>
