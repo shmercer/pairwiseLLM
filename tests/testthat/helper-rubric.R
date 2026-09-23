@@ -143,7 +143,8 @@ rubric_monotone_fit <- function(data, ...) {
 
 # A larger reference is necessary for identifiable ordinal calibration. Spokes
 # remain three-item problems; Phase B uses real deterministic MAP refits.
-rubric_linked_fixture <- function(n_sets = 2L, variant = "btl", target_shift = 0, reference_shift = 0) {
+rubric_linked_fixture <- function(n_sets = 2L, variant = "btl", target_shift = 0, reference_shift = 0,
+                                  estimator = "fixed_shape_offset") {
   theta_hub <- rep(seq(-2, 2, length.out = 9L), each = 6L) + reference_shift
   theta <- c(theta_hub, rep(c(-3, 0, 3) + target_shift, n_sets - 1L))
   ids <- sprintf("item%03d", seq_along(theta))
@@ -187,21 +188,20 @@ rubric_linked_fixture <- function(n_sets = 2L, variant = "btl", target_shift = 0
   state$linking$phase_a$phase <- "phase_b"
   state$linking$phase_a$active_phase_a_set <- NA_integer_
   state$warm_start_done <- TRUE
-  state <- pairwiseLLM:::.adaptive_anchored_joint_sync_scaffolding(state)
-  for (k in seq.int(2L, n_sets)) {
-    i <- which(sets == k)[[1L]]
-    step <- as.integer(k - 1L)
-    state$step_log <- pairwiseLLM:::append_step_log(state$step_log, list(
-      step_id = step, pair_id = step, timestamp = now_fn(), i = i, j = 1L, A = i, B = 1L,
-      Y = 1L, set_i = k, set_j = 1L, is_cross_set = TRUE, link_spoke_id = k,
-      run_mode = state$controller$run_mode, is_probe_step = FALSE))
-  }
-  state$refit_meta$link_cross_edges_cache_built <- FALSE
-  state <- pairwiseLLM:::.adaptive_linking_refit_update_state(state, list(last_refit_step = 0L))
-  state$item_log <- list(pairwiseLLM:::.adaptive_build_item_log_refit(state, 1L))
-  # Terminal budget exhaustion is simulated; one edge does not establish precision.
-  state$meta$stop_decision <- TRUE
-  state$meta$stop_reason <- "all_spokes_exhausted"
+  # Explicit-evidence replacement; no legacy Phase B optimizer or providers.
+  hub <- list(set_id = "1", items = artifacts[["1"]]$items[c("item_id", "global_item_id")])
+  inputs <- lapply(seq.int(2L, n_sets), function(k) {
+    a <- artifacts[[as.character(k)]]
+    spoke <- list(set_id = as.character(k), items = a$items[c("item_id", "global_item_id")])
+    cross <- data.frame(observation_id = paste0("cross-", k, "-", 1:6),
+      A_set = "1", A_item = rep(hub$items$item_id[c(1L, nrow(hub$items))], 3L),
+      B_set = as.character(k), B_item = rep(spoke$items$item_id, each = 2L), y_A = rep(c(0L, 1L), 3L))
+    pairwiseLLM::prepare_link_input(estimator, hub, spoke,
+      list(hub = list(artifact = artifacts[["1"]]), spoke = list(artifact = a)), cross,
+      list(beta = state$btl_fit$beta_mean, epsilon = state$btl_fit$epsilon_mean,
+        model_variant = variant, link = "logit", source = "synthetic frozen Phase A"))
+  })
+  state <- pairwiseLLM::start_link_session(inputs)
   u <- rep((seq_len(6L) - 0.5) / 6, 9L)
   eta <- theta_hub + 0.25 * theta_hub^3
   cumulative <- stats::plogis(outer(eta, c(-1, 1), function(e, t) t - e))

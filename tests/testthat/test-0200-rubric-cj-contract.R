@@ -169,65 +169,13 @@ test_that("Phase A import readiness retains reference metadata and rejects unrea
   expect_error(normalize(artifact, "trait", scale_status = "phase_b_linked"), "inappropriate")
 })
 
-test_that("real Phase B optimization normalizes accepted locations for one and several spokes", {
+test_that("old Phase B posterior state is rejected rather than reinterpreted for rubric scoring", {
   withr::local_seed(203)
-  normalize <- pairwiseLLM:::.rubric_normalize_cj
   for (n_sets in 2:3) {
     state <- rubric_test_linked(n_sets)
-    out <- normalize(state, "trait")
-    expect_identical(out$scale_status, "phase_b_linked")
-    expect_identical(out$provenance$estimation_method, "map_laplace")
-    expect_null(out$posterior_draws)
-    expect_true(out$diagnostics$diagnostics_pass)
-    for (spoke in seq.int(2L, n_sets)) {
-      accepted <- state$linking$anchored_joint$accepted_state_by_spoke[[as.character(spoke)]]
-      expect_identical(accepted$anchored_joint_init_state_method, "phase_b_refit")
-      expect_equal(out$items$theta[out$items$set_id == spoke], unname(accepted$theta_spoke_global_mean))
-      expect_false(isTRUE(all.equal(unname(accepted$theta_spoke_global_mean),
-        state$linking$phase_a$artifacts[[as.character(spoke)]]$items$theta_raw_mean)))
-    }
-    expect_equal(out$items$theta_sd[out$items$set_id == 1L], c(0, 0))
-    expect_equal(out$reference$items$theta_sd, c(0.2, 0.2))
+    expect_error(pairwiseLLM:::.rubric_normalize_cj(state, "trait"),
+      "Restart linking from compatible Phase A", class = "pairwiseLLM_unsupported_legacy_link_state")
   }
-})
-
-test_that("Phase B refuses initialization and malformed linked states and retains failed diagnostics", {
-  withr::local_seed(204)
-  normalize <- pairwiseLLM:::.rubric_normalize_cj
-  state <- rubric_test_linked(2L)
-  bad <- state
-  bad$meta$stop_decision <- FALSE
-  expect_error(normalize(bad, "trait"), "incomplete")
-  bad <- state
-  bad$linking$anchored_joint$accepted_state_by_spoke[["2"]]$anchored_joint_init_state_method <- "artifact_copy_init"
-  expect_error(normalize(bad, "trait"), "initialization")
-  bad <- state
-  bad$step_log$is_probe_step[] <- TRUE
-  expect_error(normalize(bad, "trait"), "active hub-spoke evidence")
-  bad <- state
-  bad$step_log$Y[] <- NA_integer_
-  expect_error(normalize(bad, "trait"), "malformed committed")
-  bad <- state
-  bad$controller$link_refit_stats_by_spoke[["2"]]$fit_contract$anchored_joint$cross_active_edges <- 0L
-  expect_error(normalize(bad, "trait"), "fitted active")
-  bad <- state
-  bad$controller$link_refit_stats_by_spoke[["2"]]$fit_contract$uncertainty_approximation <- "mcmc"
-  expect_error(normalize(bad, "trait"), "uncertainty_approximation")
-  bad <- state
-  bad$btl_fit$model_variant <- "btl"
-  expect_error(normalize(bad, "trait"), "model_variant")
-  bad <- state
-  bad$item_log[[1L]]$theta_link_eap[[1L]] <- 7
-  expect_error(normalize(bad, "trait"), "linked item summary")
-  bad <- state
-  bad$controller$link_refit_stats_by_spoke[["2"]]$link_diagnostics_pass <- FALSE
-  expect_warning(out <- normalize(bad, "trait"), class = "pairwiseLLM_rubric_cj_diagnostics")
-  expect_false(out$diagnostics$diagnostics_pass)
-  expect_equal(out$items$theta, normalize(state, "trait")$items$theta)
-  bad <- state
-  bad$controller$link_refit_stats_by_spoke[["2"]]$fit_contract$estimation_method <- "accepted_state_reuse"
-  bad$controller$link_refit_stats_by_spoke[["2"]]$fit_contract$uncertainty_approximation <- "accepted_state"
-  expect_equal(normalize(bad, "trait")$items, normalize(state, "trait")$items)
 })
 
 test_that("current fixed and adaptive entry points produce accepted rubric inputs offline", {

@@ -112,7 +112,8 @@ test_that("documented historical calibration consumes actual accepted Phase B", 
   env$reference_labels <- data$rubric
   env$rubric_levels <- data$levels
   env$completed_phase_b <- data$state
-  targets <- data$state$items$global_item_id[data$state$items$set_id != 1L]
+  target_items <- summarize_items(data$state)
+  targets <- target_items$global_item_id[target_items$set_id != "1"]
   env$target_labels <- data.frame(item_id = targets, rubric_score = data$levels)
   rubric_run_documentation(chunks,
     c("linked-calibration", "linked-prediction", "linked-evaluation"), env)

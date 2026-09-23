@@ -42,6 +42,8 @@ navbar:
           href: articles/adaptive-pairing.html
         - text: "Guide: Adaptive Warm Start"
           href: articles/adaptive-warm-start.html
+        - text: "Guide: Explicit-evidence Linking Sessions"
+          href: articles/linking-sessions.html
         - text: "Guide: Adaptive Linking"
           href: articles/adaptive-linking.html
         - text: "Standalone Bayesian BTL with CmdStan"
@@ -85,6 +87,7 @@ articles:
       - adaptive-pairing
       - adaptive-warm-start
       - adaptive-linking
+      - linking-sessions
 
   - title: "Modeling and Bias"
     contents:
@@ -166,9 +169,12 @@ reference:
       - validate_session_dir
       - load_adaptive_session
   - title: "Link sets from explicit evidence (development)"
-    desc: "Shared E1–E3 evidence and result contracts. Fitting engines are not yet available."
+    desc: "Fit, inspect, save and resume E1–E3 on explicit evidence; estimator selection is required."
     contents:
       - prepare_link_input
+      - start_link_session
+      - save_link_session
+      - summary.pairwiseLLM_link_result
       - fit_link
       - predict_link
   - title: "Convert Bayesian rankings to rubric levels"

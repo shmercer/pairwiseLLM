@@ -298,9 +298,10 @@
 #'
 #' With `linked_anchors`, first obtain an import-ready Phase A artifact for the
 #' human-scored `rubric_reference_set` and fit its ordinal calibration. Next run
-#' Phase A for the target set, then the existing [adaptive_rank()] Phase B linking
-#' workflow with the rubric reference set as hub and targets as one or more
-#' spokes. Pass the completed linking result (or its state) to `predict()`.
+#' Phase A for the target set, then explicitly select an E1--E3 estimator in
+#' [prepare_link_input()], supplying the reference artifact as the hub input.
+#' Pass the [fit_link()] result or [start_link_session()] session to `predict()`.
+#' E1 needs points, E2 needs posterior draws, and E3 needs raw within-set rows.
 #' Rubric labels are used for calibration; Phase B does not require them.
 #' A rubric reference set contains externally scored material; a Phase B
 #' **hub anchor** is an item selected for routing recurring comparisons.
@@ -313,8 +314,14 @@
 #' Target-only Phase A scores cannot be used with the stored calibration.
 #' Prediction consumes accepted Phase B common-scale scores and reuses the
 #' stored reference transformation, never the target cohort's mean or SD.
-#' Phase B's `theta_link_eap` field
-#' represents its accepted MAP location with Laplace/Hessian uncertainty.
+#' `theta_link_eap` aliases the estimator's point estimate: posterior mean for
+#' E1/E3-MCMC, MAP for E2/E3 Laplace. Prediction propagates the reported
+#' uncertainty scope (conditional on fixed shapes for E1; shapes and offset for
+#' E2/E3). Scores are translated from the centered linking origin to the original
+#' reference origin by adding the frozen hub mean, without rescaling or using
+#' target labels. E2/E3 hub posteriors may update; calibration stays attached to
+#' the original Phase A hub artifact. Changed artifact identity requires a new
+#' link. Invalid or unidentified fits and legacy anchored-joint sessions fail.
 #' Rubric scoring is downstream of CJ estimation and does not run comparisons
 #' or change Phase B estimation. Ordinal calibration conditions on accepted
 #' CJ locations; joint CJ/rubric likelihood estimation is outside this API.
@@ -355,7 +362,7 @@
 #'   Linked calibrations additionally retain `reference`: the reference `set_id`,
 #'   sorted stable item IDs with original Phase A locations/SDs, canonical
 #'   `fit_contract`, original `fit_contract_hash`, and within-set evidence/hash.
-#'   Original reference SDs are retained separately from Phase B's locked hub SDs.
+#'   Original reference SDs are retained separately from estimator-specific linked SDs.
 #' @family rubric calibration
 #' @seealso [predict.pairwiseLLM_rubric_calibration()], [evaluate_rubric_predictions()],
 #'   `vignette("rubric-calibration", package = "pairwiseLLM")` for practical workflows.

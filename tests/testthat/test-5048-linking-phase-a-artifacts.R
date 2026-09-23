@@ -187,6 +187,7 @@ test_that("phase A artifacts round-trip through persistence", {
   )
 
   session_dir <- withr::local_tempdir()
+  state$linking$phase_a$phase <- "phase_a"
   save_adaptive_session(state, session_dir = session_dir)
 
   expect_true(file.exists(file.path(session_dir, "phase_a_artifacts", "set_0001.rds")))
@@ -328,6 +329,7 @@ test_that("pooled Phase A judge state round-trips through persistence", {
     btl_config = test_link_btl_config()
   )
   session_dir <- withr::local_tempdir()
+  state$linking$phase_a$phase <- "phase_a"
   save_adaptive_session(state, session_dir = session_dir)
 
   restored <- load_adaptive_session(session_dir)
@@ -1198,6 +1200,7 @@ test_that("resume preserves persisted phase A artifacts for linking gate", {
   )
 
   session_dir <- withr::local_tempdir()
+  state$linking$phase_a$phase <- "phase_a"
   save_adaptive_session(state, session_dir = session_dir, overwrite = TRUE)
   restored <- load_adaptive_session(session_dir)
   restored$btl_fit <- NULL
@@ -1244,6 +1247,7 @@ test_that("phase A prepare memo is runtime-only across save and load", {
   )
 
   session_dir <- withr::local_tempdir()
+  state$linking$phase_a$phase <- "phase_a"
   save_adaptive_session(state, session_dir = session_dir, overwrite = TRUE)
   raw_state <- readRDS(file.path(session_dir, "state.rds"))
   expect_null(raw_state$linking$phase_a$prepare_context_by_set)
@@ -1313,6 +1317,7 @@ test_that("resume preserves Phase A pending/ready semantics and warm-start state
   state$warm_start_idx <- 1L
 
   session_dir <- withr::local_tempdir()
+  state$linking$phase_a$phase <- "phase_a"
   save_adaptive_session(state, session_dir = session_dir, overwrite = TRUE)
   restored <- load_adaptive_session(session_dir)
 

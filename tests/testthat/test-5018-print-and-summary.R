@@ -122,68 +122,13 @@ test_that("print.adaptive_state uses current live fixed probe details", {
   expect_true(any(grepl(paste0("probe_cap=", probe_cap), output, fixed = TRUE)))
 })
 
-test_that("print.adaptive_state names anchored-joint mode without transform-only fields", {
-  items <- tibble::tibble(
-    item_id = c("h1", "h2", "s21", "s22"),
-    set_id = c(1L, 1L, 2L, 2L),
-    global_item_id = c("gh1", "gh2", "gs21", "gs22")
-  )
-  state <- adaptive_rank_start(
-    items,
-    seed = 10L,
-    adaptive_config = list(
-      run_mode = "link_one_spoke",
-      hub_id = 1L
-    )
-  )
-  state$linking$phase_a$phase <- "phase_b"
-  state$linking$phase_a$ready_spokes <- 2L
-  state$linking$phase_a$ready_for_phase_b <- TRUE
-  state$linking$phase_a$set_status <- tibble::tibble(
-    set_id = c(1L, 2L),
-    source = c("run", "run"),
-    status = c("ready", "ready"),
-    validation_message = c("ok", "ok"),
-    artifact_path = c(NA_character_, NA_character_)
-  )
-  state$controller$link_epoch_id_by_spoke <- list(`2` = 4L)
-  state$controller$link_state_frozen_by_spoke <- list(`2` = TRUE)
-  state$link_stage_log <- pairwiseLLM:::append_link_stage_log(
-    state$link_stage_log,
-    list(
-      refit_id = 3L,
-      spoke_id = 2L,
-      hub_id = 1L,
-      link_estimation_mode = "anchored_joint",
-      link_transform_policy = NA_character_,
-      link_transform_state = NA_character_,
-      link_refit_mode = NA_character_,
-      hub_lock_mode = "hard_lock",
-      link_epoch_id = 4L,
-      probe_panel_id = "panel-epoch-4",
-      link_fit_method = "map_laplace",
-      link_uncertainty_approximation = "laplace_hessian",
-      probe_edges_planned = 30L,
-      probe_edges_realized = 30L,
-      link_lag_eligible = TRUE,
-      link_stop_gate_open = TRUE,
-      link_state_frozen = TRUE,
-      anchored_joint_init_state_method = "artifact_copy_init",
-      phase_a_within_edges_hub_used = 11L,
-      phase_a_within_edges_spoke_used = 7L,
-      phase_b_active_edges_used = 5L
-    )
-  )
-
+test_that("common link sessions print estimator and uncertainty without obsolete controls", {
+  state <- start_link_session(link_contract_input(edges = 2L), "frozen")
   output <- capture.output(print(state))
-
-  expect_true(any(grepl("estimation_mode=anchored_joint", output)))
-  expect_true(any(grepl("mode=anchored_joint", output)))
-  expect_true(any(grepl("init_state=artifact_copy_init", output)))
-  expect_true(any(grepl("frozen_spokes=2", output)))
-  expect_true(any(grepl("evidence_edges=11\\+7\\+5", output)))
-  expect_false(any(grepl("transform_policy=", output)))
-  expect_false(any(grepl("transform_state=", output)))
+  expect_true(any(grepl("fixed_shape_offset", output)))
+  expect_true(any(grepl("frozen", output)))
+  expect_true(any(grepl("Offset:", output)))
+  expect_false(any(grepl("transform|hard_lock|anchored_joint", output)))
 })
 
 test_that("adaptive_get_logs and print preserve free hub-lock mode", {

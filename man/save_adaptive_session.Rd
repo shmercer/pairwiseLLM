@@ -7,7 +7,8 @@
 save_adaptive_session(state, session_dir, overwrite = FALSE)
 }
 \arguments{
-\item{state}{Adaptive state.}
+\item{state}{Adaptive state or an explicit-evidence linking session. Linking
+sessions are saved exactly in \code{link-session.rds} using \code{\link[=save_link_session]{save_link_session()}}.}
 
 \item{session_dir}{Directory to write session artifacts.}
 

@@ -29,7 +29,8 @@ exactly one statistical payload: E1 \code{points} (named numeric vector), E2
 \code{draws} (draws by named item columns), or E3 \code{observations} (table as below).
 Points and each draw are separately centered, with removed means recorded.
 Optional \code{source} metadata contains \code{artifact_hash}, \code{evidence_hash}, and
-\code{n_observations}; unavailable values remain typed missing. External source
+\code{n_observations}, optional \code{trait} and \code{orientation} (\code{higher_is_better});
+unavailable values remain typed missing. External source
 hashes are assertions of provenance, distinct from computed payload hashes.
 E1 also accepts \code{list(artifact = artifact)} in either set entry, mutually
 exclusive with \code{points}. Supply an in-memory canonical Phase A artifact
@@ -51,7 +52,15 @@ Phase A outcomes. Each set is Gaussianized in reduced centered coordinates
 using its sample mean and full sample covariance.
 E3 requires raw within-set \code{observations} for both sets. It retains all raw
 evidence and jointly re-estimates both centered shapes and the offset.
-Every observation enters once; points/draws cannot accompany raw evidence.}
+Every observation enters once; points/draws cannot accompany raw evidence.
+E3 also accepts \code{list(artifact = artifact)} with exact
+\code{phase_a_within_set_evidence} (or historical \code{within_set_evidence}) rows.
+Historical rows use unique positive integer \code{pair_id} and \code{step_id}, item
+endpoints and binary \code{y_A}; judgment IDs are generated from set and pair ID.
+Explicit observation tables use the common columns below. Recorded row
+counts and any declared raw-evidence hash must reconcile exactly. Artifact
+means, SDs and draws are ignored for inference. All three artifact adapters
+preserve exact artifact hashes, including historical compatible artifacts.}
 
 \item{cross}{Explicit active cross-set observations, including an empty table
 at zero budget. Evidence tables contain \code{observation_id}, \code{A_set}, \code{A_item},
@@ -147,3 +156,14 @@ joint <- prepare_link_input("joint_offset", hub, spoke,
   cross = cross, judge = input$judge)
 joint_fit <- fit_link(joint)
 }
+\seealso{
+\code{\link[=prepare_link_input]{prepare_link_input()}}, \code{\link[=fit_link]{fit_link()}}, \code{\link[=predict_link]{predict_link()}}, \code{\link[=start_link_session]{start_link_session()}}
+
+Other linking:
+\code{\link[=fit_link]{fit_link()}},
+\code{\link[=predict_link]{predict_link()}},
+\code{\link[=save_link_session]{save_link_session()}},
+\code{\link[=start_link_session]{start_link_session()}},
+\code{\link[=summary.pairwiseLLM_link_result]{summary.pairwiseLLM_link_result()}}
+}
+\concept{linking}

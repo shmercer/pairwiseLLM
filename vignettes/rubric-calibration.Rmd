@@ -287,8 +287,8 @@ comparisons, not a known true rubric score.
 1. Run trait-specific Phase A for the reference, retaining its ready artifact.
 2. Fit and save its ordinal calibration and retain the original reference artifact.
 3. Run compatible Phase A for each new target set.
-4. Use the existing Phase B linking workflow with the reference as the fixed hub.
-5. Apply the saved calibration to the completed accepted Phase B result.
+4. Explicitly select E1, E2, or E3 and fit the active cross-set evidence.
+5. Apply the saved calibration to the valid, identified common-scale result.
 
 In the [linking guide](adaptive-linking.html), ready artifacts are available in
 `reference_run$phase_a$manifest[["1"]]` and
@@ -308,29 +308,31 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
 }
 ```
 
-The reference and target Phase A contracts must match the selected BTL variant
-and compatible settings. To collect the links, use `adaptive_rank()` as shown
-below with your combined sample table, compatible `btl_config`, local or configured
-judge, and planned comparison budget. `linking_samples` includes unique `ID` and
-`global_item_id`, `text`, and `set_id` values 1 and 2. This upstream call is never
-run during documentation builds. Keep production quality gates and resume the
-session until completion; exhausting a budget alone does not establish precision.
+The reference and target Phase A contracts must match the selected BTL variant.
+The [explicit-evidence linking guide](linking-sessions.html) describes evidence
+preparation and exact save/resume. This example explicitly chooses E2, which
+requires posterior item draws in both artifacts. `active_cross` contains only
+active cross-set observations; `frozen_judge` records the shared Phase A judge
+parameters. No provider calls or adaptive stopping are implicit in this fit.
 
 ```{r phase-b-workflow, eval=FALSE}
-completed_phase_b <- adaptive_rank(
-  data = linking_samples, id_col = "ID", text_col = "text",
-  judge = judge, n_steps = comparison_budget, btl_config = btl_config,
-  adaptive_config = list(
-    run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "import",
-    phase_a_artifacts = list(`1` = reference_phase_a, `2` = target_phase_a)
-  ),
-  session_dir = tempfile("rubric-linking-"), seed = 201L, progress = "none"
+link_input <- prepare_link_input(
+  estimator = "gaussian_posterior_bridge",
+  hub = list(set_id = "1",
+    items = reference_phase_a$items[c("item_id", "global_item_id")]),
+  spoke = list(set_id = "2",
+    items = target_phase_a$items[c("item_id", "global_item_id")]),
+  phase_a = list(hub = list(artifact = reference_phase_a),
+    spoke = list(artifact = target_phase_a)),
+  cross = active_cross, judge = frozen_judge
 )
+completed_phase_b <- start_link_session(link_input)
 ```
 
-For several targets, use the existing `link_multi_spoke` workflow. Phase B
-hard-locks hub locations and retains its shared judge parameters, D-optimal
-selection, probes, and stopping. Rubric labels are not required during linking.
+For several targets, pass a list of prepared inputs sharing the same hub and
+judge to `start_link_session()`. E2/E3 can update hub shapes; rubric calibration
+remains attached to the original Phase A hub artifact. Rubric labels are not
+required during linking. Held-out probe outcomes must stay outside `active_cross`.
 
 ```{r linked-prediction, eval=FALSE}
 if (requireNamespace("ordinal", quietly = TRUE)) {
@@ -341,11 +343,13 @@ if (requireNamespace("ordinal", quietly = TRUE)) {
 ```
 
 Explicit linked prediction returns targets only; `newdata = NULL` predicts the
-original reference items. Every spoke needs an accepted refit and committed
-active linking evidence. The accepted public `theta_link_eap` field retains its
-historical name: Phase B locations are MAP estimates with Laplace/Hessian
-uncertainty, not MCMC posterior means. Validated per-spoke provenance remains
-available, including accepted-state reuse.
+original reference items. Every spoke needs a valid, cross-set identified fit.
+The public `theta_link_eap` field aliases `theta_link_mean`: posterior means for
+E1 and E3-MCMC, MAP locations for E2/E3 Laplace. E1 uncertainty is conditional on
+fixed shapes; E2/E3 include shapes and offset. Predictions restore the original
+hub location origin using its frozen Phase A mean. Estimator identity,
+uncertainty scope and exact evidence provenance accompany the output. Legacy
+anchored-joint Phase B sessions must restart from compatible Phase A inputs.
 
 Prediction validates the original reference IDs, locations/uncertainty, evidence,
 trait, orientation, and canonical fit contract. A matching configuration hash

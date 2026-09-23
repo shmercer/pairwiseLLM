@@ -69,123 +69,40 @@ matrix_import_artifacts <- function(state, spoke_shift = -1.0) {
   out
 }
 
-test_that("regression matrix smoke covers baseline/linking modes and resume paths", {
+test_that("regression matrix preserves ordinary ranking and explicit E1--E3 resume", {
   withr::local_seed(20260214)
-
-  scenarios <- list(
-    list(
-      name = "single_set",
-      items = make_test_items(8),
-      adaptive_config = list(run_mode = "within_set"),
-      linking = FALSE
-    ),
-    list(
-      name = "link_one_spoke",
-      items = matrix_two_set_linking_items(),
-      adaptive_config = list(run_mode = "link_one_spoke", hub_id = 1L, phase_a_mode = "import"),
-      linking = TRUE
-    ),
-    list(
-      name = "link_multi_independent",
-      items = matrix_three_set_linking_items(),
-      adaptive_config = list(
-        run_mode = "link_multi_spoke",
-        hub_id = 1L,
-        phase_a_mode = "import"
-      ),
-      linking = TRUE
-    ),
-    list(
-      name = "link_multi_concurrent",
-      items = matrix_three_set_linking_items(),
-      adaptive_config = list(
-        run_mode = "link_multi_spoke",
-        hub_id = 1L,
-        min_cross_set_pairs_per_spoke_per_refit = 1L,
-        phase_a_mode = "import"
-      ),
-      linking = TRUE
-    )
-  )
-
-  for (sc in scenarios) {
-    session_dir <- file.path(withr::local_tempdir(), sc$name)
-    state <- adaptive_rank_start(sc$items, seed = 42L)
-    fit_stub <- make_deterministic_fit_fn(as.character(state$item_ids))
-    judge <- if (isTRUE(sc$linking)) {
-      matrix_score_judge(stats::setNames(seq_len(nrow(sc$items)), as.character(sc$items$item_id)))
-    } else {
-      make_deterministic_judge("i_wins")
-    }
-
-    cfg <- sc$adaptive_config
-    if (isTRUE(sc$linking)) {
-      cfg <- utils::modifyList(
-        cfg,
-        list(
-          probe_panel_edges = 18L,
-          probe_pairs_per_refit_per_spoke = 1L,
-          probe_edges_min_for_stop = 2L,
-          link_refit_pairs_per_spoke_rule = "fixed"
-        )
-      )
-      state$warm_start_done <- TRUE
-      state$warm_start_pairs <- tibble::tibble(i_id = character(), j_id = character())
-      cfg$phase_a_artifacts <- matrix_import_artifacts(state, spoke_shift = -1)
-    }
-
-    first <- adaptive_rank_run_live(
-      state = state,
-      judge = judge,
-      n_steps = 8L,
-      fit_fn = fit_stub$fit_fn,
-      adaptive_config = cfg,
-      btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
-      session_dir = session_dir,
-      progress = "none"
-    )
-    save_adaptive_session(first, session_dir = session_dir, overwrite = TRUE)
-    resumed <- adaptive_rank_resume(session_dir = session_dir)
-    prev <- resumed$step_log
-    prev_link_rows <- nrow(resumed$link_stage_log %||% tibble::tibble())
-
-    second <- adaptive_rank_run_live(
-      state = resumed,
-      judge = judge,
-      n_steps = if (isTRUE(sc$linking)) 50L else 4L,
-      fit_fn = fit_stub$fit_fn,
-      adaptive_config = cfg,
-      btl_config = test_link_btl_config(list(refit_pairs_target = 1L)),
-      session_dir = session_dir,
-      progress = "none"
-    )
-    expect_true(nrow(second$step_log) >= nrow(prev))
-    expect_equal(second$step_log[seq_len(nrow(prev)), , drop = FALSE], prev)
-
-    if (isTRUE(sc$linking)) {
-      expect_true(any(second$step_log$is_cross_set %in% TRUE))
-      expect_true(nrow(second$link_stage_log) >= 1L)
-      appended_link_rows <- second$link_stage_log[
-        seq.int(from = prev_link_rows + 1L, to = nrow(second$link_stage_log)),
-        ,
-        drop = FALSE
-      ]
-      appended_link_rows <- appended_link_rows[!is.na(appended_link_rows$refit_id), , drop = FALSE]
-      expect_true(nrow(appended_link_rows) >= 1L)
-      complete_probe_rows <- appended_link_rows[
-        !is.na(appended_link_rows$probe_edges_realized_before_refit) &
-          !is.na(appended_link_rows$probe_edges_realized_delta_since_last_refit) &
-          !is.na(appended_link_rows$probe_edges_realized),
-        ,
-        drop = FALSE
-      ]
-      if (nrow(complete_probe_rows) >= 1L) {
-        expect_true(all(
-          as.integer(complete_probe_rows$probe_edges_realized_before_refit) +
-            as.integer(complete_probe_rows$probe_edges_realized_delta_since_last_refit) ==
-            as.integer(complete_probe_rows$probe_edges_realized)
-        ))
-      }
+  state <- adaptive_rank_start(make_test_items(8), seed = 42L)
+  fit_stub <- make_deterministic_fit_fn(state$item_ids)
+  judge <- make_deterministic_judge("i_wins")
+  first <- adaptive_rank_run_live(state, judge, n_steps = 8L, fit_fn = fit_stub$fit_fn,
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)), progress = "none")
+  dir <- withr::local_tempdir()
+  save_adaptive_session(first, dir)
+  resumed <- adaptive_rank_resume(dir)
+  second <- adaptive_rank_run_live(resumed, judge, n_steps = 4L, fit_fn = fit_stub$fit_fn,
+    btl_config = test_link_btl_config(list(refit_pairs_target = 1L)), progress = "none")
+  expect_equal(second$step_log[seq_len(nrow(first$step_log)), ], first$step_log)
+  for (id in c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset")) {
+    for (n_spokes in 1:2) {
+      inputs <- lapply(seq_len(n_spokes), function(k) {
+        args <- link_contract_args(id, 1L)
+        args$spoke$set_id <- as.character(k)
+        args$cross$B_set <- as.character(k)
+        if (id == "joint_offset") {
+          args$phase_a$spoke$observations$A_set <- as.character(k)
+          args$phase_a$spoke$observations$B_set <- as.character(k)
+        }
+        do.call(prepare_link_input, args)
+      })
+      first <- start_link_session(inputs)
+      dir <- withr::local_tempdir()
+      save_adaptive_session(first, dir)
+      resumed <- adaptive_rank_resume(dir)
+      expect_identical(resumed, first)
+      for (input in inputs) expect_identical(resume_link_session(resumed, input), first)
+      expect_equal(nrow(summary(resumed)), n_spokes)
+      expect_true(all(summary(resumed)$fit_valid))
+      expect_identical(adaptive_get_logs(resumed)$link_stage_log, first$link_stage_log)
     }
   }
 })

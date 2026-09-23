@@ -6028,7 +6028,6 @@
       phase_a_within_edges_hub_used = as.integer(anchored_phase_a_hub_edges),
       phase_a_within_edges_spoke_used = as.integer(anchored_phase_a_spoke_edges),
       phase_b_active_edges_used = as.integer(anchored_phase_b_active_edges),
-      anchored_joint_hub_items_fixed_count = as.integer(anchored_hub_fixed_count),
       theta_global_rmse_lagged = as.double(stats_row$theta_global_rmse_lagged %||% NA_real_),
       theta_global_rmse_max_used = as.double(
         stats_row$theta_global_rmse_max_used %||% controller$theta_global_rmse_max %||% 0.05
@@ -6037,13 +6036,6 @@
       probe_edges_min_for_stop_used = as.integer(
         stats_row$probe_edges_min_for_stop_used %||% controller$probe_edges_min_for_stop %||% 80L
       ),
-      anchored_joint_init_state_method = as.character(anchored_init_method),
-      anchored_joint_spoke_prior_scale_used = as.double(anchored_prior_scale_used),
-      anchored_joint_sd_floor_used = as.double(anchored_sd_floor_used),
-      anchored_joint_spoke_prior_fallback_used = as.logical(anchored_prior_fallback_used),
-      anchored_joint_spoke_prior_fallback_sd_used = as.double(anchored_prior_fallback_sd_used),
-      judge_params_fixed_for_anchored_joint = as.logical(anchored_judge_fixed),
-      anchored_joint_free_block_dim = as.integer(anchored_free_block_dim),
       alternative_fit_method = as.character(stats_row$alternative_fit_method %||% NA_character_),
       alternative_uncertainty_approximation = as.character(
         stats_row$alternative_uncertainty_approximation %||% NA_character_
@@ -6129,12 +6121,8 @@
     "probe_quality_pass", "probe_quality_blocker_codes",
     "probe_pred_rmse_lagged", "probe_pred_rmse_max_used", "probe_pred_rmse_pass",
     "phase_a_within_edges_hub_used", "phase_a_within_edges_spoke_used",
-    "phase_b_active_edges_used", "anchored_joint_hub_items_fixed_count",
+    "phase_b_active_edges_used",
     "theta_global_rmse_lagged", "theta_global_rmse_max_used", "theta_global_rmse_pass",
-    "anchored_joint_init_state_method", "anchored_joint_spoke_prior_scale_used",
-    "anchored_joint_sd_floor_used", "anchored_joint_spoke_prior_fallback_used",
-    "anchored_joint_spoke_prior_fallback_sd_used", "judge_params_fixed_for_anchored_joint",
-    "anchored_joint_free_block_dim",
     "resumed_from_session"
   )
   missing <- setdiff(required, names(rows))
@@ -6177,34 +6165,6 @@
   }
   if (any(is.na(rows$link_state_frozen))) {
     rlang::abort("link_stage_log append completeness failure: `link_state_frozen` must be populated.")
-  }
-  anchored_idx <- !is.na(mode) & mode == "anchored_joint"
-  if (any(anchored_idx)) {
-    anchored_required <- c(
-      "phase_a_within_edges_hub_used",
-      "phase_a_within_edges_spoke_used",
-      "phase_b_active_edges_used",
-      "anchored_joint_hub_items_fixed_count",
-      "anchored_joint_init_state_method",
-      "anchored_joint_spoke_prior_scale_used",
-      "anchored_joint_sd_floor_used",
-      "anchored_joint_spoke_prior_fallback_used",
-      "anchored_joint_spoke_prior_fallback_sd_used",
-      "judge_params_fixed_for_anchored_joint",
-      "anchored_joint_free_block_dim"
-    )
-    missing_anchored_values <- anchored_required[vapply(
-      anchored_required,
-      function(col) any(is.na(rows[[col]][anchored_idx])),
-      logical(1)
-    )]
-    if (length(missing_anchored_values) > 0L) {
-      rlang::abort(paste0(
-        "link_stage_log append completeness failure for anchored_joint rows: required columns must be populated: ",
-        paste(missing_anchored_values, collapse = ", "),
-        "."
-      ))
-    }
   }
   .adaptive_assert_link_stage_budget_invariants(rows)
 

@@ -41,3 +41,14 @@ Repeated calls do not sample or mutate state. Integration failure raises
 \code{pairwiseLLM_e3_numerical_error} on failure. E3-MCMC averages the conditional
 probability over its retained raw draws, without new sampling.
 }
+\seealso{
+\code{\link[=prepare_link_input]{prepare_link_input()}}, \code{\link[=fit_link]{fit_link()}}, \code{\link[=predict_link]{predict_link()}}, \code{\link[=start_link_session]{start_link_session()}}
+
+Other linking:
+\code{\link[=fit_link]{fit_link()}},
+\code{\link[=prepare_link_input]{prepare_link_input()}},
+\code{\link[=save_link_session]{save_link_session()}},
+\code{\link[=start_link_session]{start_link_session()}},
+\code{\link[=summary.pairwiseLLM_link_result]{summary.pairwiseLLM_link_result()}}
+}
+\concept{linking}
