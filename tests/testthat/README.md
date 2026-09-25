@@ -177,3 +177,6 @@ Issue #292 extends 0021, 0022 and 9205 with optional `posterior` draws-matrix
 regressions that require no live sampler. From the package root, run the separate
 synthetic CmdStan reference/CSV-recovery smoke explicitly with
 `PAIRWISELLM_TEST_STANDALONE_STAN=true Rscript scripts/standalone-rubric-reference-stan-smoke.R`.
+
+Issue #294 reserves 5110 for shared E2/E3 Gaussian prediction refinement, D020
+scalar references, and old serialized E1/E2/E3 prediction compatibility.
