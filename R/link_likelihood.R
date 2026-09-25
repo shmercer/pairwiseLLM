@@ -94,24 +94,35 @@
   # cannot be missed by the adaptive integrator, even for broad contrasts.
   transition <- max(-8, min(8, -mean / sd))
   cuts <- sort(unique(c(-Inf, min(0, transition), max(0, transition), Inf)))
-  values <- errors <- numeric(length(cuts) - 1L)
-  for (i in seq_along(values)) {
-    ans <- tryCatch(stats::integrate(function(z) stats::dnorm(z) * stats::plogis(mean + sd * z),
-      cuts[i], cuts[i + 1L], rel.tol = control$prediction_rel_tol,
-      abs.tol = control$prediction_abs_tol / length(values), subdivisions = control$subdivisions,
-      stop.on.error = FALSE), error = function(e) NULL)
-    if (is.null(ans) || ans$message != "OK" || !is.finite(ans$value) || !is.finite(ans$abs.error)) {
-      fail("prediction_integration_failure", "Gaussian prediction integration failed.")
+  m <- length(cuts) - 1L
+  # D020 R1: budget both local tolerances conservatively. Segment-level OK
+  # does not guarantee that summed error estimates meet the global bound.
+  for (divisor in c(4, 16, 64, 256)) {
+    values <- errors <- numeric(m)
+    segments_ok <- TRUE
+    for (i in seq_len(m)) {
+      ans <- tryCatch(stats::integrate(function(z) stats::dnorm(z) * stats::plogis(mean + sd * z),
+        cuts[i], cuts[i + 1L], rel.tol = control$prediction_rel_tol / (divisor * m),
+        abs.tol = control$prediction_abs_tol / (divisor * m), subdivisions = control$subdivisions,
+        stop.on.error = FALSE), error = function(e) NULL)
+      if (is.null(ans) || ans$message != "OK" || !is.finite(ans$value) || !is.finite(ans$abs.error)) {
+        segments_ok <- FALSE
+        break
+      }
+      values[i] <- ans$value
+      errors[i] <- ans$abs.error
     }
-    values[i] <- ans$value
-    errors[i] <- ans$abs.error
+    value <- sum(values)
+    if (segments_ok && is.finite(value) && value >= 0 && value <= 1 + control$prediction_abs_tol &&
+      sum(errors) <= max(control$prediction_abs_tol, control$prediction_rel_tol * abs(value))) {
+      return(min(1, value))
+    }
   }
-  value <- sum(values)
-  if (sum(errors) > max(control$prediction_abs_tol, control$prediction_rel_tol * abs(value)) ||
-    !is.finite(value) || value < 0 || value > 1 + control$prediction_abs_tol) {
-    fail("prediction_integration_failure", "Gaussian prediction did not meet numerical tolerances.")
-  }
-  min(1, value)
+  fail("prediction_integration_failure", if (segments_ok) {
+    "Gaussian prediction did not meet numerical tolerances."
+  } else {
+    "Gaussian prediction integration failed."
+  })
 }
 
 .link_gaussian_predict <- function(state, pairs, input, integrate, fail) {

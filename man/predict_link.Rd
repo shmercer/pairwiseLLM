@@ -35,6 +35,11 @@ its joint Laplace approximation, including all item/offset cross-covariances.
 Deterministic adaptive quadrature over the standard Normal variable splits
 at zero and the logistic transition (bounded to plus/minus eight SDs to avoid
 excessively long finite intervals); both infinite tails are integrated.
+Local relative and absolute error budgets divide the requested global
+tolerances by the segment count and, successively, 4, 16, 64, and 256.
+The first valid attempt whose summed error estimate meets the original
+global absolute/relative tolerance is returned; exhaustion raises a
+numerical error. Refinement does not change saved controls or fit state.
 Degenerate zero-variance contrasts use the exact conditional probability.
 Repeated calls do not sample or mutate state. Integration failure raises
 \code{pairwiseLLM_e2_numerical_error}. E3 MAP uses the same integration with

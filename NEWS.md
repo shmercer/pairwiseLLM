@@ -1,5 +1,10 @@
 # pairwiseLLM (development version)
 
+* E2/E3 Gaussian prediction uses deterministic, error-budgeted quadrature
+  refinement to resolve global-tolerance failures on valid saved fits (#294).
+  The prediction target and requested global tolerances are unchanged; old
+  serialized fits remain usable without refitting or changing their hashes.
+
 * Sampler draws are now stored as plain numeric matrices in BTL fit contracts,
   preserving values and item alignment. This fixes standalone linked-reference
   preparation for real CmdStan fits without relaxing serialization checks or
