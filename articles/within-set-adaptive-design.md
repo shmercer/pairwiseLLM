@@ -423,7 +423,7 @@ invariants and duplicate limits remain active.
 
 ### Fallback ladder
 
-If no candidate survives, the selector tries the following deterministic
+If an attempt does not select a pair, the selector tries the following
 sequence:
 
 1.  `base`: normal stage bounds and duplicate policy;
@@ -437,9 +437,17 @@ sequence:
 
 `global_safe` does not discard stage identity: long pairs must still be
 long, anchor pairs must still contain exactly one anchor, and the other
-hard constraints remain. If the full ladder fails, the failed step
-records `candidate_starved = TRUE`. The round controller may advance
-past a starved stage; exhaustion of all stages stops a within-set run.
+hard constraints remain. Occasionally, exploration can miss every
+available pair because the sampled items have no eligible partners. If
+no pair has been selected after all five attempts, but an earlier
+attempt had eligible pairs, the controller uses the usual exploitation
+rule to choose from the last nonempty pool. This final choice respects
+the same pairing limits and leaves earlier successful selections
+unchanged.
+
+If none of the attempts has any eligible pairs, the failed step records
+`candidate_starved = TRUE`. The round controller may advance past a
+starved stage; exhaustion of all stages stops a within-set run.
 
 ## Global identification and hybrid long-link tapering
 

@@ -193,7 +193,7 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 #> Task-specific warm-start model: synthetic-a 
 #> Target: within-task standardized BT/BTL theta (sample SD)
 #> Training rows: 15 | Retained predictors: 20 | Nonzero coefficients: 2 
-#> Engine: glmnet | Version: 5.0 
+#> Engine: glmnet | Version: 5.1 
 #> Alpha: 1 | Lambda: 0.02274379 
 #> Calibration: oof_linear | Audit: full 
 #> Nested validation: Pearson r = 0.9897764 | RMSE = 0.1600619 | MAE = 0.08329452 
@@ -245,7 +245,7 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 #> [1] "glmnet"
 #> 
 #> $engine_version
-#> [1] "5.0"
+#> [1] "5.1"
 #> 
 #> $validation
 #> $validation$pearson_r

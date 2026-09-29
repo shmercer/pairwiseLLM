@@ -692,8 +692,8 @@ invariants and duplicate limits remain active.</p>
 <div class="section level3">
 <h3 id="fallback-ladder">Fallback ladder<a class="anchor" aria-label="anchor" href="#fallback-ladder"></a>
 </h3>
-<p>If no candidate survives, the selector tries the following
-deterministic sequence:</p>
+<p>If an attempt does not select a pair, the selector tries the
+following sequence:</p>
 <ol style="list-style-type: decimal">
 <li>
 <code>base</code>: normal stage bounds and duplicate policy;</li>
@@ -712,10 +712,17 @@ domain.</li>
 </ol>
 <p><code>global_safe</code> does not discard stage identity: long pairs
 must still be long, anchor pairs must still contain exactly one anchor,
-and the other hard constraints remain. If the full ladder fails, the
-failed step records <code>candidate_starved = TRUE</code>. The round
-controller may advance past a starved stage; exhaustion of all stages
-stops a within-set run.</p>
+and the other hard constraints remain. Occasionally, exploration can
+miss every available pair because the sampled items have no eligible
+partners. If no pair has been selected after all five attempts, but an
+earlier attempt had eligible pairs, the controller uses the usual
+exploitation rule to choose from the last nonempty pool. This final
+choice respects the same pairing limits and leaves earlier successful
+selections unchanged.</p>
+<p>If none of the attempts has any eligible pairs, the failed step
+records <code>candidate_starved = TRUE</code>. The round controller may
+advance past a starved stage; exhaustion of all stages stops a
+within-set run.</p>
 </div>
 </div>
 <div class="section level2">

@@ -2,6 +2,13 @@
 
 ## pairwiseLLM (development version)
 
+- Hybrid pairing no longer stops when exploration misses pairs that are
+  still eligible
+  ([\#296](https://github.com/shmercer/pairwiseLLM/issues/296)). After
+  trying every fallback, it uses the usual exploitation rule to choose
+  from the last eligible pool. Existing successful selections, pairing
+  limits and saved-session formats are unchanged.
+
 - E2/E3 Gaussian prediction uses deterministic, error-budgeted
   quadrature refinement to resolve global-tolerance failures on valid
   saved fits

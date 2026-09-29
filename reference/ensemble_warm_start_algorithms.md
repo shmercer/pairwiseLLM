@@ -191,7 +191,7 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 #> [1] "glmnet"
 #> 
 #> $provenance$model$components$elastic_net$engine_version
-#> [1] "5.0"
+#> [1] "5.1"
 #> 
 #> $provenance$model$components$elastic_net$cv_digest
 #> [1] "d34bdd49b449179566091e9ca4e9b27b"
@@ -256,7 +256,7 @@ if (requireNamespace("glmnet", quietly = TRUE) &&
 #> 
 #> 
 #> $digest
-#> [1] "5bae688cb1315d2106159b013b3e01ab"
+#> [1] "e7deb21e0dd50fb2442fe59534759ce9"
 #> 
 #> attr(,"class")
 #> [1] "pairwiseLLM_warm_prior"

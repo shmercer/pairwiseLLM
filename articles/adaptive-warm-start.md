@@ -533,7 +533,7 @@ summary(ensemble)
 #> [1] "glmnet"
 #> 
 #> $components$assessment_a$engine_version
-#> [1] "5.0"
+#> [1] "5.1"
 #> 
 #> $components$assessment_a$validation
 #> $components$assessment_a$validation$pearson_r
@@ -612,7 +612,7 @@ summary(ensemble)
 #> [1] "glmnet"
 #> 
 #> $components$assessment_b$engine_version
-#> [1] "5.0"
+#> [1] "5.1"
 #> 
 #> $components$assessment_b$validation
 #> $components$assessment_b$validation$pearson_r
