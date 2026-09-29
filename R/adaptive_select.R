@@ -1260,6 +1260,50 @@ adaptive_defaults <- function(N) {
   list(candidates = cand[ord, , drop = FALSE], mode = "near_tie")
 }
 
+#' @keywords internal
+#' @noRd
+.adaptive_select_exploitation <- function(cand, state, round, generation_stage,
+                                          stage_committed_so_far, stage_quota,
+                                          controller, is_link_mode, utility_mode) {
+  if (!isTRUE(is_link_mode) &&
+    identical(generation_stage, "local_link") &&
+    isTRUE(controller$global_identified)) {
+    prioritized <- .adaptive_local_priority_select(
+      cand = cand,
+      state = state,
+      round = round,
+      stage_committed_so_far = stage_committed_so_far %||% 0L,
+      stage_quota = stage_quota %||% nrow(cand),
+      defaults = controller
+    )
+    cand <- prioritized$candidates
+    local_priority_mode <- prioritized$mode
+  } else if (!isTRUE(is_link_mode) && identical(generation_stage, "local_link")) {
+    local_priority_mode <- "standard"
+  } else {
+    local_priority_mode <- NA_character_
+  }
+  utility_col <- .adaptive_resolve_selection_column(utility_mode)
+  utility <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
+    as.double(cand[[utility_col]])
+  } else {
+    rep_len(NA_real_, nrow(cand))
+  }
+  if (!any(is.finite(utility))) {
+    tie_utility <- if ("u0" %in% names(cand)) as.double(cand$u0) else rep_len(NA_real_, nrow(cand))
+    if (any(is.finite(tie_utility))) {
+      tie_utility[!is.finite(tie_utility)] <- -Inf
+      order_idx <- order(-tie_utility, cand$i, cand$j)
+    } else {
+      order_idx <- order(cand$i, cand$j)
+    }
+  } else {
+    utility[!is.finite(utility)] <- -Inf
+    order_idx <- order(-utility, cand$i, cand$j)
+  }
+  list(selected = cand[order_idx[[1L]], , drop = FALSE], local_priority_mode = local_priority_mode)
+}
+
 .adaptive_select_partner <- function(candidates, i_id, mu, recent_deg, mode, rank_index = NULL) {
   cand <- candidates[candidates$i == i_id | candidates$j == i_id, , drop = FALSE]
   if (nrow(cand) == 0L) return(NULL)
@@ -2246,6 +2290,7 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
   last_star_override_used <- FALSE
   last_star_override_reason <- NA_character_
   selected_pair <- NULL
+  last_viable <- NULL
   selected_stage <- NULL
   explore_mode <- NA_character_
   explore_reason <- NA_character_
@@ -2474,6 +2519,23 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
       }
       explore_rate_used <- as.double(explore_rate)
 
+      # Keep the filtered pool before stochastic coverage/exploration can miss it.
+      # Empty later stages must not discard an earlier viable pool (e.g. dup_relax).
+      last_viable <- list(
+        candidates = cand,
+        stage = stage,
+        context = stage_ctx,
+        spoke_attempt = spoke_attempt,
+        counts = last_counts,
+        star_caps = last_star_caps,
+        long_gate_pass = last_long_gate_pass,
+        long_gate_reason = last_long_gate_reason,
+        star_override_used = last_star_override_used,
+        star_override_reason = last_star_override_reason,
+        recent_deg = recent_deg,
+        explore_rate = explore_rate_used
+      )
+
       eligible_ids <- if (.adaptive_reservoir_active(state)) {
         sort(unique(c(cand$i, cand$j)))
       } else {
@@ -2551,48 +2613,17 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
         }
         selected_pair <- selected
       } else {
-        if (!isTRUE(is_link_mode) &&
-          identical(attempt_generation_stage, "local_link") &&
-          isTRUE(controller$global_identified)) {
-          prioritized <- .adaptive_local_priority_select(
-            cand = cand,
-            state = state,
-            round = round,
-            stage_committed_so_far = attempt_stage_committed_so_far %||% 0L,
-            stage_quota = attempt_stage_quota %||% nrow(cand),
-            defaults = controller
+        exploited <- .adaptive_select_exploitation(
+          cand, state, round, attempt_generation_stage,
+          attempt_stage_committed_so_far, attempt_stage_quota,
+          controller, is_link_mode, .adaptive_selection_utility_mode(
+            run_mode = controller$run_mode,
+            is_cross_set = isTRUE(is_link_mode) && isTRUE(link_phase_b),
+            link_estimation_mode = link_controller$link_estimation_mode %||% controller$link_estimation_mode
           )
-          cand <- prioritized$candidates
-          stage_local_priority_mode <- prioritized$mode
-        } else if (!isTRUE(is_link_mode) && identical(attempt_generation_stage, "local_link")) {
-          stage_local_priority_mode <- "standard"
-        } else {
-          stage_local_priority_mode <- NA_character_
-        }
-        selected_utility_mode <- .adaptive_selection_utility_mode(
-          run_mode = controller$run_mode,
-          is_cross_set = isTRUE(is_link_mode) && isTRUE(link_phase_b),
-          link_estimation_mode = link_controller$link_estimation_mode %||% controller$link_estimation_mode
         )
-        utility_col <- .adaptive_resolve_selection_column(selected_utility_mode)
-        utility <- if (!is.na(utility_col) && utility_col %in% names(cand)) {
-          as.double(cand[[utility_col]])
-        } else {
-          rep_len(NA_real_, nrow(cand))
-        }
-        if (!any(is.finite(utility))) {
-          tie_utility <- if ("u0" %in% names(cand)) as.double(cand$u0) else rep_len(NA_real_, nrow(cand))
-          if (any(is.finite(tie_utility))) {
-            tie_utility[!is.finite(tie_utility)] <- -Inf
-            order_idx <- order(-tie_utility, cand$i, cand$j)
-          } else {
-            order_idx <- order(cand$i, cand$j)
-          }
-        } else {
-          utility[!is.finite(utility)] <- -Inf
-          order_idx <- order(-utility, cand$i, cand$j)
-        }
-        selected_pair <- cand[order_idx[[1L]], , drop = FALSE]
+        selected_pair <- exploited$selected
+        stage_local_priority_mode <- exploited$local_priority_mode
       }
 
       is_explore_step <- stage_is_explore
@@ -2611,6 +2642,38 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
     if (isTRUE(stage_selected)) {
       break
     }
+  }
+
+  # Exhaust the normal ladder before recovering; successful selections stay intact.
+  if ((is.null(selected_pair) || nrow(selected_pair) == 0L) && !is.null(last_viable)) {
+    retained <- last_viable
+    exploited <- .adaptive_select_exploitation(
+      retained$candidates, state, round, retained$context$generation_stage,
+      retained$context$stage_committed_so_far, retained$context$stage_quota,
+      controller, is_link_mode, .adaptive_selection_utility_mode(
+        run_mode = controller$run_mode,
+        is_cross_set = isTRUE(is_link_mode) && isTRUE(link_phase_b),
+        link_estimation_mode = link_controller$link_estimation_mode %||% controller$link_estimation_mode
+      )
+    )
+    selected_pair <- exploited$selected
+    selected_stage <- retained$stage
+    selected_link_spoke_attempt <- as.integer(retained$spoke_attempt)
+    selected_round_stage <- as.character(retained$context$round_stage)
+    selected_stage_quota <- as.integer(retained$context$stage_quota)
+    selected_stage_committed_so_far <- as.integer(retained$context$stage_committed_so_far)
+    last_counts <- retained$counts
+    last_star_caps <- retained$star_caps
+    last_long_gate_pass <- retained$long_gate_pass
+    last_long_gate_reason <- retained$long_gate_reason
+    last_star_override_used <- retained$star_override_used
+    last_star_override_reason <- retained$star_override_reason
+    recent_deg <- retained$recent_deg
+    explore_rate_used <- retained$explore_rate
+    is_explore_step <- FALSE
+    explore_mode <- NA_character_
+    explore_reason <- NA_character_
+    local_priority_mode <- exploited$local_priority_mode
   }
 
   if (is.null(selected_pair) || nrow(selected_pair) == 0L) {

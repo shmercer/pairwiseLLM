@@ -180,3 +180,6 @@ synthetic CmdStan reference/CSV-recovery smoke explicitly with
 
 Issue #294 reserves 5110 for shared E2/E3 Gaussian prediction refinement, D020
 scalar references, and old serialized E1/E2/E3 prediction compatibility.
+
+Issue #296 reserves 5111 for terminal hybrid-selector recovery, exact successful
+selection baselines and pre-fix saved-session compatibility. All fixtures are synthetic.
