@@ -4,15 +4,19 @@
 \alias{summarize_adaptive}
 \title{Summarize an adaptive state.}
 \usage{
-summarize_adaptive(state)
+summarize_adaptive(state, include_starvation = FALSE)
 }
 \arguments{
 \item{state}{Adaptive state.}
+
+\item{include_starvation}{Logical; append a \code{starvation_diagnostic}
+list-column containing terminal hybrid exhaustion evidence. Default FALSE.}
 }
 \value{
 A one-row tibble with columns \code{n_items},
 \code{steps_attempted}, \code{committed_pairs}, \code{n_refits},
-\code{last_stop_decision}, and \code{last_stop_reason}.
+\code{last_stop_decision}, and \code{last_stop_reason}, plus the optional
+\code{starvation_diagnostic} list-column.
 }
 \description{
 Summarize an adaptive state.
@@ -21,6 +25,23 @@ Summarize an adaptive state.
 Returns a compact run-level summary from canonical logs: attempted steps,
 committed comparisons, refit count, and last stop decision/reason. This is a
 pure view and does not recompute model quantities.
+
+The optional diagnostic is NULL when no current terminal evidence is available,
+including sessions saved before this diagnostic was introduced. Otherwise it
+contains a classification, originating step, committed count, active item-set
+scope, maximum observations per pair, and a remaining arithmetic capacity upper
+bound. The bound includes bootstrap history and ignores pairing restrictions;
+it is not a feasibility forecast. Sparse replay counts only unused allowed edges.
+The attempt table retains each failed stage's fallback policies, filter counts,
+pre-exposure hard-filter boundary, admissible candidate count, and bounded-search
+flag. Counts refer to examined pools; overlapping pools must not be summed.
+A missing bounded-search flag means its extent was not recorded.
+Classification distinguishes pair-capacity exhaustion, duplicate-policy
+exhaustion, exposure/star-cap exhaustion, other or mixed restrictions, unknown
+evidence, and selection inconsistency (surviving candidates despite starvation).
+Only zero arithmetic capacity establishes global pair-capacity exhaustion.
+Other classifications describe observed filter collapse, not proof of global
+infeasibility. Existing stop reasons and canonical logs are unchanged.
 }
 \examples{
 state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)

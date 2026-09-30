@@ -1752,6 +1752,7 @@ adaptive_defaults <- function(N) {
   if (n_generated == 0L) {
     return(list(
       selected = NULL,
+      n_candidates_before_exposure_filters = 0L,
       counts = list(
         n_candidates_generated = 0L,
         n_candidates_after_route_filters = as.integer(filter_counts$n_candidates_after_route_filters %||% NA_integer_),
@@ -1955,6 +1956,7 @@ adaptive_defaults <- function(N) {
 
   list(
     selected = candidates,
+    n_candidates_before_exposure_filters = as.integer(nrow(candidates_hard)),
     counts = list(
       n_candidates_generated = n_generated,
       n_candidates_after_route_filters = as.integer(filter_counts$n_candidates_after_route_filters %||% NA_integer_),
@@ -2192,7 +2194,7 @@ adaptive_defaults <- function(N) {
 
 #' @keywords internal
 #' @noRd
-select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
+select_next_pair <- function(state, step_id = NULL, candidates = NULL, diagnostic_env = NULL) {
   if (inherits(state, c("pairwiseLLM_link_session", "pairwiseLLM_link_result"))) {
     .link_selector_unvalidated()
   }
@@ -2491,9 +2493,16 @@ select_next_pair <- function(state, step_id = NULL, candidates = NULL) {
             round = round, history_state = history_state, counts = counts,
             step_id = step_id, seed_base = seed_base, candidates = stage_candidates)
         }
+        stage_out$diagnostic_generation <- attr(stage_candidates, "candidate_filter_counts", exact = TRUE)
         if (!is.na(stage_filter_memo_key)) {
           stage_filter_memo[[stage_filter_memo_key]] <- stage_out
         }
+      }
+      if (!is.null(diagnostic_env)) {
+        diagnostic_env$attempts <- dplyr::bind_rows(
+          diagnostic_env$attempts,
+          .adaptive_starvation_attempt(stage_out, step_id, attempt_round_stage, stage)
+        )
       }
       last_counts <- stage_out$counts
       last_star_caps <- stage_out$star_caps

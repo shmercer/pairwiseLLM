@@ -124,7 +124,11 @@ under the relaxed near-tie fallback: \code{3L} (historical default) or \code{2L}
 For directed-table replay, use \code{2L} with \code{\link[=make_adaptive_judge_replay]{make_adaptive_judge_replay()}} for
 two collected orientations. The ordinary ceiling remains two; direct
 strategies already cap at two. Automatic Phase B selection is unavailable.
-This setting persists; sparse reservoirs independently enforce a one-use ceiling.}
+This setting persists; sparse reservoirs independently enforce a one-use ceiling.
+A requested budget may be unreachable even below the arithmetic multiplicity
+ceiling because third observations are conditional and other filters remain active.
+Use \code{\link[=summarize_adaptive]{summarize_adaptive()}} with \code{include_starvation = TRUE} for recorded
+terminal hybrid evidence.}
 \item{\code{global_identified_reliability_min}}{Global EAP reliability threshold
 used to mark the run as globally identified after a refit. Default is
 \code{0.80}.}
