@@ -380,7 +380,8 @@ If an attempt does not select a pair, the selector tries the following sequence:
 4. `dup_relax`: permit the conditional third observation when the configured ceiling is three; and
 5. `global_safe`: consider the broadest stage-compatible domain.
 
-`global_safe` does not discard stage identity: long pairs must still be long, anchor pairs must
+`global_safe` uses the ordinary two-observation limit; the conditional third observation is
+considered in the preceding `dup_relax` attempt. It does not discard stage identity: long pairs must still be long, anchor pairs must
 still contain exactly one anchor, and the other hard constraints remain. Occasionally, exploration
 can miss every available pair because the sampled items have no eligible partners. If no pair has
 been selected after all five attempts, but an earlier attempt had eligible pairs, the controller
@@ -390,6 +391,20 @@ the same pairing limits and leaves earlier successful selections unchanged.
 If none of the attempts has any eligible pairs, the failed step records
 `candidate_starved = TRUE`. The round controller may advance past a starved stage; exhaustion of
 all stages stops a within-set run.
+
+A fixed budget is therefore an upper limit, not a promise that the run will reach that number
+of comparisons. For example, 50 items have 1,225 distinct pairs. Allowing two observations of
+every pair gives 2,450 observations, but the rules governing which pairs can be compared can
+stop a run earlier. Allowing selected third observations does not make all 3,675 observations
+available. Passing the model's sampling checks does not change those pairing restrictions.
+
+Use `summarize_adaptive(state, include_starvation = TRUE)` to inspect a terminal hybrid report.
+It separates the unused arithmetic capacity from the candidate counts in each attempted pool.
+The report also retains earlier fallbacks, so the last attempt does not hide what happened when
+third observations were considered. A zero arithmetic bound establishes that all permitted
+observation slots have been used; a positive bound does not establish that another comparison
+is currently allowed. For sampled pools, the report describes only the pairs examined.
+
 
 ## Global identification and hybrid long-link tapering
 

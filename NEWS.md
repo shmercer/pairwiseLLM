@@ -1,5 +1,11 @@
 # pairwiseLLM (development version)
 
+* Hybrid starvation reports now distinguish unused arithmetic pair capacity from
+  the restrictions encountered in each attempted candidate pool (#298). Use
+  `summarize_adaptive(state, include_starvation = TRUE)` for the optional report.
+  Fixed-budget guidance explains why repeat rules can stop a run early; selection
+  rules, default summaries and existing log formats are unchanged.
+
 * Hybrid pairing no longer stops when exploration misses pairs that are still
   eligible (#296). After trying every fallback, it uses the usual exploitation
   rule to choose from the last eligible pool. Existing successful selections,

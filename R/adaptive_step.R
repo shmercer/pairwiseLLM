@@ -869,14 +869,17 @@ run_one_step <- function(state, judge, ...) {
   phase_ctx <- .adaptive_link_phase_context(state, controller = controller)
   .adaptive_assert_step_entry_invariants(state, controller = controller, phase_ctx = phase_ctx)
 
+  diagnostic_env <- new.env(parent = emptyenv())
   if (.adaptive_warm_start_active(state)) {
     selection <- .adaptive_warm_start_selection(state, step_id = step_id)
   } else {
     if (.adaptive_pairing_strategy(state) == "hybrid") {
       state <- .adaptive_refresh_round_anchors(state)
     }
-    selection <- select_next_pair(state, step_id = step_id)
+    selection <- select_next_pair(state, step_id = step_id, diagnostic_env = diagnostic_env)
   }
+
+  state <- .adaptive_record_starvation(state, selection, diagnostic_env$attempts, step_id)
 
   is_valid <- FALSE
   invalid_reason <- NA_character_

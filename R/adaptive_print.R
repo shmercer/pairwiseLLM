@@ -858,10 +858,31 @@ adaptive_results_history <- function(state, committed_only = TRUE) {
 #' pure view and does not recompute model quantities.
 #'
 #' @param state Adaptive state.
+#' @param include_starvation Logical; append a \code{starvation_diagnostic}
+#'   list-column containing terminal hybrid exhaustion evidence. Default FALSE.
+#'
+#' @details
+#' The optional diagnostic is NULL when no current terminal evidence is available,
+#' including sessions saved before this diagnostic was introduced. Otherwise it
+#' contains a classification, originating step, committed count, active item-set
+#' scope, maximum observations per pair, and a remaining arithmetic capacity upper
+#' bound. The bound includes bootstrap history and ignores pairing restrictions;
+#' it is not a feasibility forecast. Sparse replay counts only unused allowed edges.
+#' The attempt table retains each failed stage's fallback policies, filter counts,
+#' pre-exposure hard-filter boundary, admissible candidate count, and bounded-search
+#' flag. Counts refer to examined pools; overlapping pools must not be summed.
+#' A missing bounded-search flag means its extent was not recorded.
+#' Classification distinguishes pair-capacity exhaustion, duplicate-policy
+#' exhaustion, exposure/star-cap exhaustion, other or mixed restrictions, unknown
+#' evidence, and selection inconsistency (surviving candidates despite starvation).
+#' Only zero arithmetic capacity establishes global pair-capacity exhaustion.
+#' Other classifications describe observed filter collapse, not proof of global
+#' infeasibility. Existing stop reasons and canonical logs are unchanged.
 #'
 #' @return A one-row tibble with columns \code{n_items},
 #'   \code{steps_attempted}, \code{committed_pairs}, \code{n_refits},
-#'   \code{last_stop_decision}, and \code{last_stop_reason}.
+#'   \code{last_stop_decision}, and \code{last_stop_reason}, plus the optional
+#'   \code{starvation_diagnostic} list-column.
 #'
 #' @examples
 #' state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
@@ -871,10 +892,13 @@ adaptive_results_history <- function(state, committed_only = TRUE) {
 #'
 #' @family adaptive ranking
 #' @export
-summarize_adaptive <- function(state) {
+summarize_adaptive <- function(state, include_starvation = FALSE) {
   .link_reject_legacy(state)
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
+  }
+  if (!is.logical(include_starvation) || length(include_starvation) != 1L || is.na(include_starvation)) {
+    rlang::abort("`include_starvation` must be TRUE or FALSE.")
   }
   step_log <- adaptive_step_log(state)
   round_log <- adaptive_round_log(state)
@@ -883,7 +907,7 @@ summarize_adaptive <- function(state) {
   last_stop_decision <- as.logical(state$meta$stop_decision %||% NA)
   last_stop_reason <- as.character(state$meta$stop_reason %||% NA_character_)
 
-  tibble::tibble(
+  out <- tibble::tibble(
     n_items = as.integer(state$n_items),
     steps_attempted = as.integer(nrow(step_log)),
     committed_pairs = as.integer(committed),
@@ -891,6 +915,8 @@ summarize_adaptive <- function(state) {
     last_stop_decision = as.logical(last_stop_decision),
     last_stop_reason = as.character(last_stop_reason)
   )
+  if (include_starvation) out$starvation_diagnostic <- list(.adaptive_terminal_starvation(state))
+  out
 }
 
 .adaptive_print_compact_values <- function(x) {
@@ -1097,6 +1123,7 @@ print.adaptive_state <- function(x, ...) {
     lines <- c(lines, paste0("last stop: ", decision, suffix))
   }
 
+  lines <- c(lines, .adaptive_starvation_print(x))
   cat(paste(lines, collapse = "\n"))
   invisible(x)
 }

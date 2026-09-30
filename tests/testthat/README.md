@@ -183,3 +183,7 @@ scalar references, and old serialized E1/E2/E3 prediction compatibility.
 
 Issue #296 reserves 5111 for terminal hybrid-selector recovery, exact successful
 selection baselines and pre-fix saved-session compatibility. All fixtures are synthetic.
+
+Issue #298 reserves 5112 for terminal hybrid starvation evidence, scoped capacity
+bounds, unchanged selection, and saved-session reporting. Fixtures are synthetic
+and provider-free; no sampler or study artifacts are required.

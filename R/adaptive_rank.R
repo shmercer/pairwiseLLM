@@ -928,7 +928,11 @@ make_adaptive_judge_llm <- function(
 #'     For directed-table replay, use `2L` with [make_adaptive_judge_replay()] for
 #'     two collected orientations. The ordinary ceiling remains two; direct
 #'     strategies already cap at two. Automatic Phase B selection is unavailable.
-#'     This setting persists; sparse reservoirs independently enforce a one-use ceiling.}
+#'     This setting persists; sparse reservoirs independently enforce a one-use ceiling.
+#'     A requested budget may be unreachable even below the arithmetic multiplicity
+#'     ceiling because third observations are conditional and other filters remain active.
+#'     Use [summarize_adaptive()] with `include_starvation = TRUE` for recorded
+#'     terminal hybrid evidence.}
 #'   \item{`global_identified_reliability_min`}{Global EAP reliability threshold
 #'     used to mark the run as globally identified after a refit. Default is
 #'     `0.80`.}

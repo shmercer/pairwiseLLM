@@ -96,6 +96,7 @@ Collate:
     'adaptive_schemas.R'
     'adaptive_select.R'
     'adaptive_simulation_harness.R'
+    'adaptive_starvation.R'
     'adaptive_state.R'
     'adaptive_step.R'
     'adaptive_trueskill.R'
