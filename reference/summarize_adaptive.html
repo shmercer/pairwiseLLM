@@ -59,7 +59,7 @@
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">summarize_adaptive</span><span class="op">(</span><span class="va">state</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">summarize_adaptive</span><span class="op">(</span><span class="va">state</span>, include_starvation <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -69,18 +69,40 @@
 <dl><dt id="arg-state">state<a class="anchor" aria-label="anchor" href="#arg-state"></a></dt>
 <dd><p>Adaptive state.</p></dd>
 
+
+<dt id="arg-include-starvation">include_starvation<a class="anchor" aria-label="anchor" href="#arg-include-starvation"></a></dt>
+<dd><p>Logical; append a <code>starvation_diagnostic</code>
+list-column containing terminal hybrid exhaustion evidence. Default FALSE.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A one-row tibble with columns <code>n_items</code>,
 <code>steps_attempted</code>, <code>committed_pairs</code>, <code>n_refits</code>,
-<code>last_stop_decision</code>, and <code>last_stop_reason</code>.</p>
+<code>last_stop_decision</code>, and <code>last_stop_reason</code>, plus the optional
+<code>starvation_diagnostic</code> list-column.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>Returns a compact run-level summary from canonical logs: attempted steps,
 committed comparisons, refit count, and last stop decision/reason. This is a
 pure view and does not recompute model quantities.</p>
+<p>The optional diagnostic is NULL when no current terminal evidence is available,
+including sessions saved before this diagnostic was introduced. Otherwise it
+contains a classification, originating step, committed count, active item-set
+scope, maximum observations per pair, and a remaining arithmetic capacity upper
+bound. The bound includes bootstrap history and ignores pairing restrictions;
+it is not a feasibility forecast. Sparse replay counts only unused allowed edges.
+The attempt table retains each failed stage's fallback policies, filter counts,
+pre-exposure hard-filter boundary, admissible candidate count, and bounded-search
+flag. Counts refer to examined pools; overlapping pools must not be summed.
+A missing bounded-search flag means its extent was not recorded.
+Classification distinguishes pair-capacity exhaustion, duplicate-policy
+exhaustion, exposure/star-cap exhaustion, other or mixed restrictions, unknown
+evidence, and selection inconsistency (surviving candidates despite starvation).
+Only zero arithmetic capacity establishes global pair-capacity exhaustion.
+Other classifications describe observed filter collapse, not proof of global
+infeasibility. Existing stop reasons and canonical logs are unchanged.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

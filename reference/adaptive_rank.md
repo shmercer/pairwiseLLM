@@ -186,7 +186,13 @@ adaptive_rank(
       for two collected orientations. The ordinary ceiling remains two;
       direct strategies already cap at two. Automatic Phase B selection
       is unavailable. This setting persists; sparse reservoirs
-      independently enforce a one-use ceiling.
+      independently enforce a one-use ceiling. A requested budget may be
+      unreachable even below the arithmetic multiplicity ceiling because
+      third observations are conditional and other filters remain
+      active. Use
+      [`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md)
+      with `include_starvation = TRUE` for recorded terminal hybrid
+      evidence.
 
   `global_identified_reliability_min`
 
@@ -826,10 +832,10 @@ head(out$logs$step_log)
 #> # A tibble: 4 × 97
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-09-29 18:31:59       1     1     4 S01   S04       4     1 S04  
-#> 2       2 2026-09-29 18:31:59       2     4     8 S04   S08       8     4 S08  
-#> 3       3 2026-09-29 18:31:59       3     8     2 S08   S02       2     8 S02  
-#> 4       4 2026-09-29 18:31:59       4     2     6 S02   S06       6     2 S06  
+#> 1       1 2026-09-30 17:14:37       1     1     4 S01   S04       4     1 S04  
+#> 2       2 2026-09-30 17:14:37       2     4     8 S04   S08       8     4 S08  
+#> 3       3 2026-09-30 17:14:37       3     8     2 S08   S02       2     8 S02  
+#> 4       4 2026-09-30 17:14:37       4     2     6 S02   S06       6     2 S06  
 #> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,

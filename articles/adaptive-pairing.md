@@ -144,7 +144,12 @@ out <- adaptive_rank(
 `n_steps` is a maximum number of attempted steps for that call, not a
 promise that every attempt will commit and not a global stopping
 criterion. A run can return earlier after Bayesian stopping or candidate
-starvation.
+starvation. A requested comparison budget does not guarantee that enough
+permitted pairs remain to reach it. Hybrid usually allows two
+observations of a pair; a third is allowed only for selected close
+comparisons. These repeat rules can stop a run even when the requested
+budget is below the maximum obtained by allowing three observations of
+every pair.
 
 ### Inspect the ranking and stopping state
 
@@ -791,15 +796,37 @@ requires the same IDs in the same order as the saved state.
 `llm_status_code`, and `llm_error_message` in
 [`adaptive_step_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_step_log.md).
 
-**The run reports candidate starvation.** The hybrid selector applies
-its implemented within-stage fallbacks before declaring a stage starved.
-A terminal `"candidate_starvation"` means no eligible pair remained
-after those fallbacks. This can occur with very small or heavily
-repeated designs; inspect `fallback_path`, `starvation_reason`, and
-committed pair counts rather than treating it as Bayesian convergence.
-Direct strategies instead stop when the chosen minimum-degree focal item
-has no legal partner; they do not search other focal items or invoke
-hybrid fallbacks.
+**The run reports candidate starvation.** Hybrid tries its fallbacks
+before stopping when none of the examined pairs can be selected. Repeat
+rules or limits on how often an item is used can leave no permitted
+comparison before the requested budget is reached. Passing the Bayesian
+model checks does not establish that another pair is available, and this
+stop is not Bayesian convergence. Increasing the budget alone does not
+remove the pairing restrictions.
+
+For a saved or returned state, inspect the comparisons completed and the
+recorded explanation:
+
+``` r
+
+availability <- summarize_adaptive(out$state, include_starvation = TRUE)
+availability[, c("committed_pairs", "last_stop_reason")]
+availability$starvation_diagnostic[[1L]]
+```
+
+The optional report is `NULL` if there is no current terminal report,
+including older saved sessions. Otherwise it shows the remaining
+arithmetic upper bound and what happened in each attempt. A positive
+upper bound means that some repeat slots have not been used; those
+repeats may still be prohibited by the pairing rules. Candidate counts
+describe the pairs examined in each attempt, and the same pair may
+appear in several attempts. For large sets, some attempts examine a
+sample, so an empty examined pool does not prove that every possible
+pair was checked. See \[summarize_adaptive()\] for the report’s fields.
+
+Direct strategies stop when the chosen minimum-degree focal item has no
+legal partner; they do not search other focal items or invoke hybrid
+fallbacks. They do not produce this hybrid report.
 
 **There is no item summary yet.** `out$items` is empty until the first
 successful BTL refit. Under the default cadence, at least 20 new

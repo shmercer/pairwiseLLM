@@ -214,7 +214,12 @@ refit under this deterministic fixture.</p>
 <p><code>n_steps</code> is a maximum number of attempted steps for that
 call, not a promise that every attempt will commit and not a global
 stopping criterion. A run can return earlier after Bayesian stopping or
-candidate starvation.</p>
+candidate starvation. A requested comparison budget does not guarantee
+that enough permitted pairs remain to reach it. Hybrid usually allows
+two observations of a pair; a third is allowed only for selected close
+comparisons. These repeat rules can stop a run even when the requested
+budget is below the maximum obtained by allowing three observations of
+every pair.</p>
 <div class="section level3">
 <h3 id="inspect-the-ranking-and-stopping-state">Inspect the ranking and stopping state<a class="anchor" aria-label="anchor" href="#inspect-the-ranking-and-stopping-state"></a>
 </h3>
@@ -827,15 +832,32 @@ return <code>is_valid</code>, <code>Y</code>, and preferably
 exactly <code>0</code> or <code>1</code>. Review
 <code>judge_invalid_reason</code>, <code>llm_status_code</code>, and
 <code>llm_error_message</code> in <code><a href="../reference/adaptive_step_log.html">adaptive_step_log()</a></code>.</p>
-<p><strong>The run reports candidate starvation.</strong> The hybrid
-selector applies its implemented within-stage fallbacks before declaring
-a stage starved. A terminal <code>"candidate_starvation"</code> means no
-eligible pair remained after those fallbacks. This can occur with very
-small or heavily repeated designs; inspect <code>fallback_path</code>,
-<code>starvation_reason</code>, and committed pair counts rather than
-treating it as Bayesian convergence. Direct strategies instead stop when
-the chosen minimum-degree focal item has no legal partner; they do not
-search other focal items or invoke hybrid fallbacks.</p>
+<p><strong>The run reports candidate starvation.</strong> Hybrid tries
+its fallbacks before stopping when none of the examined pairs can be
+selected. Repeat rules or limits on how often an item is used can leave
+no permitted comparison before the requested budget is reached. Passing
+the Bayesian model checks does not establish that another pair is
+available, and this stop is not Bayesian convergence. Increasing the
+budget alone does not remove the pairing restrictions.</p>
+<p>For a saved or returned state, inspect the comparisons completed and
+the recorded explanation:</p>
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">availability</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/summarize_adaptive.html">summarize_adaptive</a></span><span class="op">(</span><span class="va">out</span><span class="op">$</span><span class="va">state</span>, include_starvation <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">availability</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"committed_pairs"</span>, <span class="st">"last_stop_reason"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="va">availability</span><span class="op">$</span><span class="va">starvation_diagnostic</span><span class="op">[[</span><span class="fl">1L</span><span class="op">]</span><span class="op">]</span></span></code></pre></div>
+<p>The optional report is <code>NULL</code> if there is no current
+terminal report, including older saved sessions. Otherwise it shows the
+remaining arithmetic upper bound and what happened in each attempt. A
+positive upper bound means that some repeat slots have not been used;
+those repeats may still be prohibited by the pairing rules. Candidate
+counts describe the pairs examined in each attempt, and the same pair
+may appear in several attempts. For large sets, some attempts examine a
+sample, so an empty examined pool does not prove that every possible
+pair was checked. See [summarize_adaptive()] for the report’s
+fields.</p>
+<p>Direct strategies stop when the chosen minimum-degree focal item has
+no legal partner; they do not search other focal items or invoke hybrid
+fallbacks. They do not produce this hybrid report.</p>
 <p><strong>There is no item summary yet.</strong> <code>out$items</code>
 is empty until the first successful BTL refit. Under the default
 cadence, at least 20 new committed comparisons are needed. Invalid and
