@@ -229,6 +229,4 @@ if (requireNamespace("sirt", quietly = TRUE)) {
 if (requireNamespace("BradleyTerry2", quietly = TRUE)) {
   fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
 }
-#> Warning: the ‘nobars’ function has moved to the reformulas package. Please update your imports, or ask an upstream package maintainer to do so.
-#> Warning: the ‘findbars’ function has moved to the reformulas package. Please update your imports, or ask an upstream package maintainer to do so.
 ```
