@@ -1,5 +1,5 @@
 
-<!-- README-source-md5: 0d24bf3d3a2d07dd60d30134cfef5063 -->
+<!-- README-source-md5: 1aa36cd7715a89a6a579f6728f05ccfe -->
 
 <img src="man/figures/pairwiseLLM-banner.jpg"
      alt="pairwiseLLM: comparing two writing samples" width="100%">
@@ -224,6 +224,23 @@ stopping criteria.
 Mercer, S., & Reed, D. K. (2026). *Validity of large language model
 comparative judgment for universal writing screening* \[Preprint\].
 EdArXiv. <https://osf.io/preprints/edarxiv/4k9r8_v2>
+
+Examines pairwise writing assessment with seven LLMs using samples from
+students in Grades 3–6. Combining several writing samples per student
+improved agreement with external assessments, while more expensive
+models did not consistently provide better results.
+
+Mercer, S. H. (2026). *Comparative judgment versus direct rubric scoring
+with large language models: Effects of human-scored reference samples*
+\[Preprint\]. SSRN. <https://doi.org/10.2139/ssrn.7549240>
+
+Compares using human-scored examples to guide direct LLM scoring or to
+convert pairwise comparisons into rubric scores. Pairwise comparisons
+better preserved differences among essays, while direct scoring more
+closely matched the scores assigned by human raters. See the [rubric
+calibration
+guide](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.html#what-the-research-shows)
+for the findings and their practical implications.
 
 ------------------------------------------------------------------------
 

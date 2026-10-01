@@ -46,6 +46,36 @@ pairwise analysis. Both ordinal methods assume the effect of CJ quality is share
 across rubric boundaries. Allowing a curve does not remove that assumption.
 You choose the method; the package does not choose one automatically.
 
+## What the research shows
+
+[Mercer (2026)](https://doi.org/10.2139/ssrn.7549240) compared direct LLM rubric
+scoring with percentile scoring and human-score calibration using pairwiseLLM.
+The study assessed 1,714 essays from students in Grades 8–12 on six writing traits.
+Without human-scored references, percentile scoring placed roughly one fifth of
+essays in each of five levels. Compared with direct scoring without examples,
+it better preserved relative differences among essays, but individual scores were
+farther from human scores. Calibrated CJ scores were also closer to human scores
+than percentile scores were.
+
+With human-score calibration, CJ agreement changed little between 20 and 80
+reference essays. Direct scoring improved with more examples until overall
+agreement was similar, although the approaches retained different strengths and
+results varied by writing trait. Calibrated CJ may be more useful when relative
+differences matter—for example, when examining correlations with external
+measures. Direct scoring may be more useful when the aim is to place each essay
+accurately on the rubric, especially when its levels describe specific skills or
+standards that students should meet (criterion-referenced scores).
+
+These findings concern the study's particular tasks and model. Reference and
+target essays participated in one comparison analysis (`same_set`); the study
+does not establish performance for separately linked sets or make 20 references
+a general recommendation. Equal-sized percentile groups describe relative
+standing; they do not establish that essays meet rubric criteria.
+
+Mercer, S. H. (2026). *Comparative judgment versus direct rubric scoring with large
+language models: Effects of human-scored reference samples* [Preprint]. SSRN.
+https://doi.org/10.2139/ssrn.7549240
+
 ## Start from completed CJ results
 
 Use a completed `fit_bayes_btl_mcmc()` result, a completed within-set
@@ -281,6 +311,9 @@ rubric distribution does not establish agreement with human raters for individua
 samples. Percentile scoring reuses only the original analysis; it cannot transport
 levels to a separate cohort through `linked_anchors`. It returns categories without
 category probabilities, so evaluation uses only category-based metrics.
+
+See [What the research shows](#what-the-research-shows) for a study comparing
+percentile scoring, human-score calibration, and direct LLM rubric scoring.
 
 ## Reuse a historical rubric reference for a new set
 
