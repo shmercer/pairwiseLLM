@@ -44,6 +44,7 @@ Rows where `better_id` does not match either side of the pair (including
 [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
 
 Other frequentist models:
+[`bootstrap_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/bootstrap_bt_model.md),
 [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),
 [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md),
 [`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md),

@@ -2,13 +2,23 @@
 
 ## pairwiseLLM (development version)
 
+- [`bootstrap_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/bootstrap_bt_model.md)
+  adds provider-free, schedule-aware parametric BT bias correction
+  ([\#304](https://github.com/shmercer/pairwiseLLM/issues/304)). Fixed
+  schedules retain their pairs; adaptive replicates rerun canonical
+  selection, state updates and scheduled refits from frozen
+  initialization. Results include centered corrections, Monte Carlo
+  summaries, explicit failed-replicate diagnostics and reproducible
+  seeds, with optional parallel execution and artifact retention. See
+  the new bootstrap guide.
+
 - `fit_bt_model(engine = "alpha", alpha = ...)` adds Hamilton-style
   alpha-adjusted Bradley-Terry estimation for adaptive schedules
   ([\#303](https://github.com/shmercer/pairwiseLLM/issues/303)),
   including explicit penalty settings, centered covariance/SEs,
   numerical diagnostics and pairwise prediction. SEs are model-based
   conditional on the realized comparison graph; schedule-aware
-  uncertainty and bootstrap correction remain separate work. Numerical
+  uncertainty remains separate from these model-based SEs. Numerical
   failures retain auditable diagnostics without changing estimators.
   Existing engine defaults and optional dependencies are unchanged.
 

@@ -31,6 +31,7 @@ single JSON object representing the result for one batch request."></head><body>
     <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Linking Saved Comparisons</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
+    <li><a class="dropdown-item" href="../articles/bt-bootstrap.html">Guide: BT Bootstrap Bias Correction</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
     <li><a class="dropdown-item" href="../articles/prompt-template-bias.html">Prompt Template Positional Bias Testing</a></li>
   </ul></li>
@@ -115,7 +116,7 @@ a temporary file and then read/parse them as a JSONL batch file.</p>
 <span class="r-in"><span><span class="va">tmp</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".jsonl"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/writeLines.html" class="external-link">writeLines</a></span><span class="op">(</span><span class="va">example_openai_batch_output</span>, con <span class="op">=</span> <span class="va">tmp</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">tmp</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/RtmpJqG8l5/file19193d786cfb.jsonl"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/RtmpwLiS9o/file1a2566a22370.jsonl"</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

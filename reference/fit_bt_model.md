@@ -276,8 +276,10 @@ conventional epsilon adjustment, which uses observed win proportions.
 Neither method changes which pairs are selected. Alpha adjustment is
 motivated by adaptive scheduling; it is not universally preferred or a
 guarantee of unbiased SSR. Firth remains the intended modern comparator
-for random schedules. Schedule-aware bootstrap correction is separate
-work.
+for random schedules.
+[`bootstrap_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/bootstrap_bt_model.md)
+separately provides schedule-aware bootstrap bias correction; it does
+not turn these conditional SEs into corrected-score SEs.
 
 The alpha engine shares Firth's binary input and sum-to-zero convention.
 Items are radix-sorted; coefficient i is the contrast of item i to the
@@ -331,6 +333,7 @@ for plug-in pair probabilities.
 [`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
 
 Other frequentist models:
+[`bootstrap_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/bootstrap_bt_model.md),
 [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),
 [`build_elo_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_elo_data.md),
 [`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md),

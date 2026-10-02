@@ -29,6 +29,8 @@
 
 ### Modeling and Bias
 
+- [Bootstrap bias correction for BT
+  scores](https://shmercer.github.io/pairwiseLLM/articles/bt-bootstrap.md):
 - [Standalone Bayesian BTL with
   CmdStan](https://shmercer.github.io/pairwiseLLM/articles/bayesian-btl.md):
 - [Guide: Rubric

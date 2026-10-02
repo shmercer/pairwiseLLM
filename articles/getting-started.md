@@ -249,9 +249,11 @@ These standard errors describe uncertainty conditional on the
 comparisons that actually occurred. They do not account for how an
 adaptive schedule might change if the assessment were repeated. Alpha
 adjustment does not select pairs and does not guarantee unbiased
-reliability for every adaptive schedule. Schedule-aware bootstrap
-correction remains separate work. For the mathematical definition,
-uncertainty assumptions and failure diagnostics, see
+reliability for every adaptive schedule. Schedule-aware bootstrap bias
+correction is available in the [bootstrap
+guide](https://shmercer.github.io/pairwiseLLM/articles/bt-bootstrap.md).
+For the mathematical definition, uncertainty assumptions and failure
+diagnostics, see
 [`?fit_bt_model`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md).
 
 ### Save an analysis

@@ -53,6 +53,7 @@ using base R with centered covariance and SSR.
     <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Linking Saved Comparisons</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-linking.html">Guide: Adaptive Linking</a></li>
     <li><a class="dropdown-item" href="../articles/bayesian-btl.html">Standalone Bayesian BTL with CmdStan</a></li>
+    <li><a class="dropdown-item" href="../articles/bt-bootstrap.html">Guide: BT Bootstrap Bias Correction</a></li>
     <li><a class="dropdown-item" href="../articles/rubric-calibration.html">Guide: Rubric Calibration</a></li>
     <li><a class="dropdown-item" href="../articles/prompt-template-bias.html">Prompt Template Positional Bias Testing</a></li>
   </ul></li>
@@ -307,7 +308,8 @@ epsilon adjustment, which uses observed win proportions. Neither method
 changes which pairs are selected. Alpha adjustment is motivated by adaptive
 scheduling; it is not universally preferred or a guarantee of unbiased SSR.
 Firth remains the intended modern comparator for random schedules.
-Schedule-aware bootstrap correction is separate work.</p>
+<code><a href="bootstrap_bt_model.html">bootstrap_bt_model()</a></code> separately provides schedule-aware bootstrap bias
+correction; it does not turn these conditional SEs into corrected-score SEs.</p>
 <p>The alpha engine shares Firth's binary input and sum-to-zero convention.
 Items are radix-sorted; coefficient i is the contrast of item i to the last
 item, for i = 1,...,N-1. If B is the centered reference map, theta = B beta.
@@ -350,6 +352,7 @@ Use <code><a href="predict.pairwiseLLM_bt_alpha.html">predict.pairwiseLLM_bt_alp
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="build_bt_data.html">build_bt_data()</a></code>, <code><a href="summarize_bt_fit.html">summarize_bt_fit()</a></code></p>
 <p>Other frequentist models:
+<code><a href="bootstrap_bt_model.html">bootstrap_bt_model()</a></code>,
 <code><a href="build_bt_data.html">build_bt_data()</a></code>,
 <code><a href="build_elo_data.html">build_elo_data()</a></code>,
 <code><a href="fit_elo_model.html">fit_elo_model()</a></code>,

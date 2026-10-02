@@ -123,6 +123,7 @@ e0190393.
 [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
 
 Other frequentist models:
+[`bootstrap_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/bootstrap_bt_model.md),
 [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),
 [`build_elo_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_elo_data.md),
 [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md),

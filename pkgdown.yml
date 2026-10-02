@@ -8,6 +8,7 @@ articles:
   adaptive-warm-start: adaptive-warm-start.html
   advanced-batch-workflows: advanced-batch-workflows.html
   bayesian-btl: bayesian-btl.html
+  bt-bootstrap: bt-bootstrap.html
   data-and-prompts: data-and-prompts.html
   getting-started: getting-started.html
   linking-sessions: linking-sessions.html
@@ -16,7 +17,7 @@ articles:
   provider-controls-and-recovery: provider-controls-and-recovery.html
   rubric-calibration: rubric-calibration.html
   within-set-adaptive-design: within-set-adaptive-design.html
-last_built: 2026-10-02T13:34Z
+last_built: 2026-10-02T15:38Z
 urls:
   reference: https://shmercer.github.io/pairwiseLLM/reference
   article: https://shmercer.github.io/pairwiseLLM/articles

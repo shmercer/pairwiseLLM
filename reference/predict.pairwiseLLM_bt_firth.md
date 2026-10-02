@@ -42,6 +42,7 @@ empty data frame returns `numeric(0)`.
 [`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
 
 Other frequentist models:
+[`bootstrap_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/bootstrap_bt_model.md),
 [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),
 [`build_elo_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_elo_data.md),
 [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md),

@@ -83,6 +83,10 @@ CmdStan.
 - [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
   : Fit a Bradley-Terry model with optional frequentist engines
 
+- [`bootstrap_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/bootstrap_bt_model.md)
+  : Schedule-aware parametric bootstrap bias correction for
+  Bradley-Terry scores
+
 - [`predict(`*`<pairwiseLLM_bt_alpha>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_alpha.md)
   : Predict pairwise win probabilities from an alpha-adjusted
   Bradley-Terry fit
