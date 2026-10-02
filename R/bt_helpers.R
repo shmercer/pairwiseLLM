@@ -57,8 +57,8 @@ scale_separation_reliability <- function(theta, se) {
 #'   \item \code{theta}: estimated ability parameter
 #'   \item \code{se}: standard error of \code{theta}
 #'   \item \code{rank}: rank order of \code{theta} (1 = highest by default)
-#'   \item \code{engine}: modeling engine used ("sirt" or "BradleyTerry2")
-#'   \item \code{reliability}: MLE reliability (for \pkg{sirt}) or \code{NA}
+#'   \item \code{engine}: modeling engine used ("sirt", "BradleyTerry2", or "brglm2")
+#'   \item \code{reliability}: raw sirt reliability, calculated Firth SSR, or \code{NA}
 #' }
 #'
 #' Standard errors describe model uncertainty; small differences in estimates
@@ -81,8 +81,8 @@ scale_separation_reliability <- function(theta, se) {
 #'   \item{se}{Standard error of \code{theta}.}
 #'   \item{rank}{Rank of \code{theta}; 1 = highest
 #'   (if \code{decreasing = TRUE}).}
-#'   \item{engine}{Modeling engine used ("sirt" or "BradleyTerry2").}
-#'   \item{reliability}{MLE reliability (numeric scalar) repeated on each row.}
+#'   \item{engine}{Modeling engine used ("sirt", "BradleyTerry2", or "brglm2").}
+#'   \item{reliability}{Reliability (numeric scalar, or `NA`) repeated on each row.}
 #' }
 #'
 #' @examples
@@ -91,11 +91,11 @@ scale_separation_reliability <- function(theta, se) {
 #' bt <- build_bt_data(example_writing_pairs)
 #'
 #' if (requireNamespace("sirt", quietly = TRUE)) {
-#'   fit1 <- fit_bt_model(bt, engine = "sirt")
+#'   fit1 <- fit_bt_model(bt, engine = "sirt", verbose = FALSE)
 #'   summarize_bt_fit(fit1)
 #' }
 #' if (requireNamespace("BradleyTerry2", quietly = TRUE)) {
-#'   fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+#'   fit2 <- fit_bt_model(bt, engine = "BradleyTerry2", verbose = FALSE)
 #'   summarize_bt_fit(fit2)
 #' }
 #'
@@ -137,9 +137,9 @@ summarize_bt_fit <- function(fit, decreasing = TRUE, verbose = TRUE) {
 
   # Order and rank (quietly if verbose = FALSE)
   ord <- if (isTRUE(verbose)) {
-    order(theta_num, decreasing = decreasing, na.last = "keep")
+    order(theta_num, decreasing = decreasing, na.last = NA)
   } else {
-    suppressWarnings(order(theta_num, decreasing = decreasing, na.last = "keep"))
+    suppressWarnings(order(theta_num, decreasing = decreasing, na.last = NA))
   }
 
   rank_vec <- rep(NA_integer_, length(theta_num))

@@ -1,5 +1,12 @@
 # pairwiseLLM (development version)
 
+* `fit_bt_model(engine = "brglm2")` adds genuine Firth mean bias reduction for
+  random/nonadaptive schedules (#307), using optional brglm2. Fits include
+  centered covariance/SEs, estimator provenance, SSR, and pairwise `predict()`.
+  Connected separated data are supported. Valid equal-strength fits retain
+  predictions and uncertainty with explicitly unavailable SSR. Existing engine
+  defaults and fallback behavior are unchanged.
+
 * Frequentist BT fits now expose independently checked scale-separation reliability
   (SSR), its variance components, and engine/settings provenance (#302).
   `scale_separation_reliability()` provides the calculation directly, and

@@ -103,10 +103,10 @@ build_bt_data <- function(results) {
   tibble::as_tibble(out)
 }
 
-#' Fit a Bradley–Terry model with sirt and fallback to BradleyTerry2
+#' Fit a Bradley-Terry model with optional frequentist engines
 #'
 #' This function fits a Bradley–Terry paired-comparison model to data
-#' prepared by \code{\link{build_bt_data}}. It supports two modeling
+#' prepared by \code{\link{build_bt_data}}. It supports three modeling
 #' engines:
 #' \itemize{
 #'   \item \pkg{sirt}: \code{\link[sirt]{btm}} — the preferred engine, which
@@ -114,6 +114,8 @@ build_bt_data <- function(results) {
 #'   \item \pkg{BradleyTerry2}: \code{\link[BradleyTerry2]{BTm}} — used as a
 #'         fallback if \pkg{sirt} is unavailable or fails; computes ability
 #'         estimates and standard errors, but not reliability.
+#'   \item \pkg{brglm2}: explicit Firth mean bias reduction for random or
+#'         nonadaptive schedules, with centered covariance and SSR.
 #' }
 #'
 #' When \code{engine = "auto"} (the default), the function attempts
@@ -135,8 +137,9 @@ build_bt_data <- function(results) {
 #' parameters on a log-odds scale. Higher values mean stronger relative
 #' performance on the assessed trait. Zero is not a pass mark, and these
 #' estimates are not rubric grades or automatically comparable across
-#' independently fitted sets. Standard errors are included for both
-#' modeling engines. MLE reliability is only available from \pkg{sirt}.
+#' independently fitted sets. Standard errors are included for all
+#' modeling engines. Raw engine MLE reliability is available from \pkg{sirt};
+#' Firth fits return independently calculated SSR.
 #'
 #' For sirt, `$ssr` independently calculates
 #' `1 - mean(se^2) / stats::var(theta)` from all returned items, using sample
@@ -161,7 +164,7 @@ build_bt_data <- function(results) {
 #' are marked unverified for that argument. No fix for the upstream estimator
 #' is applied here.
 #'
-#' Connectivity is checked before either engine is called, including ties
+#' Connectivity is checked before any engine is called, including ties
 #' removed by `ignore.ties = TRUE`, and BradleyTerry2 subsets/zero weights.
 #' Disconnected data cannot identify global BT scores or SSR. Missing outcomes,
 #' invalid IDs, and self-comparisons raise errors rather than being dropped.
@@ -179,25 +182,54 @@ build_bt_data <- function(results) {
 #' engine. See the [offline walkthrough](https://shmercer.github.io/pairwiseLLM/articles/getting-started.html)
 #' for fitting and interpreting bundled synthetic comparisons.
 #'
+#' Firth fits use binomial-logit `brglm2::brglmFit` with `type = "AS_mean"`,
+#' equivalent to adding half the log determinant of expected information to
+#' the log likelihood. This is a genuine Firth estimator, not sirt epsilon
+#' adjustment. It is an explicit option for random/nonadaptive schedules;
+#' it is not recommended here as the primary adaptive-schedule correction.
+#' No schedule type is inferred from outcomes. See Hamilton and Tawn,
+#' \doi{10.1111/jedm.70022}, and the `brglm2` mean-bias-reduction documentation.
+#'
+#' The Firth design has no intercept, tie, positional, or lapse parameter.
+#' Binary comparisons are aggregated in deterministic item/pair order.
+#' Internal contrasts use the last radix-sorted item as reference, then both
+#' estimates and covariance are transformed to sum-to-zero coordinates.
+#' `$vcov` is the model-based inverse expected information at the bias-reduced
+#' estimate, transformed to item coordinates; it is not a penalized-Hessian
+#' or bootstrap covariance. Its rank is the number of items minus one because
+#' of centering. SEs are square roots of its diagonal. Separation and undefeated
+#' or winless items are supported when the comparison graph is connected.
+#'
+#' Firth fits must converge with finite estimates and valid covariance. Failures
+#' error without fallback. A valid fit with zero score variance is retained:
+#' `$reliability` is `NA` and `$ssr$status` is `"zero_score_variance"`.
+#' Other invalid theta/SE or reliability arithmetic raises an error. Use
+#' [predict.pairwiseLLM_bt_firth()] for first-item win probabilities.
+#'
 #' @param bt_data A data frame or tibble with exactly three columns:
 #'   two character ID columns and one numeric \code{result} column
 #'   equal to 0 or 1. Usually produced by \code{\link{build_bt_data}}.
 #' @param engine Character string specifying the modeling engine. One of:
-#'   \code{"auto"} (default), \code{"sirt"}, or \code{"BradleyTerry2"}.
+#'   \code{"auto"} (default), \code{"sirt"}, \code{"BradleyTerry2"}, or
+#'   \code{"brglm2"}. Automatic selection never chooses Firth.
 #' @param verbose Logical. If \code{TRUE} (default), show engine output (iterations,
 #'   warnings). If \code{FALSE}, suppress noisy output to keep
 #'   examples and reports clean.
 #' @param ... Additional arguments passed through to \code{sirt::btm()}
-#'   or \code{BradleyTerry2::BTm()}.
+#'   or \code{BradleyTerry2::BTm()}. For `brglm2`, only a named `control`
+#'   list is accepted, with numerical settings `epsilon` (default `1e-10`),
+#'   `maxit` (200), `slowit` (1), `max_step_factor` (12), and `trace` (FALSE).
+#'   `verbose = FALSE` disables tracing; numerical warnings are retained.
+#'   The mean-bias-reduction method cannot be changed through controls.
 #' @param sirt_eps Optional finite, nonnegative epsilon adjustment for sirt,
 #'   supplied by exact name. `NULL` preserves the engine default or legacy
 #'   `eps` in `...`. Supplying both forms raises an error. This argument is
-#'   invalid with explicit `engine = "BradleyTerry2"`; on automatic fallback
+#'   valid only with `engine = "sirt"` or `"auto"`; on automatic fallback
 #'   it remains recorded as requested but is not applied to BradleyTerry2.
 #'
 #' @return A list with the following elements:
 #' \describe{
-#'   \item{engine}{The engine actually used ("sirt" or "BradleyTerry2").}
+#'   \item{engine}{The engine actually used ("sirt", "BradleyTerry2", or "brglm2").}
 #'   \item{fit}{The fitted model object.}
 #'   \item{theta}{
 #'     A tibble with columns:
@@ -208,14 +240,15 @@ build_bt_data <- function(results) {
 #'     }
 #'   }
 #'   \item{reliability}{
-#'       MLE reliability (sirt engine only). \code{NA} for
-#'       \pkg{BradleyTerry2} models.
+#'       Raw MLE reliability for sirt or calculated SSR for Firth. \code{NA} for
+#'       \pkg{BradleyTerry2} models or a zero-variance Firth fit.
 #'   }
 #'   \item{ssr}{For sirt, the [scale_separation_reliability()] decomposition
 #'     plus `engine_reliability`, `agrees`, `absolute_difference`, and
 #'     `tolerance`. For BradleyTerry2, `ssr` and `engine_reliability` are `NA`,
 #'     `valid` is `FALSE`, `agrees` is `NA`, and `status` is
-#'     `"unavailable_se_convention"`.}
+#'     `"unavailable_se_convention"`. For Firth, the helper decomposition, or
+#'     `valid = FALSE` and `status = "zero_score_variance"` when undefined.}
 #'   \item{provenance}{A list recording `engine`, `requested_engine`, loaded
 #'     `engine_version` and `package_version`, `supplied_arguments`,
 #'     `requested_sirt_eps`, `effective_settings`, `adjustment`,
@@ -224,7 +257,11 @@ build_bt_data <- function(results) {
 #'     and `fallback_reason` (`NULL` unless automatic fallback occurred).
 #'     Identification records sirt centering or BradleyTerry2's contrasts,
 #'     reference category and player levels. Save the full object to retain
-#'     these settings; the legacy summary tibble is unchanged.}
+#'     these settings; the legacy summary tibble is unchanged. Firth provenance
+#'     also records the coordinate transformation and covariance convention.}
+#'   \item{vcov}{Firth only: centered item covariance matrix, with row/column
+#'     labels in the same order as `theta$ID`.}
+#'   \item{comparisons}{Firth only: original item pairs for default prediction.}
 #' }
 #'
 #' @examples
@@ -248,7 +285,7 @@ build_bt_data <- function(results) {
 #' @family frequentist models
 #' @export
 fit_bt_model <- function(bt_data,
-                         engine = c("auto", "sirt", "BradleyTerry2"),
+                         engine = c("auto", "sirt", "BradleyTerry2", "brglm2"),
                          verbose = TRUE,
                          ...,
                          sirt_eps = NULL) {
@@ -262,8 +299,9 @@ fit_bt_model <- function(bt_data,
   dots <- list(...)
   if (!is.null(sirt_eps)) {
     .bt_validate_eps(sirt_eps)
-    if (engine == "BradleyTerry2") .bt_abort("`sirt_eps` requires engine = 'sirt' or 'auto'.")
+    if (!engine %in% c("sirt", "auto")) .bt_abort("`sirt_eps` requires engine = 'sirt' or 'auto'.")
   }
+  if (engine == "brglm2") return(.bt_fit_firth(bt_data, verbose, dots))
 
   # --------------------------
   # sirt helper
