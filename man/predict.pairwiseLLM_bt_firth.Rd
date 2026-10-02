@@ -38,6 +38,7 @@ if (requireNamespace("brglm2", quietly = TRUE)) {
 \code{\link[=fit_bt_model]{fit_bt_model()}}, \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}
 
 Other frequentist models:
+\code{\link[=bootstrap_bt_model]{bootstrap_bt_model()}},
 \code{\link[=build_bt_data]{build_bt_data()}},
 \code{\link[=build_elo_data]{build_elo_data()}},
 \code{\link[=fit_bt_model]{fit_bt_model()}},

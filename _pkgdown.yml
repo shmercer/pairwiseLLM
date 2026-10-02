@@ -48,6 +48,8 @@ navbar:
           href: articles/adaptive-linking.html
         - text: "Standalone Bayesian BTL with CmdStan"
           href: articles/bayesian-btl.html
+        - text: "Guide: BT Bootstrap Bias Correction"
+          href: articles/bt-bootstrap.html
         - text: "Guide: Rubric Calibration"
           href: articles/rubric-calibration.html
         - text: "Prompt Template Positional Bias Testing"
@@ -91,6 +93,7 @@ articles:
 
   - title: "Modeling and Bias"
     contents:
+      - bt-bootstrap
       - bayesian-btl
       - rubric-calibration
       - prompt-template-bias
@@ -142,6 +145,7 @@ reference:
     contents:
       - build_bt_data
       - fit_bt_model
+      - bootstrap_bt_model
       - predict.pairwiseLLM_bt_alpha
       - predict.pairwiseLLM_bt_firth
       - scale_separation_reliability

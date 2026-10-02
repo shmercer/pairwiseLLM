@@ -48,6 +48,7 @@ elo_data
 \code{\link[=build_bt_data]{build_bt_data()}}, \code{\link[=fit_bt_model]{fit_bt_model()}}
 
 Other frequentist models:
+\code{\link[=bootstrap_bt_model]{bootstrap_bt_model()}},
 \code{\link[=build_bt_data]{build_bt_data()}},
 \code{\link[=fit_bt_model]{fit_bt_model()}},
 \code{\link[=fit_elo_model]{fit_elo_model()}},
