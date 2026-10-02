@@ -2,6 +2,27 @@
 
 ## pairwiseLLM (development version)
 
+- `fit_bt_model(engine = "brglm2")` adds genuine Firth mean bias
+  reduction for random/nonadaptive schedules
+  ([\#307](https://github.com/shmercer/pairwiseLLM/issues/307)), using
+  optional brglm2. Fits include centered covariance/SEs, estimator
+  provenance, SSR, and pairwise
+  [`predict()`](https://rdrr.io/r/stats/predict.html). Connected
+  separated data are supported. Valid equal-strength fits retain
+  predictions and uncertainty with explicitly unavailable SSR. Existing
+  engine defaults and fallback behavior are unchanged.
+
+- Frequentist BT fits now expose independently checked scale-separation
+  reliability (SSR), its variance components, and engine/settings
+  provenance
+  ([\#302](https://github.com/shmercer/pairwiseLLM/issues/302)).
+  [`scale_separation_reliability()`](https://shmercer.github.io/pairwiseLLM/reference/scale_separation_reliability.md)
+  provides the calculation directly, and `fit_bt_model(sirt_eps = ...)`
+  makes sirt’s epsilon adjustment explicit while retaining legacy calls.
+  Disconnected comparisons and invalid/nonfinite reliability inputs now
+  error, including fixed-theta sirt fits with missing SEs. Explicit
+  engines never fall back; negative SSR remains unmodified.
+
 - Hybrid starvation reports now distinguish unused arithmetic pair
   capacity from the restrictions encountered in each attempted candidate
   pool ([\#298](https://github.com/shmercer/pairwiseLLM/issues/298)).

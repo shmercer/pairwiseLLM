@@ -100,6 +100,76 @@ guide](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.md),
 which requires completed **Bayesian** CJ results; the frequentist fit
 above is not an accepted input.
 
+### Read the reliability summary
+
+The fit also reports **scale-separation reliability**, or **SSR**. This
+compares how spread out the estimated scores are with how uncertain
+those estimates are. You can read it from the fit you already created:
+
+``` r
+
+fit$reliability
+#> [1] 0.6223254
+```
+
+Values closer to 1 mean that estimated score differences are large
+compared with their uncertainty. A value below zero means that
+uncertainty is large compared with the spread of scores, so treat the
+ranking cautiously.
+
+A high SSR does not prove that the ranking is accurate. Changing the
+fitting method can spread the scores farther apart and raise SSR without
+improving the ranking. Consider SSR alongside the score uncertainties
+and the quality of the judgments.
+
+For the sirt fit above, if the package cannot calculate a valid
+reliability value, it stops with an error and explains the problem. The
+comparisons must also connect all samples, directly or through other
+samples, to place them on one shared scale. If you use `BradleyTerry2`,
+reliability is shown as `NA`, meaning it is not available from that
+fitting method in this package.
+
+For the formula and a worked example, open the help page with
+[`?scale_separation_reliability`](https://shmercer.github.io/pairwiseLLM/reference/scale_separation_reliability.md).
+The
+[`?fit_bt_model`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
+help page explains the fitting settings and the additional details saved
+with each fit.
+
+### An option for comparisons chosen in advance
+
+For comparisons chosen randomly or fixed before seeing the results, you
+can choose **Firth estimation**. This method reduces small-sample bias
+and can still estimate scores when a sample always wins or always loses.
+The comparisons must connect all samples, and the optional `brglm2`
+package must be installed.
+
+``` r
+
+firth_fit <- fit_bt_model(build_bt_data(example_writing_pairs),
+                          engine = "brglm2", verbose = FALSE)
+head(summarize_bt_fit(firth_fit), 5)
+#> # A tibble: 5 × 6
+#>   ID    theta    se  rank engine reliability
+#>   <chr> <dbl> <dbl> <int> <chr>        <dbl>
+#> 1 S01   -4.68 1.17     19 brglm2       0.908
+#> 2 S02   -3.41 0.976    17 brglm2       0.908
+#> 3 S03   -4.68 1.17     20 brglm2       0.908
+#> 4 S04   -4.02 1.05     18 brglm2       0.908
+#> 5 S05   -2.80 0.917    16 brglm2       0.908
+head(predict(firth_fit)) # probability that the first sample wins each comparison
+#> [1] 0.21830274 0.50000000 0.34047109 0.13188116 0.07605926 0.04301231
+```
+
+The same cautions about uncertainty and reliability apply. If every
+estimated score is equal, this method keeps the fit but reports
+reliability as `NA`, because there is no score spread to compare with
+uncertainty. This option is intended for random or fixed schedules; it
+is not the package’s correction for adaptive pairing, where later
+comparisons depend on earlier results. See
+[`?fit_bt_model`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
+for the method and assumptions.
+
 ### Save an analysis
 
 ``` r
@@ -110,8 +180,10 @@ saveRDS(fit, "writing_bt_fit.rds")
 ```
 
 The CSV is convenient for viewing scores in a spreadsheet. The RDS
-preserves the fitted R object. These paths are relative to your current
-working directory.
+preserves the fitted R object, including the method and settings used to
+produce it. Keep this file if you need to revisit or explain your
+analysis later. These paths are relative to your current working
+directory.
 
 ## Prepare your own writing samples
 

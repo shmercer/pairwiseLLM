@@ -5,8 +5,8 @@ ID: object identifier
 theta: estimated ability parameter
 se: standard error of theta
 rank: rank order of theta (1 = highest by default)
-engine: modeling engine used ("sirt" or "BradleyTerry2")
-reliability: MLE reliability (for sirt) or NA
+engine: modeling engine used ("sirt", "BradleyTerry2", or "brglm2")
+reliability: raw sirt reliability, calculated Firth SSR, or NA
 
 '><meta property="og:description" content='This helper takes the object returned by fit_bt_model and
 returns a tibble with one row per object (e.g., writing sample), including:
@@ -14,8 +14,8 @@ ID: object identifier
 theta: estimated ability parameter
 se: standard error of theta
 rank: rank order of theta (1 = highest by default)
-engine: modeling engine used ("sirt" or "BradleyTerry2")
-reliability: MLE reliability (for sirt) or NA
+engine: modeling engine used ("sirt", "BradleyTerry2", or "brglm2")
+reliability: raw sirt reliability, calculated Firth SSR, or NA
 
 '></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -77,8 +77,8 @@ returns a tibble with one row per object (e.g., writing sample), including:</p><
 <li><p><code>theta</code>: estimated ability parameter</p></li>
 <li><p><code>se</code>: standard error of <code>theta</code></p></li>
 <li><p><code>rank</code>: rank order of <code>theta</code> (1 = highest by default)</p></li>
-<li><p><code>engine</code>: modeling engine used ("sirt" or "BradleyTerry2")</p></li>
-<li><p><code>reliability</code>: MLE reliability (for <span class="pkg">sirt</span>) or <code>NA</code></p></li>
+<li><p><code>engine</code>: modeling engine used ("sirt", "BradleyTerry2", or "brglm2")</p></li>
+<li><p><code>reliability</code>: raw sirt reliability, calculated Firth SSR, or <code>NA</code></p></li>
 </ul></div>
 
     <div class="section level2">
@@ -121,10 +121,10 @@ If <code>FALSE</code>, suppress coercion warnings during ranking.</p></dd>
 (if <code>decreasing = TRUE</code>).</p></dd>
 
 <dt>engine</dt>
-<dd><p>Modeling engine used ("sirt" or "BradleyTerry2").</p></dd>
+<dd><p>Modeling engine used ("sirt", "BradleyTerry2", or "brglm2").</p></dd>
 
 <dt>reliability</dt>
-<dd><p>MLE reliability (numeric scalar) repeated on each row.</p></dd>
+<dd><p>Reliability (numeric scalar, or <code>NA</code>) repeated on each row.</p></dd>
 
 
 </dl></div>
@@ -143,7 +143,9 @@ when preparing a ranked report.</p>
 <code><a href="build_bt_data.html">build_bt_data()</a></code>,
 <code><a href="build_elo_data.html">build_elo_data()</a></code>,
 <code><a href="fit_bt_model.html">fit_bt_model()</a></code>,
-<code><a href="fit_elo_model.html">fit_elo_model()</a></code></p></div>
+<code><a href="fit_elo_model.html">fit_elo_model()</a></code>,
+<code><a href="predict.pairwiseLLM_bt_firth.html">predict.pairwiseLLM_bt_firth()</a></code>,
+<code><a href="scale_separation_reliability.html">scale_separation_reliability()</a></code></p></div>
     </div>
 
     <div class="section level2">
@@ -153,111 +155,9 @@ when preparing a ranked report.</p>
 <span class="r-in"><span><span class="va">bt</span> <span class="op">&lt;-</span> <span class="fu"><a href="build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">example_writing_pairs</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"sirt"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span></span>
-<span class="r-in"><span>  <span class="va">fit1</span> <span class="op">&lt;-</span> <span class="fu"><a href="fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt</span>, engine <span class="op">=</span> <span class="st">"sirt"</span><span class="op">)</span></span></span>
+<span class="r-in"><span>  <span class="va">fit1</span> <span class="op">&lt;-</span> <span class="fu"><a href="fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt</span>, engine <span class="op">=</span> <span class="st">"sirt"</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
 <span class="r-in"><span>  <span class="fu">summarize_bt_fit</span><span class="op">(</span><span class="va">fit1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span></span></span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>NAs introduced by coercion</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 1 | Maximum parameter change=0.9874205</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 2 | Maximum parameter change=0.9604</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 3 | Maximum parameter change=0.941192</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 4 | Maximum parameter change=0.9223682</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 5 | Maximum parameter change=0.9039208</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 6 | Maximum parameter change=0.8858424</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 7 | Maximum parameter change=0.8681255</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 8 | Maximum parameter change=0.850763</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 9 | Maximum parameter change=0.8337478</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 10 | Maximum parameter change=0.8170728</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 11 | Maximum parameter change=0.8007314</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 12 | Maximum parameter change=0.7847167</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 13 | Maximum parameter change=0.7690224</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 14 | Maximum parameter change=0.7536419</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 15 | Maximum parameter change=0.7385691</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 16 | Maximum parameter change=0.7237977</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 17 | Maximum parameter change=0.7093218</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 18 | Maximum parameter change=0.6951353</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 19 | Maximum parameter change=0.6812326</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 20 | Maximum parameter change=0.667608</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 21 | Maximum parameter change=0.6542558</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 22 | Maximum parameter change=0.6411707</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 23 | Maximum parameter change=0.6283473</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 24 | Maximum parameter change=0.6157803</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 25 | Maximum parameter change=0.6034647</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 26 | Maximum parameter change=0.5913954</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 27 | Maximum parameter change=0.5795675</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 28 | Maximum parameter change=0.5679762</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 29 | Maximum parameter change=0.5566167</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 30 | Maximum parameter change=0.5454843</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 31 | Maximum parameter change=0.5345746</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 32 | Maximum parameter change=0.5238831</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 33 | Maximum parameter change=0.5134055</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 34 | Maximum parameter change=0.5031374</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 35 | Maximum parameter change=0.4930746</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 36 | Maximum parameter change=0.4832131</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 37 | Maximum parameter change=0.4735489</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 38 | Maximum parameter change=0.4640779</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 39 | Maximum parameter change=0.4547963</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 40 | Maximum parameter change=0.4457004</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 41 | Maximum parameter change=0.4367864</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 42 | Maximum parameter change=0.4280507</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 43 | Maximum parameter change=0.4194897</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 44 | Maximum parameter change=0.4110999</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 45 | Maximum parameter change=0.4028779</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 46 | Maximum parameter change=0.3948203</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 47 | Maximum parameter change=0.3869239</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 48 | Maximum parameter change=0.3791854</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 49 | Maximum parameter change=0.3716017</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 50 | Maximum parameter change=0.3641697</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 51 | Maximum parameter change=0.3568863</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 52 | Maximum parameter change=0.3497486</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 53 | Maximum parameter change=0.3427536</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 54 | Maximum parameter change=0.3358985</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 55 | Maximum parameter change=0.3291805</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 56 | Maximum parameter change=0.3225969</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 57 | Maximum parameter change=0.316145</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 58 | Maximum parameter change=0.3098221</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 59 | Maximum parameter change=0.3036257</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 60 | Maximum parameter change=0.2975531</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 61 | Maximum parameter change=0.2916021</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 62 | Maximum parameter change=0.28577</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 63 | Maximum parameter change=0.2800546</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 64 | Maximum parameter change=0.2744535</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 65 | Maximum parameter change=0.2689645</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 66 | Maximum parameter change=0.2635852</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 67 | Maximum parameter change=0.2583135</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 68 | Maximum parameter change=0.2531472</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 69 | Maximum parameter change=0.2480843</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 70 | Maximum parameter change=0.2431226</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 71 | Maximum parameter change=0.2382601</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 72 | Maximum parameter change=0.2334949</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 73 | Maximum parameter change=0.228825</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 74 | Maximum parameter change=0.2242485</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 75 | Maximum parameter change=0.2197636</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 76 | Maximum parameter change=0.2153683</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 77 | Maximum parameter change=0.2110609</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 78 | Maximum parameter change=0.2068397</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 79 | Maximum parameter change=0.2027029</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 80 | Maximum parameter change=0.1986489</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 81 | Maximum parameter change=0.1946759</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 82 | Maximum parameter change=0.1907824</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 83 | Maximum parameter change=0.1869667</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 84 | Maximum parameter change=0.1832274</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 85 | Maximum parameter change=0.1795628</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 86 | Maximum parameter change=0.1759716</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 87 | Maximum parameter change=0.1724521</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 88 | Maximum parameter change=0.1690031</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 89 | Maximum parameter change=0.165623</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 90 | Maximum parameter change=0.1623106</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 91 | Maximum parameter change=0.1590644</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 92 | Maximum parameter change=0.1558831</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 93 | Maximum parameter change=0.1527654</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 94 | Maximum parameter change=0.1497101</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 95 | Maximum parameter change=0.1467159</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 96 | Maximum parameter change=0.1437816</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 97 | Maximum parameter change=0.140906</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 98 | Maximum parameter change=0.1380878</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 99 | Maximum parameter change=0.1353261</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> **** Iteration 100 | Maximum parameter change=0.1326196</span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>NAs introduced by coercion</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 20 × 6</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    ID      theta    se  rank engine reliability</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>        <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span>
@@ -282,33 +182,32 @@ when preparing a ranked report.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">19</span> S01   -<span style="color: #BB0000;">1.85</span>   1.01     18 sirt         0.622</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">20</span> S03   -<span style="color: #BB0000;">3.00</span>   1.16     20 sirt         0.622</span>
 <span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"BradleyTerry2"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span></span>
-<span class="r-in"><span>  <span class="va">fit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt</span>, engine <span class="op">=</span> <span class="st">"BradleyTerry2"</span><span class="op">)</span></span></span>
+<span class="r-in"><span>  <span class="va">fit2</span> <span class="op">&lt;-</span> <span class="fu"><a href="fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">bt</span>, engine <span class="op">=</span> <span class="st">"BradleyTerry2"</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
 <span class="r-in"><span>  <span class="fu">summarize_bt_fit</span><span class="op">(</span><span class="va">fit2</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span></span></span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>NAs introduced by coercion</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 20 × 6</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    ID       theta    se  rank engine        reliability</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>               <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 1</span> S01   0   <span style="color: #949494;"> </span>     0       20 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 2</span> S02   1.90<span style="color: #949494;">e</span>+ 0  1.58    17 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 3</span> S03   6.93<span style="color: #949494;">e</span><span style="color: #BB0000;">-17</span>  1.49    19 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 4</span> S04   9.94<span style="color: #949494;">e</span><span style="color: #BB0000;">- 1</span>  1.48    18 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 5</span> S05   2.79<span style="color: #949494;">e</span>+ 0  1.71    16 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 6</span> S06   3.68<span style="color: #949494;">e</span>+ 0  1.83    15 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 7</span> S07   4.54<span style="color: #949494;">e</span>+ 0  1.93    14 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 8</span> S08   6.04<span style="color: #949494;">e</span>+ 0  2.05    13 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 9</span> S09   6.66<span style="color: #949494;">e</span>+ 0  2.08    11 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">10</span> S10   6.66<span style="color: #949494;">e</span>+ 0  2.08    12 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">11</span> S11   7.25<span style="color: #949494;">e</span>+ 0  2.10     9 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">12</span> S12   7.25<span style="color: #949494;">e</span>+ 0  2.10    10 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">13</span> S13   9.48<span style="color: #949494;">e</span>+ 0  2.19     7 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">14</span> S14   8.93<span style="color: #949494;">e</span>+ 0  2.17     8 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">15</span> S15   9.48<span style="color: #949494;">e</span>+ 0  2.19     5 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">16</span> S16   9.48<span style="color: #949494;">e</span>+ 0  2.19     6 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">17</span> S17   1.00<span style="color: #949494;">e</span>+ 1  2.22     4 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">18</span> S18   1.23<span style="color: #949494;">e</span>+ 1  2.45     1 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">19</span> S19   1.06<span style="color: #949494;">e</span>+ 1  2.26     3 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">20</span> S20   1.23<span style="color: #949494;">e</span>+ 1  2.45     2 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    ID        theta    se  rank engine        reliability</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>               <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 1</span> S01    0   <span style="color: #949494;"> </span>     0       19 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 2</span> S02    1.90<span style="color: #949494;">e</span>+ 0  1.58    17 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 3</span> S03   -<span style="color: #BB0000;">6.04</span><span style="color: #949494;">e</span><span style="color: #BB0000;">-16</span>  1.49    20 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 4</span> S04    9.94<span style="color: #949494;">e</span><span style="color: #BB0000;">- 1</span>  1.48    18 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 5</span> S05    2.79<span style="color: #949494;">e</span>+ 0  1.71    16 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 6</span> S06    3.68<span style="color: #949494;">e</span>+ 0  1.83    15 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 7</span> S07    4.54<span style="color: #949494;">e</span>+ 0  1.93    14 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 8</span> S08    6.04<span style="color: #949494;">e</span>+ 0  2.05    13 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;"> 9</span> S09    6.66<span style="color: #949494;">e</span>+ 0  2.08    11 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">10</span> S10    6.66<span style="color: #949494;">e</span>+ 0  2.08    12 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">11</span> S11    7.25<span style="color: #949494;">e</span>+ 0  2.10    10 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">12</span> S12    7.25<span style="color: #949494;">e</span>+ 0  2.10     9 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">13</span> S13    9.48<span style="color: #949494;">e</span>+ 0  2.19     5 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">14</span> S14    8.93<span style="color: #949494;">e</span>+ 0  2.17     8 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">15</span> S15    9.48<span style="color: #949494;">e</span>+ 0  2.19     6 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">16</span> S16    9.48<span style="color: #949494;">e</span>+ 0  2.19     7 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">17</span> S17    1.00<span style="color: #949494;">e</span>+ 1  2.22     4 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">18</span> S18    1.23<span style="color: #949494;">e</span>+ 1  2.45     1 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">19</span> S19    1.06<span style="color: #949494;">e</span>+ 1  2.26     3 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">20</span> S20    1.23<span style="color: #949494;">e</span>+ 1  2.45     2 BradleyTerry2          <span style="color: #BB0000;">NA</span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

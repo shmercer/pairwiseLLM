@@ -99,6 +99,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/parse_anthropic_batch_output.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/parse_gemini_batch_output.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/parse_openai_batch_output.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_firth.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_rubric_calibration.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_algorithm_ensemble.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_ensemble.html</loc></url>
@@ -123,6 +124,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/save_adaptive_session.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/save_link_session.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/save_warm_start_model.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/scale_separation_reliability.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/start_link_session.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_anthropic_pairs_live.html</loc></url>

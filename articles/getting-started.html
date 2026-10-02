@@ -194,15 +194,77 @@ requires completed <strong>Bayesian</strong> CJ results; the frequentist
 fit above is not an accepted input.</p>
 </div>
 <div class="section level3">
+<h3 id="read-the-reliability-summary">Read the reliability summary<a class="anchor" aria-label="anchor" href="#read-the-reliability-summary"></a>
+</h3>
+<p>The fit also reports <strong>scale-separation reliability</strong>,
+or <strong>SSR</strong>. This compares how spread out the estimated
+scores are with how uncertain those estimates are. You can read it from
+the fit you already created:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fit</span><span class="op">$</span><span class="va">reliability</span></span>
+<span><span class="co">#&gt; [1] 0.6223254</span></span></code></pre></div>
+<p>Values closer to 1 mean that estimated score differences are large
+compared with their uncertainty. A value below zero means that
+uncertainty is large compared with the spread of scores, so treat the
+ranking cautiously.</p>
+<p>A high SSR does not prove that the ranking is accurate. Changing the
+fitting method can spread the scores farther apart and raise SSR without
+improving the ranking. Consider SSR alongside the score uncertainties
+and the quality of the judgments.</p>
+<p>For the sirt fit above, if the package cannot calculate a valid
+reliability value, it stops with an error and explains the problem. The
+comparisons must also connect all samples, directly or through other
+samples, to place them on one shared scale. If you use
+<code>BradleyTerry2</code>, reliability is shown as <code>NA</code>,
+meaning it is not available from that fitting method in this
+package.</p>
+<p>For the formula and a worked example, open the help page with
+<code><a href="../reference/scale_separation_reliability.html">?scale_separation_reliability</a></code>. The
+<code><a href="../reference/fit_bt_model.html">?fit_bt_model</a></code> help page explains the fitting settings and
+the additional details saved with each fit.</p>
+</div>
+<div class="section level3">
+<h3 id="an-option-for-comparisons-chosen-in-advance">An option for comparisons chosen in advance<a class="anchor" aria-label="anchor" href="#an-option-for-comparisons-chosen-in-advance"></a>
+</h3>
+<p>For comparisons chosen randomly or fixed before seeing the results,
+you can choose <strong>Firth estimation</strong>. This method reduces
+small-sample bias and can still estimate scores when a sample always
+wins or always loses. The comparisons must connect all samples, and the
+optional <code>brglm2</code> package must be installed.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">firth_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="fu"><a href="../reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">example_writing_pairs</span><span class="op">)</span>,</span>
+<span>                          engine <span class="op">=</span> <span class="st">"brglm2"</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="../reference/summarize_bt_fit.html">summarize_bt_fit</a></span><span class="op">(</span><span class="va">firth_fit</span><span class="op">)</span>, <span class="fl">5</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 5 × 6</span></span></span>
+<span><span class="co">#&gt;   ID    theta    se  rank engine reliability</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>        <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> S01   -<span style="color: #BB0000;">4.68</span> 1.17     19 brglm2       0.908</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> S02   -<span style="color: #BB0000;">3.41</span> 0.976    17 brglm2       0.908</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> S03   -<span style="color: #BB0000;">4.68</span> 1.17     20 brglm2       0.908</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> S04   -<span style="color: #BB0000;">4.02</span> 1.05     18 brglm2       0.908</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> S05   -<span style="color: #BB0000;">2.80</span> 0.917    16 brglm2       0.908</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">firth_fit</span><span class="op">)</span><span class="op">)</span> <span class="co"># probability that the first sample wins each comparison</span></span>
+<span><span class="co">#&gt; [1] 0.21830274 0.50000000 0.34047109 0.13188116 0.07605926 0.04301231</span></span></code></pre></div>
+<p>The same cautions about uncertainty and reliability apply. If every
+estimated score is equal, this method keeps the fit but reports
+reliability as <code>NA</code>, because there is no score spread to
+compare with uncertainty. This option is intended for random or fixed
+schedules; it is not the package’s correction for adaptive pairing,
+where later comparisons depend on earlier results. See
+<code><a href="../reference/fit_bt_model.html">?fit_bt_model</a></code> for the method and assumptions.</p>
+</div>
+<div class="section level3">
 <h3 id="save-an-analysis">Save an analysis<a class="anchor" aria-label="anchor" href="#save-an-analysis"></a>
 </h3>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/write.table.html" class="external-link">write.csv</a></span><span class="op">(</span><span class="va">scores</span>, <span class="st">"writing_scores.csv"</span>, row.names <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"writing_bt_fit.rds"</span><span class="op">)</span></span>
 <span><span class="co"># In a later session: fit &lt;- readRDS("writing_bt_fit.rds")</span></span></code></pre></div>
 <p>The CSV is convenient for viewing scores in a spreadsheet. The RDS
-preserves the fitted R object. These paths are relative to your current
-working directory.</p>
+preserves the fitted R object, including the method and settings used to
+produce it. Keep this file if you need to revisit or explain your
+analysis later. These paths are relative to your current working
+directory.</p>
 </div>
 </div>
 <div class="section level2">
@@ -212,7 +274,7 @@ working directory.</p>
 and a <code>text</code> column. Keep IDs stable so that saved results
 continue to refer to the same samples. Do not include names or other
 identifying information merely to label rows.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">my_samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  ID <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"essay_01"</span>, <span class="st">"essay_02"</span>, <span class="st">"essay_03"</span><span class="op">)</span>,</span>
 <span>  text <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
@@ -224,13 +286,13 @@ identifying information merely to label rows.</p>
 <span><span class="va">samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/read_samples_df.html">read_samples_df</a></span><span class="op">(</span><span class="va">my_samples</span><span class="op">)</span></span></code></pre></div>
 <p>For a spreadsheet saved as CSV, map its columns to the package’s
 names:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">my_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.csv</a></span><span class="op">(</span><span class="st">"writing.csv"</span>, colClasses <span class="op">=</span> <span class="st">"character"</span><span class="op">)</span></span>
 <span><span class="va">samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/read_samples_df.html">read_samples_df</a></span><span class="op">(</span><span class="va">my_data</span>, id_col <span class="op">=</span> <span class="st">"student_code"</span>, text_col <span class="op">=</span> <span class="st">"response"</span><span class="op">)</span></span></code></pre></div>
 <p>These three short texts illustrate the data format only. For the
 collection example below, use the bundled 20 samples so every object is
 defined:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
 <span><span class="va">samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/read_samples_df.html">read_samples_df</a></span><span class="op">(</span><span class="va">example_writing_samples</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ID"</span>, <span class="st">"text"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
 <span><span class="va">all_pairs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="va">samples</span><span class="op">)</span></span>
@@ -256,14 +318,14 @@ selects comparisons as evidence accumulates.</p>
 </h2>
 <p>A prompt combines the trait, the judging instructions, and the two
 texts. Start with a built-in trait and template:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
 <span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"default"</span><span class="op">)</span></span>
 <span><span class="va">td</span><span class="op">$</span><span class="va">name</span></span>
 <span><span class="co">#&gt; [1] "Overall Quality"</span></span></code></pre></div>
 <p>You can inspect exactly what the model will receive before paying for
 a call:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">prompt</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/build_prompt.html">build_prompt</a></span><span class="op">(</span></span>
 <span>  template <span class="op">=</span> <span class="va">tmpl</span>,</span>
 <span>  trait_name <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
@@ -303,7 +365,7 @@ an identifier available to your account; example identifiers are not a
 guarantee of current availability. See <a href="model-compatibility.html">Backends and Tested Model
 Configurations</a> for the provider/key table and official catalogs.</p>
 <p>For the current R session:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>OPENAI_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p><code>has_key = TRUE</code> means R can see a nonempty value; it does
@@ -321,7 +383,7 @@ provider API key.</p>
 <div class="section level3">
 <h3 id="submit-the-pairs">Submit the pairs<a class="anchor" aria-label="anchor" href="#submit-the-pairs"></a>
 </h3>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res_list</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
 <span>  pairs <span class="op">=</span> <span class="va">pairs_small</span>,</span>
 <span>  backend <span class="op">=</span> <span class="st">"openai"</span>,</span>
@@ -342,7 +404,7 @@ Parallel execution is optional and requires <code>future</code> and
 <div class="section level3">
 <h3 id="check-what-succeeded">Check what succeeded<a class="anchor" aria-label="anchor" href="#check-what-succeeded"></a>
 </h3>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span>
 <span><span class="va">res_list</span><span class="op">$</span><span class="va">failed_pairs</span></span>
 <span><span class="va">res_list</span><span class="op">$</span><span class="va">failed_attempts</span></span></code></pre></div>
