@@ -51,6 +51,9 @@ parity tests (#278). Prefixes verified unused on 2026-09-22. Run 6021 with
 
 ## Determinism Rules
 
+Issue #302 reserves 0035 for frequentist SSR, estimator provenance, connectivity,
+and independent sirt agreement (verified unused on 2026-10-01).
+
 - No randomness without explicit local seeding.
 - Use `withr::local_seed()` whenever a test needs random numbers.
 - Avoid relying on system time, implicit ordering, or global RNG state.

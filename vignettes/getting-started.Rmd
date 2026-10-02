@@ -86,6 +86,58 @@ common scale. For rubric categories, use the
 [rubric calibration guide](rubric-calibration.html), which requires completed
 **Bayesian** CJ results; the frequentist fit above is not an accepted input.
 
+### Inspect reliability and estimator settings
+
+Scale-separation reliability (SSR) compares the spread of estimated scores with
+their mean squared standard error:
+
+\[
+\mathrm{SSR} = 1 - \frac{\operatorname{mean}(SE_i^2)}{\operatorname{var}(\hat\theta_i)}.
+\]
+
+The variance uses the sample denominator, number of items minus one. A small
+hand-calculated example exposes each component without requiring a model engine:
+
+```{r offline-ssr}
+scale_separation_reliability(c(-1, 0, 1), c(0.2, 0.3, 0.4))
+# Observed variance = 1; mean squared SE = 29/300; SSR = 271/300.
+```
+
+For a sirt fit, the package independently computes SSR from all returned scores
+and SEs and checks agreement with the engine's reliability to a relative/absolute
+tolerance of `1e-12`. The original `fit$reliability` remains available.
+
+```{r offline-ssr-provenance, eval=requireNamespace("sirt", quietly=TRUE)}
+audited_fit <- fit_bt_model(bt_data, engine = "sirt", sirt_eps = 0.3, verbose = FALSE)
+audited_fit$ssr
+audited_fit$provenance$adjustment
+audited_fit$provenance$convergence
+```
+
+`sirt_eps` makes the epsilon adjustment explicit. Existing calls using `eps` in
+`...` still work; do not supply both. The full provenance includes engine/package
+versions, resolved settings, identification and convergence information. Estimator
+defaults are unchanged. In particular, sirt's default fit can estimate tie and
+positional parameters; specifying epsilon alone does not change those settings.
+sirt 4.2.133 accepts `fix.delta` without applying it, so provenance separates
+that requested value from returned parameters. A sirt fit reaching its iteration
+limit has unconfirmed convergence even when its SSR arithmetic is valid.
+
+SSR is sensitive to estimated score variance and the standard-error convention.
+It is not an estimator-free measure of recovery: an estimator that spreads scores
+farther apart can increase SSR without improving accuracy. Negative SSR values
+are retained and flag a negative estimated true-score variance. The helper errors
+on nonfinite inputs or zero score variance and never silently removes items.
+Fits with undefined reliability also error, including fixed-theta sirt fits with
+missing SEs. Disconnected comparison graphs error before either engine runs
+because global BT scores and SSR are not identified.
+
+BradleyTerry2 retains `reliability = NA`; its reference-based SEs are not treated
+as equivalent to sirt's convention. An explicit engine never silently falls back.
+Automatic fallback remains available for engine availability/execution failures;
+invalid scientific results raise errors instead, and successful fallback records
+its reason in provenance.
+
 ### Save an analysis
 
 ```{r save-offline-results, eval=FALSE}

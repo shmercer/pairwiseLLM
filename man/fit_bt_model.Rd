@@ -8,7 +8,8 @@ fit_bt_model(
   bt_data,
   engine = c("auto", "sirt", "BradleyTerry2"),
   verbose = TRUE,
-  ...
+  ...,
+  sirt_eps = NULL
 )
 }
 \arguments{
@@ -25,6 +26,12 @@ examples and reports clean.}
 
 \item{...}{Additional arguments passed through to \code{sirt::btm()}
 or \code{BradleyTerry2::BTm()}.}
+
+\item{sirt_eps}{Optional finite, nonnegative epsilon adjustment for sirt,
+supplied by exact name. \code{NULL} preserves the engine default or legacy
+\code{eps} in \code{...}. Supplying both forms raises an error. This argument is
+invalid with explicit \code{engine = "BradleyTerry2"}; on automatic fallback
+it remains recorded as requested but is not applied to BradleyTerry2.}
 }
 \value{
 A list with the following elements:
@@ -43,6 +50,20 @@ A tibble with columns:
 MLE reliability (sirt engine only). \code{NA} for
 \pkg{BradleyTerry2} models.
 }
+\item{ssr}{For sirt, the \code{\link[=scale_separation_reliability]{scale_separation_reliability()}} decomposition
+plus \code{engine_reliability}, \code{agrees}, \code{absolute_difference}, and
+\code{tolerance}. For BradleyTerry2, \code{ssr} and \code{engine_reliability} are \code{NA},
+\code{valid} is \code{FALSE}, \code{agrees} is \code{NA}, and \code{status} is
+\code{"unavailable_se_convention"}.}
+\item{provenance}{A list recording \code{engine}, \code{requested_engine}, loaded
+\code{engine_version} and \code{package_version}, \code{supplied_arguments},
+\code{requested_sirt_eps}, \code{effective_settings}, \code{adjustment},
+\code{identification}, \code{convergence} (status, converged, iterations),
+\code{theta_finite}, \code{se_finite}, \code{reliability_valid}, \code{reliability_status},
+and \code{fallback_reason} (\code{NULL} unless automatic fallback occurred).
+Identification records sirt centering or BradleyTerry2's contrasts,
+reference category and player levels. Save the full object to retain
+these settings; the legacy summary tibble is unchanged.}
 }
 }
 \description{
@@ -60,7 +81,9 @@ estimates and standard errors, but not reliability.
 \details{
 When \code{engine = "auto"} (the default), the function attempts
 \pkg{sirt} first and automatically falls back to \pkg{BradleyTerry2}
-only if necessary. In all cases, the output format is standardized, so
+on availability or execution failure. Explicit engine requests never fall
+back. Invalid inputs, disconnected graphs, and invalid reliability results
+raise errors even in automatic mode. The output format is standardized, so
 downstream code can rely on consistent fields.
 
 The input \code{bt_data} must contain exactly three columns:
@@ -77,6 +100,42 @@ estimates are not rubric grades or automatically comparable across
 independently fitted sets. Standard errors are included for both
 modeling engines. MLE reliability is only available from \pkg{sirt}.
 
+For sirt, \verb{$ssr} independently calculates
+\code{1 - mean(se^2) / stats::var(theta)} from all returned items, using sample
+variance. Agreement with \verb{$fit$mle.rel} is required within
+\code{1e-12 * max(1, abs(engine_reliability), abs(ssr))}. Negative SSR is retained.
+Nonfinite theta/SEs, negative SEs, zero score variance, and nonfinite
+calculations raise errors without dropping items. This includes sirt fits
+with missing SEs from fixed theta or extreme scores when epsilon is zero.
+See \code{\link[=scale_separation_reliability]{scale_separation_reliability()}} for the component definitions.
+
+SSR depends on estimated score variance and the SE convention: it is not
+an estimator-free measure of recovery. BradleyTerry2 uses engine contrasts
+(normally a reference item); this wrapper does not calculate SSR from its
+reference-based SEs. Its legacy \verb{$reliability} remains \code{NA}.
+
+The sirt default epsilon is resolved from the installed engine (0.3 in
+sirt 4.2.133), and the returned epsilon is checked and recorded. Other
+estimator defaults are unchanged, including sirt's tie and positional
+parameters. \code{effective_settings} records resolved arguments; for sirt,
+\code{fix.delta_requested} is separated from \code{returned_parameters} because
+sirt 4.2.133 accepts but does not apply \code{fix.delta}. Other engine versions
+are marked unverified for that argument. No fix for the upstream estimator
+is applied here.
+
+Connectivity is checked before either engine is called, including ties
+removed by \code{ignore.ties = TRUE}, and BradleyTerry2 subsets/zero weights.
+Disconnected data cannot identify global BT scores or SSR. Missing outcomes,
+invalid IDs, and self-comparisons raise errors rather than being dropped.
+Direct sirt inputs may include ties coded 0.5; the BradleyTerry2 wrapper
+requires binary outcomes.
+
+sirt provides iterations but no explicit convergence flag. Early termination
+is recorded as \code{stopping_criterion_met}; reaching \code{maxiter} is recorded as
+\code{iteration_limit_reached} with \code{converged = NA}, not as proven convergence
+or nonconvergence. BradleyTerry2's reported convergence is preserved.
+Reliability validity describes the arithmetic, not proof of convergence.
+
 Install an optional engine before fitting, for example with
 \code{install.packages("sirt")}. Pairwise data preparation does not need that
 engine. See the \href{https://shmercer.github.io/pairwiseLLM/articles/getting-started.html}{offline walkthrough}
@@ -88,10 +147,12 @@ data("example_writing_pairs")
 bt <- build_bt_data(example_writing_pairs)
 
 if (requireNamespace("sirt", quietly = TRUE)) {
-  fit1 <- fit_bt_model(bt, engine = "sirt")
+  fit1 <- fit_bt_model(bt, engine = "sirt", sirt_eps = 0.3, verbose = FALSE)
+  fit1$ssr
+  fit1$provenance$adjustment
 }
 if (requireNamespace("BradleyTerry2", quietly = TRUE)) {
-  fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+  fit2 <- fit_bt_model(bt, engine = "BradleyTerry2", verbose = FALSE)
 }
 
 }
@@ -102,6 +163,7 @@ Other frequentist models:
 \code{\link[=build_bt_data]{build_bt_data()}},
 \code{\link[=build_elo_data]{build_elo_data()}},
 \code{\link[=fit_elo_model]{fit_elo_model()}},
+\code{\link[=scale_separation_reliability]{scale_separation_reliability()}},
 \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}
 }
 \concept{frequentist models}

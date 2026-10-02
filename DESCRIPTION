@@ -110,6 +110,7 @@ Collate:
     'bayes_btl_summarize.R'
     'bt_helpers.R'
     'bt_model.R'
+    'bt_provenance.R'
     'btl_evidence_identity.R'
     'btl_mcmc_constraints.R'
     'btl_mcmc_contracts.R'

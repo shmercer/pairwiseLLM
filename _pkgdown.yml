@@ -142,6 +142,7 @@ reference:
     contents:
       - build_bt_data
       - fit_bt_model
+      - scale_separation_reliability
       - summarize_bt_fit
       - build_elo_data
       - fit_elo_model
