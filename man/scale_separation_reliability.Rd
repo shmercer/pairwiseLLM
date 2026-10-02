@@ -40,6 +40,7 @@ scale_separation_reliability(c(-1, 0, 1), c(0.2, 0.3, 0.4))
 \code{\link[=fit_bt_model]{fit_bt_model()}}
 
 Other frequentist models:
+\code{\link[=bootstrap_bt_model]{bootstrap_bt_model()}},
 \code{\link[=build_bt_data]{build_bt_data()}},
 \code{\link[=build_elo_data]{build_elo_data()}},
 \code{\link[=fit_bt_model]{fit_bt_model()}},

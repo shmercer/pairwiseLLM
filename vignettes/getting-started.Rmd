@@ -165,7 +165,8 @@ These standard errors describe uncertainty conditional on the comparisons that
 actually occurred. They do not account for how an adaptive schedule might change
 if the assessment were repeated. Alpha adjustment does not select pairs and does
 not guarantee unbiased reliability for every adaptive schedule. Schedule-aware
-bootstrap correction remains separate work. For the mathematical definition,
+bootstrap bias correction is available in the [bootstrap guide](bt-bootstrap.html).
+For the mathematical definition,
 uncertainty assumptions and failure diagnostics, see `?fit_bt_model`.
 
 ### Save an analysis

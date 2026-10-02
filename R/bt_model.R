@@ -296,7 +296,8 @@ build_bt_data <- function(results) {
 #' changes which pairs are selected. Alpha adjustment is motivated by adaptive
 #' scheduling; it is not universally preferred or a guarantee of unbiased SSR.
 #' Firth remains the intended modern comparator for random schedules.
-#' Schedule-aware bootstrap correction is separate work.
+#' [bootstrap_bt_model()] separately provides schedule-aware bootstrap bias
+#' correction; it does not turn these conditional SEs into corrected-score SEs.
 #'
 #' The alpha engine shares Firth's binary input and sum-to-zero convention.
 #' Items are radix-sorted; coefficient i is the contrast of item i to the last

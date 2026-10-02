@@ -139,7 +139,8 @@ make_adaptive_replay_reservoir <- function(outcomes, item_ids) {
 
 .adaptive_reservoir_bootstrap <- function(state) {
   manifest <- state$replay_reservoir
-  rows <- .adaptive_reservoir_tree(manifest$edges, manifest$item_ids, state$meta$seed)
+  rows <- .adaptive_reservoir_tree(manifest$edges, manifest$item_ids,
+    state$meta$initialization_seed %||% state$meta$seed)
   tibble::tibble(i_id = manifest$edges$A_id[rows], j_id = manifest$edges$B_id[rows])
 }
 

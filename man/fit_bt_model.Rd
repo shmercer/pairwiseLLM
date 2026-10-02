@@ -212,7 +212,8 @@ epsilon adjustment, which uses observed win proportions. Neither method
 changes which pairs are selected. Alpha adjustment is motivated by adaptive
 scheduling; it is not universally preferred or a guarantee of unbiased SSR.
 Firth remains the intended modern comparator for random schedules.
-Schedule-aware bootstrap correction is separate work.
+\code{\link[=bootstrap_bt_model]{bootstrap_bt_model()}} separately provides schedule-aware bootstrap bias
+correction; it does not turn these conditional SEs into corrected-score SEs.
 
 The alpha engine shares Firth's binary input and sum-to-zero convention.
 Items are radix-sorted; coefficient i is the contrast of item i to the last
@@ -274,6 +275,7 @@ if (requireNamespace("BradleyTerry2", quietly = TRUE)) {
 \code{\link[=build_bt_data]{build_bt_data()}}, \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}
 
 Other frequentist models:
+\code{\link[=bootstrap_bt_model]{bootstrap_bt_model()}},
 \code{\link[=build_bt_data]{build_bt_data()}},
 \code{\link[=build_elo_data]{build_elo_data()}},
 \code{\link[=fit_elo_model]{fit_elo_model()}},

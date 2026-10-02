@@ -275,7 +275,7 @@ validate_judge_result <- function(result, A_id, B_id) {
   j_id <- as.character(pair$j_id[[1L]])
   history_state <- .adaptive_history_state_resolve(state, ids = state$item_ids)
   counts <- .adaptive_history_state_counts(history_state, state$item_ids)
-  seed_base <- as.integer(state$meta$seed %||% 1L)
+  seed_base <- as.integer(state$meta$initialization_seed %||% state$meta$seed %||% 1L)
 
   order_vals <- .adaptive_assign_order_for_state(
     state,
