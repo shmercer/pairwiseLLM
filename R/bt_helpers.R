@@ -1,3 +1,53 @@
+#' Calculate scale-separation reliability
+#'
+#' Calculate conventional SSR as `1 - mean(se^2) / stats::var(theta)` and
+#' expose its variance components. The observed variance uses the sample
+#' denominator `n - 1`. Estimates and SEs must use the same scale and item order.
+#'
+#' Negative SSR and negative estimated true-score variance are retained, not
+#' clipped. They indicate that mean squared uncertainty exceeds observed score
+#' variance. SSR depends on the estimator, its SE convention, and the estimated
+#' score variance; it is not an estimator-free measure of recovery or accuracy.
+#'
+#' @param theta Real numeric vector of finite item estimates, with at least two
+#'   entries and positive sample variance.
+#' @param se Real numeric vector of finite, nonnegative standard errors, in the
+#'   same order and of the same length as `theta`. Names are not used to align
+#'   the vectors.
+#' @return A list with `observed_variance`, `mean_squared_se`,
+#'   `true_score_variance` (observed variance minus mean squared SE), `ssr`,
+#'   `n_items`, `n_finite`, `valid`, and `status`. Successful calculations have
+#'   `valid = TRUE` and status `"ok"` or `"negative_true_score_variance"`.
+#'   Invalid inputs or nonfinite calculated components raise an error; no items
+#'   are dropped and no coefficient is returned for an undefined calculation.
+#' @examples
+#' scale_separation_reliability(c(-1, 0, 1), c(0.2, 0.3, 0.4))
+#' @seealso [fit_bt_model()]
+#' @family frequentist models
+#' @export
+scale_separation_reliability <- function(theta, se) {
+  .bt_validate_estimates(theta, se)
+  if (length(theta) < 2L) {
+    .bt_abort("SSR requires at least two items.")
+  }
+  observed <- stats::var(theta)
+  error <- mean(se^2)
+  if (!is.finite(observed) || observed <= 0 || !is.finite(error)) {
+    .bt_abort("SSR requires positive finite score variance and finite mean squared SE.")
+  }
+  true <- observed - error
+  ssr <- 1 - error / observed
+  if (!is.finite(true) || !is.finite(ssr)) {
+    .bt_abort("SSR calculation produced nonfinite variance components or reliability.")
+  }
+  list(
+    observed_variance = observed, mean_squared_se = error,
+    true_score_variance = true, ssr = ssr,
+    n_items = length(theta), n_finite = length(theta), valid = TRUE,
+    status = if (true < 0) "negative_true_score_variance" else "ok"
+  )
+}
+
 #' Summarize a Bradley–Terry model fit
 #'
 #' This helper takes the object returned by \code{\link{fit_bt_model}} and
@@ -7,8 +57,8 @@
 #'   \item \code{theta}: estimated ability parameter
 #'   \item \code{se}: standard error of \code{theta}
 #'   \item \code{rank}: rank order of \code{theta} (1 = highest by default)
-#'   \item \code{engine}: modeling engine used ("sirt" or "BradleyTerry2")
-#'   \item \code{reliability}: MLE reliability (for \pkg{sirt}) or \code{NA}
+#'   \item \code{engine}: modeling engine used ("sirt", "BradleyTerry2", or "brglm2")
+#'   \item \code{reliability}: raw sirt reliability, calculated Firth SSR, or \code{NA}
 #' }
 #'
 #' Standard errors describe model uncertainty; small differences in estimates
@@ -31,8 +81,8 @@
 #'   \item{se}{Standard error of \code{theta}.}
 #'   \item{rank}{Rank of \code{theta}; 1 = highest
 #'   (if \code{decreasing = TRUE}).}
-#'   \item{engine}{Modeling engine used ("sirt" or "BradleyTerry2").}
-#'   \item{reliability}{MLE reliability (numeric scalar) repeated on each row.}
+#'   \item{engine}{Modeling engine used ("sirt", "BradleyTerry2", or "brglm2").}
+#'   \item{reliability}{Reliability (numeric scalar, or `NA`) repeated on each row.}
 #' }
 #'
 #' @examples
@@ -41,11 +91,11 @@
 #' bt <- build_bt_data(example_writing_pairs)
 #'
 #' if (requireNamespace("sirt", quietly = TRUE)) {
-#'   fit1 <- fit_bt_model(bt, engine = "sirt")
+#'   fit1 <- fit_bt_model(bt, engine = "sirt", verbose = FALSE)
 #'   summarize_bt_fit(fit1)
 #' }
 #' if (requireNamespace("BradleyTerry2", quietly = TRUE)) {
-#'   fit2 <- fit_bt_model(bt, engine = "BradleyTerry2")
+#'   fit2 <- fit_bt_model(bt, engine = "BradleyTerry2", verbose = FALSE)
 #'   summarize_bt_fit(fit2)
 #' }
 #'
@@ -87,9 +137,9 @@ summarize_bt_fit <- function(fit, decreasing = TRUE, verbose = TRUE) {
 
   # Order and rank (quietly if verbose = FALSE)
   ord <- if (isTRUE(verbose)) {
-    order(theta_num, decreasing = decreasing, na.last = "keep")
+    order(theta_num, decreasing = decreasing, na.last = NA)
   } else {
-    suppressWarnings(order(theta_num, decreasing = decreasing, na.last = "keep"))
+    suppressWarnings(order(theta_num, decreasing = decreasing, na.last = NA))
   }
 
   rank_vec <- rep(NA_integer_, length(theta_num))

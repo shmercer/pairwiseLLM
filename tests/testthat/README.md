@@ -49,7 +49,13 @@ prediction, failures, and MCMC contracts; 6021 contains opt-in real synthetic St
 parity tests (#278). Prefixes verified unused on 2026-09-22. Run 6021 with
 `PAIRWISELLM_TEST_E3_STAN=true`; ordinary tests never compile or sample implicitly.
 
+Issue #307 reserves 0036 for Firth BT numerical, uncertainty, prediction, and
+compatibility contracts (verified unused on 2026-10-01).
+
 ## Determinism Rules
+
+Issue #302 reserves 0035 for frequentist SSR, estimator provenance, connectivity,
+and independent sirt agreement (verified unused on 2026-10-01).
 
 - No randomness without explicit local seeding.
 - Use `withr::local_seed()` whenever a test needs random numbers.

@@ -60,6 +60,8 @@ Other frequentist models:
 \code{\link[=build_elo_data]{build_elo_data()}},
 \code{\link[=fit_bt_model]{fit_bt_model()}},
 \code{\link[=fit_elo_model]{fit_elo_model()}},
+\code{\link[=predict.pairwiseLLM_bt_firth]{predict.pairwiseLLM_bt_firth()}},
+\code{\link[=scale_separation_reliability]{scale_separation_reliability()}},
 \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}
 }
 \concept{frequentist models}

@@ -193,11 +193,6 @@ test_that("fit_bt_model(auto) falls back to BradleyTerry2 when sirt is unavailab
   data("example_writing_pairs", package = "pairwiseLLM")
   bt <- build_bt_data(example_writing_pairs)
 
-  # Save originals and restore no matter what happens in the test
-  ns <- asNamespace("pairwiseLLM")
-  orig_require <- get(".require_ns", envir = ns, inherits = FALSE)
-  on.exit(assign(".require_ns", orig_require, envir = ns), add = TRUE)
-
   testthat::local_mocked_bindings(
     .require_ns = function(pkg, quietly = TRUE) {
       if (identical(pkg, "sirt")) {
@@ -205,7 +200,7 @@ test_that("fit_bt_model(auto) falls back to BradleyTerry2 when sirt is unavailab
       }
       base::requireNamespace(pkg, quietly = quietly)
     },
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   fit <- fit_bt_model(bt, engine = "auto", verbose = FALSE)
@@ -219,14 +214,9 @@ test_that("fit_bt_model(auto) falls back to BradleyTerry2 when sirt btm errors",
   data("example_writing_pairs", package = "pairwiseLLM")
   bt <- build_bt_data(example_writing_pairs)
 
-  # Save originals and restore no matter what happens in the test
-  ns <- asNamespace("pairwiseLLM")
-  orig_btm <- get(".sirt_btm", envir = ns, inherits = FALSE)
-  on.exit(assign(".sirt_btm", orig_btm, envir = ns), add = TRUE)
-
   testthat::local_mocked_bindings(
     .sirt_btm = function(...) stop("forced sirt failure for testing", call. = FALSE),
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   fit <- fit_bt_model(bt, engine = "auto", verbose = FALSE)
@@ -353,10 +343,9 @@ test_that("fit_bt_model errors if explicit engine is missing (sirt)", {
   data("example_writing_pairs", package = "pairwiseLLM")
   bt <- build_bt_data(example_writing_pairs)
 
-  ns <- asNamespace("pairwiseLLM")
   testthat::local_mocked_bindings(
     .require_ns = function(...) FALSE,
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   expect_error(
@@ -369,10 +358,9 @@ test_that("fit_bt_model errors if explicit engine is missing (BradleyTerry2)", {
   data("example_writing_pairs", package = "pairwiseLLM")
   bt <- build_bt_data(example_writing_pairs)
 
-  ns <- asNamespace("pairwiseLLM")
   testthat::local_mocked_bindings(
     .require_ns = function(...) FALSE,
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   expect_error(
@@ -382,9 +370,7 @@ test_that("fit_bt_model errors if explicit engine is missing (BradleyTerry2)", {
 })
 
 test_that("fit_bt_model (sirt) errors on malformed output", {
-  # We mock .require_ns to return TRUE so we reach the sirt execution block
-  # even if sirt isn't installed locally.
-  ns <- asNamespace("pairwiseLLM")
+  skip_if_not_installed("sirt")
 
   # Prepare dummy data
   data("example_writing_pairs", package = "pairwiseLLM")
@@ -394,7 +380,7 @@ test_that("fit_bt_model (sirt) errors on malformed output", {
   testthat::local_mocked_bindings(
     .require_ns = function(...) TRUE,
     .sirt_btm = function(...) list(effects = NULL),
-    .env = ns
+    .package = "pairwiseLLM"
   )
   expect_error(
     fit_bt_model(bt, engine = "sirt"),
@@ -405,7 +391,7 @@ test_that("fit_bt_model (sirt) errors on malformed output", {
   testthat::local_mocked_bindings(
     .require_ns = function(...) TRUE,
     .sirt_btm = function(...) list(effects = data.frame(wrong = 1)),
-    .env = ns
+    .package = "pairwiseLLM"
   )
   expect_error(
     fit_bt_model(bt, engine = "sirt"),
@@ -417,8 +403,6 @@ test_that("fit_bt_model reports errors from both engines when engine='auto' fail
   data("example_writing_pairs", package = "pairwiseLLM")
   bt <- build_bt_data(example_writing_pairs)
 
-  ns <- asNamespace("pairwiseLLM")
-
   # Mock to ensure:
   # 1. sirt check passes, but execution fails
   # 2. BT2 check fails (simulating missing package or execution failure)
@@ -427,7 +411,7 @@ test_that("fit_bt_model reports errors from both engines when engine='auto' fail
       if (pkg == "sirt") TRUE else FALSE
     },
     .sirt_btm = function(...) stop("Sirt crashed"),
-    .env = ns
+    .package = "pairwiseLLM"
   )
 
   expect_error(
@@ -437,10 +421,10 @@ test_that("fit_bt_model reports errors from both engines when engine='auto' fail
 })
 
 test_that("fit_bt_model executes verbose branches", {
+  skip_if_not_installed("sirt")
   # This test ensures the verbose=TRUE paths run without error.
   # We explicitly mock the engines to ensure stability and avoid external dependencies.
 
-  ns <- asNamespace("pairwiseLLM")
   data("example_writing_pairs", package = "pairwiseLLM")
   bt <- build_bt_data(example_writing_pairs)
 
@@ -452,13 +436,13 @@ test_that("fit_bt_model executes verbose branches", {
       list(
         effects = data.frame(
           individual = c("A", "B"),
-          theta = c(0, 0),
-          se.theta = c(0, 0)
+          theta = c(-1, 1),
+          se.theta = c(0.5, 0.5)
         ),
-        mle.rel = 0.8
+        mle.rel = 0.875, eps = 0.3, iter = 10L
       )
     },
-    .env = ns,
+    .package = "pairwiseLLM",
     {
       expect_no_error(fit_bt_model(bt, engine = "sirt", verbose = TRUE))
     }
@@ -473,7 +457,7 @@ test_that("fit_bt_model executes verbose branches", {
   # We explicitly ensure .require_ns returns TRUE to avoid leakage from previous tests.
   testthat::with_mocked_bindings(
     .require_ns = function(...) TRUE,
-    .env = ns,
+    .package = "pairwiseLLM",
     {
       expect_no_error(fit_bt_model(bt, engine = "BradleyTerry2", verbose = TRUE))
     }
