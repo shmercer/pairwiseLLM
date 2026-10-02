@@ -94,6 +94,9 @@ CmdStan.
 - [`predict(`*`<pairwiseLLM_bt_firth>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_firth.md)
   : Predict pairwise win probabilities from a Firth Bradley-Terry fit
 
+- [`predict(`*`<pairwiseLLM_bt_lapse>`*`)`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_lapse.md)
+  : Predict ordered comparisons from an experimental lapse BTL fit
+
 - [`scale_separation_reliability()`](https://shmercer.github.io/pairwiseLLM/reference/scale_separation_reliability.md)
   : Calculate scale-separation reliability
 

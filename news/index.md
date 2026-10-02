@@ -2,6 +2,21 @@
 
 ## pairwiseLLM (development version)
 
+- `fit_bt_model(engine = "lapse")` adds an experimental unpenalized
+  frequentist prototype matching the Bayesian `btl_e_b` likelihood
+  ([\#305](https://github.com/shmercer/pairwiseLLM/issues/305)). Bounded
+  optimization estimates centered item strengths, positional bias and
+  lapse probability. Valid epsilon-zero boundary fits retain point
+  estimates and predictions with explicit nonregular uncertainty status;
+  ordinary joint SEs and covariance are unavailable. Interior fits
+  retain validated joint uncertainty. Genuine numerical and
+  identification failures still fail closed. Conventional SSR and
+  simple-BT bootstrap integration remain unavailable. The unchanged
+  frozen qualification recovered all 450 cases: 352 interior and 98
+  boundary fits, with no numerical or recovery failures. Numerical
+  tolerances and the original evidence are preserved. Existing defaults,
+  dependencies and package version are unchanged.
+
 - [`bootstrap_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/bootstrap_bt_model.md)
   adds provider-free, schedule-aware parametric BT bias correction
   ([\#304](https://github.com/shmercer/pairwiseLLM/issues/304)). Fixed

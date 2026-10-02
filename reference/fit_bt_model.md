@@ -3,7 +3,7 @@
 This function fits a Bradley–Terry paired-comparison model to data
 prepared by
 [`build_bt_data`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md).
-It supports four modeling engines:
+It supports five modeling engines:
 
 - sirt: [`btm`](https://rdrr.io/pkg/sirt/man/btm.html) — the default
   engine, which produces ability estimates, standard errors, and MLE
@@ -19,12 +19,15 @@ It supports four modeling engines:
 - `alpha`: explicit alpha adjustment motivated by adaptive schedules,
   using base R with centered covariance and SSR.
 
+- `lapse`: experimental unpenalized model matching with estimated
+  first-position bias and lapse probability, using base R.
+
 ## Usage
 
 ``` r
 fit_bt_model(
   bt_data,
-  engine = c("auto", "sirt", "BradleyTerry2", "brglm2", "alpha"),
+  engine = c("auto", "sirt", "BradleyTerry2", "brglm2", "alpha", "lapse"),
   verbose = TRUE,
   ...,
   sirt_eps = NULL,
@@ -44,8 +47,8 @@ fit_bt_model(
 - engine:
 
   Character string specifying the modeling engine. One of: `"auto"`
-  (default), `"sirt"`, `"BradleyTerry2"`, `"brglm2"`, or `"alpha"`.
-  Automatic selection never chooses Firth or alpha.
+  (default), `"sirt"`, `"BradleyTerry2"`, `"brglm2"`, `"alpha"`, or
+  `"lapse"`. Automatic selection never chooses Firth, alpha, or lapse.
 
 - verbose:
 
@@ -66,7 +69,10 @@ fit_bt_model(
   `alpha`, only a named `control` list is accepted: `epsilon` (default
   `1e-12`), `maxit` (200), `gradient_tol` (`1e-7`), `step_tol` (`1e-7`),
   `min_rcond` (`1e-12`), and `trace` (FALSE). See the alpha section
-  below.
+  below. For `lapse`, only a named `control` list is accepted: `maxit`
+  (2000), `reltol` (`1e-12`), `gradient_tol` (`1e-7`), `step_tol`
+  (`1e-7`), `min_rcond` (`1e-12`), and `trace` (FALSE). See the lapse
+  section below.
 
 - sirt_eps:
 
@@ -91,8 +97,8 @@ A list with the following elements:
 
 - engine:
 
-  The engine actually used ("sirt", "BradleyTerry2", "brglm2", or
-  "alpha").
+  The engine actually used ("sirt", "BradleyTerry2", "brglm2", "alpha",
+  or "lapse").
 
 - fit:
 
@@ -106,12 +112,12 @@ A list with the following elements:
 
   - `theta`: estimated ability parameter
 
-  - `se`: standard error of `theta`
+  - `se`: standard error of `theta`; `NA` for valid lapse-boundary fits
 
 - reliability:
 
   Raw MLE reliability for sirt or calculated SSR for Firth/alpha. `NA`
-  for BradleyTerry2 models or a zero-variance Firth/alpha fit.
+  for BradleyTerry2 and lapse models or a zero-variance Firth/alpha fit.
 
 - ssr:
 
@@ -141,12 +147,29 @@ A list with the following elements:
 
 - vcov:
 
-  Firth/alpha: centered item covariance matrix, with row/column labels
-  in the same order as `theta$ID`.
+  Firth/alpha/lapse: centered item covariance matrix, with row/column
+  labels in the same order as `theta$ID`; `NULL` for valid
+  lapse-boundary fits.
 
 - comparisons:
 
-  Firth/alpha: original item pairs for default prediction.
+  Firth/alpha/lapse: original item pairs for default prediction.
+
+- beta, epsilon, model_variant:
+
+  Lapse only: first-position bias, guessing probability, and exact
+  variant `"btl_e_b"`.
+
+- parameter_vcov:
+
+  Lapse only: joint centered theta/beta/epsilon covariance, ordered by
+  `theta:ID` labels followed by `beta` and `epsilon`; `NULL` at the zero
+  boundary.
+
+- log_likelihood, objective:
+
+  Lapse only: unpenalized log likelihood and its negative. No penalty or
+  parameter-transformation Jacobian is added.
 
 - alpha:
 
@@ -154,10 +177,13 @@ A list with the following elements:
 
 - diagnostics:
 
-  Alpha engine only: objective components, item scores,
-  reduced-coordinate gradient, penalized Hessian and unpenalized
-  information, matrix checks, Newton correction, optimizer status, and
-  numerical warnings.
+  Alpha: objective components, item scores, reduced-coordinate gradient,
+  penalized Hessian and unpenalized information, matrix checks, Newton
+  correction, optimizer status, and numerical warnings. Lapse:
+  ordered-pair probabilities, natural-coordinate score and observed
+  Hessian, information/matrix checks, Newton correction, and all
+  optimizer attempts including the epsilon-zero boundary and epsilon-one
+  objective.
 
 ## Details
 
@@ -181,8 +207,9 @@ parameters on a log-odds scale. Higher values mean stronger relative
 performance on the assessed trait. Zero is not a pass mark, and these
 estimates are not rubric grades or automatically comparable across
 independently fitted sets. Standard errors are included for all modeling
-engines. Raw engine MLE reliability is available from sirt; Firth and
-alpha fits return independently calculated SSR.
+engines when their uncertainty checks pass. Raw MLE reliability is
+available from sirt; Firth and alpha fits return independently
+calculated SSR.
 
 For sirt, `$ssr` independently calculates
 `1 - mean(se^2) / stats::var(theta)` from all returned items, using
@@ -259,6 +286,94 @@ retained: `$reliability` is `NA` and `$ssr$status` is
 arithmetic raises an error. Use
 [`predict.pairwiseLLM_bt_firth()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_firth.md)
 for first-item win probabilities.
+
+## Experimental frequentist lapse model matching
+
+`engine = "lapse"` matches the Bayesian `btl_e_b` likelihood: \$\$p(A\\
+wins)=(1-\epsilon)\operatorname{logit}^{-1}(\theta_A-\theta_B+\beta)+\epsilon/2.\$\$
+Positive beta favors the first presented item; epsilon in `[0, 1]` is
+the probability of guessing, distinct from sirt's epsilon adjustment.
+The fit estimates all three parameter groups jointly, with sum-to-zero
+theta, no penalty and no Bayesian priors. It is a model-matching
+prototype, not a replacement for Bayesian estimation or a production
+recommendation.
+
+Binary rows are aggregated by ordered pair. Joint optimization uses the
+existing centered reference contrasts and natural epsilon constrained to
+`[0, 1]`, with L-BFGS-B. Starts have zero item contrasts and beta, and
+epsilon 0.001, 0.05, 0.2, 0.5 and 0.9. The objective and gradient are
+divided by the comparison count for optimization; reported likelihoods,
+Hessians and stationarity checks use the unscaled sum. L-BFGS-B uses
+`factr = reltol / .Machine$double.eps`, and its projected-score
+tolerance is `gradient_tol` divided by the comparison count. Up to ten
+damped Newton steps polish successful attempts in natural coordinates,
+within the bounds. The highest-likelihood candidate is checked
+independently; a materially worse solution is never selected to obtain
+valid uncertainty. Native convergence, natural-coordinate scores and
+centered Newton corrections must satisfy the numerical controls. All
+attempts, including failed ones, remain in diagnostics.
+
+The epsilon-zero face is optimized separately with BFGS, and the
+epsilon-one constant-probability likelihood is evaluated exactly. The
+zero-face solution must pass its own theta/beta convergence,
+stationarity and curvature checks even when an interior fit is selected.
+It can be selected when its objective is lower or within
+`100 * .Machine$double.eps * max(1, abs(objective))` of the joint
+candidate and its one-sided negative-log-likelihood epsilon score is at
+least `-gradient_tol`. A small positive fitted epsilon alone does not
+establish a boundary optimum. There are no bounds on item strengths or
+beta, penalties, or clipping of probabilities, epsilon, or Hessian
+eigenvalues. Out-of-domain optimizer evaluations are retained as failed
+attempts.
+
+Connectedness alone does not establish identification of lapse and bias.
+The ordered design must have sufficient rank, and full natural-parameter
+expected information must be positive definite with reciprocal condition
+number at least `min_rcond`. Interior fits also require a positive
+definite, well-conditioned joint observed negative-log-likelihood
+Hessian. Its inverse is transformed to centered theta, beta and natural
+epsilon; theta SEs include estimation of both nuisance parameters. The
+full covariance is positive semidefinite and singular only because theta
+sums to zero. SEs are local, model-based approximations conditional on
+the realized graph; these checks do not establish repeated-sample
+calibration.
+
+An identified epsilon-zero optimum is a valid point-estimate fit. It
+returns theta, beta, exactly zero epsilon, likelihoods and predictions,
+with `provenance$convergence$status = "converged_boundary"` and
+`converged = TRUE`. Required observed curvature is positive definite
+along the theta/beta face; when the epsilon score is within
+`gradient_tol` of zero, the full joint curvature must also pass.
+Ordinary joint lapse-model uncertainty is not reported: `theta$se` is
+`NA`, `vcov` and `parameter_vcov` are `NULL`, and
+`provenance$uncertainty` has `method = "none"`, `valid = FALSE`, and
+`status = "nonregular_boundary"`. Interior fits have uncertainty status
+`"valid"`. Epsilon one leaves theta and beta unidentified and is
+rejected.
+
+Genuine failed checks raise `pairwiseLLM_bt_lapse_error`, also a BT
+validation error, retaining available `theta` (without SEs), `beta`,
+`epsilon`, `diagnostics`, `provenance` and `failure_reason`. No
+regularization or simple-BT fallback is introduced after failure.
+Conventional SSR is unavailable for this prototype (`reliability = NA`,
+`ssr$valid = FALSE`), including valid boundary and interior fits.
+[`bootstrap_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/bootstrap_bt_model.md)
+rejects these fit objects. Boundary intervals and bootstrap uncertainty
+are outside this prototype.
+
+The original frozen issue-305 audit recovered 324 of 450 cases and
+rejected 100 boundary candidates and 26 numerical failures. The boundary
+follow-up repeats the identical cases and recovery tolerances: 352
+interior-valid fits and 98 boundary-valid fits recovered, with zero
+numerical/identification failures and zero recovery failures among valid
+fits. Read its results with
+`readLines(system.file("validation", "bt-lapse-305-boundary.txt", package = "pairwiseLLM"))`.
+The original `bt-lapse-305.txt` and accompanying evidence are preserved.
+This synthetic qualification does not establish production validity,
+boundary interval coverage or repeated-sample uncertainty calibration.
+See
+[`predict.pairwiseLLM_bt_lapse()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_lapse.md)
+for ordered plug-in probabilities.
 
 ## Alpha-adjusted estimation
 
@@ -339,6 +454,7 @@ Other frequentist models:
 [`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md),
 [`predict.pairwiseLLM_bt_alpha()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_alpha.md),
 [`predict.pairwiseLLM_bt_firth()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_firth.md),
+[`predict.pairwiseLLM_bt_lapse()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_lapse.md),
 [`scale_separation_reliability()`](https://shmercer.github.io/pairwiseLLM/reference/scale_separation_reliability.md),
 [`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
 
