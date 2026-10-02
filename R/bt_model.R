@@ -106,16 +106,18 @@ build_bt_data <- function(results) {
 #' Fit a Bradley-Terry model with optional frequentist engines
 #'
 #' This function fits a Bradley–Terry paired-comparison model to data
-#' prepared by \code{\link{build_bt_data}}. It supports three modeling
+#' prepared by \code{\link{build_bt_data}}. It supports four modeling
 #' engines:
 #' \itemize{
-#'   \item \pkg{sirt}: \code{\link[sirt]{btm}} — the preferred engine, which
+#'   \item \pkg{sirt}: \code{\link[sirt]{btm}} — the default engine, which
 #'         produces ability estimates, standard errors, and MLE reliability.
 #'   \item \pkg{BradleyTerry2}: \code{\link[BradleyTerry2]{BTm}} — used as a
 #'         fallback if \pkg{sirt} is unavailable or fails; computes ability
 #'         estimates and standard errors, but not reliability.
 #'   \item \pkg{brglm2}: explicit Firth mean bias reduction for random or
 #'         nonadaptive schedules, with centered covariance and SSR.
+#'   \item `alpha`: explicit alpha adjustment motivated by adaptive schedules,
+#'         using base R with centered covariance and SSR.
 #' }
 #'
 #' When \code{engine = "auto"} (the default), the function attempts
@@ -139,7 +141,7 @@ build_bt_data <- function(results) {
 #' estimates are not rubric grades or automatically comparable across
 #' independently fitted sets. Standard errors are included for all
 #' modeling engines. Raw engine MLE reliability is available from \pkg{sirt};
-#' Firth fits return independently calculated SSR.
+#' Firth and alpha fits return independently calculated SSR.
 #'
 #' For sirt, `$ssr` independently calculates
 #' `1 - mean(se^2) / stats::var(theta)` from all returned items, using sample
@@ -210,8 +212,8 @@ build_bt_data <- function(results) {
 #'   two character ID columns and one numeric \code{result} column
 #'   equal to 0 or 1. Usually produced by \code{\link{build_bt_data}}.
 #' @param engine Character string specifying the modeling engine. One of:
-#'   \code{"auto"} (default), \code{"sirt"}, \code{"BradleyTerry2"}, or
-#'   \code{"brglm2"}. Automatic selection never chooses Firth.
+#'   \code{"auto"} (default), \code{"sirt"}, \code{"BradleyTerry2"},
+#'   \code{"brglm2"}, or `"alpha"`. Automatic selection never chooses Firth or alpha.
 #' @param verbose Logical. If \code{TRUE} (default), show engine output (iterations,
 #'   warnings). If \code{FALSE}, suppress noisy output to keep
 #'   examples and reports clean.
@@ -221,15 +223,25 @@ build_bt_data <- function(results) {
 #'   `maxit` (200), `slowit` (1), `max_step_factor` (12), and `trace` (FALSE).
 #'   `verbose = FALSE` disables tracing; numerical warnings are retained.
 #'   The mean-bias-reduction method cannot be changed through controls.
+#'   For `alpha`, only a named `control` list is accepted: `epsilon` (default
+#'   `1e-12`), `maxit` (200), `gradient_tol` (`1e-7`), `step_tol` (`1e-7`),
+#'   `min_rcond` (`1e-12`), and `trace` (FALSE). See the alpha section below.
 #' @param sirt_eps Optional finite, nonnegative epsilon adjustment for sirt,
 #'   supplied by exact name. `NULL` preserves the engine default or legacy
 #'   `eps` in `...`. Supplying both forms raises an error. This argument is
 #'   valid only with `engine = "sirt"` or `"auto"`; on automatic fallback
 #'   it remains recorded as requested but is not applied to BradleyTerry2.
 #'
+#' @param alpha Explicit finite nonnegative numeric scalar, supplied by exact
+#'   name, required only for `engine = "alpha"`. There is no default penalty
+#'   and no tuning from outcomes. Values 0.30 and 0.50 are supported alongside
+#'   other nonnegative values. Zero requests ordinary unpenalized estimation
+#'   and requires a strongly connected directed win graph. `NULL` is only
+#'   accepted for other engines.
+#'
 #' @return A list with the following elements:
 #' \describe{
-#'   \item{engine}{The engine actually used ("sirt", "BradleyTerry2", or "brglm2").}
+#'   \item{engine}{The engine actually used ("sirt", "BradleyTerry2", "brglm2", or "alpha").}
 #'   \item{fit}{The fitted model object.}
 #'   \item{theta}{
 #'     A tibble with columns:
@@ -240,14 +252,14 @@ build_bt_data <- function(results) {
 #'     }
 #'   }
 #'   \item{reliability}{
-#'       Raw MLE reliability for sirt or calculated SSR for Firth. \code{NA} for
-#'       \pkg{BradleyTerry2} models or a zero-variance Firth fit.
+#'       Raw MLE reliability for sirt or calculated SSR for Firth/alpha. \code{NA} for
+#'       \pkg{BradleyTerry2} models or a zero-variance Firth/alpha fit.
 #'   }
 #'   \item{ssr}{For sirt, the [scale_separation_reliability()] decomposition
 #'     plus `engine_reliability`, `agrees`, `absolute_difference`, and
 #'     `tolerance`. For BradleyTerry2, `ssr` and `engine_reliability` are `NA`,
 #'     `valid` is `FALSE`, `agrees` is `NA`, and `status` is
-#'     `"unavailable_se_convention"`. For Firth, the helper decomposition, or
+#'     `"unavailable_se_convention"`. For Firth/alpha, the helper decomposition, or
 #'     `valid = FALSE` and `status = "zero_score_variance"` when undefined.}
 #'   \item{provenance}{A list recording `engine`, `requested_engine`, loaded
 #'     `engine_version` and `package_version`, `supplied_arguments`,
@@ -258,11 +270,73 @@ build_bt_data <- function(results) {
 #'     Identification records sirt centering or BradleyTerry2's contrasts,
 #'     reference category and player levels. Save the full object to retain
 #'     these settings; the legacy summary tibble is unchanged. Firth provenance
-#'     also records the coordinate transformation and covariance convention.}
-#'   \item{vcov}{Firth only: centered item covariance matrix, with row/column
+#'     also records the coordinate transformation and covariance convention.
+#'     Alpha adds `engine_package = "stats"`, the explicit penalty, solver,
+#'     parameter ordering, convergence code/message and uncertainty scope.}
+#'   \item{vcov}{Firth/alpha: centered item covariance matrix, with row/column
 #'     labels in the same order as `theta$ID`.}
-#'   \item{comparisons}{Firth only: original item pairs for default prediction.}
+#'   \item{comparisons}{Firth/alpha: original item pairs for default prediction.}
+#'   \item{alpha}{Alpha engine only: the requested penalty strength.}
+#'   \item{diagnostics}{Alpha engine only: objective components, item scores,
+#'     reduced-coordinate gradient, penalized Hessian and unpenalized information,
+#'     matrix checks, Newton correction, optimizer status, and numerical warnings.}
 #' }
+#'
+#' @section Alpha-adjusted estimation:
+#' Hamilton and Tawn (\doi{10.1111/jedm.70022}, equation 3) define an adjustment
+#' to the score equation for item r:
+#' \deqn{a_r = \alpha\left(1 - \frac{2}{N-1}\sum_{j\ne r}p_{rj}\right).}
+#' With \eqn{p_{ij}=\operatorname{logit}^{-1}(\theta_i-\theta_j)}, observed win
+#' counts \eqn{w_{ij}}, and \eqn{c=\alpha/(N-1)}, the implemented objective is
+#' \deqn{\ell_\alpha(\theta) = \sum_{i<j}\{w_{ij}\log p_{ij} +
+#' w_{ji}\log(1-p_{ij})\} + c\sum_{i<j}\log\{p_{ij}(1-p_{ij})\}.}
+#' The penalty covers every unordered pair, including unobserved pairs, and
+#' adds c pseudo-wins in each direction. It differs from sirt's conventional
+#' epsilon adjustment, which uses observed win proportions. Neither method
+#' changes which pairs are selected. Alpha adjustment is motivated by adaptive
+#' scheduling; it is not universally preferred or a guarantee of unbiased SSR.
+#' Firth remains the intended modern comparator for random schedules.
+#' Schedule-aware bootstrap correction is separate work.
+#'
+#' The alpha engine shares Firth's binary input and sum-to-zero convention.
+#' Items are radix-sorted; coefficient i is the contrast of item i to the last
+#' item, for i = 1,...,N-1. If B is the centered reference map, theta = B beta.
+#' For pair design row x and total observed comparisons m, the negative
+#' objective Hessian is \eqn{H_\alpha=\sum_{i<j}(m_{ij}+2c)p_{ij}(1-p_{ij})xx^T}.
+#' The original-data information is \eqn{I=\sum_{i<j}m_{ij}p_{ij}(1-p_{ij})xx^T}.
+#' The returned covariance is \eqn{B I^{-1} B^T}, evaluated at the alpha estimate,
+#' with SEs from its diagonal. These are model-based SEs conditional on the
+#' realized comparison graph, not schedule-aware uncertainty. The penalized
+#' Hessian, inverse penalized curvature, and sandwich covariance are not used
+#' for reported SEs or SSR. Centering makes the item covariance rank N-1.
+#'
+#' A single `stats::glm.fit` IWLS fit uses weighted binary rows for the augmented
+#' counts, zero starts,
+#' and a quasibinomial-logit working family with dispersion fixed at one.
+#' This supplies the exact binomial-logit estimating equations without warnings
+#' about fractional pseudo-counts; no dispersion estimate or GLM covariance is
+#' used. The objective and derivatives are evaluated independently. Native
+#' convergence and full rank are necessary but not sufficient: the maximum
+#' absolute adjusted item score must be at most `gradient_tol`, and the maximum
+#' absolute item-coordinate Newton correction at most `step_tol`. Both reduced
+#' matrices must be positive definite with reciprocal condition number at least
+#' `min_rcond`. All numeric controls must be positive and finite; `maxit` must
+#' be an integer, `min_rcond` less than one, and `trace` logical.
+#'
+#' Fits never change alpha or solver after failure. Numerical validation errors
+#' have class `pairwiseLLM_bt_alpha_error` (also a BT validation error). Their
+#' `theta`, `provenance`, `diagnostics`, and `failure_reason` fields preserve
+#' available results for auditing, including converged theta if uncertainty
+#' fails. No theta-only public fit is returned. A valid equal-strength fit is
+#' retained with `NA` SSR and `zero_score_variance` status, as for Firth.
+#' When every item's total wins equal its total losses, zero is the exact
+#' stationary solution. `$diagnostics$exact_zero_solution` records its use;
+#' `$diagnostics$coefficients` are the effective contrasts, while `$fit` retains
+#' the raw IWLS output. This is an exact count-based identity, not rounding small
+#' estimates to zero. Native convergence and uncertainty checks still apply.
+#' Extremely small/large penalties can exceed numerical resolution and error.
+#' The dense all-pair design has no large-scale sparse-optimization guarantee.
+#' Use [predict.pairwiseLLM_bt_alpha()] for plug-in pair probabilities.
 #'
 #' @examples
 #' # Example using built-in comparison data
@@ -285,15 +359,18 @@ build_bt_data <- function(results) {
 #' @family frequentist models
 #' @export
 fit_bt_model <- function(bt_data,
-                         engine = c("auto", "sirt", "BradleyTerry2", "brglm2"),
+                         engine = c("auto", "sirt", "BradleyTerry2", "brglm2", "alpha"),
                          verbose = TRUE,
                          ...,
-                         sirt_eps = NULL) {
+                         sirt_eps = NULL,
+                         alpha = NULL) {
   bt_data <- as.data.frame(bt_data)
   if (ncol(bt_data) != 3L) {
     stop("`bt_data` must have exactly three columns.", call. = FALSE)
   }
 
+  # Preserve the formerly unambiguous abbreviation for the default engine.
+  if (identical(engine, "a")) engine <- "auto"
   engine <- match.arg(engine)
   .bt_validate_data(bt_data)
   dots <- list(...)
@@ -301,6 +378,8 @@ fit_bt_model <- function(bt_data,
     .bt_validate_eps(sirt_eps)
     if (!engine %in% c("sirt", "auto")) .bt_abort("`sirt_eps` requires engine = 'sirt' or 'auto'.")
   }
+  if (!is.null(alpha) && engine != "alpha") .bt_abort("`alpha` requires engine = 'alpha'.")
+  if (engine == "alpha") return(.bt_fit_alpha(bt_data, alpha, verbose, dots))
   if (engine == "brglm2") return(.bt_fit_firth(bt_data, verbose, dots))
 
   # --------------------------

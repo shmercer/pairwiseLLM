@@ -137,6 +137,37 @@ for random or fixed schedules; it is not the package's correction for adaptive
 pairing, where later comparisons depend on earlier results. See `?fit_bt_model`
 for the method and assumptions.
 
+### An option for comparisons chosen adaptively
+
+When later comparisons depend on earlier results, **alpha adjustment** is an
+option motivated by the estimation bias that adaptive scheduling can introduce.
+It gently pulls scores together by adding a small, equal amount of evidence in
+both directions for every possible pair. This differs from the conventional
+sirt epsilon adjustment, which depends on observed win proportions. Both methods
+remain available; Firth is the intended modern comparator for random schedules.
+
+Choose `alpha` before examining your substantive results. The package accepts
+nonnegative values, including 0.30 and 0.50, and never chooses or tunes it for you.
+The bundled example below demonstrates the API with 0.50; it does not establish
+which setting is best for a particular study. This option needs no additional
+engine package.
+
+```{r offline-alpha}
+alpha_fit <- fit_bt_model(build_bt_data(example_writing_pairs),
+                          engine = "alpha", alpha = 0.50, verbose = FALSE)
+head(summarize_bt_fit(alpha_fit), 5) # includes model-based standard errors
+head(predict(alpha_fit))           # first-sample win probabilities
+alpha_fit$ssr                     # reliability and its variance components
+alpha_fit$provenance$adjustment   # exact penalty used
+```
+
+These standard errors describe uncertainty conditional on the comparisons that
+actually occurred. They do not account for how an adaptive schedule might change
+if the assessment were repeated. Alpha adjustment does not select pairs and does
+not guarantee unbiased reliability for every adaptive schedule. Schedule-aware
+bootstrap correction remains separate work. For the mathematical definition,
+uncertainty assumptions and failure diagnostics, see `?fit_bt_model`.
+
 ### Save an analysis
 
 ```{r save-offline-results, eval=FALSE}

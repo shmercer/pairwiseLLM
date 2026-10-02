@@ -142,6 +142,7 @@ reference:
     contents:
       - build_bt_data
       - fit_bt_model
+      - predict.pairwiseLLM_bt_alpha
       - predict.pairwiseLLM_bt_firth
       - scale_separation_reliability
       - summarize_bt_fit
