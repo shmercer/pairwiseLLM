@@ -12,6 +12,10 @@
 }
 
 .bt_bootstrap_theta <- function(object, ids = NULL) {
+  if (inherits(object, "pairwiseLLM_bt_lapse") ||
+      (is.list(object) && identical(object$engine, "lapse"))) {
+    .bt_bootstrap_abort("Lapse/positional fits are outside the simple-BT bootstrap interface.")
+  }
   if (is.list(object)) {
     convergence <- object$provenance$convergence$converged
     if (!is.null(convergence) && !isTRUE(convergence)) {

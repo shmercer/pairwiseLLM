@@ -148,6 +148,7 @@ reference:
       - bootstrap_bt_model
       - predict.pairwiseLLM_bt_alpha
       - predict.pairwiseLLM_bt_firth
+      - predict.pairwiseLLM_bt_lapse
       - scale_separation_reliability
       - summarize_bt_fit
       - build_elo_data

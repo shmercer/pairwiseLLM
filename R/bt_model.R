@@ -106,7 +106,7 @@ build_bt_data <- function(results) {
 #' Fit a Bradley-Terry model with optional frequentist engines
 #'
 #' This function fits a Bradley–Terry paired-comparison model to data
-#' prepared by \code{\link{build_bt_data}}. It supports four modeling
+#' prepared by \code{\link{build_bt_data}}. It supports five modeling
 #' engines:
 #' \itemize{
 #'   \item \pkg{sirt}: \code{\link[sirt]{btm}} — the default engine, which
@@ -118,6 +118,8 @@ build_bt_data <- function(results) {
 #'         nonadaptive schedules, with centered covariance and SSR.
 #'   \item `alpha`: explicit alpha adjustment motivated by adaptive schedules,
 #'         using base R with centered covariance and SSR.
+#'   \item `lapse`: experimental unpenalized model matching with estimated
+#'         first-position bias and lapse probability, using base R.
 #' }
 #'
 #' When \code{engine = "auto"} (the default), the function attempts
@@ -140,7 +142,7 @@ build_bt_data <- function(results) {
 #' performance on the assessed trait. Zero is not a pass mark, and these
 #' estimates are not rubric grades or automatically comparable across
 #' independently fitted sets. Standard errors are included for all
-#' modeling engines. Raw engine MLE reliability is available from \pkg{sirt};
+#' modeling engines when their uncertainty checks pass. Raw MLE reliability is available from \pkg{sirt};
 #' Firth and alpha fits return independently calculated SSR.
 #'
 #' For sirt, `$ssr` independently calculates
@@ -213,7 +215,8 @@ build_bt_data <- function(results) {
 #'   equal to 0 or 1. Usually produced by \code{\link{build_bt_data}}.
 #' @param engine Character string specifying the modeling engine. One of:
 #'   \code{"auto"} (default), \code{"sirt"}, \code{"BradleyTerry2"},
-#'   \code{"brglm2"}, or `"alpha"`. Automatic selection never chooses Firth or alpha.
+#'   \code{"brglm2"}, `"alpha"`, or `"lapse"`. Automatic selection never chooses
+#'   Firth, alpha, or lapse.
 #' @param verbose Logical. If \code{TRUE} (default), show engine output (iterations,
 #'   warnings). If \code{FALSE}, suppress noisy output to keep
 #'   examples and reports clean.
@@ -226,6 +229,9 @@ build_bt_data <- function(results) {
 #'   For `alpha`, only a named `control` list is accepted: `epsilon` (default
 #'   `1e-12`), `maxit` (200), `gradient_tol` (`1e-7`), `step_tol` (`1e-7`),
 #'   `min_rcond` (`1e-12`), and `trace` (FALSE). See the alpha section below.
+#'   For `lapse`, only a named `control` list is accepted: `maxit` (2000),
+#'   `reltol` (`1e-12`), `gradient_tol` (`1e-7`), `step_tol` (`1e-7`),
+#'   `min_rcond` (`1e-12`), and `trace` (FALSE). See the lapse section below.
 #' @param sirt_eps Optional finite, nonnegative epsilon adjustment for sirt,
 #'   supplied by exact name. `NULL` preserves the engine default or legacy
 #'   `eps` in `...`. Supplying both forms raises an error. This argument is
@@ -241,19 +247,19 @@ build_bt_data <- function(results) {
 #'
 #' @return A list with the following elements:
 #' \describe{
-#'   \item{engine}{The engine actually used ("sirt", "BradleyTerry2", "brglm2", or "alpha").}
+#'   \item{engine}{The engine actually used ("sirt", "BradleyTerry2", "brglm2", "alpha", or "lapse").}
 #'   \item{fit}{The fitted model object.}
 #'   \item{theta}{
 #'     A tibble with columns:
 #'     \itemize{
 #'       \item \code{ID}: object identifier
 #'       \item \code{theta}: estimated ability parameter
-#'       \item \code{se}: standard error of \code{theta}
+#'       \item \code{se}: standard error of \code{theta}; `NA` for valid lapse-boundary fits
 #'     }
 #'   }
 #'   \item{reliability}{
 #'       Raw MLE reliability for sirt or calculated SSR for Firth/alpha. \code{NA} for
-#'       \pkg{BradleyTerry2} models or a zero-variance Firth/alpha fit.
+#'       \pkg{BradleyTerry2} and lapse models or a zero-variance Firth/alpha fit.
 #'   }
 #'   \item{ssr}{For sirt, the [scale_separation_reliability()] decomposition
 #'     plus `engine_reliability`, `agrees`, `absolute_difference`, and
@@ -273,14 +279,98 @@ build_bt_data <- function(results) {
 #'     also records the coordinate transformation and covariance convention.
 #'     Alpha adds `engine_package = "stats"`, the explicit penalty, solver,
 #'     parameter ordering, convergence code/message and uncertainty scope.}
-#'   \item{vcov}{Firth/alpha: centered item covariance matrix, with row/column
-#'     labels in the same order as `theta$ID`.}
-#'   \item{comparisons}{Firth/alpha: original item pairs for default prediction.}
+#'   \item{vcov}{Firth/alpha/lapse: centered item covariance matrix, with row/column
+#'     labels in the same order as `theta$ID`; `NULL` for valid lapse-boundary fits.}
+#'   \item{comparisons}{Firth/alpha/lapse: original item pairs for default prediction.}
+#'   \item{beta, epsilon, model_variant}{Lapse only: first-position bias, guessing
+#'     probability, and exact variant `"btl_e_b"`.}
+#'   \item{parameter_vcov}{Lapse only: joint centered theta/beta/epsilon covariance,
+#'     ordered by `theta:ID` labels followed by `beta` and `epsilon`; `NULL` at the zero boundary.}
+#'   \item{log_likelihood, objective}{Lapse only: unpenalized log likelihood and
+#'     its negative. No penalty or parameter-transformation Jacobian is added.}
 #'   \item{alpha}{Alpha engine only: the requested penalty strength.}
-#'   \item{diagnostics}{Alpha engine only: objective components, item scores,
+#'   \item{diagnostics}{Alpha: objective components, item scores,
 #'     reduced-coordinate gradient, penalized Hessian and unpenalized information,
-#'     matrix checks, Newton correction, optimizer status, and numerical warnings.}
+#'     matrix checks, Newton correction, optimizer status, and numerical warnings.
+#'     Lapse: ordered-pair probabilities, natural-coordinate score and observed
+#'     Hessian, information/matrix checks, Newton correction, and all optimizer
+#'     attempts including the epsilon-zero boundary and epsilon-one objective.}
 #' }
+#'
+#' @section Experimental frequentist lapse model matching:
+#' `engine = "lapse"` matches the Bayesian `btl_e_b` likelihood:
+#' \deqn{p(A\ wins)=(1-\epsilon)\operatorname{logit}^{-1}(\theta_A-\theta_B+\beta)+\epsilon/2.}
+#' Positive beta favors the first presented item; epsilon in `[0, 1]` is the
+#' probability of guessing, distinct from sirt's epsilon adjustment. The fit
+#' estimates all three parameter groups jointly, with sum-to-zero theta, no
+#' penalty and no Bayesian priors. It is a model-matching prototype, not a
+#' replacement for Bayesian estimation or a production recommendation.
+#'
+#' Binary rows are aggregated by ordered pair. Joint optimization uses the
+#' existing centered reference contrasts and natural epsilon constrained to
+#' `[0, 1]`, with L-BFGS-B. Starts have zero item contrasts and beta, and epsilon
+#' 0.001, 0.05, 0.2, 0.5 and 0.9. The objective and gradient are divided by the
+#' comparison count for optimization; reported likelihoods, Hessians and
+#' stationarity checks use the unscaled sum. L-BFGS-B uses
+#' `factr = reltol / .Machine$double.eps`, and its projected-score tolerance is
+#' `gradient_tol` divided by the comparison count. Up to ten damped Newton steps
+#' polish successful attempts in natural coordinates, within the bounds.
+#' The highest-likelihood candidate is checked independently; a materially worse
+#' solution is never selected to obtain valid uncertainty. Native convergence,
+#' natural-coordinate scores and centered Newton corrections must satisfy the
+#' numerical controls. All attempts, including failed ones, remain in diagnostics.
+#'
+#' The epsilon-zero face is optimized separately with BFGS, and the epsilon-one
+#' constant-probability likelihood is evaluated exactly. The zero-face solution
+#' must pass its own theta/beta convergence, stationarity and curvature checks
+#' even when an interior fit is selected. It can be selected when its objective
+#' is lower or within `100 * .Machine$double.eps * max(1, abs(objective))` of the
+#' joint candidate and its one-sided negative-log-likelihood epsilon score is
+#' at least `-gradient_tol`. A small positive fitted epsilon alone does not
+#' establish a boundary optimum. There are no bounds on item strengths or beta,
+#' penalties, or clipping of probabilities, epsilon, or Hessian eigenvalues.
+#' Out-of-domain optimizer evaluations are retained as failed attempts.
+#'
+#' Connectedness alone does not establish identification of lapse and bias.
+#' The ordered design must have sufficient rank, and full natural-parameter
+#' expected information must be positive definite with reciprocal condition
+#' number at least `min_rcond`. Interior fits also require a positive definite,
+#' well-conditioned joint observed negative-log-likelihood Hessian. Its inverse
+#' is transformed to centered theta, beta and natural epsilon; theta SEs include
+#' estimation of both nuisance parameters. The full covariance is positive
+#' semidefinite and singular only because theta sums to zero. SEs are local,
+#' model-based approximations conditional on the realized graph; these checks
+#' do not establish repeated-sample calibration.
+#'
+#' An identified epsilon-zero optimum is a valid point-estimate fit. It returns
+#' theta, beta, exactly zero epsilon, likelihoods and predictions, with
+#' `provenance$convergence$status = "converged_boundary"` and `converged = TRUE`.
+#' Required observed curvature is positive definite along the theta/beta face;
+#' when the epsilon score is within `gradient_tol` of zero, the full joint
+#' curvature must also pass. Ordinary joint lapse-model uncertainty is not
+#' reported: `theta$se` is `NA`, `vcov` and `parameter_vcov` are `NULL`, and
+#' `provenance$uncertainty` has `method = "none"`, `valid = FALSE`, and
+#' `status = "nonregular_boundary"`. Interior fits have uncertainty status
+#' `"valid"`. Epsilon one leaves theta and beta unidentified and is rejected.
+#'
+#' Genuine failed checks raise `pairwiseLLM_bt_lapse_error`, also a BT validation
+#' error, retaining available `theta` (without SEs), `beta`, `epsilon`,
+#' `diagnostics`, `provenance` and `failure_reason`. No regularization or simple-BT
+#' fallback is introduced after failure. Conventional SSR is unavailable for
+#' this prototype (`reliability = NA`, `ssr$valid = FALSE`), including valid
+#' boundary and interior fits. [bootstrap_bt_model()] rejects these fit objects.
+#' Boundary intervals and bootstrap uncertainty are outside this prototype.
+#'
+#' The original frozen issue-305 audit recovered 324 of 450 cases and rejected
+#' 100 boundary candidates and 26 numerical failures. The boundary follow-up
+#' repeats the identical cases and recovery tolerances: 352 interior-valid fits
+#' and 98 boundary-valid fits recovered, with zero numerical/identification
+#' failures and zero recovery failures among valid fits. Read its results with
+#' `readLines(system.file("validation", "bt-lapse-305-boundary.txt", package = "pairwiseLLM"))`.
+#' The original `bt-lapse-305.txt` and accompanying evidence are preserved.
+#' This synthetic qualification does not establish production validity,
+#' boundary interval coverage or repeated-sample uncertainty calibration.
+#' See [predict.pairwiseLLM_bt_lapse()] for ordered plug-in probabilities.
 #'
 #' @section Alpha-adjusted estimation:
 #' Hamilton and Tawn (\doi{10.1111/jedm.70022}, equation 3) define an adjustment
@@ -360,7 +450,7 @@ build_bt_data <- function(results) {
 #' @family frequentist models
 #' @export
 fit_bt_model <- function(bt_data,
-                         engine = c("auto", "sirt", "BradleyTerry2", "brglm2", "alpha"),
+                         engine = c("auto", "sirt", "BradleyTerry2", "brglm2", "alpha", "lapse"),
                          verbose = TRUE,
                          ...,
                          sirt_eps = NULL,
@@ -381,6 +471,7 @@ fit_bt_model <- function(bt_data,
   }
   if (!is.null(alpha) && engine != "alpha") .bt_abort("`alpha` requires engine = 'alpha'.")
   if (engine == "alpha") return(.bt_fit_alpha(bt_data, alpha, verbose, dots))
+  if (engine == "lapse") return(.bt_fit_lapse(bt_data, verbose, dots))
   if (engine == "brglm2") return(.bt_fit_firth(bt_data, verbose, dots))
 
   # --------------------------

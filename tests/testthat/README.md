@@ -58,6 +58,11 @@ on 2026-10-01).
 
 ## Determinism Rules
 
+Issue #305 reserves 0041–0043 for lapse likelihood/derivative contracts,
+estimation/recovery, and boundary/failure handling (verified unused on 2026-10-02).
+The frozen synthetic qualification matrix is in `scripts/validate-bt-lapse.R`;
+successful failure-handling tests do not establish production qualification.
+
 Issue #304 reserves 0038–0040 for bootstrap contracts, numerical oracles, and
 execution/failure handling; 5113–5115 for schedule replay, reservoirs, and
 bootstrap boundary coverage (verified unused on 2026-10-02).
