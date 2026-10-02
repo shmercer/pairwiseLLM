@@ -1,14 +1,16 @@
 # pairwiseLLM (development version)
 
 * `fit_bt_model(engine = "lapse")` adds an experimental unpenalized frequentist
-  prototype matching the Bayesian `btl_e_b` likelihood (#305). It jointly
-  estimates centered item strengths, first-position bias and lapse probability,
-  with ordered predictions, joint covariance and auditable optimizer/boundary
-  diagnostics. Invalid identification or uncertainty prevents SEs; conventional
-  SSR and simple-BT bootstrap integration remain unavailable. Frozen synthetic
-  qualification results retain 126 boundary/convergence/stationarity failures
-  among 450 cases; stable near-zero behavior is not established. Existing defaults,
-  dependencies and package version are unchanged.
+  prototype matching the Bayesian `btl_e_b` likelihood (#305). Bounded optimization
+  estimates centered item strengths, positional bias and lapse probability.
+  Valid epsilon-zero boundary fits retain point estimates and predictions with
+  explicit nonregular uncertainty status; ordinary joint SEs and covariance are
+  unavailable. Interior fits retain validated joint uncertainty. Genuine numerical
+  and identification failures still fail closed. Conventional SSR and simple-BT
+  bootstrap integration remain unavailable. The unchanged frozen qualification
+  recovered all 450 cases: 352 interior and 98 boundary fits, with no numerical
+  or recovery failures. Numerical tolerances and the original evidence are preserved.
+  Existing defaults, dependencies and package version are unchanged.
 
 * `bootstrap_bt_model()` adds provider-free, schedule-aware parametric BT bias
   correction (#304). Fixed schedules retain their pairs; adaptive replicates

@@ -179,18 +179,33 @@ from the probability model or from Bayesian versus frequentist estimation.
 It is a prototype, not a replacement for the Bayesian fit.
 
 A connected set of comparisons is not always enough to separate these effects.
-The prototype stops when identification, optimization, lapse-boundary, or
-uncertainty checks fail. The error retains the available estimates and diagnostic
-details, without standard errors or reliability. Successful fits provide local
-standard errors that include uncertainty in bias and lapse, but these checks
-alone do not prove that the errors are well calibrated across repeated samples.
-Conventional reliability (SSR) remains unavailable for this prototype.
-The frozen synthetic assessment recovered the known parameters in all 270
-cases with guessing probabilities of 5%, 20%, or 40%. At zero or near-zero
-guessing, 126 of 180 cases were rejected by the boundary or numerical checks.
-Stable behavior near zero has therefore not been established for production use.
-The simple-BT bootstrap does not accept lapse fits. See `?fit_bt_model` for the
-model, assumptions, numerical controls, and failure fields.
+The prototype stops when numerical or identification checks fail. The error
+retains available estimates and diagnostic details without standard errors or
+reliability.
+
+A fitted guessing probability of exactly zero can be a valid result: the best
+fit needs no guessing component. When this boundary solution passes the
+required checks, the fit retains scores, positional bias, and predictions.
+Its convergence status is `converged_boundary`. Ordinary standard errors are
+unavailable because the usual uncertainty approximation does not apply at
+this boundary. The fit records uncertainty status `nonregular_boundary`,
+missing score standard errors, and no covariance matrices. You can still use
+`predict()` and `summarize_bt_fit()`.
+
+Valid interior fits provide local standard errors that include uncertainty in
+bias and guessing. Numerical checks alone do not prove that these errors are
+well calibrated across repeated samples. Conventional reliability (SSR) remains
+unavailable for every lapse fit, and the simple-BT bootstrap rejects these fits.
+
+The original frozen synthetic assessment recovered 324 of 450 cases and rejected
+100 boundary candidates and 26 numerical failures. With the same cases and
+recovery tolerances, the follow-up recovered all 450: 352 interior fits and 98
+valid zero-boundary fits. There were no numerical or identification failures,
+and no valid fits failed parameter recovery. Read the follow-up with
+`readLines(system.file("validation", "bt-lapse-305-boundary.txt", package = "pairwiseLLM"))`.
+The original evidence is preserved. These synthetic results do not establish
+production validity or uncertainty calibration. See `?fit_bt_model` for the
+model, checks, numerical controls, and diagnostic fields.
 
 ### Save an analysis
 

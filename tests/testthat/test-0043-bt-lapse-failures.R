@@ -24,8 +24,8 @@ test_that("lapse inputs and controls cannot change the scientific model", {
   expect_error(pairwiseLLM::fit_bt_model(lapse_case()$skeleton, engine = "lapse", sirt_eps = 0.2), "sirt_eps")
 })
 
-test_that("nonidentified designs and boundary likelihoods retain failures without SEs", {
-  cases <- list(lapse_case(n = 2L), lapse_case(epsilon = 0), lapse_case(epsilon = 1),
+test_that("nonidentified designs and epsilon-one likelihoods retain failures without SEs", {
+  cases <- list(lapse_case(n = 2L), lapse_case(epsilon = 1),
                  lapse_case(n = 8L, beta = 0, graph = "tree"))
   for (case in cases) {
     failure <- lapse_error(lapse_fit_case(case))
@@ -147,4 +147,81 @@ test_that("separation and disconnected data never trigger regularization or fall
   expect_null(failure$provenance$fallback_reason)
   dat <- data.frame(a = c("a", "c"), b = c("b", "d"), y = c(1, 0))
   expect_error(pairwiseLLM::fit_bt_model(dat, engine = "lapse"), "disconnected")
+})
+
+test_that("boundary candidates require KKT, stationarity, curvature and identification", {
+  case <- lapse_case(epsilon = 0)
+  baseline <- lapse_fit_case(case)
+  original_surface <- pairwiseLLM:::.bt_lapse_surface
+  opt <- baseline$diagnostics$optimization
+  mode <- "kkt"
+  testthat::local_mocked_bindings(
+    .bt_lapse_optimize = function(...) opt,
+    .bt_lapse_surface = function(par, kernel) {
+      out <- original_surface(par, kernel)
+      if (tail(par, 1L) == 0) {
+        k <- length(par)
+        if (mode == "kkt") out$gradient[k] <- -1
+        if (mode == "score") out$gradient[1L] <- 1
+        if (mode == "face_curvature") out$hessian[1L, 1L] <- -1
+        if (mode == "joint_curvature") out$hessian[k, k] <- -1
+      }
+      out
+    }, .package = "pairwiseLLM")
+  # Make the selected joint candidate exact zero too: it cannot masquerade as
+  # an interior fit when the independently evaluated boundary KKT check fails.
+  opt$attempts[[opt$selected]] <- opt$boundary_zero
+  expect_identical(lapse_error(lapse_fit_case(case))$failure_reason, "boundary_kkt_failure")
+  mode <- "score"
+  expect_identical(lapse_error(lapse_fit_case(case))$failure_reason, "boundary_unresolved")
+  mode <- "face_curvature"
+  expect_identical(lapse_error(lapse_fit_case(case))$failure_reason, "boundary_unresolved")
+  mode <- "joint_curvature"
+  expect_identical(lapse_error(lapse_fit_case(case))$failure_reason, "invalid_hessian")
+  mode <- "unchanged"
+  opt$boundary_zero$code <- 1L
+  expect_identical(lapse_error(lapse_fit_case(case))$failure_reason, "boundary_unresolved")
+  opt$boundary_zero$code <- 0L
+  testthat::local_mocked_bindings(.bt_lapse_information = function(par, kernel) matrix(0, length(par), length(par)),
+                                 .package = "pairwiseLLM")
+  failure <- lapse_error(lapse_fit_case(case))
+  expect_identical(failure$failure_reason, "unidentified_information")
+  expect_identical(failure$provenance$convergence$status, "failed")
+  expect_false(failure$provenance$convergence$converged)
+  expect_false("se" %in% names(failure$theta))
+})
+
+test_that("strict boundary KKT needs face curvature and never produces an inverse joint covariance", {
+  case <- lapse_case(beta = 0, epsilon = 0, seed = 30501)
+  baseline <- lapse_fit_case(case)
+  original_surface <- pairwiseLLM:::.bt_lapse_surface
+  testthat::local_mocked_bindings(
+    .bt_lapse_optimize = function(...) baseline$diagnostics$optimization,
+    .bt_lapse_surface = function(par, kernel) {
+      out <- original_surface(par, kernel)
+      if (tail(par, 1L) == 0) out$hessian[length(par), length(par)] <- -1
+      out
+    },
+    .bt_item_covariance = function(...) stop("A boundary fit must not construct joint uncertainty."),
+    .package = "pairwiseLLM")
+  fit <- lapse_fit_case(case)
+  expect_identical(fit$epsilon, 0)
+  expect_gt(fit$diagnostics$boundary_zero_checks$epsilon_score, 1e-7)
+  expect_false(fit$diagnostics$hessian_checks$positive_definite)
+  expect_true(fit$diagnostics$boundary_zero_checks$stationary)
+  expect_null(fit$parameter_vcov)
+  expect_identical(fit$provenance$uncertainty$status, "nonregular_boundary")
+})
+
+test_that("bounded attempts reject out-of-domain evaluations without clipping epsilon", {
+  testthat::local_mocked_bindings(optim = function(par, fn, ...) {
+    par[length(par)] <- -.Machine$double.eps
+    fn(par)
+  }, .package = "stats")
+  attempt <- pairwiseLLM:::.bt_lapse_attempt(0.2, lapse_case()$kernel,
+    pairwiseLLM:::.bt_lapse_control(list(), FALSE))
+  expect_identical(attempt$code, 1L)
+  expect_identical(attempt$objective, Inf)
+  expect_null(attempt$par)
+  expect_match(attempt$message, "outside \\[0, 1\\]")
 })

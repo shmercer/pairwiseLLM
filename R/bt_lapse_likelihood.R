@@ -91,5 +91,8 @@
   q <- exp(.link_e1_log_probability(-eta, epsilon))
   derivative <- cbind(kernel$X * ((1 - epsilon) * stats::plogis(eta) * stats::plogis(-eta)),
                        -0.5 * tanh(eta / 2))
-  crossprod(derivative, derivative * ((kernel$counts$wins + kernel$counts$losses) / (p * q)))
+  # A weighted Gram matrix evaluates the same expected information with exact
+  # computational symmetry, including entries whose true value is zero.
+  weighted <- derivative * sqrt((kernel$counts$wins + kernel$counts$losses) / (p * q))
+  crossprod(weighted)
 }

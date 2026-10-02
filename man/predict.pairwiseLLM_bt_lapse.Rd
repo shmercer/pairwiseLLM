@@ -24,7 +24,9 @@ Numeric first-item win probabilities in input row order.
 Calculate \code{(1-epsilon) * plogis(theta1-theta2+beta) + epsilon/2}.
 Positive beta favors the first presented item. Swapping the items generally
 does not give complementary probabilities unless beta is zero. These are
-plug-in probabilities, without integration over estimation uncertainty.
+plug-in probabilities, without integration over estimation uncertainty. Valid
+epsilon-zero boundary fits also support prediction; their unavailable joint
+uncertainty does not invalidate the point estimates.
 }
 \seealso{
 \code{\link[=fit_bt_model]{fit_bt_model()}}

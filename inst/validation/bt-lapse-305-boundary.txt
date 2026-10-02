@@ -1,0 +1,156 @@
+Issue #305 / PR #311: zero-boundary MLE review follow-up
+
+Contract: https://github.com/shmercer/pairwiseLLM/pull/311#issuecomment-5957015530
+Baseline PR head: b96c92632eb42f3cae18468b7ef932e197be515a.
+Master/base: b8875d081f2d1965f409313cffe3d9d0fc4e401c.
+Environment: R 4.6.1 (2026-06-24), pairwiseLLM 1.6.0, Linux.
+The containing commit identifies the delivered tree; the accompanying source
+fingerprints identify the implementation and frozen generator. The delivery SHA
+and validation state are also recorded in PR #311 and the local #305 handoff.
+
+Result
+  All 450 frozen cases recovered within their original tolerances:
+  352 valid interior fits, 98 valid epsilon-zero boundary fits,
+  zero numerical/identification failures, and zero recovery failures among
+  otherwise valid fits. These are point-estimation qualification results for
+  this synthetic matrix, not production or interval-calibration evidence.
+
+Before / after (fit validity and recovery are separate classifications)
+  Outcome                              Original     Follow-up
+  Interior-valid                           324           352
+  Boundary-valid                             0            98
+  Boundary candidates rejected             100             0
+  Numerical/identification failure          26             0
+  Recovery failure among valid fits          0             0
+  Total cases                              450           450
+  Total recovered                          324           450
+
+  The original 100 boundary rejections were not validated boundary MLEs.
+  Re-evaluation returned 98 boundary fits and two interior fits. The original
+  25 nonconverged cases and one nonstationary case now return valid interior
+  fits. All 324 originally valid fits remain interior-valid and recover.
+
+  True epsilon   Cases   Interior-valid   Boundary-valid   Numerical   Recovery failure
+  0                90          28              62              0              0
+  0.001            90          54              36              0              0
+  0.05             90          90               0              0              0
+  0.2              90          90               0              0              0
+  0.4              90          90               0              0              0
+
+  Population cases: 60 interior, 15 boundary, all 75 recovered.
+  Seeded cases: 292 interior, 83 boundary, all 375 recovered.
+  Maximum population theta/beta/epsilon errors: 6.20924e-10 / 4.02898e-11 / 6.06922e-11.
+  Maximum seeded theta/beta/epsilon errors: 0.299931 / 0.101371 / 0.033979.
+  Maximum interior natural score: 9.911514e-8.
+  Maximum boundary theta/beta score or KKT violation: 9.923639e-8.
+
+Frozen requirements preserved
+  Complete graphs with 4, 8, 12 items and cycle/chord graphs with 8, 12 items;
+  both presentation directions, 2,000 comparisons per ordered edge; centered
+  strengths spanning [-2,2]; beta 0, -0.3, 0.3; epsilon 0, 0.001, 0.05, 0.2, 0.4;
+  population expected counts and seeded binomial counts using 30501:30505.
+  Population maximum absolute theta/beta/epsilon errors must each be <= 1e-5;
+  seeded thresholds remain 0.35 / 0.15 / 0.08. Validity is required for recovery.
+  The grid, case generator, counts, seeds, recovery thresholds and numerical
+  control definitions were compared against the baseline and are unchanged.
+  CSV case keys and ordering match the original 450-case record exactly.
+
+Implementation and numerical investigation
+  The likelihood remains (1-epsilon) * plogis(theta_A-theta_B+beta) + epsilon/2.
+  Centering, model variant btl_e_b, positional interpretation, and no-penalty
+  estimation are unchanged. Natural epsilon in [0,1] replaces logit-epsilon
+  optimization, avoiding the vanishing transformed score near zero. L-BFGS-B
+  retains the same five starts and iteration limit; factr is reltol divided by
+  machine precision, and pgtol is gradient_tol divided by comparison count.
+  At most ten damped natural-coordinate Newton steps polish native successes.
+  No score, step, condition-number, objective-tie, or recovery tolerance changed.
+
+  Epsilon zero is optimized separately with BFGS. Its theta/beta convergence,
+  stationarity and curvature are checked even for an interior fit. A boundary
+  point also requires the one-sided negative-log-likelihood epsilon score to be
+  >= -gradient_tol and full-model expected-information identification. A strict
+  positive score requires curvature along the theta/beta face; when that score
+  is within gradient_tol of zero, full joint observed curvature must also pass.
+  Epsilon one remains unidentified. Invalid candidates retain typed failures.
+
+  The exact-zero optimum may win or tie the best joint objective within the
+  original objective tolerance, but only if KKT holds. A deterministic positive
+  lapse case at 1e-7 verifies that an objective tie with a negative boundary
+  score still returns an interior fit. Candidate choice never substitutes a
+  materially worse likelihood to obtain uncertainty.
+
+  The first follow-up audit returned 351 interior and 98 boundary fits, with
+  one information-matrix rejection and no recovery failures among valid fits.
+  At the rejected 8-item sparse population case (beta 0.3, epsilon 0.2), the
+  weighted two-argument cross-product had asymmetry of 1.136868e-13 near a true
+  zero entry. The existing relative symmetry check correctly rejected it.
+  Computing expected information as crossprod(sqrt(weight) * derivative)
+  evaluates the identical formula with computational symmetry. No tolerance,
+  eigenvalue, covariance repair, or model change was used. An independent
+  information oracle and exact-symmetry regression cover this calculation.
+
+  That first audit also emitted six invalid-log warnings from out-of-domain
+  trial evaluations. Such trials now abort and retain an explicit failed-attempt
+  message before evaluating the likelihood; epsilon is never clipped. The final
+  audit emitted zero warnings. Seven of the 2,250 joint starts in seven cases
+  were unsuccessful; all attempts remain in fit diagnostics and per-case failed
+  counts are in the CSV. Final fit validity is not a claim that every start
+  converged, or that all possible modes were found.
+
+Boundary output and limits
+  Valid boundary fits retain theta, beta, epsilon = 0, objective, log likelihood,
+  ordered predictions and summary compatibility. Convergence status is
+  converged_boundary with converged = TRUE. Uncertainty status is
+  nonregular_boundary, method none, valid FALSE; theta SEs are NA and both item
+  and joint covariance are NULL. No conditional theta/beta covariance is
+  substituted for ordinary joint lapse-model uncertainty.
+  Interior fits retain validated joint observed-information covariance.
+  Conventional SSR remains unavailable for every lapse fit. Simple-BT bootstrap
+  rejects both classes. Boundary intervals and bootstrap uncertainty are absent.
+  Qualification does not establish global optimality, robustness on other
+  graphs, repeated-sample SE/interval calibration, or production suitability.
+
+Focused engineering validation
+  Fifteen files: 0015, 0021, 0026, 0035-0043, 5113-5115.
+  The broad focused run passed 2,451 expectations with zero failures/errors/
+  warnings and two existing skips: missing historical tasklist audit evidence
+  and sandbox-unavailable PSOCK sockets. A final rerun of 0026 and 0041-0043
+  passed 951 expectations including eight added positive-lapse tie assertions.
+  Using the latest result for each file gives 2,459 passes, zero failures/errors/
+  warnings and the same two skips. No full package check or full-suite coverage
+  was run.
+  Targeted line coverage from the focused files:
+    bt_lapse_likelihood.R    100.000%
+    bt_lapse_optimizer.R     98.864%
+    bt_lapse.R               99.259%
+    bt_model.R              100.000%
+    bt_bootstrap_contracts.R 99.107%
+  Changed-file lint, static usage checks for eleven lapse functions, regenerated
+  Roxygen/Rd checks, offline getting-started rendering and diff checks passed.
+  Tests include an independent binomial GLM boundary oracle, likelihood and
+  one-sided derivative checks, public prediction/summary behavior, relabeling,
+  reversal, near-zero regressions, and fail-closed KKT/curvature/identification
+  and optimization cases. No providers, private outcomes or new dependencies.
+
+Reproduction and preserved evidence
+  From a checkout of this report's commit, use a fresh output path:
+    Rscript scripts/validate-bt-lapse.R /tmp/bt-lapse-305-boundary-reproduction.csv
+  A zero script exit means the audit completed, not that qualification passed.
+  The script refuses to overwrite an existing output file.
+  Focused tests:
+    testthat::test_local(filter = "^(0015|0021|0026|003[5-9]|004[0-3]|511[3-5])-", stop_on_warning = TRUE)
+
+  All five original bt-lapse-305 qualification artifacts are byte-for-byte
+  unchanged. Follow-up files are separate:
+    bt-lapse-305-boundary.csv: final 450-case outcomes and failed-attempt counts.
+    bt-lapse-305-boundary.txt: this report.
+    bt-lapse-305-boundary-sources.sha256: final implementation fingerprints.
+    bt-lapse-305-boundary-coverage.csv: targeted line coverage.
+    bt-lapse-305-boundary-preliminary.csv: first follow-up, including rejection.
+    bt-lapse-305-boundary-preliminary-sources.sha256: first follow-up fingerprints.
+    bt-lapse-305-boundary-preliminary.patch.gz: source/reporting diff from the
+      baseline PR head to that first audit; decompress and apply in a separate
+      baseline checkout to reconstruct it. All eight reconstructed fingerprints
+      were verified. This patch is historical evidence, not the final code.
+
+No merge, branch deletion, release, version bump, or #306 work is authorized or done.

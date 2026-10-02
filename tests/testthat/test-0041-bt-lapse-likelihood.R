@@ -54,3 +54,32 @@ test_that("ordered aggregation preserves orientation and uses the established ce
   expect_equal(pairwiseLLM:::.bt_lapse_surface(par, kernel)$value,
                  -sum(dbinom(data$result, 1, p, log = TRUE)), tolerance = 1e-12)
 })
+
+test_that("natural zero-boundary derivatives agree with one-sided differences", {
+  kernel <- lapse_case(epsilon = 0, seed = 30501)$kernel
+  par <- c(-4, -2.5, -1, 0.3, 0)
+  surface <- function(x) pairwiseLLM:::.bt_lapse_surface(x, kernel)
+  h <- 1e-6
+  step <- c(rep(0, 4), h)
+  s <- surface(par)
+  score <- (-3 * s$value + 4 * surface(par + step)$value - surface(par + 2 * step)$value) / (2 * h)
+  curvature <- (-3 * s$gradient + 4 * surface(par + step)$gradient -
+                  surface(par + 2 * step)$gradient) / (2 * h)
+  expect_equal(tail(s$gradient, 1L), score, tolerance = 1e-7)
+  expect_equal(unname(s$hessian[, 5]), curvature, tolerance = 1e-7)
+})
+
+test_that("expected information is a symmetric weighted Gram matrix even at zero cross terms", {
+  case <- lapse_case(8L, 0.3, 0.2, "cycle_chords")
+  par <- c(head(case$theta, -1L) - tail(case$theta, 1L), case$beta, case$epsilon)
+  kernel <- case$kernel
+  eta <- as.vector(kernel$X %*% head(par, -1L))
+  q <- plogis(eta)
+  p <- (1 - case$epsilon) * q + case$epsilon / 2
+  derivative <- cbind(kernel$X * ((1 - case$epsilon) * q * (1 - q)), 0.5 - q)
+  oracle <- crossprod(derivative, derivative * ((kernel$counts$wins + kernel$counts$losses) / (p * (1 - p))))
+  information <- pairwiseLLM:::.bt_lapse_information(par, kernel)
+  expect_identical(information, t(information))
+  expect_equal(unname(information), unname(oracle), tolerance = 1e-12)
+  expect_true(pairwiseLLM:::.bt_alpha_matrix(information)$positive_definite)
+})

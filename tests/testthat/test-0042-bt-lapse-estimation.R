@@ -79,3 +79,108 @@ test_that("public fits retain predictions, summaries and invariance under relabe
   expect_error(pairwiseLLM::bootstrap_bt_model(fit, mode = "fixed", n_rep = 2, seed = 305,
     estimator = "alpha", estimator_args = list(alpha = 0.5)), "outside the simple-BT")
 })
+
+test_that("identified zero-lapse population optima retain points without regular uncertainty", {
+  for (n in c(4L, 8L, 12L)) for (beta in c(0, 0.3)) {
+    case <- lapse_case(n, beta, 0, if (n == 4L) "complete" else "cycle_chords")
+    fit <- lapse_fit_case(case)
+    expect_equal(fit$theta$theta, case$theta, tolerance = 1e-5)
+    expect_equal(fit$beta, beta, tolerance = 1e-5)
+    expect_identical(fit$epsilon, 0)
+    expect_identical(fit$provenance$convergence$status, "converged_boundary")
+    expect_true(fit$provenance$convergence$converged)
+    expect_identical(fit$diagnostics$boundary, "epsilon_zero")
+    expect_identical(fit$diagnostics$optimization$selected_source, "boundary_zero")
+    expect_true(fit$diagnostics$boundary_zero_checks$stationary)
+    expect_true(fit$diagnostics$boundary_zero_checks$kkt_valid)
+    expect_lte(fit$diagnostics$gradient_max, 1e-7)
+    expect_lte(fit$diagnostics$step_max, 1e-7)
+    expect_true(all(is.na(fit$theta$se)))
+    expect_null(fit$vcov)
+    expect_null(fit$parameter_vcov)
+    expect_false(fit$provenance$se_finite)
+    expect_false(fit$provenance$uncertainty$valid)
+    expect_identical(fit$provenance$uncertainty$method, "none")
+    expect_identical(fit$provenance$uncertainty$status, "nonregular_boundary")
+    expect_false(fit$ssr$valid)
+    expect_true(is.na(fit$reliability))
+    expect_equal(fit$log_likelihood, -fit$objective)
+  }
+})
+
+test_that("seeded boundary points match an independent binomial GLM and retain public behavior", {
+  case <- lapse_case(beta = 0, epsilon = 0, seed = 30501)
+  dat <- lapse_binary_data(case)
+  fit <- pairwiseLLM::fit_bt_model(dat, engine = "lapse", verbose = FALSE)
+  oracle <- glm.fit(case$kernel$X, with(case$kernel$counts, cbind(wins, losses)),
+    family = binomial(), intercept = FALSE, control = glm.control(epsilon = 1e-12, maxit = 100))
+  expect_true(oracle$converged)
+  expect_identical(fit$epsilon, 0)
+  expect_gt(fit$diagnostics$boundary_zero_checks$epsilon_score, 1e-7)
+  expect_equal(fit$theta$theta, as.vector(case$kernel$transform %*% head(oracle$coefficients, -1L)),
+               tolerance = 1e-7)
+  expect_equal(fit$beta, unname(tail(oracle$coefficients, 1L)), tolerance = 1e-7)
+  p <- plogis(case$kernel$X %*% oracle$coefficients)
+  expect_equal(fit$objective, -sum(case$kernel$counts$wins * log(p) +
+                                   case$kernel$counts$losses * log1p(-p)), tolerance = 1e-12)
+  summary <- pairwiseLLM::summarize_bt_fit(fit, verbose = FALSE)
+  expect_equal(nrow(summary), 4L)
+  expect_true(all(is.na(summary$se)))
+  predictions <- predict(fit)
+  expect_equal(predictions, plogis(fit$theta$theta[match(dat$object1, fit$theta$ID)] -
+    fit$theta$theta[match(dat$object2, fit$theta$ID)] + fit$beta), tolerance = 1e-14)
+  changed <- dat[c(2, 1, 3)]
+  names(changed) <- names(dat)
+  changed$result <- 1 - dat$result
+  reverse <- pairwiseLLM::fit_bt_model(changed, engine = "lapse", verbose = FALSE)
+  expect_equal(reverse$theta$theta, fit$theta$theta, tolerance = 1e-7)
+  expect_equal(reverse$beta, -fit$beta, tolerance = 1e-7)
+  expect_identical(reverse$epsilon, 0)
+  expect_equal(predict(reverse), 1 - predictions, tolerance = 1e-8)
+  labels <- c(a = "zebra", b = "item with spaces", c = "beta", d = "alpha")
+  changed <- dat[rev(seq_len(nrow(dat))), ]
+  changed$object1 <- unname(labels[changed$object1])
+  changed$object2 <- unname(labels[changed$object2])
+  renamed <- pairwiseLLM::fit_bt_model(changed, engine = "lapse", verbose = FALSE)
+  index <- match(unname(labels[fit$theta$ID]), renamed$theta$ID)
+  expect_equal(renamed$theta$theta[index], fit$theta$theta, tolerance = 1e-7)
+  expect_equal(renamed$beta, fit$beta, tolerance = 1e-7)
+  expect_identical(renamed$epsilon, 0)
+  expect_equal(predict(renamed), rev(predictions), tolerance = 1e-8)
+  expect_error(pairwiseLLM::bootstrap_bt_model(fit, mode = "fixed", n_rep = 2, seed = 305,
+    estimator = "alpha", estimator_args = list(alpha = 0.5)), "outside the simple-BT")
+})
+
+test_that("bounded optimization resolves near-zero regression cases with unchanged gates", {
+  cases <- list(lapse_case(n = 12L, beta = 0, epsilon = 0.001, seed = 30501),
+                lapse_case(n = 12L, beta = 0, epsilon = 0, graph = "cycle_chords", seed = 30501))
+  for (case in cases) {
+    fit <- lapse_fit_case(case)
+    expect_gt(fit$epsilon, 0)
+    expect_identical(fit$provenance$convergence$status, "converged")
+    expect_identical(fit$provenance$uncertainty$status, "valid")
+    expect_identical(fit$provenance$effective_settings$algorithm, "L-BFGS-B")
+    expect_lte(fit$diagnostics$gradient_max, 1e-7)
+    expect_lte(fit$diagnostics$step_max, 1e-7)
+    expect_gte(fit$diagnostics$hessian_checks$rcond, 1e-12)
+    expect_gte(fit$diagnostics$information_checks$rcond, 1e-12)
+    expect_lte(max(abs(fit$theta$theta - case$theta)), 0.35)
+    expect_lte(abs(fit$beta - case$beta), 0.15)
+    expect_lte(abs(fit$epsilon - case$epsilon), 0.08)
+    expect_true(all(is.finite(fit$theta$se)))
+  }
+})
+
+test_that("a likelihood tie alone cannot turn a positive lapse optimum into a boundary fit", {
+  case <- lapse_case(epsilon = 1e-7)
+  fit <- lapse_fit_case(case)
+  gap <- fit$diagnostics$optimization$boundary_zero$objective - fit$objective
+  expect_lte(gap, fit$diagnostics$boundary_objective_tolerance)
+  expect_lt(fit$diagnostics$boundary_zero_checks$epsilon_score, -1e-7)
+  expect_false(fit$diagnostics$boundary_zero_checks$kkt_valid)
+  expect_gt(fit$epsilon, 0)
+  expect_lte(abs(fit$epsilon - case$epsilon), 1e-10)
+  expect_identical(fit$provenance$convergence$status, "converged")
+  expect_true(fit$provenance$uncertainty$valid)
+  expect_lte(fit$diagnostics$gradient_max, 1e-7)
+})

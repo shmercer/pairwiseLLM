@@ -63,7 +63,7 @@ A tibble with columns:
 \itemize{
 \item \code{ID}: object identifier
 \item \code{theta}: estimated ability parameter
-\item \code{se}: standard error of \code{theta}
+\item \code{se}: standard error of \code{theta}; \code{NA} for valid lapse-boundary fits
 }
 }
 \item{reliability}{
@@ -89,12 +89,12 @@ also records the coordinate transformation and covariance convention.
 Alpha adds \code{engine_package = "stats"}, the explicit penalty, solver,
 parameter ordering, convergence code/message and uncertainty scope.}
 \item{vcov}{Firth/alpha/lapse: centered item covariance matrix, with row/column
-labels in the same order as \code{theta$ID}.}
+labels in the same order as \code{theta$ID}; \code{NULL} for valid lapse-boundary fits.}
 \item{comparisons}{Firth/alpha/lapse: original item pairs for default prediction.}
 \item{beta, epsilon, model_variant}{Lapse only: first-position bias, guessing
 probability, and exact variant \code{"btl_e_b"}.}
 \item{parameter_vcov}{Lapse only: joint centered theta/beta/epsilon covariance,
-ordered by \code{theta:ID} labels followed by \code{beta} and \code{epsilon}.}
+ordered by \code{theta:ID} labels followed by \code{beta} and \code{epsilon}; \code{NULL} at the zero boundary.}
 \item{log_likelihood, objective}{Lapse only: unpenalized log likelihood and
 its negative. No penalty or parameter-transformation Jacobian is added.}
 \item{alpha}{Alpha engine only: the requested penalty strength.}
@@ -222,48 +222,70 @@ estimates all three parameter groups jointly, with sum-to-zero theta, no
 penalty and no Bayesian priors. It is a model-matching prototype, not a
 replacement for Bayesian estimation or a production recommendation.
 
-Binary rows are aggregated by ordered pair. Interior optimization uses the
-existing centered reference contrasts and logit-epsilon. BFGS starts at zero
-item contrasts and beta, with epsilon 0.001, 0.05, 0.2, 0.5 and 0.9. Each
-objective and gradient is divided by the comparison count for optimization;
-reported likelihoods, Hessians and stationarity checks use the unscaled sum.
-Up to ten damped Newton steps polish successful BFGS attempts. The highest
-likelihood candidate is checked independently, without selecting a worse
-solution to obtain valid uncertainty. Native convergence, natural-coordinate
-scores and centered Newton corrections must satisfy the numerical controls.
+Binary rows are aggregated by ordered pair. Joint optimization uses the
+existing centered reference contrasts and natural epsilon constrained to
+\verb{[0, 1]}, with L-BFGS-B. Starts have zero item contrasts and beta, and epsilon
+0.001, 0.05, 0.2, 0.5 and 0.9. The objective and gradient are divided by the
+comparison count for optimization; reported likelihoods, Hessians and
+stationarity checks use the unscaled sum. L-BFGS-B uses
+\code{factr = reltol / .Machine$double.eps}, and its projected-score tolerance is
+\code{gradient_tol} divided by the comparison count. Up to ten damped Newton steps
+polish successful attempts in natural coordinates, within the bounds.
+The highest-likelihood candidate is checked independently; a materially worse
+solution is never selected to obtain valid uncertainty. Native convergence,
+natural-coordinate scores and centered Newton corrections must satisfy the
+numerical controls. All attempts, including failed ones, remain in diagnostics.
 
-The epsilon-zero boundary is optimized separately and the epsilon-one
-constant-probability likelihood is evaluated exactly. The boundary fit
-must also pass its own convergence and stationarity checks before an
-interior fit can be accepted. A boundary objective
-within \code{100 * .Machine$double.eps * max(1, abs(objective))} of the interior
-candidate prevents ordinary joint SEs. Boundary fits are diagnostic evidence,
-not a fallback estimator. There are no bounds on item strengths or beta and
-no clipping of probabilities, epsilon, or Hessian eigenvalues.
+The epsilon-zero face is optimized separately with BFGS, and the epsilon-one
+constant-probability likelihood is evaluated exactly. The zero-face solution
+must pass its own theta/beta convergence, stationarity and curvature checks
+even when an interior fit is selected. It can be selected when its objective
+is lower or within \code{100 * .Machine$double.eps * max(1, abs(objective))} of the
+joint candidate and its one-sided negative-log-likelihood epsilon score is
+at least \code{-gradient_tol}. A small positive fitted epsilon alone does not
+establish a boundary optimum. There are no bounds on item strengths or beta,
+penalties, or clipping of probabilities, epsilon, or Hessian eigenvalues.
+Out-of-domain optimizer evaluations are retained as failed attempts.
 
 Connectedness alone does not establish identification of lapse and bias.
-The ordered design must have sufficient rank, and both full natural-parameter
-expected information and the observed negative-log-likelihood Hessian must
-be positive definite with reciprocal condition number at least \code{min_rcond}.
-The joint inverse observed Hessian is transformed to centered theta, beta
-and natural epsilon; theta SEs include estimation of both nuisance parameters.
-The full covariance is positive semidefinite and singular only because theta
-sums to zero. SEs are local, model-based approximations conditional on the
-realized graph; matrix checks do not establish repeated-sample calibration.
+The ordered design must have sufficient rank, and full natural-parameter
+expected information must be positive definite with reciprocal condition
+number at least \code{min_rcond}. Interior fits also require a positive definite,
+well-conditioned joint observed negative-log-likelihood Hessian. Its inverse
+is transformed to centered theta, beta and natural epsilon; theta SEs include
+estimation of both nuisance parameters. The full covariance is positive
+semidefinite and singular only because theta sums to zero. SEs are local,
+model-based approximations conditional on the realized graph; these checks
+do not establish repeated-sample calibration.
 
-Failed checks raise \code{pairwiseLLM_bt_lapse_error}, also a BT validation error,
-retaining available \code{theta} (without SEs), \code{beta}, \code{epsilon}, \code{diagnostics},
-\code{provenance} and \code{failure_reason}. Failed recovery and boundary results are
-retained in the issue-305 synthetic validation record; a correctly detected
-failure is not successful model qualification. No regularization or simple-BT
+An identified epsilon-zero optimum is a valid point-estimate fit. It returns
+theta, beta, exactly zero epsilon, likelihoods and predictions, with
+\code{provenance$convergence$status = "converged_boundary"} and \code{converged = TRUE}.
+Required observed curvature is positive definite along the theta/beta face;
+when the epsilon score is within \code{gradient_tol} of zero, the full joint
+curvature must also pass. Ordinary joint lapse-model uncertainty is not
+reported: \code{theta$se} is \code{NA}, \code{vcov} and \code{parameter_vcov} are \code{NULL}, and
+\code{provenance$uncertainty} has \code{method = "none"}, \code{valid = FALSE}, and
+\code{status = "nonregular_boundary"}. Interior fits have uncertainty status
+\code{"valid"}. Epsilon one leaves theta and beta unidentified and is rejected.
+
+Genuine failed checks raise \code{pairwiseLLM_bt_lapse_error}, also a BT validation
+error, retaining available \code{theta} (without SEs), \code{beta}, \code{epsilon},
+\code{diagnostics}, \code{provenance} and \code{failure_reason}. No regularization or simple-BT
 fallback is introduced after failure. Conventional SSR is unavailable for
-this prototype (\code{reliability = NA}, \code{ssr$valid = FALSE}), even for a locally
-valid fit. \code{\link[=bootstrap_bt_model]{bootstrap_bt_model()}} rejects these fit objects.
-The frozen issue-305 audit passed all 270 cases with true epsilon 0.05, 0.2,
-or 0.4, but rejected 126 of 180 true-zero/near-zero cases. Stable near-zero
-estimation is not established; the prototype is not production-qualified.
-Read the full record with
-\code{readLines(system.file("validation", "bt-lapse-305.txt", package = "pairwiseLLM"))}.
+this prototype (\code{reliability = NA}, \code{ssr$valid = FALSE}), including valid
+boundary and interior fits. \code{\link[=bootstrap_bt_model]{bootstrap_bt_model()}} rejects these fit objects.
+Boundary intervals and bootstrap uncertainty are outside this prototype.
+
+The original frozen issue-305 audit recovered 324 of 450 cases and rejected
+100 boundary candidates and 26 numerical failures. The boundary follow-up
+repeats the identical cases and recovery tolerances: 352 interior-valid fits
+and 98 boundary-valid fits recovered, with zero numerical/identification
+failures and zero recovery failures among valid fits. Read its results with
+\code{readLines(system.file("validation", "bt-lapse-305-boundary.txt", package = "pairwiseLLM"))}.
+The original \verb{bt-lapse-305.txt} and accompanying evidence are preserved.
+This synthetic qualification does not establish production validity,
+boundary interval coverage or repeated-sample uncertainty calibration.
 See \code{\link[=predict.pairwiseLLM_bt_lapse]{predict.pairwiseLLM_bt_lapse()}} for ordered plug-in probabilities.
 }
 

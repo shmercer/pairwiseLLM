@@ -8,13 +8,14 @@
     model_variant = normalize_model_variant("btl_e_b"), experimental = TRUE,
     supplied_arguments = supplied, requested_sirt_eps = NULL,
     adjustment = list(method = "none", log_penalty = 0), theta_finite = FALSE, se_finite = FALSE,
-    effective_settings = list(solver = "stats::optim", algorithm = "BFGS", control = control,
+    effective_settings = list(solver = "stats::optim", algorithm = "L-BFGS-B", control = control,
+      boundary_zero_algorithm = "BFGS",
       start_epsilon = c(0.001, 0.05, 0.2, 0.5, 0.9), start_theta = 0, start_beta = 0,
-      epsilon_interval = c(0, 1), epsilon_parameterization = "logit"),
+      epsilon_interval = c(0, 1), epsilon_parameterization = "natural_bounded"),
     identification = list(convention = "sum_to_zero", internal_reference = tail(ids, 1L),
       transformation = transform, parameter_order = c(colnames(kernel$X), "epsilon")),
     convergence = list(status = "not_attempted", converged = FALSE),
-    uncertainty = list(method = "inverse_joint_observed_information", valid = FALSE,
+    uncertainty = list(method = "inverse_joint_observed_information", valid = FALSE, status = "unavailable",
       coordinates = "sum_to_zero_theta_beta_epsilon", scope = "conditional_on_realized_comparison_graph",
       schedule_aware = FALSE), reliability_valid = FALSE, reliability_status = "prototype_ssr_unavailable",
     fallback_reason = NULL)
@@ -23,6 +24,8 @@
   beta <- epsilon <- NA_real_
   fail <- function(reason, message, parent = NULL) {
     diagnostics$failure_reason <- reason
+    provenance$convergence$status <- "failed"
+    provenance$convergence$converged <- FALSE
     rlang::abort(message, class = c("pairwiseLLM_bt_lapse_error", "pairwiseLLM_bt_validation_error"),
       failure_reason = reason, theta = theta, beta = beta, epsilon = epsilon,
       provenance = provenance, diagnostics = diagnostics, parent = parent)
@@ -51,28 +54,38 @@
   tolerance <- 100 * .Machine$double.eps * max(1, abs(surface$value))
   zero <- opt$boundary_zero
   diagnostics$boundary_objective_tolerance <- tolerance
-  if (epsilon == 0 || epsilon == 1 || opt$boundary_one_objective <= surface$value + tolerance ||
-      (is.finite(zero$objective) && zero$objective <= surface$value + tolerance)) {
-    fail("lapse_boundary",
-      "A lapse boundary matches or exceeds the interior likelihood; regular joint SEs are unavailable.")
-  }
   # An unfinished boundary search cannot establish that the interior beats it.
   if (is.null(zero$par) || zero$code != 0L || !is.finite(zero$objective)) {
     fail("boundary_unresolved", "The epsilon-zero boundary optimization is unresolved.")
   }
   zero_surface <- .bt_lapse_surface(zero$par, kernel)
-  zero_H <- .bt_alpha_matrix(zero_surface$hessian[-length(par), -length(par), drop = FALSE])
-  zero_score <- head(zero_surface$gradient, -1L)
-  zero_step <- if (zero_H$positive_definite && all(is.finite(zero_score))) {
-    as.vector(backsolve(zero_H$chol, forwardsolve(t(zero_H$chol), zero_score)))
-  } else {
-    rep(Inf, length(zero_score))
-  }
-  diagnostics$boundary_zero_checks <- list(gradient_max = max(abs(zero_score)),
-    step_max = max(abs(zero_step)), hessian_rcond = zero_H$rcond)
-  if (any(!is.finite(c(zero_score, zero_step, zero_H$rcond))) || zero_H$rcond < control$min_rcond ||
-      max(abs(zero_score)) > control$gradient_tol || max(abs(zero_step)) > control$step_tol) {
+  zero_checks <- .bt_lapse_boundary_checks(zero_surface, kernel, control)
+  diagnostics$boundary_zero_checks <- zero_checks
+  if (!zero_checks$stationary) {
     fail("boundary_unresolved", "The epsilon-zero boundary failed independent stationarity/curvature checks.")
+  }
+  # Compare likelihoods before choosing an uncertainty convention. A numerical
+  # tie can represent the same zero-boundary solution reached from an interior
+  # start, but proximity to zero alone never establishes a boundary optimum.
+  boundary <- zero_surface$value <= surface$value + tolerance && zero_checks$kkt_valid
+  if (boundary) {
+    best <- zero
+    par <- zero$par
+    surface <- zero_surface
+    theta$theta <- as.vector(transform %*% head(par, -2L))
+    provenance$theta_finite <- all(is.finite(theta$theta))
+    beta <- par[length(ids)]
+    epsilon <- 0
+    diagnostics[names(surface)] <- surface
+    provenance$convergence <- list(status = "candidate", converged = FALSE,
+      code = best$code, message = best$message, evaluations = best$evaluations)
+  } else if (epsilon == 0 || zero_surface$value < surface$value - tolerance) {
+    fail("boundary_kkt_failure", "The best epsilon-zero candidate fails the one-sided lapse score check.")
+  }
+  diagnostics$optimization$selected_source <- if (boundary) "boundary_zero" else "attempts"
+  diagnostics$boundary <- if (boundary) "epsilon_zero" else "none"
+  if (epsilon == 1 || opt$boundary_one_objective <= surface$value + tolerance) {
+    fail("unidentified_information", "The epsilon-one likelihood leaves theta and beta unidentified.")
   }
   if (best$code != 0L) fail("not_converged", "The best likelihood candidate did not converge.")
   H <- .bt_alpha_matrix(surface$hessian)
@@ -82,33 +95,49 @@
   if (!I$positive_definite || !is.finite(I$rcond) || I$rcond < control$min_rcond) {
     fail("unidentified_information", "Full-model information is not positive definite and well conditioned.")
   }
-  if (!H$positive_definite || !is.finite(H$rcond) || H$rcond < control$min_rcond) {
+  # With a strictly positive one-sided score, curvature is required only along
+  # the theta/beta face. At a zero score, require the full joint curvature too.
+  require_joint <- !boundary || zero_checks$epsilon_score <= control$gradient_tol
+  if (require_joint && (!H$positive_definite || !is.finite(H$rcond) || H$rcond < control$min_rcond)) {
     fail("invalid_hessian", "Joint observed Hessian is not positive definite and well conditioned.")
   }
-  correction <- as.vector(backsolve(H$chol, forwardsolve(t(H$chol), surface$gradient)))
-  diagnostics$gradient_max <- max(abs(surface$gradient))
-  diagnostics$newton_correction <- c(as.vector(transform %*% head(correction, -2L)), tail(correction, 2L))
+  if (boundary) {
+    diagnostics$gradient_max <- max(zero_checks$gradient_max, zero_checks$kkt_violation)
+    diagnostics$newton_correction <- c(zero_checks$newton_correction, epsilon = 0)
+  } else {
+    correction <- as.vector(backsolve(H$chol, forwardsolve(t(H$chol), surface$gradient)))
+    diagnostics$gradient_max <- max(abs(surface$gradient))
+    diagnostics$newton_correction <- c(as.vector(transform %*% head(correction, -2L)), tail(correction, 2L))
+  }
   diagnostics$step_max <- max(abs(diagnostics$newton_correction))
   if (diagnostics$gradient_max > control$gradient_tol || diagnostics$step_max > control$step_tol) {
     fail("not_stationary", "Lapse fit failed natural-coordinate score/Newton-correction checks.")
   }
-  covariance <- chol2inv(H$chol)
-  item_map <- cbind(transform, 0, 0)
-  item_covariance <- tryCatch(.bt_item_covariance(covariance, item_map, ids, "Lapse"),
-    error = function(e) fail("invalid_covariance", "Lapse item covariance validation failed.", e))
-  joint_map <- rbind(item_map, c(rep(0, ncol(transform)), 1, 0), c(rep(0, ncol(transform)), 0, 1))
-  joint <- joint_map %*% covariance %*% t(joint_map)
-  joint_names <- c(paste0("theta:", ids), "beta", "epsilon")
-  dimnames(joint) <- list(joint_names, joint_names)
-  if (any(!is.finite(joint)) || any(diag(joint) <= 0) || !isSymmetric(joint, tol = 1e-10) ||
-      min(eigen(joint, symmetric = TRUE, only.values = TRUE)$values) < -1e-10 * max(diag(joint))) {
-    fail("invalid_covariance", "Joint natural-parameter covariance failed finite/PSD checks.")
+  item_covariance <- joint <- NULL
+  if (!boundary) {
+    covariance <- chol2inv(H$chol)
+    item_map <- cbind(transform, 0, 0)
+    item_covariance <- tryCatch(.bt_item_covariance(covariance, item_map, ids, "Lapse"),
+      error = function(e) fail("invalid_covariance", "Lapse item covariance validation failed.", e))
+    joint_map <- rbind(item_map, c(rep(0, ncol(transform)), 1, 0), c(rep(0, ncol(transform)), 0, 1))
+    joint <- joint_map %*% covariance %*% t(joint_map)
+    joint_names <- c(paste0("theta:", ids), "beta", "epsilon")
+    dimnames(joint) <- list(joint_names, joint_names)
+    if (any(!is.finite(joint)) || any(diag(joint) <= 0) || !isSymmetric(joint, tol = 1e-10) ||
+        min(eigen(joint, symmetric = TRUE, only.values = TRUE)$values) < -1e-10 * max(diag(joint))) {
+      fail("invalid_covariance", "Joint natural-parameter covariance failed finite/PSD checks.")
+    }
+    theta$se <- unname(sqrt(diag(item_covariance)))
+    provenance$uncertainty$valid <- TRUE
+    provenance$uncertainty$status <- "valid"
+    provenance$se_finite <- TRUE
+  } else {
+    theta$se <- rep(NA_real_, length(ids))
+    provenance$uncertainty$method <- "none"
+    provenance$uncertainty$status <- "nonregular_boundary"
   }
-  theta$se <- unname(sqrt(diag(item_covariance)))
-  provenance$convergence$status <- "converged"
+  provenance$convergence$status <- if (boundary) "converged_boundary" else "converged"
   provenance$convergence$converged <- TRUE
-  provenance$uncertainty$valid <- TRUE
-  provenance$se_finite <- TRUE
   structure(list(engine = "lapse", model_variant = "btl_e_b", fit = best, theta = theta,
     beta = unname(beta), epsilon = unname(epsilon), vcov = item_covariance, parameter_vcov = joint,
     log_likelihood = -surface$value, objective = surface$value, reliability = NA_real_,
@@ -130,7 +159,9 @@
 #' Calculate `(1-epsilon) * plogis(theta1-theta2+beta) + epsilon/2`.
 #' Positive beta favors the first presented item. Swapping the items generally
 #' does not give complementary probabilities unless beta is zero. These are
-#' plug-in probabilities, without integration over estimation uncertainty.
+#' plug-in probabilities, without integration over estimation uncertainty. Valid
+#' epsilon-zero boundary fits also support prediction; their unavailable joint
+#' uncertainty does not invalidate the point estimates.
 #'
 #' @param object A validated experimental fit from [fit_bt_model()] with
 #'   `engine = "lapse"`.

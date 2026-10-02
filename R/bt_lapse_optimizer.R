@@ -1,40 +1,53 @@
 # Fixed numerical algorithm; no changes to likelihood or starts after failure.
 .bt_lapse_attempt <- function(epsilon, kernel, control) {
   boundary <- epsilon == 0
-  start <- c(rep(0, ncol(kernel$X)), if (!boundary) stats::qlogis(epsilon))
+  start <- c(rep(0, ncol(kernel$X)), if (!boundary) epsilon)
   warnings <- character()
   tryCatch(withCallingHandlers({
     total <- sum(kernel$counts$wins + kernel$counts$losses)
-    previous <- NULL
-    cached <- NULL
+    cache <- new.env(parent = emptyenv())
+    cache$previous <- cache$surface <- NULL
     objective <- function(x) {
       # optim requests value and gradient at the same point. Cache only that
       # point; this changes neither evaluated values nor the optimization path.
-      if (!identical(x, previous)) {
-        cached <<- .bt_lapse_objective(x, kernel, boundary)
-        previous <<- x
+      if (!identical(x, cache$previous)) {
+        if (!boundary && (tail(x, 1L) < 0 || tail(x, 1L) > 1)) {
+          stop("Lapse optimizer evaluated epsilon outside [0, 1].")
+        }
+        cache$surface <- if (boundary) .bt_lapse_objective(x, kernel, TRUE) else .bt_lapse_surface(x, kernel)
+        cache$previous <- x
       }
-      cached
+      cache$surface
     }
-    fit <- stats::optim(start, function(x) objective(x)$value / total,
-      function(x) objective(x)$gradient / total, method = "BFGS",
-      control = control[c("maxit", "reltol", "trace")])
-    # As in the existing Gaussian optimizer, polish relative-objective convergence
-    # with at most ten damped Newton steps. Independent natural-coordinate gates
-    # still decide whether this is a stationary, identified interior solution.
+    fit <- if (boundary) {
+      stats::optim(start, function(x) objective(x)$value / total,
+        function(x) objective(x)$gradient / total, method = "BFGS",
+        control = control[c("maxit", "reltol", "trace")])
+    } else {
+      stats::optim(start, function(x) objective(x)$value / total,
+        function(x) objective(x)$gradient / total, method = "L-BFGS-B",
+        lower = c(rep(-Inf, length(start) - 1L), 0), upper = c(rep(Inf, length(start) - 1L), 1),
+        control = list(maxit = control$maxit, trace = control$trace,
+          factr = control$reltol / .Machine$double.eps, pgtol = control$gradient_tol / total))
+    }
+    # Polish in natural coordinates, retaining the existing tolerances and limit.
+    # At exact zero only theta/beta are free; the one-sided epsilon score is
+    # validated independently, never mistaken for an interior zero-score test.
     steps <- 0L
     if (fit$convergence == 0L) {
       for (i in seq_len(10L)) {
         obj <- objective(fit$par)
-        H <- .bt_alpha_matrix(obj$hessian)
+        free <- seq_along(fit$par)
+        if (!boundary && tail(fit$par, 1L) == 0) free <- head(free, -1L)
+        H <- .bt_alpha_matrix(obj$hessian[free, free, drop = FALSE])
         if (!H$positive_definite) break
-        step <- as.vector(backsolve(H$chol, forwardsolve(t(H$chol), obj$gradient)))
-        natural_score <- .bt_lapse_surface(obj$natural, kernel)$gradient
-        if (boundary) natural_score <- head(natural_score, -1L)
-        if (max(abs(natural_score)) <= control$gradient_tol && max(abs(step)) <= control$step_tol) break
+        step <- numeric(length(fit$par))
+        step[free] <- backsolve(H$chol, forwardsolve(t(H$chol), obj$gradient[free]))
+        if (max(abs(obj$gradient[free])) <= control$gradient_tol && max(abs(step)) <= control$step_tol) break
         accepted <- FALSE
         for (fraction in 2^-(0:20)) {
           candidate <- fit$par - fraction * step
+          if (!boundary && (tail(candidate, 1L) < 0 || tail(candidate, 1L) > 1)) next
           value <- objective(candidate)$value
           if (is.finite(value) && value <= obj$value + 1e-12 * max(1, abs(obj$value))) {
             fit$par <- candidate
@@ -47,7 +60,7 @@
       }
     }
     obj <- objective(fit$par)
-    list(start_epsilon = epsilon, boundary = boundary, par = obj$natural,
+    list(start_epsilon = epsilon, boundary = boundary, par = if (boundary) obj$natural else fit$par,
          objective = obj$value, code = fit$convergence, message = fit$message %||% "",
          evaluations = fit$counts, newton_steps = steps, warnings = warnings)
   }, warning = function(w) {
@@ -56,6 +69,26 @@
     list(start_epsilon = epsilon, boundary = boundary, par = NULL, objective = Inf,
          code = 1L, message = conditionMessage(e), warnings = warnings)
   })
+}
+
+.bt_lapse_boundary_checks <- function(surface, kernel, control) {
+  k <- length(surface$gradient)
+  H <- .bt_alpha_matrix(surface$hessian[-k, -k, drop = FALSE])
+  score <- head(surface$gradient, -1L)
+  step <- if (H$positive_definite && all(is.finite(score))) {
+    as.vector(backsolve(H$chol, forwardsolve(t(H$chol), score)))
+  } else {
+    rep(Inf, length(score))
+  }
+  centered <- c(as.vector(kernel$transform %*% head(step, -1L)), tail(step, 1L))
+  epsilon_score <- tail(surface$gradient, 1L)
+  finite <- all(is.finite(c(surface$value, surface$gradient, surface$hessian, step, H$rcond)))
+  list(gradient_max = max(abs(score)), step_max = max(abs(c(step, centered))),
+    newton_correction = centered, hessian_rcond = H$rcond, epsilon_score = epsilon_score,
+    kkt_violation = max(0, -epsilon_score),
+    stationary = finite && H$rcond >= control$min_rcond &&
+      max(abs(score)) <= control$gradient_tol && max(abs(c(step, centered))) <= control$step_tol,
+    kkt_valid = is.finite(epsilon_score) && epsilon_score >= -control$gradient_tol)
 }
 
 .bt_lapse_optimize <- function(kernel, control) {
