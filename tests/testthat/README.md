@@ -52,6 +52,10 @@ parity tests (#278). Prefixes verified unused on 2026-09-22. Run 6021 with
 Issue #307 reserves 0036 for Firth BT numerical, uncertainty, prediction, and
 compatibility contracts (verified unused on 2026-10-01).
 
+Issue #303 reserves 0037 for alpha-adjusted BT objectives, numerical derivatives,
+conditional uncertainty, diagnostic failures and compatibility (verified unused
+on 2026-10-01).
+
 ## Determinism Rules
 
 Issue #302 reserves 0035 for frequentist SSR, estimator provenance, connectivity,

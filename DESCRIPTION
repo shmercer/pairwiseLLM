@@ -109,6 +109,8 @@ Collate:
     'bayes_btl_mcmc.R'
     'bayes_btl_mcmc_adaptive.R'
     'bayes_btl_summarize.R'
+    'bt_alpha.R'
+    'bt_common.R'
     'bt_firth.R'
     'bt_helpers.R'
     'bt_model.R'

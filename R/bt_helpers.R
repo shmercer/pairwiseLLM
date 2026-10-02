@@ -57,8 +57,8 @@ scale_separation_reliability <- function(theta, se) {
 #'   \item \code{theta}: estimated ability parameter
 #'   \item \code{se}: standard error of \code{theta}
 #'   \item \code{rank}: rank order of \code{theta} (1 = highest by default)
-#'   \item \code{engine}: modeling engine used ("sirt", "BradleyTerry2", or "brglm2")
-#'   \item \code{reliability}: raw sirt reliability, calculated Firth SSR, or \code{NA}
+#'   \item \code{engine}: modeling engine used ("sirt", "BradleyTerry2", "brglm2", or "alpha")
+#'   \item \code{reliability}: raw sirt reliability, calculated Firth/alpha SSR, or \code{NA}
 #' }
 #'
 #' Standard errors describe model uncertainty; small differences in estimates
@@ -81,7 +81,7 @@ scale_separation_reliability <- function(theta, se) {
 #'   \item{se}{Standard error of \code{theta}.}
 #'   \item{rank}{Rank of \code{theta}; 1 = highest
 #'   (if \code{decreasing = TRUE}).}
-#'   \item{engine}{Modeling engine used ("sirt", "BradleyTerry2", or "brglm2").}
+#'   \item{engine}{Modeling engine used ("sirt", "BradleyTerry2", "brglm2", or "alpha").}
 #'   \item{reliability}{Reliability (numeric scalar, or `NA`) repeated on each row.}
 #' }
 #'
