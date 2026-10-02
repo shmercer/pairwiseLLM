@@ -2,6 +2,16 @@
 
 ## pairwiseLLM (development version)
 
+- `fit_bt_model(engine = "alpha", alpha = ...)` adds Hamilton-style
+  alpha-adjusted Bradley-Terry estimation for adaptive schedules
+  ([\#303](https://github.com/shmercer/pairwiseLLM/issues/303)),
+  including explicit penalty settings, centered covariance/SEs,
+  numerical diagnostics and pairwise prediction. SEs are model-based
+  conditional on the realized comparison graph; schedule-aware
+  uncertainty and bootstrap correction remain separate work. Numerical
+  failures retain auditable diagnostics without changing estimators.
+  Existing engine defaults and optional dependencies are unchanged.
+
 - `fit_bt_model(engine = "brglm2")` adds genuine Firth mean bias
   reduction for random/nonadaptive schedules
   ([\#307](https://github.com/shmercer/pairwiseLLM/issues/307)), using

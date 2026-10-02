@@ -1,14 +1,13 @@
-# Predict pairwise win probabilities from a Firth Bradley-Terry fit
+# Predict pairwise win probabilities from an alpha-adjusted Bradley-Terry fit
 
 Calculate `plogis(theta1 - theta2)`, the probability that the first item
-wins. Predictions use the fitted item strengths, without a positional,
-lapse, or tie parameter. They do not integrate over estimation
-uncertainty.
+wins. These plug-in probabilities do not integrate over uncertainty and
+have no tie, lapse, or positional parameter.
 
 ## Usage
 
 ``` r
-# S3 method for class 'pairwiseLLM_bt_firth'
+# S3 method for class 'pairwiseLLM_bt_alpha'
 predict(object, newdata = NULL, ...)
 ```
 
@@ -16,9 +15,9 @@ predict(object, newdata = NULL, ...)
 
 - object:
 
-  A Firth fit returned by
+  An alpha-adjusted fit from
   [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
-  with `engine = "brglm2"`.
+  with `engine = "alpha"`.
 
 - newdata:
 
@@ -33,8 +32,7 @@ predict(object, newdata = NULL, ...)
 
 ## Value
 
-A numeric vector of first-item win probabilities in input row order. An
-empty data frame returns `numeric(0)`.
+A numeric vector of first-item win probabilities in input row order.
 
 ## See also
 
@@ -46,19 +44,18 @@ Other frequentist models:
 [`build_elo_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_elo_data.md),
 [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md),
 [`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md),
-[`predict.pairwiseLLM_bt_alpha()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_alpha.md),
+[`predict.pairwiseLLM_bt_firth()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_firth.md),
 [`scale_separation_reliability()`](https://shmercer.github.io/pairwiseLLM/reference/scale_separation_reliability.md),
 [`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)
 
 ## Examples
 
 ``` r
-if (requireNamespace("brglm2", quietly = TRUE)) {
-  comparisons <- data.frame(object1 = c("a", "a", "b"),
-                            object2 = c("b", "c", "c"), result = c(1, 1, 1))
-  fit <- fit_bt_model(comparisons, engine = "brglm2")
-  predict(fit)
-  predict(fit, data.frame(object1 = "c", object2 = "a"))
-}
-#> [1] 0.1120953
+comparisons <- data.frame(object1 = c("a", "a", "b"),
+                          object2 = c("b", "c", "c"), result = c(1, 1, 1))
+fit <- fit_bt_model(comparisons, engine = "alpha", alpha = 0.5)
+predict(fit)
+#> [1] 0.7586094 0.9080573 0.7586094
+predict(fit, data.frame(object1 = "c", object2 = "a"))
+#> [1] 0.09194274
 ```

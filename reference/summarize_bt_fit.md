@@ -13,9 +13,11 @@ including:
 
 - `rank`: rank order of `theta` (1 = highest by default)
 
-- `engine`: modeling engine used ("sirt", "BradleyTerry2", or "brglm2")
+- `engine`: modeling engine used ("sirt", "BradleyTerry2", "brglm2", or
+  "alpha")
 
-- `reliability`: raw sirt reliability, calculated Firth SSR, or `NA`
+- `reliability`: raw sirt reliability, calculated Firth/alpha SSR, or
+  `NA`
 
 ## Usage
 
@@ -62,7 +64,7 @@ A tibble with columns:
 
 - engine:
 
-  Modeling engine used ("sirt", "BradleyTerry2", or "brglm2").
+  Modeling engine used ("sirt", "BradleyTerry2", "brglm2", or "alpha").
 
 - reliability:
 
@@ -86,6 +88,7 @@ Other frequentist models:
 [`build_elo_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_elo_data.md),
 [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md),
 [`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md),
+[`predict.pairwiseLLM_bt_alpha()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_alpha.md),
 [`predict.pairwiseLLM_bt_firth()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_firth.md),
 [`scale_separation_reliability()`](https://shmercer.github.io/pairwiseLLM/reference/scale_separation_reliability.md)
 

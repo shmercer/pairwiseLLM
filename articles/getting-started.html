@@ -254,9 +254,91 @@ where later comparisons depend on earlier results. See
 <code><a href="../reference/fit_bt_model.html">?fit_bt_model</a></code> for the method and assumptions.</p>
 </div>
 <div class="section level3">
+<h3 id="an-option-for-comparisons-chosen-adaptively">An option for comparisons chosen adaptively<a class="anchor" aria-label="anchor" href="#an-option-for-comparisons-chosen-adaptively"></a>
+</h3>
+<p>When later comparisons depend on earlier results, <strong>alpha
+adjustment</strong> is an option motivated by the estimation bias that
+adaptive scheduling can introduce. It gently pulls scores together by
+adding a small, equal amount of evidence in both directions for every
+possible pair. This differs from the conventional sirt epsilon
+adjustment, which depends on observed win proportions. Both methods
+remain available; Firth is the intended modern comparator for random
+schedules.</p>
+<p>Choose <code>alpha</code> before examining your substantive results.
+The package accepts nonnegative values, including 0.30 and 0.50, and
+never chooses or tunes it for you. The bundled example below
+demonstrates the API with 0.50; it does not establish which setting is
+best for a particular study. This option needs no additional engine
+package.</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">alpha_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="fu"><a href="../reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">example_writing_pairs</span><span class="op">)</span>,</span>
+<span>                          engine <span class="op">=</span> <span class="st">"alpha"</span>, alpha <span class="op">=</span> <span class="fl">0.50</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="../reference/summarize_bt_fit.html">summarize_bt_fit</a></span><span class="op">(</span><span class="va">alpha_fit</span><span class="op">)</span>, <span class="fl">5</span><span class="op">)</span> <span class="co"># includes model-based standard errors</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 5 × 6</span></span></span>
+<span><span class="co">#&gt;   ID    theta    se  rank engine reliability</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>        <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> S01   -<span style="color: #BB0000;">4.20</span> 1.07     19 alpha        0.900</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> S02   -<span style="color: #BB0000;">2.92</span> 0.870    17 alpha        0.900</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> S03   -<span style="color: #BB0000;">4.20</span> 1.07     20 alpha        0.900</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> S04   -<span style="color: #BB0000;">3.51</span> 0.947    18 alpha        0.900</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> S05   -<span style="color: #BB0000;">2.38</span> 0.815    16 alpha        0.900</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">alpha_fit</span><span class="op">)</span><span class="op">)</span>           <span class="co"># first-sample win probabilities</span></span>
+<span><span class="co">#&gt; [1] 0.21722290 0.50000000 0.33427851 0.13887040 0.08836331 0.05650570</span></span>
+<span><span class="va">alpha_fit</span><span class="op">$</span><span class="va">ssr</span>                     <span class="co"># reliability and its variance components</span></span>
+<span><span class="co">#&gt; $observed_variance</span></span>
+<span><span class="co">#&gt; [1] 6.666692</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $mean_squared_se</span></span>
+<span><span class="co">#&gt; [1] 0.6653468</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $true_score_variance</span></span>
+<span><span class="co">#&gt; [1] 6.001345</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $ssr</span></span>
+<span><span class="co">#&gt; [1] 0.9001984</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $n_items</span></span>
+<span><span class="co">#&gt; [1] 20</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $n_finite</span></span>
+<span><span class="co">#&gt; [1] 20</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $valid</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $status</span></span>
+<span><span class="co">#&gt; [1] "ok"</span></span>
+<span><span class="va">alpha_fit</span><span class="op">$</span><span class="va">provenance</span><span class="op">$</span><span class="va">adjustment</span>   <span class="co"># exact penalty used</span></span>
+<span><span class="co">#&gt; $method</span></span>
+<span><span class="co">#&gt; [1] "hamilton_alpha"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $alpha</span></span>
+<span><span class="co">#&gt; [1] 0.5</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $pseudo_count</span></span>
+<span><span class="co">#&gt; [1] 0.02631579</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $pairs</span></span>
+<span><span class="co">#&gt; [1] "all_unordered_pairs"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $objective</span></span>
+<span><span class="co">#&gt; [1] "log_likelihood + alpha/(N-1) * sum(log(p*(1-p)))"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $reference</span></span>
+<span><span class="co">#&gt; [1] "doi:10.1111/jedm.70022, equation (3)"</span></span></code></pre></div>
+<p>These standard errors describe uncertainty conditional on the
+comparisons that actually occurred. They do not account for how an
+adaptive schedule might change if the assessment were repeated. Alpha
+adjustment does not select pairs and does not guarantee unbiased
+reliability for every adaptive schedule. Schedule-aware bootstrap
+correction remains separate work. For the mathematical definition,
+uncertainty assumptions and failure diagnostics, see
+<code><a href="../reference/fit_bt_model.html">?fit_bt_model</a></code>.</p>
+</div>
+<div class="section level3">
 <h3 id="save-an-analysis">Save an analysis<a class="anchor" aria-label="anchor" href="#save-an-analysis"></a>
 </h3>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/write.table.html" class="external-link">write.csv</a></span><span class="op">(</span><span class="va">scores</span>, <span class="st">"writing_scores.csv"</span>, row.names <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">fit</span>, <span class="st">"writing_bt_fit.rds"</span><span class="op">)</span></span>
 <span><span class="co"># In a later session: fit &lt;- readRDS("writing_bt_fit.rds")</span></span></code></pre></div>
@@ -274,7 +356,7 @@ directory.</p>
 and a <code>text</code> column. Keep IDs stable so that saved results
 continue to refer to the same samples. Do not include names or other
 identifying information merely to label rows.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">my_samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  ID <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"essay_01"</span>, <span class="st">"essay_02"</span>, <span class="st">"essay_03"</span><span class="op">)</span>,</span>
 <span>  text <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
@@ -286,13 +368,13 @@ identifying information merely to label rows.</p>
 <span><span class="va">samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/read_samples_df.html">read_samples_df</a></span><span class="op">(</span><span class="va">my_samples</span><span class="op">)</span></span></code></pre></div>
 <p>For a spreadsheet saved as CSV, map its columns to the package’s
 names:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">my_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.csv</a></span><span class="op">(</span><span class="st">"writing.csv"</span>, colClasses <span class="op">=</span> <span class="st">"character"</span><span class="op">)</span></span>
 <span><span class="va">samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/read_samples_df.html">read_samples_df</a></span><span class="op">(</span><span class="va">my_data</span>, id_col <span class="op">=</span> <span class="st">"student_code"</span>, text_col <span class="op">=</span> <span class="st">"response"</span><span class="op">)</span></span></code></pre></div>
 <p>These three short texts illustrate the data format only. For the
 collection example below, use the bundled 20 samples so every object is
 defined:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
 <span><span class="va">samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/read_samples_df.html">read_samples_df</a></span><span class="op">(</span><span class="va">example_writing_samples</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ID"</span>, <span class="st">"text"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
 <span><span class="va">all_pairs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_pairs.html">make_pairs</a></span><span class="op">(</span><span class="va">samples</span><span class="op">)</span></span>
@@ -318,14 +400,14 @@ selects comparisons as evidence accumulates.</p>
 </h2>
 <p>A prompt combines the trait, the judging instructions, and the two
 texts. Start with a built-in trait and template:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">td</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
 <span><span class="va">tmpl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_prompt_template.html">get_prompt_template</a></span><span class="op">(</span><span class="st">"default"</span><span class="op">)</span></span>
 <span><span class="va">td</span><span class="op">$</span><span class="va">name</span></span>
 <span><span class="co">#&gt; [1] "Overall Quality"</span></span></code></pre></div>
 <p>You can inspect exactly what the model will receive before paying for
 a call:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">prompt</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/build_prompt.html">build_prompt</a></span><span class="op">(</span></span>
 <span>  template <span class="op">=</span> <span class="va">tmpl</span>,</span>
 <span>  trait_name <span class="op">=</span> <span class="va">td</span><span class="op">$</span><span class="va">name</span>,</span>
@@ -365,7 +447,7 @@ an identifier available to your account; example identifiers are not a
 guarantee of current availability. See <a href="model-compatibility.html">Backends and Tested Model
 Configurations</a> for the provider/key table and official catalogs.</p>
 <p>For the current R session:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>OPENAI_API_KEY <span class="op">=</span> <span class="st">"your-key-here"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/check_llm_api_keys.html">check_llm_api_keys</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p><code>has_key = TRUE</code> means R can see a nonempty value; it does
@@ -383,7 +465,7 @@ provider API key.</p>
 <div class="section level3">
 <h3 id="submit-the-pairs">Submit the pairs<a class="anchor" aria-label="anchor" href="#submit-the-pairs"></a>
 </h3>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res_list</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
 <span>  pairs <span class="op">=</span> <span class="va">pairs_small</span>,</span>
 <span>  backend <span class="op">=</span> <span class="st">"openai"</span>,</span>
@@ -404,7 +486,7 @@ Parallel execution is optional and requires <code>future</code> and
 <div class="section level3">
 <h3 id="check-what-succeeded">Check what succeeded<a class="anchor" aria-label="anchor" href="#check-what-succeeded"></a>
 </h3>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">res_list</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span>
 <span><span class="va">res_list</span><span class="op">$</span><span class="va">failed_pairs</span></span>
 <span><span class="va">res_list</span><span class="op">$</span><span class="va">failed_attempts</span></span></code></pre></div>

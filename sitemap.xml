@@ -99,6 +99,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/parse_anthropic_batch_output.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/parse_gemini_batch_output.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/parse_openai_batch_output.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_alpha.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_firth.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_rubric_calibration.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_warm_algorithm_ensemble.html</loc></url>

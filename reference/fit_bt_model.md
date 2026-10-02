@@ -3,9 +3,9 @@
 This function fits a Bradley–Terry paired-comparison model to data
 prepared by
 [`build_bt_data`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md).
-It supports three modeling engines:
+It supports four modeling engines:
 
-- sirt: [`btm`](https://rdrr.io/pkg/sirt/man/btm.html) — the preferred
+- sirt: [`btm`](https://rdrr.io/pkg/sirt/man/btm.html) — the default
   engine, which produces ability estimates, standard errors, and MLE
   reliability.
 
@@ -16,15 +16,19 @@ It supports three modeling engines:
 - brglm2: explicit Firth mean bias reduction for random or nonadaptive
   schedules, with centered covariance and SSR.
 
+- `alpha`: explicit alpha adjustment motivated by adaptive schedules,
+  using base R with centered covariance and SSR.
+
 ## Usage
 
 ``` r
 fit_bt_model(
   bt_data,
-  engine = c("auto", "sirt", "BradleyTerry2", "brglm2"),
+  engine = c("auto", "sirt", "BradleyTerry2", "brglm2", "alpha"),
   verbose = TRUE,
   ...,
-  sirt_eps = NULL
+  sirt_eps = NULL,
+  alpha = NULL
 )
 ```
 
@@ -40,8 +44,8 @@ fit_bt_model(
 - engine:
 
   Character string specifying the modeling engine. One of: `"auto"`
-  (default), `"sirt"`, `"BradleyTerry2"`, or `"brglm2"`. Automatic
-  selection never chooses Firth.
+  (default), `"sirt"`, `"BradleyTerry2"`, `"brglm2"`, or `"alpha"`.
+  Automatic selection never chooses Firth or alpha.
 
 - verbose:
 
@@ -58,7 +62,11 @@ fit_bt_model(
   settings `epsilon` (default `1e-10`), `maxit` (200), `slowit` (1),
   `max_step_factor` (12), and `trace` (FALSE). `verbose = FALSE`
   disables tracing; numerical warnings are retained. The
-  mean-bias-reduction method cannot be changed through controls.
+  mean-bias-reduction method cannot be changed through controls. For
+  `alpha`, only a named `control` list is accepted: `epsilon` (default
+  `1e-12`), `maxit` (200), `gradient_tol` (`1e-7`), `step_tol` (`1e-7`),
+  `min_rcond` (`1e-12`), and `trace` (FALSE). See the alpha section
+  below.
 
 - sirt_eps:
 
@@ -68,13 +76,23 @@ fit_bt_model(
   only with `engine = "sirt"` or `"auto"`; on automatic fallback it
   remains recorded as requested but is not applied to BradleyTerry2.
 
+- alpha:
+
+  Explicit finite nonnegative numeric scalar, supplied by exact name,
+  required only for `engine = "alpha"`. There is no default penalty and
+  no tuning from outcomes. Values 0.30 and 0.50 are supported alongside
+  other nonnegative values. Zero requests ordinary unpenalized
+  estimation and requires a strongly connected directed win graph.
+  `NULL` is only accepted for other engines.
+
 ## Value
 
 A list with the following elements:
 
 - engine:
 
-  The engine actually used ("sirt", "BradleyTerry2", or "brglm2").
+  The engine actually used ("sirt", "BradleyTerry2", "brglm2", or
+  "alpha").
 
 - fit:
 
@@ -92,8 +110,8 @@ A list with the following elements:
 
 - reliability:
 
-  Raw MLE reliability for sirt or calculated SSR for Firth. `NA` for
-  BradleyTerry2 models or a zero-variance Firth fit.
+  Raw MLE reliability for sirt or calculated SSR for Firth/alpha. `NA`
+  for BradleyTerry2 models or a zero-variance Firth/alpha fit.
 
 - ssr:
 
@@ -102,9 +120,9 @@ A list with the following elements:
   decomposition plus `engine_reliability`, `agrees`,
   `absolute_difference`, and `tolerance`. For BradleyTerry2, `ssr` and
   `engine_reliability` are `NA`, `valid` is `FALSE`, `agrees` is `NA`,
-  and `status` is `"unavailable_se_convention"`. For Firth, the helper
-  decomposition, or `valid = FALSE` and `status = "zero_score_variance"`
-  when undefined.
+  and `status` is `"unavailable_se_convention"`. For Firth/alpha, the
+  helper decomposition, or `valid = FALSE` and
+  `status = "zero_score_variance"` when undefined.
 
 - provenance:
 
@@ -117,16 +135,29 @@ A list with the following elements:
   sirt centering or BradleyTerry2's contrasts, reference category and
   player levels. Save the full object to retain these settings; the
   legacy summary tibble is unchanged. Firth provenance also records the
-  coordinate transformation and covariance convention.
+  coordinate transformation and covariance convention. Alpha adds
+  `engine_package = "stats"`, the explicit penalty, solver, parameter
+  ordering, convergence code/message and uncertainty scope.
 
 - vcov:
 
-  Firth only: centered item covariance matrix, with row/column labels in
-  the same order as `theta$ID`.
+  Firth/alpha: centered item covariance matrix, with row/column labels
+  in the same order as `theta$ID`.
 
 - comparisons:
 
-  Firth only: original item pairs for default prediction.
+  Firth/alpha: original item pairs for default prediction.
+
+- alpha:
+
+  Alpha engine only: the requested penalty strength.
+
+- diagnostics:
+
+  Alpha engine only: objective components, item scores,
+  reduced-coordinate gradient, penalized Hessian and unpenalized
+  information, matrix checks, Newton correction, optimizer status, and
+  numerical warnings.
 
 ## Details
 
@@ -150,8 +181,8 @@ parameters on a log-odds scale. Higher values mean stronger relative
 performance on the assessed trait. Zero is not a pass mark, and these
 estimates are not rubric grades or automatically comparable across
 independently fitted sets. Standard errors are included for all modeling
-engines. Raw engine MLE reliability is available from sirt; Firth fits
-return independently calculated SSR.
+engines. Raw engine MLE reliability is available from sirt; Firth and
+alpha fits return independently calculated SSR.
 
 For sirt, `$ssr` independently calculates
 `1 - mean(se^2) / stats::var(theta)` from all returned items, using
@@ -229,6 +260,71 @@ arithmetic raises an error. Use
 [`predict.pairwiseLLM_bt_firth()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_firth.md)
 for first-item win probabilities.
 
+## Alpha-adjusted estimation
+
+Hamilton and Tawn
+([doi:10.1111/jedm.70022](https://doi.org/10.1111/jedm.70022) , equation
+3) define an adjustment to the score equation for item r: \$\$a_r =
+\alpha\left(1 - \frac{2}{N-1}\sum\_{j\ne r}p\_{rj}\right).\$\$ With
+\\p\_{ij}=\operatorname{logit}^{-1}(\theta_i-\theta_j)\\, observed win
+counts \\w\_{ij}\\, and \\c=\alpha/(N-1)\\, the implemented objective is
+\$\$\ell\_\alpha(\theta) = \sum\_{i\<j}\\w\_{ij}\log p\_{ij} +
+w\_{ji}\log(1-p\_{ij})\\ + c\sum\_{i\<j}\log\\p\_{ij}(1-p\_{ij})\\.\$\$
+The penalty covers every unordered pair, including unobserved pairs, and
+adds c pseudo-wins in each direction. It differs from sirt's
+conventional epsilon adjustment, which uses observed win proportions.
+Neither method changes which pairs are selected. Alpha adjustment is
+motivated by adaptive scheduling; it is not universally preferred or a
+guarantee of unbiased SSR. Firth remains the intended modern comparator
+for random schedules. Schedule-aware bootstrap correction is separate
+work.
+
+The alpha engine shares Firth's binary input and sum-to-zero convention.
+Items are radix-sorted; coefficient i is the contrast of item i to the
+last item, for i = 1,...,N-1. If B is the centered reference map, theta
+= B beta. For pair design row x and total observed comparisons m, the
+negative objective Hessian is
+\\H\_\alpha=\sum\_{i\<j}(m\_{ij}+2c)p\_{ij}(1-p\_{ij})xx^T\\. The
+original-data information is
+\\I=\sum\_{i\<j}m\_{ij}p\_{ij}(1-p\_{ij})xx^T\\. The returned covariance
+is \\B I^{-1} B^T\\, evaluated at the alpha estimate, with SEs from its
+diagonal. These are model-based SEs conditional on the realized
+comparison graph, not schedule-aware uncertainty. The penalized Hessian,
+inverse penalized curvature, and sandwich covariance are not used for
+reported SEs or SSR. Centering makes the item covariance rank N-1.
+
+A single [`stats::glm.fit`](https://rdrr.io/r/stats/glm.html) IWLS fit
+uses weighted binary rows for the augmented counts, zero starts, and a
+quasibinomial-logit working family with dispersion fixed at one. This
+supplies the exact binomial-logit estimating equations without warnings
+about fractional pseudo-counts; no dispersion estimate or GLM covariance
+is used. The objective and derivatives are evaluated independently.
+Native convergence and full rank are necessary but not sufficient: the
+maximum absolute adjusted item score must be at most `gradient_tol`, and
+the maximum absolute item-coordinate Newton correction at most
+`step_tol`. Both reduced matrices must be positive definite with
+reciprocal condition number at least `min_rcond`. All numeric controls
+must be positive and finite; `maxit` must be an integer, `min_rcond`
+less than one, and `trace` logical.
+
+Fits never change alpha or solver after failure. Numerical validation
+errors have class `pairwiseLLM_bt_alpha_error` (also a BT validation
+error). Their `theta`, `provenance`, `diagnostics`, and `failure_reason`
+fields preserve available results for auditing, including converged
+theta if uncertainty fails. No theta-only public fit is returned. A
+valid equal-strength fit is retained with `NA` SSR and
+`zero_score_variance` status, as for Firth. When every item's total wins
+equal its total losses, zero is the exact stationary solution.
+`$diagnostics$exact_zero_solution` records its use;
+`$diagnostics$coefficients` are the effective contrasts, while `$fit`
+retains the raw IWLS output. This is an exact count-based identity, not
+rounding small estimates to zero. Native convergence and uncertainty
+checks still apply. Extremely small/large penalties can exceed numerical
+resolution and error. The dense all-pair design has no large-scale
+sparse-optimization guarantee. Use
+[`predict.pairwiseLLM_bt_alpha()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_alpha.md)
+for plug-in pair probabilities.
+
 ## See also
 
 [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),
@@ -238,6 +334,7 @@ Other frequentist models:
 [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),
 [`build_elo_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_elo_data.md),
 [`fit_elo_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_elo_model.md),
+[`predict.pairwiseLLM_bt_alpha()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_alpha.md),
 [`predict.pairwiseLLM_bt_firth()`](https://shmercer.github.io/pairwiseLLM/reference/predict.pairwiseLLM_bt_firth.md),
 [`scale_separation_reliability()`](https://shmercer.github.io/pairwiseLLM/reference/scale_separation_reliability.md),
 [`summarize_bt_fit()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.md)

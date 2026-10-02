@@ -5,8 +5,8 @@ ID: object identifier
 theta: estimated ability parameter
 se: standard error of theta
 rank: rank order of theta (1 = highest by default)
-engine: modeling engine used ("sirt", "BradleyTerry2", or "brglm2")
-reliability: raw sirt reliability, calculated Firth SSR, or NA
+engine: modeling engine used ("sirt", "BradleyTerry2", "brglm2", or "alpha")
+reliability: raw sirt reliability, calculated Firth/alpha SSR, or NA
 
 '><meta property="og:description" content='This helper takes the object returned by fit_bt_model and
 returns a tibble with one row per object (e.g., writing sample), including:
@@ -14,8 +14,8 @@ ID: object identifier
 theta: estimated ability parameter
 se: standard error of theta
 rank: rank order of theta (1 = highest by default)
-engine: modeling engine used ("sirt", "BradleyTerry2", or "brglm2")
-reliability: raw sirt reliability, calculated Firth SSR, or NA
+engine: modeling engine used ("sirt", "BradleyTerry2", "brglm2", or "alpha")
+reliability: raw sirt reliability, calculated Firth/alpha SSR, or NA
 
 '></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -77,8 +77,8 @@ returns a tibble with one row per object (e.g., writing sample), including:</p><
 <li><p><code>theta</code>: estimated ability parameter</p></li>
 <li><p><code>se</code>: standard error of <code>theta</code></p></li>
 <li><p><code>rank</code>: rank order of <code>theta</code> (1 = highest by default)</p></li>
-<li><p><code>engine</code>: modeling engine used ("sirt", "BradleyTerry2", or "brglm2")</p></li>
-<li><p><code>reliability</code>: raw sirt reliability, calculated Firth SSR, or <code>NA</code></p></li>
+<li><p><code>engine</code>: modeling engine used ("sirt", "BradleyTerry2", "brglm2", or "alpha")</p></li>
+<li><p><code>reliability</code>: raw sirt reliability, calculated Firth/alpha SSR, or <code>NA</code></p></li>
 </ul></div>
 
     <div class="section level2">
@@ -121,7 +121,7 @@ If <code>FALSE</code>, suppress coercion warnings during ranking.</p></dd>
 (if <code>decreasing = TRUE</code>).</p></dd>
 
 <dt>engine</dt>
-<dd><p>Modeling engine used ("sirt", "BradleyTerry2", or "brglm2").</p></dd>
+<dd><p>Modeling engine used ("sirt", "BradleyTerry2", "brglm2", or "alpha").</p></dd>
 
 <dt>reliability</dt>
 <dd><p>Reliability (numeric scalar, or <code>NA</code>) repeated on each row.</p></dd>
@@ -144,6 +144,7 @@ when preparing a ranked report.</p>
 <code><a href="build_elo_data.html">build_elo_data()</a></code>,
 <code><a href="fit_bt_model.html">fit_bt_model()</a></code>,
 <code><a href="fit_elo_model.html">fit_elo_model()</a></code>,
+<code><a href="predict.pairwiseLLM_bt_alpha.html">predict.pairwiseLLM_bt_alpha()</a></code>,
 <code><a href="predict.pairwiseLLM_bt_firth.html">predict.pairwiseLLM_bt_firth()</a></code>,
 <code><a href="scale_separation_reliability.html">scale_separation_reliability()</a></code></p></div>
     </div>

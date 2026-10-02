@@ -170,6 +170,90 @@ comparisons depend on earlier results. See
 [`?fit_bt_model`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
 for the method and assumptions.
 
+### An option for comparisons chosen adaptively
+
+When later comparisons depend on earlier results, **alpha adjustment**
+is an option motivated by the estimation bias that adaptive scheduling
+can introduce. It gently pulls scores together by adding a small, equal
+amount of evidence in both directions for every possible pair. This
+differs from the conventional sirt epsilon adjustment, which depends on
+observed win proportions. Both methods remain available; Firth is the
+intended modern comparator for random schedules.
+
+Choose `alpha` before examining your substantive results. The package
+accepts nonnegative values, including 0.30 and 0.50, and never chooses
+or tunes it for you. The bundled example below demonstrates the API with
+0.50; it does not establish which setting is best for a particular
+study. This option needs no additional engine package.
+
+``` r
+
+alpha_fit <- fit_bt_model(build_bt_data(example_writing_pairs),
+                          engine = "alpha", alpha = 0.50, verbose = FALSE)
+head(summarize_bt_fit(alpha_fit), 5) # includes model-based standard errors
+#> # A tibble: 5 × 6
+#>   ID    theta    se  rank engine reliability
+#>   <chr> <dbl> <dbl> <int> <chr>        <dbl>
+#> 1 S01   -4.20 1.07     19 alpha        0.900
+#> 2 S02   -2.92 0.870    17 alpha        0.900
+#> 3 S03   -4.20 1.07     20 alpha        0.900
+#> 4 S04   -3.51 0.947    18 alpha        0.900
+#> 5 S05   -2.38 0.815    16 alpha        0.900
+head(predict(alpha_fit))           # first-sample win probabilities
+#> [1] 0.21722290 0.50000000 0.33427851 0.13887040 0.08836331 0.05650570
+alpha_fit$ssr                     # reliability and its variance components
+#> $observed_variance
+#> [1] 6.666692
+#> 
+#> $mean_squared_se
+#> [1] 0.6653468
+#> 
+#> $true_score_variance
+#> [1] 6.001345
+#> 
+#> $ssr
+#> [1] 0.9001984
+#> 
+#> $n_items
+#> [1] 20
+#> 
+#> $n_finite
+#> [1] 20
+#> 
+#> $valid
+#> [1] TRUE
+#> 
+#> $status
+#> [1] "ok"
+alpha_fit$provenance$adjustment   # exact penalty used
+#> $method
+#> [1] "hamilton_alpha"
+#> 
+#> $alpha
+#> [1] 0.5
+#> 
+#> $pseudo_count
+#> [1] 0.02631579
+#> 
+#> $pairs
+#> [1] "all_unordered_pairs"
+#> 
+#> $objective
+#> [1] "log_likelihood + alpha/(N-1) * sum(log(p*(1-p)))"
+#> 
+#> $reference
+#> [1] "doi:10.1111/jedm.70022, equation (3)"
+```
+
+These standard errors describe uncertainty conditional on the
+comparisons that actually occurred. They do not account for how an
+adaptive schedule might change if the assessment were repeated. Alpha
+adjustment does not select pairs and does not guarantee unbiased
+reliability for every adaptive schedule. Schedule-aware bootstrap
+correction remains separate work. For the mathematical definition,
+uncertainty assumptions and failure diagnostics, see
+[`?fit_bt_model`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md).
+
 ### Save an analysis
 
 ``` r
