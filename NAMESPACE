@@ -2,6 +2,7 @@
 
 S3method(predict,pairwiseLLM_bt_alpha)
 S3method(predict,pairwiseLLM_bt_firth)
+S3method(predict,pairwiseLLM_bt_lapse)
 S3method(predict,pairwiseLLM_rubric_calibration)
 S3method(predict,pairwiseLLM_warm_algorithm_ensemble)
 S3method(predict,pairwiseLLM_warm_ensemble)

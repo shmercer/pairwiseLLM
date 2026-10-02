@@ -1,0 +1,6 @@
+"filename","line_coverage_percent"
+"bt_bootstrap_contracts.R",99.1071428571429
+"bt_lapse_likelihood.R",100
+"bt_lapse_optimizer.R",98.2758620689655
+"bt_lapse.R",99.1379310344828
+"bt_model.R",100

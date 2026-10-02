@@ -108,6 +108,7 @@ Other frequentist models:
 \code{\link[=fit_bt_model]{fit_bt_model()}},
 \code{\link[=predict.pairwiseLLM_bt_alpha]{predict.pairwiseLLM_bt_alpha()}},
 \code{\link[=predict.pairwiseLLM_bt_firth]{predict.pairwiseLLM_bt_firth()}},
+\code{\link[=predict.pairwiseLLM_bt_lapse]{predict.pairwiseLLM_bt_lapse()}},
 \code{\link[=scale_separation_reliability]{scale_separation_reliability()}},
 \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}
 }

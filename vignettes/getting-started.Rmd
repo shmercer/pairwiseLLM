@@ -169,6 +169,29 @@ bootstrap bias correction is available in the [bootstrap guide](bt-bootstrap.htm
 For the mathematical definition,
 uncertainty assumptions and failure diagnostics, see `?fit_bt_model`.
 
+### An experimental comparison with the Bayesian likelihood
+
+`fit_bt_model(..., engine = "lapse")` jointly estimates sample strengths,
+a preference for the first presented sample, and a probability of guessing.
+It uses the same comparison probability as the Bayesian `btl_e_b` model, with
+unpenalized maximum likelihood. This helps investigate whether differences come
+from the probability model or from Bayesian versus frequentist estimation.
+It is a prototype, not a replacement for the Bayesian fit.
+
+A connected set of comparisons is not always enough to separate these effects.
+The prototype stops when identification, optimization, lapse-boundary, or
+uncertainty checks fail. The error retains the available estimates and diagnostic
+details, without standard errors or reliability. Successful fits provide local
+standard errors that include uncertainty in bias and lapse, but these checks
+alone do not prove that the errors are well calibrated across repeated samples.
+Conventional reliability (SSR) remains unavailable for this prototype.
+The frozen synthetic assessment recovered the known parameters in all 270
+cases with guessing probabilities of 5%, 20%, or 40%. At zero or near-zero
+guessing, 126 of 180 cases were rejected by the boundary or numerical checks.
+Stable behavior near zero has therefore not been established for production use.
+The simple-BT bootstrap does not accept lapse fits. See `?fit_bt_model` for the
+model, assumptions, numerical controls, and failure fields.
+
 ### Save an analysis
 
 ```{r save-offline-results, eval=FALSE}

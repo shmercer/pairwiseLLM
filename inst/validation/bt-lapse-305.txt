@@ -1,0 +1,95 @@
+Issue #305: frozen frequentist lapse + positional-bias BTL qualification
+
+Conclusion: experimental prototype; near-zero stability is NOT established.
+Do not describe successful failure-handling tests as production qualification.
+Unpenalized MLE was explicitly selected before validation. No penalty, fallback,
+parameter bounds beyond epsilon in [0,1], covariance repair, or recovery-tolerance
+changes were introduced to make the model pass.
+
+Reproduce from the repository root:
+  Rscript scripts/validate-bt-lapse.R /tmp/bt-lapse-305.csv
+
+Environment: R 4.6.1 (2026-06-24); pairwiseLLM 1.6.0; Linux.
+Base: b8875d081f2d1965f409313cffe3d9d0fc4e401c.
+The accompanying sources.sha256 identifies the numerical source and frozen
+fixtures used. The delivery commit/PR identifies the complete reviewed tree.
+
+Frozen design
+  Complete graphs: 4, 8, 12 items.
+  Sparse graphs: 8 and 12 items, paths closed into cycles with fixed chords.
+  Every edge has both presentation directions and 2,000 observations per direction.
+  Centered theta spans [-2,2]; beta is 0, -0.3, or 0.3.
+  Epsilon is 0.001, 0.05, 0.2, or 0.4, plus separate true-zero boundary cases.
+  Each cell has a population expected-count oracle and five integer-binomial
+  samples with fixed seeds 30501 through 30505. Integer counts are the sufficient
+  statistics for repeated binary observations; public row aggregation is tested
+  independently against these counts.
+  Population recovery: maximum absolute error <= 1e-5 for theta, beta, epsilon.
+  Seeded recovery: maximum absolute theta/beta/epsilon errors <= 0.35/0.15/0.08.
+  Both a locally valid fit AND those recovery tolerances are required to pass.
+
+Results: 324 of 450 cases passed recovery; 126 did not return a valid fit.
+
+True epsilon   Cases   Valid/recovered   Boundary   Nonconverged   Nonstationary
+0                 90          13             63            14               0
+0.001             90          41             37            11               1
+0.05              90          90              0             0               0
+0.2               90          90              0             0               0
+0.4               90          90              0             0               0
+
+All 60 positive-epsilon population cases recovered their known parameters;
+the maximum errors were theta 3.235e-12, beta 9.698e-14, epsilon 1.314e-12.
+The 15 true-zero population cases were rejected as boundary fits.
+Of 375 seeded cases, 264 returned valid fits and all met the recovery tolerances.
+Their maximum absolute errors were theta 0.299931, beta 0.101371, epsilon 0.033979.
+
+The nonstationary case was the complete 12-item graph, true beta 0,
+true epsilon 0.001, seed 30501. Its natural-coordinate maximum score was 93.15404
+despite the optimizer's convergence code. It was rejected; no tolerance was
+relaxed and no alternative solution was substituted to obtain uncertainty.
+Twenty-five other near-zero cases retained the best candidate's native failure
+to converge. These are limitations of this fixed implementation, not proof that
+all possible unpenalized algorithms must fail.
+
+What the evidence establishes
+  Recovery across the specified graph sizes, including zero bias and connected
+  sparse graphs, succeeded for all cases with true epsilon 0.05, 0.2, and 0.4.
+  All positive-epsilon population cases passed. No boundary pathologies were
+  observed in the three specified moderate-lapse settings.
+  Natural/logit derivatives agree with finite differences. Joint covariance
+  agrees with an independent orthonormal-coordinate oracle and includes beta
+  and epsilon estimation. Relabeling, row-order and presentation-reversal tests
+  passed. Predictions agree with independent hand calculations and the current
+  Bayesian likelihood formula; no Stan sampler was run.
+  Nonidentification, separation, disconnected graphs, bad curvature, boundary
+  and optimizer failures are retained without SEs, covariance repair or fallback.
+
+What remains unestablished
+  Stable near-zero estimation and ordinary joint uncertainty are not established.
+  Correct rejection at epsilon zero is not successful regular joint estimation.
+  Positive curvature and a recovery pass do not prove repeated-sample SE/interval
+  calibration, global optimality over all modes, or validity on other graphs.
+  This audit is not a study-specific power/coverage analysis. Conventional SSR
+  remains unavailable for every lapse fit. Adaptive bootstrap remains out of scope.
+
+Focused engineering checks
+  Test files: 0015, 0021, 0026, 0035-0043, 5113-5115.
+  All focused tests passed, with existing skips for unavailable historical
+  tasklist evidence and sandbox-unavailable PSOCK sockets.
+  Targeted line coverage: bt_lapse_likelihood.R 100%; bt_lapse_optimizer.R
+  98.276%; bt_lapse.R 99.138%; bt_model.R 100%; bt_bootstrap_contracts.R 99.107%.
+  Changed-file lint, static usage checks for ten new functions, generated-help
+  checks, offline getting-started rendering, and diff whitespace checks passed.
+  No full package check or full-suite coverage was run. No provider, private
+  study, optional dependency installation, release, merge, or #306 work was done.
+
+Artifacts
+  bt-lapse-305.csv: all 450 final qualification outcomes, including failures.
+  bt-lapse-305-preliminary.csv: all 450 preliminary outcomes, identical to the
+  final run on every shared result column. This run wrote its complete CSV but
+  exited with a trailing script parse error; the final rerun exited cleanly.
+  bt-lapse-305-coverage.csv: focused line coverage for affected R files.
+  bt-lapse-305-sources.sha256: numerical implementation and fixture fingerprints.
+  The final implementation additionally
+  requires the epsilon-zero comparison to pass its own stationarity/curvature
+  checks and caches repeated objective evaluations without changing their values.

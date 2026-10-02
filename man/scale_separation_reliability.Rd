@@ -47,6 +47,7 @@ Other frequentist models:
 \code{\link[=fit_elo_model]{fit_elo_model()}},
 \code{\link[=predict.pairwiseLLM_bt_alpha]{predict.pairwiseLLM_bt_alpha()}},
 \code{\link[=predict.pairwiseLLM_bt_firth]{predict.pairwiseLLM_bt_firth()}},
+\code{\link[=predict.pairwiseLLM_bt_lapse]{predict.pairwiseLLM_bt_lapse()}},
 \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}
 }
 \concept{frequentist models}
