@@ -1276,6 +1276,7 @@ make_adaptive_judge_llm <- function(
 #'   [adaptive_rank_start()], [adaptive_rank_resume()], [llm_compare_pair()]
 #'
 #' @seealso [make_warm_start_prior()], [fit_warm_start_model()]
+#'   and the [integrated CJ workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
 #' @family adaptive ranking
 #' @param warm_start_model Optional calibrated model, cross-task or same-task algorithm ensemble,
 #'   path string, or

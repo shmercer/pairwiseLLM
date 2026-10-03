@@ -286,7 +286,7 @@ test_that("release documentation keeps navigation and citation contracts", {
   expect_false(grepl("template_positional_bias", pkgdown, fixed = TRUE))
   expect_true(grepl("articles/prompt-template-bias.html", pkgdown, fixed = TRUE))
 
-  expect_length(vignette_paths, 15L)
+  expect_length(vignette_paths, 16L)
   expect_true(all(vapply(vignette_text, function(text) {
     normalized <- gsub("\n> ", " ", text, fixed = TRUE)
     grepl("Citation", normalized, fixed = TRUE) &&
@@ -320,6 +320,34 @@ test_that("release documentation keeps navigation and citation contracts", {
     bt_helper_source,
     fixed = TRUE
   ))
+})
+
+test_that("integrated CJ guide links the existing topic documentation", {
+  root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  path <- file.path(root, "vignettes", "adaptive-cj-workflow.Rmd")
+  skip_if_not(file.exists(path), "Source vignette unavailable in installed-package tests")
+  guide <- paste(readLines(path, warn = FALSE), collapse = "\n")
+  topics <- c("getting-started", "bayesian-btl", "adaptive-pairing",
+    "within-set-adaptive-design", "bt-bootstrap")
+  for (topic in topics) {
+    expect_match(guide, paste0(topic, ".html"), fixed = TRUE)
+    source <- paste(readLines(file.path(root, "vignettes", paste0(topic, ".Rmd"))), collapse = "\n")
+    expect_match(source, "adaptive-cj-workflow.html", fixed = TRUE)
+  }
+  for (topic in c("fit_bt_model", "scale_separation_reliability", "bootstrap_bt_model",
+      "fit_bayes_btl_mcmc", "adaptive_rank", "adaptive_results_history",
+      "summarize_refits", "predict.pairwiseLLM_bt_lapse")) {
+    rd <- paste(readLines(file.path(root, "man", paste0(topic, ".Rd"))), collapse = "\n")
+    expect_match(rd, "adaptive-cj-workflow.html", fixed = TRUE)
+  }
+  for (term in c("Five related questions", "Scale Separation Reliability (SSR)",
+      "Bayesian BTL and EAP reliability", "Empirical recovery and scale dispersion",
+      "Held-out predictive evaluation", "Schedule-aware parametric bootstrap",
+      "Experimental lapse and positional-bias model matching",
+      "base", "expand_locality", "uncertainty_pool", "dup_relax", "global_safe")) {
+    expect_match(guide, term, fixed = TRUE)
+  }
+  expect_false(grepl("ELLIPSE|D108|R-libs|ellipse-adaptive-pairing|pairwiseLLM:::", guide))
 })
 
 test_that("standalone Bayesian BTL vignette uses current summary columns", {
@@ -393,6 +421,8 @@ test_that("README article navigation is portable and uses descriptive labels", {
     "data-and-prompts",
     "provider-controls-and-recovery",
     "bayesian-btl",
+    "adaptive-cj-workflow",
+    "bt-bootstrap",
     "rubric-calibration",
     "advanced-batch-workflows",
     "prompt-template-bias",

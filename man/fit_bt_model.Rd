@@ -364,7 +364,9 @@ if (requireNamespace("BradleyTerry2", quietly = TRUE)) {
 
 }
 \seealso{
-\code{\link[=build_bt_data]{build_bt_data()}}, \code{\link[=summarize_bt_fit]{summarize_bt_fit()}}
+\code{\link[=build_bt_data]{build_bt_data()}}, \code{\link[=summarize_bt_fit]{summarize_bt_fit()}},
+\code{\link[=scale_separation_reliability]{scale_separation_reliability()}}, \code{\link[=bootstrap_bt_model]{bootstrap_bt_model()}},
+\href{https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html}{integrated CJ workflow}
 
 Other frequentist models:
 \code{\link[=bootstrap_bt_model]{bootstrap_bt_model()}},

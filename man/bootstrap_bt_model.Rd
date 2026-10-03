@@ -146,6 +146,7 @@ boot$theta
 }
 \seealso{
 \code{\link[=fit_bt_model]{fit_bt_model()}}, \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_run_live]{adaptive_rank_run_live()}}
+and the \href{https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html}{integrated CJ workflow}
 
 Other frequentist models:
 \code{\link[=build_bt_data]{build_bt_data()}},

@@ -27,6 +27,10 @@ before Task 01 of the v1.5.0 series; do not renumber unrelated tests.
 - 6000–6999: Bayesian sampler and fit integration contracts
 - 9000–9999: End-to-end and integration tests
 
+Issue #306 reserves 9005 for the executable integrated CJ documentation workflow
+(verified unused on 2026-10-02). Tests use the actual vignette chunks, synthetic
+outcomes, local seeds, optional-engine guards, and no Bayesian sampling or providers.
+
 Notes specific to adaptive pairing tests:
 - Prefer small synthetic problems (typically N ≤ 12) unless explicitly testing
   performance or scaling behavior.

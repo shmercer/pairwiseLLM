@@ -38,6 +38,8 @@ navbar:
           href: articles/model-compatibility.html
         - text: "Advanced: Submitting and Polling Multiple Batches"
           href: articles/advanced-batch-workflows.html
+        - text: "Guide: CJ Estimation, Reliability, and Evaluation"
+          href: articles/adaptive-cj-workflow.html
         - text: "Guide: Adaptive Pairing"
           href: articles/adaptive-pairing.html
         - text: "Guide: Adaptive Warm Start"
@@ -93,6 +95,7 @@ articles:
 
   - title: "Modeling and Bias"
     contents:
+      - adaptive-cj-workflow
       - bt-bootstrap
       - bayesian-btl
       - rubric-calibration
@@ -141,7 +144,7 @@ reference:
       - estimate_llm_pairs_cost
       - print.pairwiseLLM_cost_estimate
   - title: "Turn comparisons into rankings"
-    desc: "BT and Elo use recorded winners; Bayesian BTL additionally requires CmdStan."
+    desc: "Start with the [integrated CJ workflow](../articles/adaptive-cj-workflow.html) for estimation, reliability, recovery, and prediction. Bayesian BTL additionally requires CmdStan."
     contents:
       - build_bt_data
       - fit_bt_model

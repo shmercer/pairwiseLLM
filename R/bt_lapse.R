@@ -171,7 +171,8 @@
 #'   positional bias and need not equal 0.5. Empty input returns `numeric(0)`.
 #' @param ... Reserved; additional arguments are rejected.
 #' @return Numeric first-item win probabilities in input row order.
-#' @seealso [fit_bt_model()]
+#' @seealso [fit_bt_model()],
+#'   [integrated CJ workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
 #' @family frequentist models
 #' @export
 predict.pairwiseLLM_bt_lapse <- function(object, newdata = NULL, ...) {

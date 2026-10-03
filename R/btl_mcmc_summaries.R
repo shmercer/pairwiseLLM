@@ -350,6 +350,7 @@
 #' summarize_refits(logs, include_optional = FALSE)
 #'
 #' @seealso [adaptive_get_logs()], [adaptive_step_log()]
+#'   and the [integrated CJ workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
 #' @family adaptive logs
 #' @export
 summarize_refits <- function(state, last_n = NULL, include_optional = TRUE) {

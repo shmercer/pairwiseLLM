@@ -446,7 +446,9 @@ build_bt_data <- function(results) {
 #' @import tibble
 #' @import dplyr
 #' @importFrom stats aggregate
-#' @seealso [build_bt_data()], [summarize_bt_fit()]
+#' @seealso [build_bt_data()], [summarize_bt_fit()],
+#'   [scale_separation_reliability()], [bootstrap_bt_model()],
+#'   [integrated CJ workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
 #' @family frequentist models
 #' @export
 fit_bt_model <- function(bt_data,

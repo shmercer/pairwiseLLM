@@ -24,7 +24,7 @@ A tibble with columns:
 \item{se}{Standard error of \code{theta}.}
 \item{rank}{Rank of \code{theta}; 1 = highest
 (if \code{decreasing = TRUE}).}
-\item{engine}{Modeling engine used ("sirt", "BradleyTerry2", "brglm2", or "alpha").}
+\item{engine}{Modeling engine used ("sirt", "BradleyTerry2", "brglm2", "alpha", or "lapse").}
 \item{reliability}{Reliability (numeric scalar, or \code{NA}) repeated on each row.}
 }
 }
@@ -36,7 +36,7 @@ returns a tibble with one row per object (e.g., writing sample), including:
 \item \code{theta}: estimated ability parameter
 \item \code{se}: standard error of \code{theta}
 \item \code{rank}: rank order of \code{theta} (1 = highest by default)
-\item \code{engine}: modeling engine used ("sirt", "BradleyTerry2", "brglm2", or "alpha")
+\item \code{engine}: modeling engine used ("sirt", "BradleyTerry2", "brglm2", "alpha", or "lapse")
 \item \code{reliability}: raw sirt reliability, calculated Firth/alpha SSR, or \code{NA}
 }
 }
@@ -46,6 +46,8 @@ should not be interpreted without considering that uncertainty. Reliability
 is a study-level summary repeated on each row, not an item-specific score.
 The returned rows retain input order; sort explicitly by \code{rank} or \code{theta}
 when preparing a ranked report.
+Valid lapse-boundary fits retain point estimates and ranks with missing SEs;
+reliability is unavailable for every lapse fit.
 }
 \examples{
 # Example using built-in comparison data

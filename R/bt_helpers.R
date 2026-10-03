@@ -22,7 +22,8 @@
 #'   are dropped and no coefficient is returned for an undefined calculation.
 #' @examples
 #' scale_separation_reliability(c(-1, 0, 1), c(0.2, 0.3, 0.4))
-#' @seealso [fit_bt_model()]
+#' @seealso [fit_bt_model()],
+#'   [integrated CJ workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
 #' @family frequentist models
 #' @export
 scale_separation_reliability <- function(theta, se) {
@@ -57,7 +58,7 @@ scale_separation_reliability <- function(theta, se) {
 #'   \item \code{theta}: estimated ability parameter
 #'   \item \code{se}: standard error of \code{theta}
 #'   \item \code{rank}: rank order of \code{theta} (1 = highest by default)
-#'   \item \code{engine}: modeling engine used ("sirt", "BradleyTerry2", "brglm2", or "alpha")
+#'   \item \code{engine}: modeling engine used ("sirt", "BradleyTerry2", "brglm2", "alpha", or "lapse")
 #'   \item \code{reliability}: raw sirt reliability, calculated Firth/alpha SSR, or \code{NA}
 #' }
 #'
@@ -66,6 +67,8 @@ scale_separation_reliability <- function(theta, se) {
 #' is a study-level summary repeated on each row, not an item-specific score.
 #' The returned rows retain input order; sort explicitly by `rank` or `theta`
 #' when preparing a ranked report.
+#' Valid lapse-boundary fits retain point estimates and ranks with missing SEs;
+#' reliability is unavailable for every lapse fit.
 #'
 #' @param fit A list returned by \code{\link{fit_bt_model}}.
 #' @param decreasing Logical; should higher \code{theta} values receive
@@ -81,7 +84,7 @@ scale_separation_reliability <- function(theta, se) {
 #'   \item{se}{Standard error of \code{theta}.}
 #'   \item{rank}{Rank of \code{theta}; 1 = highest
 #'   (if \code{decreasing = TRUE}).}
-#'   \item{engine}{Modeling engine used ("sirt", "BradleyTerry2", "brglm2", or "alpha").}
+#'   \item{engine}{Modeling engine used ("sirt", "BradleyTerry2", "brglm2", "alpha", or "lapse").}
 #'   \item{reliability}{Reliability (numeric scalar, or `NA`) repeated on each row.}
 #' }
 #'
