@@ -2,6 +2,16 @@
 
 ## pairwiseLLM (development version)
 
+- A new integrated CJ workflow guide connects pair selection,
+  frequentist and Bayesian estimation, SSR and EAP reliability,
+  empirical score recovery, scale dispersion, schedule-aware bootstrap,
+  and held-out predictive evaluation
+  ([\#306](https://github.com/shmercer/pairwiseLLM/issues/306)). Seeded
+  offline examples include experimental lapse-model interior and
+  boundary fits. Topic guides and reference help link to the shared
+  conceptual entry point; statistical implementations, defaults,
+  dependencies, and version are unchanged.
+
 - `fit_bt_model(engine = "lapse")` adds an experimental unpenalized
   frequentist prototype matching the Bayesian `btl_e_b` likelihood
   ([\#305](https://github.com/shmercer/pairwiseLLM/issues/305)). Bounded

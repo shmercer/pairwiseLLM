@@ -184,6 +184,8 @@ treated as a "refit" in the adaptive logging sense, producing:
 [`build_btl_results_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_btl_results_data.md),
 [`make_warm_start_prior()`](https://shmercer.github.io/pairwiseLLM/reference/make_warm_start_prior.md),
 [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
+and the [integrated CJ
+workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
 
 Other Bayesian models:
 [`build_btl_results_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_btl_results_data.md)

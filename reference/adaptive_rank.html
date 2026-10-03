@@ -26,6 +26,7 @@ returns state plus summary outputs."></head><body>
     <li><a class="dropdown-item" href="../articles/provider-controls-and-recovery.html">Provider Controls and Recovery</a></li>
     <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-cj-workflow.html">Guide: CJ Estimation, Reliability, and Evaluation</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
     <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Linking Saved Comparisons</a></li>
@@ -740,7 +741,8 @@ state, mode, strategy, and bootstrap progress; omit all warm-start arguments.</p
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="make_adaptive_judge_llm.html">make_adaptive_judge_llm()</a></code>, <code><a href="adaptive_rank_run_live.html">adaptive_rank_run_live()</a></code>,
 <code><a href="adaptive_rank_start.html">adaptive_rank_start()</a></code>, <code><a href="adaptive_rank_resume.html">adaptive_rank_resume()</a></code>, <code><a href="llm_compare_pair.html">llm_compare_pair()</a></code></p>
-<p><code><a href="make_warm_start_prior.html">make_warm_start_prior()</a></code>, <code><a href="fit_warm_start_model.html">fit_warm_start_model()</a></code></p>
+<p><code><a href="make_warm_start_prior.html">make_warm_start_prior()</a></code>, <code><a href="fit_warm_start_model.html">fit_warm_start_model()</a></code>
+and the <a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html">integrated CJ workflow</a></p>
 <p>Other adaptive ranking:
 <code><a href="adaptive_rank_resume.html">adaptive_rank_resume()</a></code>,
 <code><a href="adaptive_rank_run_live.html">adaptive_rank_run_live()</a></code>,
@@ -779,10 +781,10 @@ state, mode, strategy, and bootstrap progress; omit all warm-start arguments.</p
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 4 × 97</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-10-02 <span style="color: #949494;">18:29:22</span>       1     1     4 S01   S04       4     1 S04  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-10-02 <span style="color: #949494;">18:29:22</span>       2     4     8 S04   S08       8     4 S08  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-10-02 <span style="color: #949494;">18:29:22</span>       3     8     2 S08   S02       2     8 S02  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-10-02 <span style="color: #949494;">18:29:22</span>       4     2     6 S02   S06       6     2 S06  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-10-03 <span style="color: #949494;">01:17:40</span>       1     1     4 S01   S04       4     1 S04  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-10-03 <span style="color: #949494;">01:17:40</span>       2     4     8 S04   S08       8     4 S08  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-10-03 <span style="color: #949494;">01:17:40</span>       3     8     2 S08   S02       2     8 S02  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-10-03 <span style="color: #949494;">01:17:40</span>       4     2     6 S02   S06       6     2 S06  </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 87 more variables: B_id &lt;chr&gt;, unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   Y &lt;int&gt;, status &lt;chr&gt;, judge_backend &lt;chr&gt;, judge_model &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   judge_endpoint &lt;chr&gt;, judge_valid &lt;lgl&gt;, judge_invalid_reason &lt;chr&gt;,</span></span>

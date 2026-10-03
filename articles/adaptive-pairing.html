@@ -38,6 +38,7 @@
     <li><a class="dropdown-item" href="../articles/provider-controls-and-recovery.html">Provider Controls and Recovery</a></li>
     <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-cj-workflow.html">Guide: CJ Estimation, Reliability, and Evaluation</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
     <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Linking Saved Comparisons</a></li>
@@ -88,6 +89,10 @@
 <div class="section level2">
 <h2 id="what-you-will-do">What you will do<a class="anchor" aria-label="anchor" href="#what-you-will-do"></a>
 </h2>
+<p>The <a href="adaptive-cj-workflow.html">integrated CJ workflow</a> is
+the conceptual entry point for selection, estimation, reliability,
+recovery, and held-out prediction. Use this guide for the practical
+collection and persistence steps.</p>
 <p>This article shows how to rank <strong>one set of items</strong> with
 [adaptive_rank()]. The wrapper reads and validates the items, starts or
 resumes a run, requests comparisons from a judge, performs Bayesian
@@ -391,6 +396,13 @@ the predicted chance that the sample presented as A beats B.
 desired probability; it is missing for random pairing. BTL fits and
 stopping checks continue at their usual intervals for every
 strategy.</p>
+<p>Hybrid recovery attempts remain part of hybrid, including
+<code>base</code>, <code>expand_locality</code>,
+<code>uncertainty_pool</code>, <code>dup_relax</code>, and
+<code>global_safe</code>; they do not substitute another strategy. See
+the <a href="adaptive-cj-workflow.html#hybrid-recovery-stays-within-hybrid">integrated
+explanation</a> and the <a href="within-set-adaptive-design.html#fallback-ladder">exact recovery
+rules</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="lower-level-lifecycle-and-offline-judges">Lower-level lifecycle and offline judges<a class="anchor" aria-label="anchor" href="#lower-level-lifecycle-and-offline-judges"></a>

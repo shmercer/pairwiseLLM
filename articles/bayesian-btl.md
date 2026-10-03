@@ -5,6 +5,13 @@ fits a Bayesian Bradley–Terry–Luce (BTL) model to an existing fixed set
 of pairwise outcomes. It reuses the adaptive fit and summary contracts
 but does not perform adaptive pair selection.
 
+The [integrated CJ
+workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.md)
+explains how Bayesian EAP reliability differs from frequentist SSR,
+empirical score recovery, and held-out prediction. It also introduces
+the experimental frequentist lapse/position estimator that matches the
+`btl_e_b` likelihood without Bayesian priors.
+
 ## When to use this guide
 
 Use this workflow when you already have pairwise winners and want
@@ -125,7 +132,7 @@ items <- summarize_items(fit)
 
 refits[, c(
   "round_id", "total_pairs", "diagnostics_pass",
-  "divergences", "max_rhat", "min_ess_bulk"
+  "divergences", "max_rhat", "min_ess_bulk", "reliability_EAP"
 )]
 items[, c("ID", "theta_mean", "theta_sd", "rank_mean", "deg")]
 ```
@@ -145,6 +152,7 @@ warning or reporting only posterior means.
 | `rank_mean` | Posterior mean rank; uncertainty can make it non-integer. |
 | `deg` | Number of committed comparisons involving that item. |
 | `diagnostics_pass` | Whether the fit meets the implemented diagnostic checks; inspect individual diagnostics too. |
+| `reliability_EAP` | Posterior mean score variance divided by that variance plus average posterior variance; an internal model-based summary, not empirical recovery. |
 | `max_rhat`, `min_ess_bulk`, `divergences` | Sampling checks for chain agreement, effective information, and numerical problems. |
 
 Higher quality locations indicate stronger writing, but adjacent ranks

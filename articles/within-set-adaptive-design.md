@@ -20,6 +20,13 @@ and
 
 ## Reading guide
 
+For a plain-language comparison of selection, estimation, internal
+reliability, empirical recovery, and held-out prediction, begin with the
+[integrated CJ
+workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.md).
+It also connects this design to frequentist adjustments and
+schedule-aware bootstrap bias correction.
+
 For the broad idea, read **Foundational concepts** and **Algorithm
 overview**. For implementation detail, follow the selection sections
 through **Bayesian BTL refits**. For deciding whether a result can be

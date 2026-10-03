@@ -29,6 +29,8 @@
 
 ### Modeling and Bias
 
+- [Adaptive comparative judgment: estimation, reliability, and
+  evaluation](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.md):
 - [Bootstrap bias correction for BT
   scores](https://shmercer.github.io/pairwiseLLM/articles/bt-bootstrap.md):
 - [Standalone Bayesian BTL with

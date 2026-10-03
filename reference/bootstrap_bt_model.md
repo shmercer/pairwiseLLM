@@ -187,6 +187,8 @@ signaled once at completion.
 [`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md),
 [`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md),
 [`adaptive_rank_run_live()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_run_live.md)
+and the [integrated CJ
+workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
 
 Other frequentist models:
 [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),

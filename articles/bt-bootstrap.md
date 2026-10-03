@@ -2,6 +2,14 @@
 
 ## What the correction estimates
 
+The [integrated CJ
+workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.md)
+explains where bootstrap bias correction fits alongside pair selection,
+internal reliability, score recovery, and held-out prediction. This
+guide focuses on the bootstrap interface. The examples require the
+suggested `withr` package and are displayed without execution when it is
+absent.
+
 A Bradley–Terry (BT) score describes relative strength on a log-odds
 scale. With limited comparisons, an estimator may systematically place
 scores too far apart or too close together. A **parametric bootstrap**
@@ -57,6 +65,29 @@ fixed$theta
 #> 3 c             0.404          0.240 -0.165            0.569        0.483
 #> 4 d             0.299          0.225 -0.0742           0.373        0.565
 #> # ℹ 1 more variable: mcse_bias <dbl>
+fixed$provenance[c("mode", "seed", "pairing_strategy", "refit", "versions")]
+#> $mode
+#> [1] "fixed"
+#> 
+#> $seed
+#> [1] 1304
+#> 
+#> $pairing_strategy
+#> [1] "fixed"
+#> 
+#> $refit
+#> $refit$estimator
+#> [1] "alpha"
+#> 
+#> $refit$args
+#> $refit$args$alpha
+#> [1] 0.5
+#> 
+#> 
+#> 
+#> $versions
+#>           R pairwiseLLM       stats 
+#>     "4.6.1"     "1.6.0"     "4.6.1"
 ```
 
 The fitted object supplies both the generating scores and the estimator
@@ -85,8 +116,7 @@ judge <- function(A, B, state, ...) {
 schedule_config <- list(refit_pairs_target = 100L)
 observed <- withr::with_seed(7304, adaptive_rank_run_live(initial, judge,
   n_steps = 12, btl_config = schedule_config, progress = "none"))
-log <- adaptive_step_log(observed)
-dat <- data.frame(object1 = log$A_id, object2 = log$B_id, result = log$Y)
+dat <- adaptive_results_history(observed)
 fit <- fit_bt_model(dat, engine = "alpha", alpha = 0.5, verbose = FALSE)
 adaptive <- bootstrap_bt_model(fit, mode = "adaptive", n_rep = 4, seed = 2304,
   initial_state = initial, budget = 12, btl_config = schedule_config)
@@ -109,6 +139,29 @@ adaptive$replicates[, c("replicate", "success", "n_comparisons", "schedule_diges
 #> 2         2 TRUE               12 3e80c6940736310370db99ad7add564a
 #> 3         3 TRUE               12 a45fe7069b80fe0680ab99a7654b2558
 #> 4         4 TRUE               12 005c33660e3e93f0b85b2ddb91fb6208
+adaptive$provenance[c("mode", "seed", "pairing_strategy", "refit", "versions")]
+#> $mode
+#> [1] "adaptive"
+#> 
+#> $seed
+#> [1] 2304
+#> 
+#> $pairing_strategy
+#> [1] "trueskill_p50"
+#> 
+#> $refit
+#> $refit$estimator
+#> [1] "alpha"
+#> 
+#> $refit$args
+#> $refit$args$alpha
+#> [1] 0.5
+#> 
+#> 
+#> 
+#> $versions
+#>           R pairwiseLLM       stats 
+#>     "4.6.1"     "1.6.0"     "4.6.1"
 ```
 
 The initial connected pairs and their presentations stay fixed across

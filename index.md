@@ -192,6 +192,15 @@ stopping criteria.
 
 ### Modeling and bias
 
+- [Guide: CJ Estimation, Reliability, and
+  Evaluation](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
+  — distinguish adaptive selection, estimator choices, SSR and EAP
+  reliability, score recovery, scale dispersion, bootstrap correction,
+  and held-out prediction.
+- [Guide: BT Bootstrap Bias
+  Correction](https://shmercer.github.io/pairwiseLLM/articles/bt-bootstrap.html)
+  — simulate fixed or adaptive schedules and inspect corrected scores
+  and Monte Carlo error.
 - [Guide: Rubric
   Calibration](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.html)
   — convert completed CJ results to distribution-matched levels or human

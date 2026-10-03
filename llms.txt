@@ -192,6 +192,15 @@ stopping criteria.
 
 ### Modeling and bias
 
+- [Guide: CJ Estimation, Reliability, and
+  Evaluation](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
+  — distinguish adaptive selection, estimator choices, SSR and EAP
+  reliability, score recovery, scale dispersion, bootstrap correction,
+  and held-out prediction.
+- [Guide: BT Bootstrap Bias
+  Correction](https://shmercer.github.io/pairwiseLLM/articles/bt-bootstrap.html)
+  — simulate fixed or adaptive schedules and inspect corrected scores
+  and Monte Carlo error.
 - [Guide: Rubric
   Calibration](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.html)
   — convert completed CJ results to distribution-matched levels or human
@@ -368,8 +377,10 @@ recovery](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-
 
 ## Turn comparisons into rankings
 
-BT and Elo use recorded winners; Bayesian BTL additionally requires
-CmdStan.
+Start with the [integrated CJ
+workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.md)
+for estimation, reliability, recovery, and prediction. Bayesian BTL
+additionally requires CmdStan.
 
 - [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md)
   : Build Bradley-Terry comparison data from pairwise results
@@ -434,7 +445,7 @@ guide](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md).
 - [`adaptive_item_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_item_log.md)
   : Adaptive item log accessor.
 - [`adaptive_results_history()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_results_history.md)
-  : Adaptive results history in build_bt_data() format.
+  : Adaptive results history ready for BT fitting
 - [`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md)
   : Summarize an adaptive state.
 - [`summarize_refits()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_refits.md)
@@ -696,6 +707,8 @@ parser fixture for offline exploration.
 
 ### Modeling and Bias
 
+- [Adaptive comparative judgment: estimation, reliability, and
+  evaluation](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.md):
 - [Bootstrap bias correction for BT
   scores](https://shmercer.github.io/pairwiseLLM/articles/bt-bootstrap.md):
 - [Standalone Bayesian BTL with

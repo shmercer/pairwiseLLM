@@ -38,6 +38,7 @@
     <li><a class="dropdown-item" href="../articles/provider-controls-and-recovery.html">Provider Controls and Recovery</a></li>
     <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-cj-workflow.html">Guide: CJ Estimation, Reliability, and Evaluation</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
     <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Linking Saved Comparisons</a></li>
@@ -88,6 +89,12 @@
 <div class="section level2">
 <h2 id="what-the-correction-estimates">What the correction estimates<a class="anchor" aria-label="anchor" href="#what-the-correction-estimates"></a>
 </h2>
+<p>The <a href="adaptive-cj-workflow.html">integrated CJ workflow</a>
+explains where bootstrap bias correction fits alongside pair selection,
+internal reliability, score recovery, and held-out prediction. This
+guide focuses on the bootstrap interface. The examples require the
+suggested <code>withr</code> package and are displayed without execution
+when it is absent.</p>
 <p>A Bradley–Terry (BT) score describes relative strength on a log-odds
 scale. With limited comparisons, an estimator may systematically place
 scores too far apart or too close together. A <strong>parametric
@@ -137,7 +144,30 @@ is installed.</p>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> b            -<span style="color: #BB0000;">0.384</span>         -<span style="color: #BB0000;">0.327</span>  0.056<span style="text-decoration: underline;">9</span>          -<span style="color: #BB0000;">0.441</span>        0.367</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> c             0.404          0.240 -<span style="color: #BB0000;">0.165</span>            0.569        0.483</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> d             0.299          0.225 -<span style="color: #BB0000;">0.074</span><span style="color: #BB0000; text-decoration: underline;">2</span>           0.373        0.565</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 1 more variable: mcse_bias &lt;dbl&gt;</span></span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 1 more variable: mcse_bias &lt;dbl&gt;</span></span></span>
+<span><span class="va">fixed</span><span class="op">$</span><span class="va">provenance</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"mode"</span>, <span class="st">"seed"</span>, <span class="st">"pairing_strategy"</span>, <span class="st">"refit"</span>, <span class="st">"versions"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt; $mode</span></span>
+<span><span class="co">#&gt; [1] "fixed"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $seed</span></span>
+<span><span class="co">#&gt; [1] 1304</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $pairing_strategy</span></span>
+<span><span class="co">#&gt; [1] "fixed"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $refit</span></span>
+<span><span class="co">#&gt; $refit$estimator</span></span>
+<span><span class="co">#&gt; [1] "alpha"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $refit$args</span></span>
+<span><span class="co">#&gt; $refit$args$alpha</span></span>
+<span><span class="co">#&gt; [1] 0.5</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $versions</span></span>
+<span><span class="co">#&gt;           R pairwiseLLM       stats </span></span>
+<span><span class="co">#&gt;     "4.6.1"     "1.6.0"     "4.6.1"</span></span></code></pre></div>
 <p>The fitted object supplies both the generating scores and the
 estimator settings. Each replicate keeps the original ordered pair rows,
 including any repetitions, and draws fresh winners. Twenty replicates
@@ -164,8 +194,7 @@ supplies winners in place of a provider.</p>
 <span><span class="va">schedule_config</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>refit_pairs_target <span class="op">=</span> <span class="fl">100L</span><span class="op">)</span></span>
 <span><span class="va">observed</span> <span class="op">&lt;-</span> <span class="fu">withr</span><span class="fu">::</span><span class="fu"><a href="https://withr.r-lib.org/reference/with_seed.html" class="external-link">with_seed</a></span><span class="op">(</span><span class="fl">7304</span>, <span class="fu"><a href="../reference/adaptive_rank_run_live.html">adaptive_rank_run_live</a></span><span class="op">(</span><span class="va">initial</span>, <span class="va">judge</span>,</span>
 <span>  n_steps <span class="op">=</span> <span class="fl">12</span>, btl_config <span class="op">=</span> <span class="va">schedule_config</span>, progress <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">log</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_step_log.html">adaptive_step_log</a></span><span class="op">(</span><span class="va">observed</span><span class="op">)</span></span>
-<span><span class="va">dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>object1 <span class="op">=</span> <span class="va">log</span><span class="op">$</span><span class="va">A_id</span>, object2 <span class="op">=</span> <span class="va">log</span><span class="op">$</span><span class="va">B_id</span>, result <span class="op">=</span> <span class="va">log</span><span class="op">$</span><span class="va">Y</span><span class="op">)</span></span>
+<span><span class="va">dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_results_history.html">adaptive_results_history</a></span><span class="op">(</span><span class="va">observed</span><span class="op">)</span></span>
 <span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_bt_model.html">fit_bt_model</a></span><span class="op">(</span><span class="va">dat</span>, engine <span class="op">=</span> <span class="st">"alpha"</span>, alpha <span class="op">=</span> <span class="fl">0.5</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="va">adaptive</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/bootstrap_bt_model.html">bootstrap_bt_model</a></span><span class="op">(</span><span class="va">fit</span>, mode <span class="op">=</span> <span class="st">"adaptive"</span>, n_rep <span class="op">=</span> <span class="fl">4</span>, seed <span class="op">=</span> <span class="fl">2304</span>,</span>
 <span>  initial_state <span class="op">=</span> <span class="va">initial</span>, budget <span class="op">=</span> <span class="fl">12</span>, btl_config <span class="op">=</span> <span class="va">schedule_config</span><span class="op">)</span></span>
@@ -187,7 +216,30 @@ supplies winners in place of a provider.</p>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span>         1 TRUE               12 8e73059d9ff495e86aa26ef53c6ff117</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span>         2 TRUE               12 3e80c6940736310370db99ad7add564a</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span>         3 TRUE               12 a45fe7069b80fe0680ab99a7654b2558</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span>         4 TRUE               12 005c33660e3e93f0b85b2ddb91fb6208</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span>         4 TRUE               12 005c33660e3e93f0b85b2ddb91fb6208</span></span>
+<span><span class="va">adaptive</span><span class="op">$</span><span class="va">provenance</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"mode"</span>, <span class="st">"seed"</span>, <span class="st">"pairing_strategy"</span>, <span class="st">"refit"</span>, <span class="st">"versions"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt; $mode</span></span>
+<span><span class="co">#&gt; [1] "adaptive"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $seed</span></span>
+<span><span class="co">#&gt; [1] 2304</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $pairing_strategy</span></span>
+<span><span class="co">#&gt; [1] "trueskill_p50"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $refit</span></span>
+<span><span class="co">#&gt; $refit$estimator</span></span>
+<span><span class="co">#&gt; [1] "alpha"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $refit$args</span></span>
+<span><span class="co">#&gt; $refit$args$alpha</span></span>
+<span><span class="co">#&gt; [1] 0.5</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $versions</span></span>
+<span><span class="co">#&gt;           R pairwiseLLM       stats </span></span>
+<span><span class="co">#&gt;     "4.6.1"     "1.6.0"     "4.6.1"</span></span></code></pre></div>
 <p>The initial connected pairs and their presentations stay fixed across
 replicates. After initialization, each replicate has a new deterministic
 selector seed and its own simulated outcomes. The selector and state

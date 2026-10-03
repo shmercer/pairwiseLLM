@@ -2,6 +2,12 @@
 
 ## What you will do
 
+The [integrated CJ
+workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.md)
+is the conceptual entry point for selection, estimation, reliability,
+recovery, and held-out prediction. Use this guide for the practical
+collection and persistence steps.
+
 This article shows how to rank **one set of items** with
 \[adaptive_rank()\]. The wrapper reads and validates the items, starts
 or resumes a run, requests comparisons from a judge, performs Bayesian
@@ -306,6 +312,13 @@ chosen first. `p_ij` is the predicted chance that the sample presented
 as A beats B. `target_distance` records how close a pair came to the
 desired probability; it is missing for random pairing. BTL fits and
 stopping checks continue at their usual intervals for every strategy.
+
+Hybrid recovery attempts remain part of hybrid, including `base`,
+`expand_locality`, `uncertainty_pool`, `dup_relax`, and `global_safe`;
+they do not substitute another strategy. See the [integrated
+explanation](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html#hybrid-recovery-stays-within-hybrid)
+and the [exact recovery
+rules](https://shmercer.github.io/pairwiseLLM/articles/within-set-adaptive-design.html#fallback-ladder).
 
 ## Lower-level lifecycle and offline judges
 

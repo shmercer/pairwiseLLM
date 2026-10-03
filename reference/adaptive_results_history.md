@@ -1,6 +1,6 @@
-# Adaptive results history in build_bt_data() format.
+# Adaptive results history ready for BT fitting
 
-Adaptive results history in build_bt_data() format.
+Adaptive results history ready for BT fitting
 
 ## Usage
 
@@ -36,17 +36,24 @@ A tibble with columns:
 
 ## Details
 
-Converts adaptive step outcomes into the three-column format used by
+Converts adaptive step outcomes into the three-column format accepted by
+[`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md)
+(`object1`, `object2`, `result`). Pass the result directly to
+[`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md);
+it is already in the output format of
 [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md)
-(`object1`, `object2`, `result`). With `committed_only = TRUE`, only
+and needs no further conversion. With `committed_only = TRUE`, only
 committed steps (`pair_id` not missing) are retained. This preserves the
 transactional invariant that invalid steps do not contribute to inferred
 comparisons.
 
 ## See also
 
+[`fit_bt_model()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bt_model.md),
 [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md),
-[`adaptive_step_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_step_log.md)
+[`adaptive_step_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_step_log.md),
+[integrated CJ
+workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
 
 Other adaptive logs:
 [`adaptive_get_logs()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_get_logs.md),

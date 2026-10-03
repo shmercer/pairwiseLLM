@@ -38,6 +38,7 @@
     <li><a class="dropdown-item" href="../articles/provider-controls-and-recovery.html">Provider Controls and Recovery</a></li>
     <li><a class="dropdown-item" href="../articles/model-compatibility.html">Backends and Tested Model Configurations</a></li>
     <li><a class="dropdown-item" href="../articles/advanced-batch-workflows.html">Advanced: Submitting and Polling Multiple Batches</a></li>
+    <li><a class="dropdown-item" href="../articles/adaptive-cj-workflow.html">Guide: CJ Estimation, Reliability, and Evaluation</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-pairing.html">Guide: Adaptive Pairing</a></li>
     <li><a class="dropdown-item" href="../articles/adaptive-warm-start.html">Guide: Adaptive Warm Start</a></li>
     <li><a class="dropdown-item" href="../articles/linking-sessions.html">Guide: Linking Saved Comparisons</a></li>
@@ -89,6 +90,11 @@
 (BTL) model to an existing fixed set of pairwise outcomes. It reuses the
 adaptive fit and summary contracts but does not perform adaptive pair
 selection.</p>
+<p>The <a href="adaptive-cj-workflow.html">integrated CJ workflow</a>
+explains how Bayesian EAP reliability differs from frequentist SSR,
+empirical score recovery, and held-out prediction. It also introduces
+the experimental frequentist lapse/position estimator that matches the
+<code>btl_e_b</code> likelihood without Bayesian priors.</p>
 <div class="section level2">
 <h2 id="when-to-use-this-guide">When to use this guide<a class="anchor" aria-label="anchor" href="#when-to-use-this-guide"></a>
 </h2>
@@ -209,7 +215,7 @@ inference.</p>
 <span></span>
 <span><span class="va">refits</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
 <span>  <span class="st">"round_id"</span>, <span class="st">"total_pairs"</span>, <span class="st">"diagnostics_pass"</span>,</span>
-<span>  <span class="st">"divergences"</span>, <span class="st">"max_rhat"</span>, <span class="st">"min_ess_bulk"</span></span>
+<span>  <span class="st">"divergences"</span>, <span class="st">"max_rhat"</span>, <span class="st">"min_ess_bulk"</span>, <span class="st">"reliability_EAP"</span></span>
 <span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="va">items</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ID"</span>, <span class="st">"theta_mean"</span>, <span class="st">"theta_sd"</span>, <span class="st">"rank_mean"</span>, <span class="st">"deg"</span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
 <p>The item scale is relative and identified by the model constraints;
@@ -252,6 +258,12 @@ item.</td>
 individual diagnostics too.</td>
 </tr>
 <tr class="odd">
+<td><code>reliability_EAP</code></td>
+<td>Posterior mean score variance divided by that variance plus average
+posterior variance; an internal model-based summary, not empirical
+recovery.</td>
+</tr>
+<tr class="even">
 <td>
 <code>max_rhat</code>, <code>min_ess_bulk</code>,
 <code>divergences</code>

@@ -15,6 +15,12 @@ new comparisons using an LLM. All code through “Prepare a judging
 prompt” runs locally; cloud requests later in the guide are shown but
 are not executed when this page builds.
 
+For the relationship between pair selection, estimation, reliability,
+score recovery, and prediction, start with the [integrated CJ
+workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.md).
+It connects the frequentist, Bayesian, adaptive, bootstrap, and
+experimental lapse-model options.
+
 ## Install the tools for this example
 
 Use **R 4.4 or later**. Install the package and the optional `sirt`

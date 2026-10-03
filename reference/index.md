@@ -74,8 +74,10 @@ recovery](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-
 
 ## Turn comparisons into rankings
 
-BT and Elo use recorded winners; Bayesian BTL additionally requires
-CmdStan.
+Start with the [integrated CJ
+workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.md)
+for estimation, reliability, recovery, and prediction. Bayesian BTL
+additionally requires CmdStan.
 
 - [`build_bt_data()`](https://shmercer.github.io/pairwiseLLM/reference/build_bt_data.md)
   : Build Bradley-Terry comparison data from pairwise results
@@ -140,7 +142,7 @@ guide](https://shmercer.github.io/pairwiseLLM/articles/adaptive-pairing.md).
 - [`adaptive_item_log()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_item_log.md)
   : Adaptive item log accessor.
 - [`adaptive_results_history()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_results_history.md)
-  : Adaptive results history in build_bt_data() format.
+  : Adaptive results history ready for BT fitting
 - [`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md)
   : Summarize an adaptive state.
 - [`summarize_refits()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_refits.md)
