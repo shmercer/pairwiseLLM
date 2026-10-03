@@ -800,11 +800,13 @@ adaptive_item_log <- function(state, refit_id = NULL, stack = FALSE) {
   .adaptive_canonicalize_item_log(item_logs[[idx]], state, refit_id = idx)
 }
 
-#' Adaptive results history in build_bt_data() format.
+#' Adaptive results history ready for BT fitting
 #'
 #' @details
-#' Converts adaptive step outcomes into the three-column format used by
-#' [build_bt_data()] (\code{object1}, \code{object2}, \code{result}). With
+#' Converts adaptive step outcomes into the three-column format accepted by
+#' [fit_bt_model()] (\code{object1}, \code{object2}, \code{result}). Pass the
+#' result directly to [fit_bt_model()]; it is already in the output format of
+#' [build_bt_data()] and needs no further conversion. With
 #' \code{committed_only = TRUE}, only committed steps (\code{pair_id} not
 #' missing) are retained. This preserves the transactional invariant that
 #' invalid steps do not contribute to inferred comparisons.
@@ -824,7 +826,8 @@ adaptive_item_log <- function(state, refit_id = NULL, stack = FALSE) {
 #' state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
 #' adaptive_results_history(state)
 #'
-#' @seealso [build_bt_data()], [adaptive_step_log()]
+#' @seealso [fit_bt_model()], [build_bt_data()], [adaptive_step_log()],
+#'   [integrated CJ workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
 #'
 #' @family adaptive logs
 #' @export

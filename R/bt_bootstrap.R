@@ -106,6 +106,7 @@
 #' boot <- bootstrap_bt_model(fit, mode = "fixed", n_rep = 20, seed = 304)
 #' boot$theta
 #' @seealso [fit_bt_model()], [adaptive_rank_start()], [adaptive_rank_run_live()]
+#'   and the [integrated CJ workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
 #' @family frequentist models
 #' @export
 bootstrap_bt_model <- function(object, mode, n_rep, seed, schedule = NULL,

@@ -616,6 +616,7 @@ names(link_out$logs)
 \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}}, \code{\link[=llm_compare_pair]{llm_compare_pair()}}
 
 \code{\link[=make_warm_start_prior]{make_warm_start_prior()}}, \code{\link[=fit_warm_start_model]{fit_warm_start_model()}}
+and the \href{https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html}{integrated CJ workflow}
 
 Other adaptive ranking:
 \code{\link[=adaptive_rank_resume]{adaptive_rank_resume()}},

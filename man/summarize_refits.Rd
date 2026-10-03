@@ -79,6 +79,7 @@ summarize_refits(logs, include_optional = FALSE)
 }
 \seealso{
 \code{\link[=adaptive_get_logs]{adaptive_get_logs()}}, \code{\link[=adaptive_step_log]{adaptive_step_log()}}
+and the \href{https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html}{integrated CJ workflow}
 
 Other adaptive logs:
 \code{\link[=adaptive_get_logs]{adaptive_get_logs()}},

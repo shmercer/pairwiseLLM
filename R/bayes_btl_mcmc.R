@@ -546,6 +546,7 @@ build_btl_results_data <- function(
 #' }
 #'
 #' @seealso [build_btl_results_data()], [make_warm_start_prior()], [adaptive_rank()]
+#'   and the [integrated CJ workflow](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
 #' @family Bayesian models
 #' @export
 fit_bayes_btl_mcmc <- function(

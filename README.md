@@ -1,5 +1,5 @@
 
-<!-- README-source-md5: 1aa36cd7715a89a6a579f6728f05ccfe -->
+<!-- README-source-md5: 4d1644113d38151a03b317da6349051e -->
 
 <img src="man/figures/pairwiseLLM-banner.jpg"
      alt="pairwiseLLM: comparing two writing samples" width="100%">
@@ -207,6 +207,15 @@ stopping criteria.
 
 ### Modeling and bias
 
+- [Guide: CJ Estimation, Reliability, and
+  Evaluation](https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html)
+  — distinguish adaptive selection, estimator choices, SSR and EAP
+  reliability, score recovery, scale dispersion, bootstrap correction,
+  and held-out prediction.
+- [Guide: BT Bootstrap Bias
+  Correction](https://shmercer.github.io/pairwiseLLM/articles/bt-bootstrap.html)
+  — simulate fixed or adaptive schedules and inspect corrected scores
+  and Monte Carlo error.
 - [Guide: Rubric
   Calibration](https://shmercer.github.io/pairwiseLLM/articles/rubric-calibration.html)
   — convert completed CJ results to distribution-matched levels or human

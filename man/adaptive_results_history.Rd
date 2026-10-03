@@ -2,7 +2,7 @@
 % Please edit documentation in R/adaptive_print.R
 \name{adaptive_results_history}
 \alias{adaptive_results_history}
-\title{Adaptive results history in build_bt_data() format.}
+\title{Adaptive results history ready for BT fitting}
 \usage{
 adaptive_results_history(state, committed_only = TRUE)
 }
@@ -21,11 +21,13 @@ A tibble with columns:
 }
 }
 \description{
-Adaptive results history in build_bt_data() format.
+Adaptive results history ready for BT fitting
 }
 \details{
-Converts adaptive step outcomes into the three-column format used by
-\code{\link[=build_bt_data]{build_bt_data()}} (\code{object1}, \code{object2}, \code{result}). With
+Converts adaptive step outcomes into the three-column format accepted by
+\code{\link[=fit_bt_model]{fit_bt_model()}} (\code{object1}, \code{object2}, \code{result}). Pass the
+result directly to \code{\link[=fit_bt_model]{fit_bt_model()}}; it is already in the output format of
+\code{\link[=build_bt_data]{build_bt_data()}} and needs no further conversion. With
 \code{committed_only = TRUE}, only committed steps (\code{pair_id} not
 missing) are retained. This preserves the transactional invariant that
 invalid steps do not contribute to inferred comparisons.
@@ -36,7 +38,8 @@ adaptive_results_history(state)
 
 }
 \seealso{
-\code{\link[=build_bt_data]{build_bt_data()}}, \code{\link[=adaptive_step_log]{adaptive_step_log()}}
+\code{\link[=fit_bt_model]{fit_bt_model()}}, \code{\link[=build_bt_data]{build_bt_data()}}, \code{\link[=adaptive_step_log]{adaptive_step_log()}},
+\href{https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html}{integrated CJ workflow}
 
 Other adaptive logs:
 \code{\link[=adaptive_get_logs]{adaptive_get_logs()}},

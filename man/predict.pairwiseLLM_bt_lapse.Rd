@@ -29,7 +29,8 @@ epsilon-zero boundary fits also support prediction; their unavailable joint
 uncertainty does not invalidate the point estimates.
 }
 \seealso{
-\code{\link[=fit_bt_model]{fit_bt_model()}}
+\code{\link[=fit_bt_model]{fit_bt_model()}},
+\href{https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html}{integrated CJ workflow}
 
 Other frequentist models:
 \code{\link[=bootstrap_bt_model]{bootstrap_bt_model()}},

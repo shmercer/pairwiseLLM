@@ -1,0 +1,619 @@
+---
+title: "Adaptive comparative judgment: estimation, reliability, and evaluation"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 2
+vignette: >
+  %\VignetteIndexEntry{Adaptive comparative judgment: estimation, reliability, and evaluation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+library(pairwiseLLM)
+has_withr <- requireNamespace("withr", quietly = TRUE)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = has_withr)
+```
+
+## Five related questions
+
+Comparative judgment (CJ) uses decisions about pairs of items to estimate their
+relative strengths. An adaptive run chooses later pairs using earlier results.
+Good pair selection, precise estimates, and accurate predictions are related,
+but each needs its own assessment:
+
+**Pair selection → parameter estimation → internal reliability → empirical score
+recovery → held-out predictive performance.**
+
+| Step | Question | What to inspect |
+| --- | --- | --- |
+| Pair selection | Which comparison should be collected next? | Strategy, allowed pairs, presentation order, and selection logs. |
+| Parameter estimation | What strengths explain the collected outcomes? | Estimator, likelihood, adjustments, estimates, uncertainty, and convergence. |
+| Internal reliability | How large is estimated item spread relative to estimated uncertainty? | SSR or Bayesian EAP reliability, with their definitions and provenance. |
+| Empirical score recovery | How closely do scores reproduce an external reference? | Correlation, ranks, spread, and score differences against truth or a dense estimate. |
+| Held-out predictive performance | How well do probabilities predict new judgments? | Log loss, Brier score, and pairwise accuracy on outcomes withheld from selection and fitting. |
+
+The arrows organize the workflow; they do not imply that passing one step proves
+the next. A dense score estimate is itself uncertain, and high internal
+reliability does not establish agreement with it, judge validity, or predictive
+calibration. Calibration means that predicted chances agree with observed win
+frequencies over comparable predictions.
+
+This guide uses synthetic outcomes only. It makes no provider or network calls.
+The executable examples require the suggested `withr` package for local seeds;
+if it is absent, the code is displayed without execution. The conventional and
+Firth examples have additional optional-engine guards. Bayesian sampling is
+shown separately and never runs during document builds. Example sizes, penalties,
+and replicate counts illustrate interfaces, not recommended study settings.
+
+## Start with comparisons chosen in advance
+
+Here `theta` is relative strength on a log-odds scale. For the simple BT model,
+the probability that A wins is `plogis(theta[A] - theta[B])`. Zero is a reference
+location, not a passing score. Separately fitted panels do not automatically
+share an origin or scale.
+
+We choose all ordered pairs before drawing any winners. A fixed training set,
+a denser reference set, and an evaluation set use separate random streams.
+They share items and pair identities but contain independently generated
+judgments. No evaluation outcome is used to choose pairs, fit scores, or select
+settings. This assesses new judgments on known items, not generalization to
+unseen items or judges.
+
+```{r synthetic-data}
+ids <- letters[1:6]
+truth <- setNames(seq(-1, 1, length.out = length(ids)), ids)
+pairs <- expand.grid(object1 = ids, object2 = ids, stringsAsFactors = FALSE)
+pairs <- pairs[pairs$object1 != pairs$object2, ]
+simulate_rows <- function(repeats, seed) {
+  dat <- pairs[rep(seq_len(nrow(pairs)), each = repeats), ]
+  p <- plogis(truth[dat$object1] - truth[dat$object2])
+  dat$result <- withr::with_seed(seed, rbinom(nrow(dat), 1, p))
+  rownames(dat) <- NULL
+  dat
+}
+fixed_data <- simulate_rows(2L, 30601L)
+reference_data <- simulate_rows(40L, 30602L)
+heldout_data <- simulate_rows(20L, 30603L)
+example_design <- data.frame(
+  dataset = c("fixed training", "dense reference", "held-out evaluation"),
+  outcome_seed = c(30601L, 30602L, 30603L),
+  comparisons = c(nrow(fixed_data), nrow(reference_data), nrow(heldout_data)),
+  selection = "all ordered pairs chosen before outcomes"
+)
+example_design
+```
+
+`fit_bt_model()` accepts these three columns: `object1`, `object2`, and binary
+`result`, where 1 means the first item wins. For recorded winners in
+`ID1`/`ID2`/`better_id` or `A_id`/`B_id`/`better_id` columns, first use
+`build_bt_data()`. The [getting-started guide](getting-started.html) demonstrates
+that conversion with bundled public data.
+
+### Conventional fitting and estimator provenance
+
+The default `engine = "auto"` tries sirt, then BradleyTerry2 if sirt is missing
+or its execution fails. Explicit engines never switch to another estimator.
+Validation failures such as disconnected comparisons are not repaired by that
+automatic fallback. Use an explicit engine when an analysis requires a particular
+method, and retain the returned `provenance`, including effective settings,
+identification, convergence, engine version, and any fallback reason.
+
+```{r conventional-fit, eval=requireNamespace("withr", quietly=TRUE) && requireNamespace("sirt", quietly=TRUE)}
+conventional_fit <- fit_bt_model(
+  fixed_data, engine = "sirt", sirt_eps = 0.3, verbose = FALSE
+)
+summarize_bt_fit(conventional_fit)
+conventional_fit$ssr
+conventional_fit$provenance[c(
+  "requested_engine", "engine", "engine_version", "package_version",
+  "adjustment", "convergence", "fallback_reason"
+)]
+```
+
+The explicit `sirt_eps` above controls sirt's conventional epsilon adjustment;
+omitting it preserves the installed engine's default. It is not a lapse
+probability. sirt reports iterations rather than an explicit convergence flag;
+inspect its recorded stopping status as well as reliability.
+
+### What the adjustments change
+
+| Estimator | Point-estimate adjustment | Reported uncertainty |
+| --- | --- | --- |
+| `engine = "sirt"` | Conventional epsilon adjustment depends on observed win proportions. | Engine SEs and independently checked SSR; retain resolved sirt settings. |
+| `engine = "brglm2"` | Firth / mean bias reduction adds half the log determinant of expected information to the log likelihood (`AS_mean`). | Inverse original-data expected information at the adjusted estimate, transformed to centered item coordinates. |
+| `engine = "alpha"` | Hamilton-style adjustment adds equal pseudo-wins in both directions for every possible pair, including unobserved pairs. | Inverse original-data expected information at the adjusted estimate, transformed to centered item coordinates. |
+
+Firth is an explicit option for random or nonadaptive schedules, including
+connected data with undefeated or winless items. Alpha adjustment is motivated
+by adaptive scheduling. The package does not infer a schedule type from outcomes,
+choose alpha, or establish that either adjustment is universally superior.
+Neither adjustment selects pairs.
+
+For \(N\) items, alpha adds \(c=\alpha/(N-1)\) pseudo-wins in each direction to
+every unordered pair. With \(p_{ij}=\operatorname{logit}^{-1}(\theta_i-\theta_j)\),
+the objective is
+
+\[
+\ell_\alpha(\theta)=\ell(\theta)+
+\frac{\alpha}{N-1}\sum_{i<j}\log\{p_{ij}(1-p_{ij})\}.
+\]
+
+The Firth and alpha covariance matrices use the **original observed comparisons**,
+not the inverse penalized Hessian. Their SEs are conditional on the realized
+comparison graph: adjusting point estimates does not automatically account for
+the variability of an outcome-dependent schedule. See `fit_bt_model()` for
+the exact objectives, numerical checks, and the Hamilton and Tawn reference.
+
+```{r firth-fit, eval=requireNamespace("withr", quietly=TRUE) && requireNamespace("brglm2", quietly=TRUE)}
+firth_fit <- fit_bt_model(fixed_data, engine = "brglm2", verbose = FALSE)
+summarize_bt_fit(firth_fit)
+firth_fit$provenance[c("engine_version", "adjustment", "identification")]
+```
+
+```{r alpha-fit}
+fixed_fit <- fit_bt_model(fixed_data, engine = "alpha", alpha = 0.5, verbose = FALSE)
+summarize_bt_fit(fixed_fit)
+fixed_fit$provenance[c("engine_version", "package_version", "adjustment")]
+```
+
+This alpha fit provides a common example that needs no additional fitting engine.
+The penalty is chosen in advance for demonstration; it is not selected using the
+reference or held-out outcomes.
+
+## Internal reliability: SSR and Bayesian EAP
+
+### Scale Separation Reliability (SSR)
+
+Let \(\hat\theta_i\) and \(SE_i\) be estimates and standard errors on the same
+scale for the same \(N\) items. Conventional SSR uses
+
+\[
+V_{\mathrm{observed}}=\frac{1}{N-1}\sum_i(\hat\theta_i-\bar{\hat\theta})^2,
+\qquad V_{\mathrm{error}}=\frac{1}{N}\sum_i SE_i^2,
+\]
+\[
+\widehat V_{\mathrm{true}}=V_{\mathrm{observed}}-V_{\mathrm{error}},
+\qquad SSR=\frac{\widehat V_{\mathrm{true}}}{V_{\mathrm{observed}}}
+=1-\frac{V_{\mathrm{error}}}{V_{\mathrm{observed}}}.
+\]
+
+In words, SSR subtracts average squared uncertainty from observed score spread,
+then expresses the remainder as a proportion of that spread. “Estimated
+true-score variance” is the name of this subtraction; it does not use known truth
+or prove that the remainder equals empirical recoverable variance.
+
+```{r ssr-components}
+ssr_components <- scale_separation_reliability(fixed_fit$theta$theta, fixed_fit$theta$se)
+ssr_components
+```
+
+The helper uses sample variance across items and the mean of **squared SEs**,
+not the square of their mean. It does not align names for you. Negative SSR and
+negative estimated true-score variance are retained: estimated uncertainty then
+exceeds observed spread. Invalid inputs are not repaired by dropping items.
+
+| Fit or calculation | SSR availability |
+| --- | --- |
+| sirt | Independently computed and checked against the engine's `mle.rel`; missing/invalid SEs or undefined arithmetic cause an error. |
+| Firth or alpha | Available with valid uncertainty and positive score variance; a valid equal-score fit is retained with `zero_score_variance` and missing reliability. |
+| BradleyTerry2 | Unavailable (`unavailable_se_convention`): its reference-based SEs are not used for centered-score SSR by this wrapper. |
+| Experimental lapse model | Always unavailable (`prototype_ssr_unavailable`), for both interior and boundary fits. |
+| Standalone SSR helper | Requires at least two finite scores with positive variance and matching finite, nonnegative SEs; otherwise errors. |
+
+Do not combine adjusted scores with another estimator's SEs, or substitute
+bootstrap SDs to manufacture a “corrected SSR.” Report the components, estimator,
+SE convention, item set, and status along with the coefficient.
+
+### Bayesian BTL and EAP reliability
+
+An expected a posteriori (EAP) score is an item's posterior mean. If
+
+\[
+m_i=E(\theta_i\mid\text{data}),\qquad
+v_i=\operatorname{Var}(\theta_i\mid\text{data}),
+\]
+
+the implemented Bayesian coefficient is
+
+\[
+R_{\mathrm{EAP}}=
+\frac{\operatorname{var}_i(m_i)}
+{\operatorname{var}_i(m_i)+N^{-1}\sum_i v_i}.
+\]
+
+It describes posterior mean spread relative to that spread plus average
+posterior uncertainty. Unlike SSR, it adds uncertainty to the denominator
+instead of subtracting it from observed variance. The variances across items
+and across posterior draws use R's sample-variance convention. Invalid draws,
+fewer than two items or draws, or nonpositive between-item variance give missing
+reliability; otherwise the result is clamped to \([0,1]\).
+
+The posterior model and priors affect both means and variances. Inspect sampling
+diagnostics before interpreting this coefficient. It does not measure empirical
+score recovery, held-out accuracy, or all sources of judgment error.
+
+The following optional example fits the same fixed training outcomes with the
+simple `btl` likelihood. It requires installed CmdStan, `cmdstanr`, `parallelly`,
+and a compiler; it is **not evaluated during builds**. The seed and short sampler
+settings demonstrate reproducibility, not an adequate sampling budget.
+
+```{r bayesian-fit, eval=FALSE}
+bayes_input <- build_btl_results_data(data.frame(
+  ID1 = fixed_data$object1, ID2 = fixed_data$object2,
+  better_id = ifelse(fixed_data$result == 1, fixed_data$object1, fixed_data$object2)
+), backend = "synthetic", model = "fixed_binary_bt")
+sampler_settings <- list(
+  chains = 2L, parallel_chains = 1L, iter_warmup = 250L,
+  iter_sampling = 250L, seed = 30604L
+)
+bayes_fit <- fit_bayes_btl_mcmc(
+  bayes_input, ids = ids, model_variant = "btl", cmdstan = sampler_settings
+)
+list(model_variant = "btl", selection = example_design$selection[1L],
+     sampler = sampler_settings, package_version = as.character(packageVersion("pairwiseLLM")))
+summarize_refits(bayes_fit)[, c(
+  "round_id", "total_pairs", "diagnostics_pass", "reliability_EAP",
+  "max_rhat", "min_ess_bulk", "divergences"
+)]
+```
+
+The [Bayesian BTL guide](bayesian-btl.html) explains setup, other likelihood
+variants, item summaries, and diagnostics. The
+[adaptive design guide](within-set-adaptive-design.html#diagnostics-reliability-and-stopping)
+explains how EAP reliability participates in stopping. Passing that operational
+rule is not independent validation of the scores.
+
+## Collect an adaptive schedule
+
+Every strategy begins with seeded comparisons connecting the items. Later
+selection uses the current state:
+
+| `pairing_strategy` | Later comparisons |
+| --- | --- |
+| `random` | Choose a minimum-degree focal item, then a random allowed partner. |
+| `trueskill_p50` | Choose a minimum-degree focal item, then the partner closest to a TrueSkill win probability of one half (maximum ambiguity). |
+| `trueskill_pollitt` | Choose a minimum-degree focal item, then the partner closest to a TrueSkill win probability of one third or two thirds. This is Pollitt-inspired, not the original BTL-probability procedure. |
+| `hybrid` (default) | Mix anchor, long, mid, and local comparisons with exploration, coverage, and exposure constraints. |
+
+Degree means the number of completed comparisons involving an item. Direct
+strategies (the first three rows) balance presentation and reverse a repeated
+pair; they allow at most two judgments per pair. They can stop when the chosen
+focal item has no legal partner. Random here is therefore a specific constrained
+policy, not uniform sampling from all pairs. A sparse replay reservoir adds its
+own restrictions; this example uses ordinary within-set selection.
+
+TrueSkill provides fast step-by-step selection estimates. Bayesian refits supply
+posterior scores, diagnostics, reliability, and stopping checks; their
+`global_identified` signal also affects hybrid routing. A later frequentist fit
+does not replace the scheduling model or retroactively alter collected pairs.
+
+### Hybrid recovery stays within hybrid
+
+When an attempt cannot select a pair, the canonical ladder is:
+
+| Attempt | What changes |
+| --- | --- |
+| `base` | Use normal stage bounds and duplicate policy. |
+| `expand_locality` | Widen mid/local bounds, retaining long-link semantics. |
+| `uncertainty_pool` | Keep base bounds and increase exploration. |
+| `dup_relax` | Allow the conditional third judgment when the configured ceiling permits it; ambiguity and utility conditions still apply. |
+| `global_safe` | Use the broadest stage-compatible domain with the ordinary two-judgment limit. |
+
+Stage identity and hard constraints remain in force. If exploration misses every
+pair but a previous attempt had eligible candidates, the usual exploitation rule
+can select from the last viable pool. These are recovery attempts **within
+hybrid**, not substitution of random, p50, or Pollitt strategies. Exhaustion can
+stop collection before the requested budget. Inspect `fallback_used`,
+`fallback_path`, and `candidate_starved` in `adaptive_step_log()` and the optional
+report from `summarize_adaptive(state, include_starvation = TRUE)`. Direct
+strategies do not invoke this ladder. See the
+[design guide](within-set-adaptive-design.html#fallback-ladder) for the exact rules.
+
+### A small provider-free p50 run
+
+Save the pristine initial state before collecting outcomes. The synthetic judge
+below supplies fresh winners. Its function name does not make a provider call:
+`adaptive_rank_run_live()` also accepts a local judge like this one.
+
+```{r adaptive-collection}
+initial <- adaptive_rank_start(ids, seed = 17L,
+  adaptive_config = list(pairing_strategy = "trueskill_p50"))
+judge <- function(A, B, state, ...) {
+  p <- plogis(truth[[A$item_id]] - truth[[B$item_id]])
+  list(is_valid = TRUE, Y = as.integer(runif(1) < p))
+}
+schedule_config <- list(refit_pairs_target = 100L)
+observed <- withr::with_seed(7304L, adaptive_rank_run_live(
+  initial, judge, n_steps = 12L, btl_config = schedule_config, progress = "none"
+))
+adaptive_data <- adaptive_results_history(observed)
+adaptive_fit <- fit_bt_model(adaptive_data, engine = "alpha", alpha = 0.5, verbose = FALSE)
+selection_log <- adaptive_step_log(observed)
+list(strategy = initial$controller$pairing_strategy, selector_seed = 17L,
+     outcome_seed = 7304L, scheduling = schedule_config,
+     committed_comparisons = nrow(adaptive_data), estimator = adaptive_fit$provenance$adjustment)
+selection_log[, c("A_id", "B_id", "Y", "pairing_strategy", "fallback_used")]
+```
+
+`adaptive_results_history()` already returns the three columns needed by
+`fit_bt_model()` and defaults to committed comparisons only. It needs no further
+`build_bt_data()` conversion. This demonstration specifies a refit interval
+larger than its entire budget, so it has no Bayesian refit or EAP coefficient.
+It does not demonstrate statistical stopping. In a design with scheduled refits,
+preserve those refits, including their optional CmdStan requirements. The
+[practical adaptive guide](adaptive-pairing.html) covers that full lifecycle.
+
+## Empirical recovery and scale dispersion
+
+In a simulation we know the generating scores. With real data, a dense or
+high-information fit can instead serve as a reference, but it is not known truth.
+Its uncertainty, estimator, overlap with training outcomes, and model assumptions
+affect apparent recovery. Here the dense reference uses independent judgments.
+Align IDs and center scores before comparing differences; do not rescale each
+vector to unit SD if scale expansion is the question.
+
+```{r score-recovery}
+reference_fit <- fit_bt_model(reference_data, engine = "alpha", alpha = 0.5, verbose = FALSE)
+theta_adaptive <- setNames(adaptive_fit$theta$theta, adaptive_fit$theta$ID)[ids]
+theta_reference <- setNames(reference_fit$theta$theta, reference_fit$theta$ID)[ids]
+score_recovery <- function(estimate, reference) {
+  data.frame(
+    pearson_r_squared = cor(estimate, reference)^2,
+    rank_correlation = cor(estimate, reference, method = "spearman"),
+    score_sd = sd(estimate), reference_sd = sd(reference),
+    sd_ratio = sd(estimate) / sd(reference),
+    centered_rmse = sqrt(mean(((estimate - mean(estimate)) -
+      (reference - mean(reference)))^2))
+  )
+}
+recovery <- rbind(
+  against_truth = score_recovery(theta_adaptive, truth[ids]),
+  against_dense_estimate = score_recovery(theta_adaptive, theta_reference)
+)
+recovery
+reference_fit$provenance$adjustment
+```
+
+Correlation describes association, not equality. Multiplying every score by a
+positive constant leaves ranks and Pearson correlation unchanged, so it also
+leaves **squared Pearson correlation** unchanged. This is the meaning of
+“R-squared” here; a prediction-error statistic such as \(1-SSE/SST\) need not be
+invariant. The score SD and variance do change, and BT differences become larger
+log odds. Thus an adaptive schedule could stretch the scale while preserving
+strong rank recovery. Examine spread separately instead of using correlation
+as a test for the absence of scale distortion.
+
+```{r scale-expansion}
+scale_comparison <- rbind(
+  reference = score_recovery(theta_reference, theta_reference),
+  doubled = score_recovery(2 * theta_reference, theta_reference)
+)
+scale_comparison
+```
+
+Doubling here is an algebraic illustration, not a new estimator. This small
+example is not a benchmark establishing which selector or estimator performs best.
+Neither recovery table estimates calibration of SSR or EAP reliability; assessing
+that requires an appropriate repeated-sampling design and reference target.
+
+## Held-out predictive evaluation
+
+Score recovery compares item scores. Predictive evaluation compares probabilities
+with new binary judgments. For first-item outcomes \(y_k\) and probabilities \(p_k\),
+use the following summaries (lower loss is better, higher accuracy is better):
+
+\[
+\mathrm{log\ loss}=-\frac1M\sum_k[y_k\log p_k+(1-y_k)\log(1-p_k)],
+\qquad \mathrm{Brier}=\frac1M\sum_k(p_k-y_k)^2.
+\]
+
+Pairwise accuracy counts correct winners at a stated probability threshold.
+It discards the strength of the probability: 0.51 and 0.99 choose the same winner
+but express very different confidence. Log loss particularly penalizes confident
+mistakes. Brier score also uses probabilities. These are overall predictive
+scores, not complete calibration diagnostics.
+
+```{r heldout-prediction}
+p_adaptive <- predict(adaptive_fit, newdata = heldout_data[c("object1", "object2")])
+p_reference <- predict(reference_fit, newdata = heldout_data[c("object1", "object2")])
+p_expanded <- plogis(2 * qlogis(p_reference))
+prediction_metrics <- function(p, y) {
+  data.frame(
+    log_loss = -mean(ifelse(y == 1, log(p), log1p(-p))),
+    brier = mean((p - y)^2),
+    accuracy = mean((p >= 0.5) == y)
+  )
+}
+predictive_results <- rbind(
+  adaptive = prediction_metrics(p_adaptive, heldout_data$result),
+  dense_reference = prediction_metrics(p_reference, heldout_data$result),
+  doubled_reference = prediction_metrics(p_expanded, heldout_data$result)
+)
+predictive_results
+```
+
+The example classifies exactly 0.5 as an A win. It does not clip probabilities:
+a probability-zero realized event gives infinite log loss. Predictions here are
+plug-in probabilities from the alpha fits. The doubled reference retains the
+same predicted winners while moving probabilities farther from one half.
+Held-out losses can expose overconfidence that rank correlation or accuracy
+misses; no single finite test set guarantees this ordering.
+
+Keep evaluation outcomes out of adaptive state updates, reference fitting,
+penalty selection, and stopping decisions. If you tune a method using evaluation
+results, reserve another independent test set for the final assessment. Sharing
+item identities is intentional here, but copying the same judgment into training
+and evaluation would not be independent evaluation.
+
+## Schedule-aware parametric bootstrap
+
+`bootstrap_bt_model()` simulates new binary BT outcomes from the initial fitted
+scores, refits the chosen estimator, aligns item IDs, and centers scores. For
+each item it computes
+
+\[
+\widehat{\mathrm{bias}}_i=\overline{\theta_i^*}-\hat\theta_i,
+\qquad \hat\theta_{i,\mathrm{corrected}}=\hat\theta_i-\widehat{\mathrm{bias}}_i.
+\]
+
+This estimates point-estimate bias under the fitted generating model and the
+specified design. Corrections can change ranks and need not improve recovery.
+
+### Fixed versus adaptive scheduling
+
+Fixed mode retains an outcome-independent schedule's ordered rows and repeats,
+and draws fresh outcomes. It is appropriate for the training pairs chosen in
+advance above:
+
+```{r fixed-bootstrap}
+fixed_boot <- bootstrap_bt_model(fixed_fit, mode = "fixed", n_rep = 20L,
+                                 seed = 1304L, keep = "theta")
+fixed_boot$theta
+fixed_boot$provenance[c("mode", "seed", "pairing_strategy", "refit", "versions")]
+```
+
+An adaptive schedule depends on earlier outcomes. Its bootstrap must repeat the
+selection decisions after simulating those outcomes. Freezing the observed
+adaptive pairs conditions on a realized schedule and answers a different question.
+The package uses the canonical runner, not a separate approximation to p50,
+Pollitt-inspired, random, or hybrid selection:
+
+```{r adaptive-bootstrap}
+adaptive_boot <- bootstrap_bt_model(adaptive_fit, mode = "adaptive", n_rep = 4L,
+  seed = 2304L, initial_state = initial, budget = 12L,
+  btl_config = schedule_config, keep = "theta")
+adaptive_boot$theta
+adaptive_boot$replicates[, c(
+  "replicate", "selector", "outcome", "scheduling_refit", "estimator",
+  "success", "n_comparisons", "schedule_digest"
+)]
+adaptive_boot$provenance[c("mode", "seed", "pairing_strategy", "refit", "versions")]
+```
+
+The pristine initial connected pairs and presentations remain fixed; subsequent
+selector randomness and simulated outcomes use deterministic per-replicate
+seeds. Separate seeds cover selection, outcomes, scheduling refits, and the final
+estimator. Compatible software and deterministic callbacks are needed for exact
+reproduction. Serial and optional parallel execution use the same replicate
+seeds and aggregation order.
+
+Keep the original scheduling configuration. This example deliberately has no
+scheduled refits within its budget; a design that uses Bayesian refits must rerun
+them. In hybrid, those refits can affect later routing and tapering. The final
+bootstrap estimator is separate from the scheduling fitter. The bootstrap budget
+counts committed comparisons including initialization; statistical stopping does
+not shorten that fixed-budget experiment, but terminal selection exhaustion
+fails a replicate. Hybrid recovery remains hybrid, including inside bootstrap.
+
+### What the Monte Carlo summaries mean
+
+| Output | Meaning |
+| --- | --- |
+| `bias`, `theta_corrected` | Estimated bias and corrected point estimate under the fitted model and specified schedule semantics. |
+| `bootstrap_sd` | Dispersion of the successfully refitted replicate estimates. |
+| `mcse_bias` | Simulation error in the estimated bias, calculated as `bootstrap_sd / sqrt(n_success)`. |
+| `n_success`, `n_failed`, `replicates` | Whether the correction has sufficient successful simulations and what happened in each replicate. |
+
+Neither bootstrap SD nor Monte Carlo error is a corrected-score standard error.
+The API does not provide corrected-score confidence intervals or corrected SSR.
+These small replicate counts keep the example fast; their Monte Carlo error can
+be substantial and they are not study recommendations. The default requires all
+replicates to succeed. A deliberately lower `min_success` excludes failures and
+therefore changes the summary to successful refits; inspect every failure. An
+unmet threshold raises an error carrying `condition$result` diagnostics and
+missing corrected scores.
+
+The built-in final estimators are alpha and Firth; other supported estimators
+require an explicit callback. The generating model is simple binary BT, without
+lapse, position, or ties. Lapse fits are rejected. Keep full fit/bootstrap objects
+to retain settings and provenance. The [bootstrap guide](bt-bootstrap.html)
+explains callback requirements, optional parallel workers, and artifact retention.
+
+## Experimental lapse and positional-bias model matching
+
+`fit_bt_model(..., engine = "lapse")` uses the Bayesian `btl_e_b` likelihood
+with frequentist unpenalized maximum likelihood:
+
+\[
+P(A\text{ wins})=(1-\epsilon)
+\operatorname{logit}^{-1}(\theta_A-\theta_B+\beta)+\epsilon/2.
+\]
+
+The item strengths sum to zero; positive positional beta favors the first
+presented item; lapse epsilon is the probability of guessing. Unlike conventional
+sirt epsilon, lapse epsilon is an estimated likelihood parameter. The estimator
+jointly fits all three parameter groups without Bayesian priors. It helps
+separate differences in probability models from differences in estimation;
+it is experimental, not the default BT estimator or a Bayesian replacement.
+
+The following separate four-item example uses both presentation directions and
+many inexpensive simulated binary rows to identify the extra parameters. The
+counts are demonstration choices, not guidance on the data needed in practice.
+
+```{r lapse-fits}
+lapse_ids <- letters[1:4]
+lapse_truth <- setNames(seq(-2, 2, length.out = 4), lapse_ids)
+lapse_pairs <- expand.grid(object1 = lapse_ids, object2 = lapse_ids, stringsAsFactors = FALSE)
+lapse_pairs <- lapse_pairs[lapse_pairs$object1 != lapse_pairs$object2, ]
+lapse_pairs <- lapse_pairs[order(lapse_pairs$object1, lapse_pairs$object2), ]
+fit_lapse_example <- function(beta, epsilon, seed) {
+  p <- (1 - epsilon) * plogis(lapse_truth[lapse_pairs$object1] -
+    lapse_truth[lapse_pairs$object2] + beta) + epsilon / 2
+  wins <- withr::with_seed(seed, rbinom(nrow(lapse_pairs), 2000L, p))
+  dat <- lapse_pairs[rep(seq_len(nrow(lapse_pairs)), each = 2000L), ]
+  dat$result <- unlist(lapply(wins, function(w) c(rep(1L, w), rep(0L, 2000L - w))))
+  fit_bt_model(dat, engine = "lapse", verbose = FALSE)
+}
+lapse_interior <- fit_lapse_example(beta = 0.3, epsilon = 0.2, seed = 305L)
+lapse_boundary <- fit_lapse_example(beta = 0, epsilon = 0, seed = 30501L)
+lapse_examples <- list(interior = lapse_interior, boundary = lapse_boundary)
+lapply(lapse_examples, function(fit) {
+  list(engine = fit$engine, beta = fit$beta, epsilon = fit$epsilon,
+       convergence = fit$provenance$convergence$status,
+       uncertainty = fit$provenance$uncertainty, ssr = fit$ssr)
+})
+list(selection = "all ordered pairs chosen before outcomes",
+     outcome_seeds = c(interior = 305L, boundary = 30501L),
+     model_variant = lapse_interior$model_variant,
+     adjustment = lapse_interior$provenance$adjustment,
+     package_version = lapse_interior$provenance$package_version)
+predict(lapse_boundary, newdata = lapse_pairs)
+```
+
+A valid **interior MLE** has \(0<\epsilon<1\) and passes identification,
+stationarity, and information/Hessian checks. Its joint covariance includes
+estimation of beta and epsilon; item SEs are local model-based approximations
+conditional on the realized graph, not a claim of repeated-sample calibration.
+
+A valid **epsilon-zero boundary MLE** needs no guessing component. It retains
+theta, beta, likelihoods, and predictions, with convergence status
+`converged_boundary`. Ordinary joint interior uncertainty is unavailable:
+`theta$se` is missing, `vcov` and `parameter_vcov` are `NULL`, and uncertainty
+status is `nonregular_boundary`. A small positive epsilon alone does not
+establish a boundary optimum. Epsilon one leaves strengths and beta unidentified
+and is rejected. Connectedness alone is insufficient for this model's
+identification, and genuine numerical/identification failures still error.
+
+Conventional SSR is unavailable for **both** interior and boundary lapse fits.
+Do not compute it manually from the interior SEs, or feed a lapse fit into the
+simple-BT bootstrap. See `fit_bt_model()` and `predict.pairwiseLLM_bt_lapse()`
+for the full experimental contract and failure diagnostics.
+
+## Reporting the complete workflow
+
+Report which strategy collected the comparisons, which estimator fit them, its
+settings and uncertainty convention, and which internal reliability formula was
+used. Then report recovery against the stated reference separately from held-out
+predictive performance. Include score spread, evaluation-data provenance, seeds,
+and software versions. Retain selection logs and complete fit/bootstrap objects.
+
+The examples illustrate those distinctions. They do not establish universal
+estimator or strategy superiority, universal reliability calibration, suitability
+for a particular study, or equivalence of internal reliability and empirical
+recovery.
+
+## Citation
+
+> Mercer, S. H. (2026). *Adaptive comparative judgment: estimation, reliability, and evaluation* [R package vignette]. Comprehensive R Archive Network. https://doi.org/10.32614/CRAN.package.pairwiseLLM

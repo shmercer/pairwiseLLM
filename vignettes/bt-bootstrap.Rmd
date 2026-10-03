@@ -10,11 +10,18 @@ vignette: >
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>",
+                     eval = requireNamespace("withr", quietly = TRUE))
 library(pairwiseLLM)
 ```
 
 ## What the correction estimates
+
+The [integrated CJ workflow](adaptive-cj-workflow.html) explains where bootstrap
+bias correction fits alongside pair selection, internal reliability, score
+recovery, and held-out prediction. This guide focuses on the bootstrap interface.
+The examples require the suggested `withr` package and are displayed without
+execution when it is absent.
 
 A Bradley–Terry (BT) score describes relative strength on a log-odds scale.
 With limited comparisons, an estimator may systematically place scores too far
@@ -61,6 +68,7 @@ dat <- withr::with_seed(304, {
 fit <- fit_bt_model(dat, engine = "alpha", alpha = 0.5, verbose = FALSE)
 fixed <- bootstrap_bt_model(fit, mode = "fixed", n_rep = 20, seed = 1304)
 fixed$theta
+fixed$provenance[c("mode", "seed", "pairing_strategy", "refit", "versions")]
 ```
 
 The fitted object supplies both the generating scores and the estimator
@@ -87,13 +95,13 @@ judge <- function(A, B, state, ...) {
 schedule_config <- list(refit_pairs_target = 100L)
 observed <- withr::with_seed(7304, adaptive_rank_run_live(initial, judge,
   n_steps = 12, btl_config = schedule_config, progress = "none"))
-log <- adaptive_step_log(observed)
-dat <- data.frame(object1 = log$A_id, object2 = log$B_id, result = log$Y)
+dat <- adaptive_results_history(observed)
 fit <- fit_bt_model(dat, engine = "alpha", alpha = 0.5, verbose = FALSE)
 adaptive <- bootstrap_bt_model(fit, mode = "adaptive", n_rep = 4, seed = 2304,
   initial_state = initial, budget = 12, btl_config = schedule_config)
 adaptive$theta
 adaptive$replicates[, c("replicate", "success", "n_comparisons", "schedule_digest")]
+adaptive$provenance[c("mode", "seed", "pairing_strategy", "refit", "versions")]
 ```
 
 The initial connected pairs and their presentations stay fixed across

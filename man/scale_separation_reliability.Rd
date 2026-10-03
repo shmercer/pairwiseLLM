@@ -37,7 +37,8 @@ score variance; it is not an estimator-free measure of recovery or accuracy.
 scale_separation_reliability(c(-1, 0, 1), c(0.2, 0.3, 0.4))
 }
 \seealso{
-\code{\link[=fit_bt_model]{fit_bt_model()}}
+\code{\link[=fit_bt_model]{fit_bt_model()}},
+\href{https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-workflow.html}{integrated CJ workflow}
 
 Other frequentist models:
 \code{\link[=bootstrap_bt_model]{bootstrap_bt_model()}},
