@@ -3998,6 +3998,9 @@
 #' @examples
 #' state <- adaptive_rank_start(c("a", "b", "c"), seed = 11)
 #' summarize_adaptive(state)
+#' # Prior-only exposure checkpoint: B=0 commits no comparisons.
+#' B <- c(0, 0.5, 1, 2)
+#' data.frame(B = B, target_pairs = floor(B * length(state$item_ids) / 2))
 #'
 #' @seealso [make_warm_start_prior()], [adaptive_rank_run_live()], [adaptive_rank_resume()],
 #'   [adaptive_step_log()], [adaptive_round_log()], [adaptive_item_log()]
@@ -4056,6 +4059,14 @@
 #' allowed spanning tree with Pollitt probability targets and degree-cap
 #' relaxation. Both policies preserve invalid-result retries and recorded
 #' reservoir orientation. Later pairing retains the configured strategy.
+#' When expressing budgets as mean comparison exposures per item, each committed
+#' pair contributes two exposures. A prespecified rounding-down convention gives
+#' `floor(B * N / 2)` total pairs, including bootstrap, with realized exposure
+#' `2 * committed_pairs / N`. B = 0 is prior-only; B = 0.5 and B = 1 precede
+#' connectivity and are not fully connected comparative-judgment estimates.
+#' The tree completes at N - 1 successful commits; comparison N uses the
+#' post-bootstrap strategy. Invalid attempts and retries do not add evidence.
+#' See `vignette("adaptive-warm-start")` for the five-arm synthetic count example.
 #' Without the distribution opt-in, BTL prior SD
 #' does not determine TrueSkill sigma. Ensemble disagreement never supplies SD
 #' automatically. No historical training-score units are restored.

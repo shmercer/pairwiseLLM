@@ -76,7 +76,7 @@ test_that("warm-mode tables distinguish destinations and the common bootstrap", 
     for (contract in c(
       "Omitted/NULL mode defaults to btl_only with predictive input, otherwise cold",
       "mu = mu0 + sigma0 * prior_mean", "fixed multiplier 1", "unchanged sigma",
-      "same seeded connected shuffled bootstrap", "presence alone does not imply BTL warming"
+      "same seeded shuffled bootstrap", "presence alone does not imply BTL warming"
     )) {
       expect_match(rd, contract, fixed = TRUE, info = topic)
     }
@@ -133,12 +133,11 @@ test_that("numeric warm-start and directed replay vignette examples execute offl
   skip_if_not(file.exists(file.path(root, "_pkgdown.yml")), "Source documentation unavailable")
   withr::local_seed(808L)
   rng <- .Random.seed
-  run_chunk <- function(article, label) {
+  run_chunk <- function(article, label, env = new.env(parent = asNamespace("pairwiseLLM"))) {
     lines <- readLines(file.path(root, "vignettes", paste0(article, ".Rmd")))
     start <- grep(paste0("^```\\{r ", label, "[,}]"), lines)
     stopifnot(length(start) == 1L)
     end <- which(seq_along(lines) > start & lines == "```")[[1L]]
-    env <- new.env(parent = asNamespace("pairwiseLLM"))
     invisible(capture.output(eval(parse(text = lines[seq.int(start + 1L, end - 1L)]), env)))
     env
   }
@@ -163,5 +162,26 @@ test_that("numeric warm-start and directed replay vignette examples execute offl
   expect_identical(anyDuplicated(log[c("A_id", "B_id")]), 0L)
   expect_identical(log$Y, as.integer(log$A_id < log$B_id))
   expect_identical(nrow(replay$replay_state$round_log), 0L)
+
+  testthat::local_mocked_bindings(fit_bayes_btl_mcmc = function(...) stop("unexpected sampling"),
+    .package = "pairwiseLLM")
+  five <- new.env(parent = asNamespace("pairwiseLLM"))
+  for (label in c("five-arm-bootstrap", "five-arm-checkpoints", "predictive-bootstrap-resume",
+    "five-arm-continuation")) run_chunk("adaptive-warm-start", label, five)
+  counts <- five$checkpoint_counts
+  expect_identical(unique(counts$arm), c("cold", "estimation", "legacy_graph", "selection", "full"))
+  expect_equal(nrow(counts), 35L)
+  expect_equal(counts$committed_pairs, rep(c(0, 1, 3, 6, 4, 5, 6), 5L))
+  expect_equal(counts$target_pairs, counts$committed_pairs)
+  expect_equal(counts$realized_B, 2 * counts$committed_pairs / 6)
+  expect_identical(counts$bootstrap_complete, counts$committed_pairs >= 5)
+  expect_true(all(!counts$bootstrap_complete[counts$B %in% c(0, 0.5, 1)]))
+  expect_true(all(vapply(five$continuation_checks, function(x) x$committed_pairs == 7L, logical(1))))
+  expect_true(all(vapply(five$continuation_checks, function(x) x$bootstrap_complete, logical(1))))
+  # The documented collector bounds retries and counts evidence, not attempts.
+  invalid <- function(...) list(is_valid = FALSE, invalid_reason = "documentation retry")
+  attributes(invalid) <- attributes(five$bootstrap_judge)
+  expect_error(five$collect_committed(five$bootstrap_states$full, 1L, invalid, max_attempts = 2L),
+    "Committed-pair target was not reached")
   expect_identical(.Random.seed, rng)
 })

@@ -1,11 +1,21 @@
 # pairwiseLLM (development version)
 
+* Five-arm synthetic qualification (#317) checks matched initialization,
+  outcome-leakage boundaries, Pollitt selection, evidence budgets and continuation
+  across the connected-bootstrap boundary. The warm-start guide now executes
+  all five arms with B defined as mean exposures per item: `floor(B * N / 2)`
+  total committed pairs, including bootstrap. The tree benchmark separately
+  reports unprofiled wall time, fresh-process peak RSS and cumulative allocations.
+  These are package engineering checks, not estimates of study effects.
+
 * An internal frozen predictive spanning-tree builder (#315) ranks allowed edges
   using initial TrueSkill probabilities near one third or two thirds. Degree
   caps start at two and double only when stalled; exact ties are seeded, recorded
   orientations are retained, and diagnostics describe relaxation and exposure.
   Construction uses only permitted endpoints and frozen predictions. Public
-  opt-in integration is deferred to #316; existing bootstrap defaults are unchanged.
+  `bootstrap_policy = "predictive_connected"` integration (#316) requires a
+  selectable replay reservoir, coherent predictive TrueSkill uncertainty and
+  Pollitt subsequent pairing. Existing bootstrap defaults are unchanged.
 
 * Adaptive ranking can opt into `warm_start_trueskill = "predictive_distribution"`
   to initialize item-specific TrueSkill uncertainty from saved predictive prior SD

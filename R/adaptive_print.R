@@ -859,6 +859,11 @@ adaptive_results_history <- function(state, committed_only = TRUE) {
 #' Returns a compact run-level summary from canonical logs: attempted steps,
 #' committed comparisons, refit count, and last stop decision/reason. This is a
 #' pure view and does not recompute model quantities.
+#' For an ordinary within-set run with N items, mean comparison exposure is
+#' `2 * committed_pairs / N`. This count includes bootstrap comparisons and
+#' excludes invalid attempts. A planned exposure budget B can use the explicit
+#' rounding convention `floor(B * N / 2)`; this summary does not enforce budgets
+#' or imply connectivity before N - 1 successful bootstrap comparisons.
 #'
 #' @param state Adaptive state.
 #' @param include_starvation Logical; append a \code{starvation_diagnostic}
