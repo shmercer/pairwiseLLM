@@ -509,6 +509,14 @@ N - 1 valid comparisons. The explicit predictive graph policy uses a frozen
 allowed spanning tree with Pollitt probability targets and degree-cap
 relaxation. Both policies preserve invalid-result retries and recorded
 reservoir orientation. Later pairing retains the configured strategy.
+For budgets expressed as mean comparison exposures per item, each committed
+pair counts twice. The synthetic five-arm example uses \code{floor(B * N / 2)}
+total committed pairs, including bootstrap, and reports realized exposure
+\code{2 * committed_pairs / N}. B = 0 is prior-only; B = 0.5 and B = 1 precede
+connectivity. The tree completes at N - 1 successful commits; comparison N
+uses the post-bootstrap strategy. \code{n_steps} counts attempts, so invalid or
+retried judgments must not be counted as additional committed evidence.
+See \code{vignette("adaptive-warm-start")} for count and continuation examples.
 Without the distribution opt-in, BTL prior SD
 does not determine TrueSkill sigma. Ensemble disagreement never supplies SD
 automatically. No historical training-score units are restored.

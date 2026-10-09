@@ -221,3 +221,10 @@ The bounded provider-free benchmark is `scripts/benchmark-predictive-tree.R`.
 Issue #316 reserves 5118 for predictive bootstrap API integration, five-arm
 contracts, queue integrity, transaction retries, and fresh-process resume.
 Fixtures are synthetic and offline; no provider calls or real sampler runs.
+
+Issue #317 reserves 9107 for independent five-arm synthetic qualification:
+exposure budgets, leakage boundaries, scalar Pollitt oracles, matched contrasts,
+and fresh-process continuation across all arms. B denotes mean exposures per
+item: floor(B * N / 2) total committed pairs, without adding bootstrap evidence.
+The benchmark in `scripts/benchmark-predictive-tree.R` reports unprofiled build
+time, fresh-process peak RSS, and separately profiled cumulative allocations.

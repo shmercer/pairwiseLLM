@@ -48,7 +48,10 @@ This assumes comparable latent scales and does not turn raw-theta SD into the
 marginal SD of centered effects. Upstream workflows must establish calibration;
 explicit SD alone does not prove it. Scalar SD is a sensitivity assumption,
 not essay-specific calibration. Ensemble disagreement never supplies SD automatically.
-Every adaptive mode retains the same seeded connected shuffled bootstrap.
+By default, every adaptive mode retains the same seeded connected shuffled
+bootstrap. The separate \code{bootstrap_policy = "predictive_connected"} opt-in
+uses frozen mapped means and SDs to build an allowed spanning tree; see
+\code{\link[=adaptive_rank_start]{adaptive_rank_start()}} for its reservoir and selection requirements.
 Standalone \code{\link[=fit_bayes_btl_mcmc]{fit_bayes_btl_mcmc()}} retains its \code{warm_start_prior} interface
 without the adaptive four-mode argument.
 }
