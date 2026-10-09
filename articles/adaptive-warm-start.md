@@ -50,7 +50,10 @@ The bootstrap is the initial connected set of observed comparisons. It
 is the same for all modes under the default
 `bootstrap_policy = "shuffled_connected"` when the items and seed are
 the same. Later pair choices can differ as TrueSkill updates from its
-starting values and the observed judgments.
+starting values and the observed judgments. The table describes runs
+without a replay reservoir. With a reservoir, the historical default
+instead shuffles its allowed edges to form a spanning tree; matched
+modes share that tree when the reservoir and seed are the same.
 
 With no predictive input, the default mode is `cold`. With predictive
 input, the default is `btl_only`. Request `both` explicitly to
@@ -201,8 +204,11 @@ with degree cap two, and doubles that cap only when needed to connect
 the graph. Exact-score ties use a local seeded permutation. It builds
 once before judging, preserves recorded A/B orientation, and never reads
 outcomes or evolving ratings. After `N - 1` successful bootstrap
-comparisons, the existing Pollitt selector continues using current
-ratings and its existing degree rules.
+comparisons, the existing Pollitt selector chooses a focal item with the
+fewest committed comparisons among items with unused allowed edges. It
+then chooses the legal partner minimizing
+`min(abs(p - 1/3), abs(p - 2/3))`, using current ratings and
+uncertainty.
 
 These five configurations separate estimation, selection state, and
 graph effects:
@@ -340,6 +346,137 @@ unchanged; retry uses the same ordered edge. `n_steps` counts attempts.
 When comparing arms at equal budgets, count committed comparisons with
 `summarize_adaptive(state)$committed_pairs`, not attempted requests.
 
+### Count evidence consistently across arms
+
+Let **B be the mean number of comparison exposures per essay**. Each
+committed pair contributes two exposures. For N essays, this example
+prespecifies `floor(B * N / 2)` total committed pairs: fractional pairs
+are always rounded down, and realized exposure is
+`2 * committed_pairs / N`. Bootstrap comparisons are included in that
+total; never add another `N - 1` to the B-based budget. Invalid attempts
+and retries do not count as committed evidence.
+
+B=0 is prior-only. B=0.5 and B=1 occur before the graph is connected and
+must not be interpreted as fully connected comparative-judgment
+estimates. We also check `N - 2`, `N - 1`, and `N` pairs explicitly: the
+tree is complete at `N - 1`, and comparison `N` is the first Pollitt
+selection. These are engineering count checks, with no scientific
+scoring, BTL fitting, or claims about study effects.
+
+``` r
+
+# Bound attempts so an invalid or exhausted judge cannot loop indefinitely.
+collect_committed <- function(state, target, judge, max_attempts = 100L) {
+  attempts <- 0L
+  while (summarize_adaptive(state)$committed_pairs < target) {
+    if (attempts >= max_attempts) stop("Committed-pair target was not reached")
+    state <- adaptive_rank_run_live(state, judge, n_steps = 1L,
+      btl_config = list(refit_pairs_target = 5000L), progress = "none")
+    attempts <- attempts + 1L
+  }
+  stopifnot(summarize_adaptive(state)$committed_pairs == target)
+  state
+}
+n <- length(bootstrap_ids)
+budgets <- c(0, 0.5, 1, 2)
+checkpoint_spec <- data.frame(
+  checkpoint = c(paste0("B=", budgets), "N-2", "N-1", "N"),
+  B = c(budgets, rep(NA_real_, 3L)),
+  target_pairs = c(floor(budgets * n / 2), n - 2L, n - 1L, n))
+checkpoint_states <- lapply(bootstrap_states, function(initial) {
+  state <- initial
+  saved <- list()
+  for (target in sort(unique(checkpoint_spec$target_pairs))) {
+    state <- collect_committed(state, target, bootstrap_judge)
+    saved[[as.character(target)]] <- state
+  }
+  saved
+})
+checkpoint_counts <- do.call(rbind, lapply(names(checkpoint_states), function(arm) {
+  do.call(rbind, lapply(seq_len(nrow(checkpoint_spec)), function(k) {
+    spec <- checkpoint_spec[k, ]
+    state <- checkpoint_states[[arm]][[as.character(spec$target_pairs)]]
+    committed <- summarize_adaptive(state)$committed_pairs
+    data.frame(arm = arm, spec, committed_pairs = committed,
+      realized_B = 2 * committed / n, bootstrap_complete = state$warm_start_done)
+  }))
+}))
+rownames(checkpoint_counts) <- NULL
+checkpoint_counts
+#>             arm checkpoint   B target_pairs committed_pairs realized_B
+#> 1          cold        B=0 0.0            0               0  0.0000000
+#> 2          cold      B=0.5 0.5            1               1  0.3333333
+#> 3          cold        B=1 1.0            3               3  1.0000000
+#> 4          cold        B=2 2.0            6               6  2.0000000
+#> 5          cold        N-2  NA            4               4  1.3333333
+#> 6          cold        N-1  NA            5               5  1.6666667
+#> 7          cold          N  NA            6               6  2.0000000
+#> 8    estimation        B=0 0.0            0               0  0.0000000
+#> 9    estimation      B=0.5 0.5            1               1  0.3333333
+#> 10   estimation        B=1 1.0            3               3  1.0000000
+#> 11   estimation        B=2 2.0            6               6  2.0000000
+#> 12   estimation        N-2  NA            4               4  1.3333333
+#> 13   estimation        N-1  NA            5               5  1.6666667
+#> 14   estimation          N  NA            6               6  2.0000000
+#> 15 legacy_graph        B=0 0.0            0               0  0.0000000
+#> 16 legacy_graph      B=0.5 0.5            1               1  0.3333333
+#> 17 legacy_graph        B=1 1.0            3               3  1.0000000
+#> 18 legacy_graph        B=2 2.0            6               6  2.0000000
+#> 19 legacy_graph        N-2  NA            4               4  1.3333333
+#> 20 legacy_graph        N-1  NA            5               5  1.6666667
+#> 21 legacy_graph          N  NA            6               6  2.0000000
+#> 22    selection        B=0 0.0            0               0  0.0000000
+#> 23    selection      B=0.5 0.5            1               1  0.3333333
+#> 24    selection        B=1 1.0            3               3  1.0000000
+#> 25    selection        B=2 2.0            6               6  2.0000000
+#> 26    selection        N-2  NA            4               4  1.3333333
+#> 27    selection        N-1  NA            5               5  1.6666667
+#> 28    selection          N  NA            6               6  2.0000000
+#> 29         full        B=0 0.0            0               0  0.0000000
+#> 30         full      B=0.5 0.5            1               1  0.3333333
+#> 31         full        B=1 1.0            3               3  1.0000000
+#> 32         full        B=2 2.0            6               6  2.0000000
+#> 33         full        N-2  NA            4               4  1.3333333
+#> 34         full        N-1  NA            5               5  1.6666667
+#> 35         full          N  NA            6               6  2.0000000
+#>    bootstrap_complete
+#> 1               FALSE
+#> 2               FALSE
+#> 3               FALSE
+#> 4                TRUE
+#> 5               FALSE
+#> 6                TRUE
+#> 7                TRUE
+#> 8               FALSE
+#> 9               FALSE
+#> 10              FALSE
+#> 11               TRUE
+#> 12              FALSE
+#> 13               TRUE
+#> 14               TRUE
+#> 15              FALSE
+#> 16              FALSE
+#> 17              FALSE
+#> 18               TRUE
+#> 19              FALSE
+#> 20               TRUE
+#> 21               TRUE
+#> 22              FALSE
+#> 23              FALSE
+#> 24              FALSE
+#> 25               TRUE
+#> 26              FALSE
+#> 27               TRUE
+#> 28               TRUE
+#> 29              FALSE
+#> 30              FALSE
+#> 31              FALSE
+#> 32               TRUE
+#> 33              FALSE
+#> 34               TRUE
+#> 35               TRUE
+```
+
 Predictive sessions save their initial distribution, mapping identity,
 tree policy/version, seed, ordered queue, diagnostics, and SHA-256
 digest. Session metadata repeats the policy/version and digest. Resume
@@ -368,6 +505,47 @@ saved sessions without bootstrap policy metadata retain their shuffled
 queue, current ratings, and progress. Default summary columns remain
 unchanged; use `include_bootstrap = TRUE` for the additional audit
 list-column.
+
+The same continuation check applies to every arm, including prior-only
+and partially connected sessions. This example crosses the connectivity
+boundary and compares the exact observed presentations and outcomes with
+uninterrupted collection. Fresh-process continuation is also covered by
+the package tests.
+
+``` r
+
+continuation_checks <- lapply(names(bootstrap_states), function(arm) {
+  partial <- checkpoint_states[[arm]][[as.character(n - 2L)]]
+  session <- tempfile("five-arm-session-")
+  on.exit(unlink(session, recursive = TRUE), add = TRUE)
+  save_adaptive_session(partial, session)
+  restored <- adaptive_rank_resume(session)
+  continued <- collect_committed(restored, n + 1L, bootstrap_judge)
+  uninterrupted <- collect_committed(partial, n + 1L, bootstrap_judge)
+  fields <- c("A_id", "B_id", "Y")
+  stopifnot(identical(adaptive_step_log(continued)[fields],
+    adaptive_step_log(uninterrupted)[fields]))
+  stopifnot(identical(continued$trueskill_state, uninterrupted$trueskill_state))
+  data.frame(arm = arm, committed_pairs = summarize_adaptive(continued)$committed_pairs,
+    bootstrap_complete = continued$warm_start_done)
+})
+do.call(rbind, continuation_checks)
+#>            arm committed_pairs bootstrap_complete
+#> 1         cold               7               TRUE
+#> 2   estimation               7               TRUE
+#> 3 legacy_graph               7               TRUE
+#> 4    selection               7               TRUE
+#> 5         full               7               TRUE
+```
+
+The frozen graph is outcome-blind, but the replay identity includes
+selectable outcomes so a changed judge cannot silently continue an old
+session. In a new session with changed selectable Y, the initial prior,
+mapped distribution and tree remain unchanged while judged updates can
+differ. Held-out outcomes, reversal audits and human scores belong
+outside initialization and selection. Synthetic qualification tests this
+separation; it does not establish upstream uncertainty calibration or a
+scientific advantage for any arm.
 
 ## A complete example with three algorithms
 

@@ -43,7 +43,12 @@ A one-row tibble with columns `n_items`, `steps_attempted`,
 Returns a compact run-level summary from canonical logs: attempted
 steps, committed comparisons, refit count, and last stop
 decision/reason. This is a pure view and does not recompute model
-quantities.
+quantities. For an ordinary within-set run with N items, mean comparison
+exposure is `2 * committed_pairs / N`. This count includes bootstrap
+comparisons and excludes invalid attempts. A planned exposure budget B
+can use the explicit rounding convention `floor(B * N / 2)`; this
+summary does not enforce budgets or imply connectivity before N - 1
+successful bootstrap comparisons.
 
 The optional diagnostic is NULL when no current terminal evidence is
 available, including sessions saved before this diagnostic was

@@ -207,9 +207,19 @@ of N - 1 valid comparisons. The explicit predictive graph policy uses a
 frozen allowed spanning tree with Pollitt probability targets and
 degree-cap relaxation. Both policies preserve invalid-result retries and
 recorded reservoir orientation. Later pairing retains the configured
-strategy. Without the distribution opt-in, BTL prior SD does not
-determine TrueSkill sigma. Ensemble disagreement never supplies SD
-automatically. No historical training-score units are restored.
+strategy. When expressing budgets as mean comparison exposures per item,
+each committed pair contributes two exposures. A prespecified
+rounding-down convention gives `floor(B * N / 2)` total pairs, including
+bootstrap, with realized exposure `2 * committed_pairs / N`. B = 0 is
+prior-only; B = 0.5 and B = 1 precede connectivity and are not fully
+connected comparative-judgment estimates. The tree completes at N - 1
+successful commits; comparison N uses the post-bootstrap strategy.
+Invalid attempts and retries do not add evidence. See
+[`vignette("adaptive-warm-start")`](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.md)
+for the five-arm synthetic count example. Without the distribution
+opt-in, BTL prior SD does not determine TrueSkill sigma. Ensemble
+disagreement never supplies SD automatically. No historical
+training-score units are restored.
 
 Distribution initialization assumes the supplied BTL prior SD and
 TrueSkill uncertainty describe comparable latent scales under the
@@ -278,4 +288,12 @@ summarize_adaptive(state)
 #>     <int>           <int>           <int>    <int> <lgl>             
 #> 1       3               0               0        0 FALSE             
 #> # ℹ 1 more variable: last_stop_reason <chr>
+# Prior-only exposure checkpoint: B=0 commits no comparisons.
+B <- c(0, 0.5, 1, 2)
+data.frame(B = B, target_pairs = floor(B * length(state$item_ids) / 2))
+#>     B target_pairs
+#> 1 0.0            0
+#> 2 0.5            0
+#> 3 1.0            1
+#> 4 2.0            3
 ```

@@ -803,9 +803,19 @@ of N - 1 valid comparisons. The explicit predictive graph policy uses a
 frozen allowed spanning tree with Pollitt probability targets and
 degree-cap relaxation. Both policies preserve invalid-result retries and
 recorded reservoir orientation. Later pairing retains the configured
-strategy. Without the distribution opt-in, BTL prior SD does not
-determine TrueSkill sigma. Ensemble disagreement never supplies SD
-automatically. No historical training-score units are restored.
+strategy. For budgets expressed as mean comparison exposures per item,
+each committed pair counts twice. The synthetic five-arm example uses
+`floor(B * N / 2)` total committed pairs, including bootstrap, and
+reports realized exposure `2 * committed_pairs / N`. B = 0 is
+prior-only; B = 0.5 and B = 1 precede connectivity. The tree completes
+at N - 1 successful commits; comparison N uses the post-bootstrap
+strategy. `n_steps` counts attempts, so invalid or retried judgments
+must not be counted as additional committed evidence. See
+[`vignette("adaptive-warm-start")`](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.md)
+for count and continuation examples. Without the distribution opt-in,
+BTL prior SD does not determine TrueSkill sigma. Ensemble disagreement
+never supplies SD automatically. No historical training-score units are
+restored.
 
 Distribution initialization assumes the supplied BTL prior SD and
 TrueSkill uncertainty describe comparable latent scales under the
@@ -883,10 +893,10 @@ head(out$logs$step_log)
 #> # A tibble: 4 × 97
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-10-09 20:20:42       1     1     4 S01   S04       4     1 S04  
-#> 2       2 2026-10-09 20:20:42       2     4     8 S04   S08       8     4 S08  
-#> 3       3 2026-10-09 20:20:42       3     8     2 S08   S02       2     8 S02  
-#> 4       4 2026-10-09 20:20:42       4     2     6 S02   S06       6     2 S06  
+#> 1       1 2026-10-09 21:36:09       1     1     4 S01   S04       4     1 S04  
+#> 2       2 2026-10-09 21:36:09       2     4     8 S04   S08       8     4 S08  
+#> 3       3 2026-10-09 21:36:10       3     8     2 S08   S02       2     8 S02  
+#> 4       4 2026-10-09 21:36:10       4     2     6 S02   S06       6     2 S06  
 #> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,

@@ -242,6 +242,14 @@ N - 1 valid comparisons. The explicit predictive graph policy uses a frozen
 allowed spanning tree with Pollitt probability targets and degree-cap
 relaxation. Both policies preserve invalid-result retries and recorded
 reservoir orientation. Later pairing retains the configured strategy.
+When expressing budgets as mean comparison exposures per item, each committed
+pair contributes two exposures. A prespecified rounding-down convention gives
+<code>floor(B * N / 2)</code> total pairs, including bootstrap, with realized exposure
+<code>2 * committed_pairs / N</code>. B = 0 is prior-only; B = 0.5 and B = 1 precede
+connectivity and are not fully connected comparative-judgment estimates.
+The tree completes at N - 1 successful commits; comparison N uses the
+post-bootstrap strategy. Invalid attempts and retries do not add evidence.
+See <code><a href="../articles/adaptive-warm-start.html">vignette("adaptive-warm-start")</a></code> for the five-arm synthetic count example.
 Without the distribution opt-in, BTL prior SD
 does not determine TrueSkill sigma. Ensemble disagreement never supplies SD
 automatically. No historical training-score units are restored.</p>
@@ -301,6 +309,14 @@ cross-set evidence and an explicit estimator choice.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>           <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>           <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;lgl&gt;</span>             </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       3               0               0        0 FALSE             </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 1 more variable: last_stop_reason &lt;chr&gt;</span></span>
+<span class="r-in"><span><span class="co"># Prior-only exposure checkpoint: B=0 commits no comparisons.</span></span></span>
+<span class="r-in"><span><span class="va">B</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.5</span>, <span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>B <span class="op">=</span> <span class="va">B</span>, target_pairs <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">floor</a></span><span class="op">(</span><span class="va">B</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">state</span><span class="op">$</span><span class="va">item_ids</span><span class="op">)</span> <span class="op">/</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     B target_pairs</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1 0.0            0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2 0.5            0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3 1.0            1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4 2.0            3</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

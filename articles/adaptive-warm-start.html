@@ -168,7 +168,11 @@ information:</p>
 It is the same for all modes under the default
 <code>bootstrap_policy = "shuffled_connected"</code> when the items and
 seed are the same. Later pair choices can differ as TrueSkill updates
-from its starting values and the observed judgments.</p>
+from its starting values and the observed judgments. The table describes
+runs without a replay reservoir. With a reservoir, the historical
+default instead shuffles its allowed edges to form a spanning tree;
+matched modes share that tree when the reservoir and seed are the
+same.</p>
 <p>With no predictive input, the default mode is <code>cold</code>. With
 predictive input, the default is <code>btl_only</code>. Request
 <code>both</code> explicitly to initialize both models. The names below
@@ -314,8 +318,11 @@ with degree cap two, and doubles that cap only when needed to connect
 the graph. Exact-score ties use a local seeded permutation. It builds
 once before judging, preserves recorded A/B orientation, and never reads
 outcomes or evolving ratings. After <code>N - 1</code> successful
-bootstrap comparisons, the existing Pollitt selector continues using
-current ratings and its existing degree rules.</p>
+bootstrap comparisons, the existing Pollitt selector chooses a focal
+item with the fewest committed comparisons among items with unused
+allowed edges. It then chooses the legal partner minimizing
+<code>min(abs(p - 1/3), abs(p - 2/3))</code>, using current ratings and
+uncertainty.</p>
 <p>These five configurations separate estimation, selection state, and
 graph effects:</p>
 <table class="table">
@@ -491,6 +498,135 @@ unchanged; retry uses the same ordered edge. <code>n_steps</code> counts
 attempts. When comparing arms at equal budgets, count committed
 comparisons with <code>summarize_adaptive(state)$committed_pairs</code>,
 not attempted requests.</p>
+<div class="section level3">
+<h3 id="count-evidence-consistently-across-arms">Count evidence consistently across arms<a class="anchor" aria-label="anchor" href="#count-evidence-consistently-across-arms"></a>
+</h3>
+<p>Let <strong>B be the mean number of comparison exposures per
+essay</strong>. Each committed pair contributes two exposures. For N
+essays, this example prespecifies <code>floor(B * N / 2)</code> total
+committed pairs: fractional pairs are always rounded down, and realized
+exposure is <code>2 * committed_pairs / N</code>. Bootstrap comparisons
+are included in that total; never add another <code>N - 1</code> to the
+B-based budget. Invalid attempts and retries do not count as committed
+evidence.</p>
+<p>B=0 is prior-only. B=0.5 and B=1 occur before the graph is connected
+and must not be interpreted as fully connected comparative-judgment
+estimates. We also check <code>N - 2</code>, <code>N - 1</code>, and
+<code>N</code> pairs explicitly: the tree is complete at
+<code>N - 1</code>, and comparison <code>N</code> is the first Pollitt
+selection. These are engineering count checks, with no scientific
+scoring, BTL fitting, or claims about study effects.</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Bound attempts so an invalid or exhausted judge cannot loop indefinitely.</span></span>
+<span><span class="va">collect_committed</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">state</span>, <span class="va">target</span>, <span class="va">judge</span>, <span class="va">max_attempts</span> <span class="op">=</span> <span class="fl">100L</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">attempts</span> <span class="op">&lt;-</span> <span class="fl">0L</span></span>
+<span>  <span class="kw">while</span> <span class="op">(</span><span class="fu"><a href="../reference/summarize_adaptive.html">summarize_adaptive</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span><span class="op">$</span><span class="va">committed_pairs</span> <span class="op">&lt;</span> <span class="va">target</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="kw">if</span> <span class="op">(</span><span class="va">attempts</span> <span class="op">&gt;=</span> <span class="va">max_attempts</span><span class="op">)</span> <span class="kw"><a href="https://rdrr.io/r/base/stop.html" class="external-link">stop</a></span><span class="op">(</span><span class="st">"Committed-pair target was not reached"</span><span class="op">)</span></span>
+<span>    <span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_run_live.html">adaptive_rank_run_live</a></span><span class="op">(</span><span class="va">state</span>, <span class="va">judge</span>, n_steps <span class="op">=</span> <span class="fl">1L</span>,</span>
+<span>      btl_config <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>refit_pairs_target <span class="op">=</span> <span class="fl">5000L</span><span class="op">)</span>, progress <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span>
+<span>    <span class="va">attempts</span> <span class="op">&lt;-</span> <span class="va">attempts</span> <span class="op">+</span> <span class="fl">1L</span></span>
+<span>  <span class="op">}</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="../reference/summarize_adaptive.html">summarize_adaptive</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span><span class="op">$</span><span class="va">committed_pairs</span> <span class="op">==</span> <span class="va">target</span><span class="op">)</span></span>
+<span>  <span class="va">state</span></span>
+<span><span class="op">}</span></span>
+<span><span class="va">n</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">bootstrap_ids</span><span class="op">)</span></span>
+<span><span class="va">budgets</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.5</span>, <span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="va">checkpoint_spec</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  checkpoint <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"B="</span>, <span class="va">budgets</span><span class="op">)</span>, <span class="st">"N-2"</span>, <span class="st">"N-1"</span>, <span class="st">"N"</span><span class="op">)</span>,</span>
+<span>  B <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">budgets</span>, <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="cn">NA_real_</span>, <span class="fl">3L</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  target_pairs <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">floor</a></span><span class="op">(</span><span class="va">budgets</span> <span class="op">*</span> <span class="va">n</span> <span class="op">/</span> <span class="fl">2</span><span class="op">)</span>, <span class="va">n</span> <span class="op">-</span> <span class="fl">2L</span>, <span class="va">n</span> <span class="op">-</span> <span class="fl">1L</span>, <span class="va">n</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">checkpoint_states</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">bootstrap_states</span>, <span class="kw">function</span><span class="op">(</span><span class="va">initial</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">state</span> <span class="op">&lt;-</span> <span class="va">initial</span></span>
+<span>  <span class="va">saved</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">target</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/sort.html" class="external-link">sort</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">checkpoint_spec</span><span class="op">$</span><span class="va">target_pairs</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">state</span> <span class="op">&lt;-</span> <span class="fu">collect_committed</span><span class="op">(</span><span class="va">state</span>, <span class="va">target</span>, <span class="va">bootstrap_judge</span><span class="op">)</span></span>
+<span>    <span class="va">saved</span><span class="op">[[</span><span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">target</span><span class="op">)</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">state</span></span>
+<span>  <span class="op">}</span></span>
+<span>  <span class="va">saved</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span><span class="va">checkpoint_counts</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">checkpoint_states</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">arm</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">checkpoint_spec</span><span class="op">)</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">k</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">spec</span> <span class="op">&lt;-</span> <span class="va">checkpoint_spec</span><span class="op">[</span><span class="va">k</span>, <span class="op">]</span></span>
+<span>    <span class="va">state</span> <span class="op">&lt;-</span> <span class="va">checkpoint_states</span><span class="op">[[</span><span class="va">arm</span><span class="op">]</span><span class="op">]</span><span class="op">[[</span><span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">spec</span><span class="op">$</span><span class="va">target_pairs</span><span class="op">)</span><span class="op">]</span><span class="op">]</span></span>
+<span>    <span class="va">committed</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/summarize_adaptive.html">summarize_adaptive</a></span><span class="op">(</span><span class="va">state</span><span class="op">)</span><span class="op">$</span><span class="va">committed_pairs</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>arm <span class="op">=</span> <span class="va">arm</span>, <span class="va">spec</span>, committed_pairs <span class="op">=</span> <span class="va">committed</span>,</span>
+<span>      realized_B <span class="op">=</span> <span class="fl">2</span> <span class="op">*</span> <span class="va">committed</span> <span class="op">/</span> <span class="va">n</span>, bootstrap_complete <span class="op">=</span> <span class="va">state</span><span class="op">$</span><span class="va">warm_start_done</span><span class="op">)</span></span>
+<span>  <span class="op">}</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="va">checkpoint_counts</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="cn">NULL</span></span>
+<span><span class="va">checkpoint_counts</span></span>
+<span><span class="co">#&gt;             arm checkpoint   B target_pairs committed_pairs realized_B</span></span>
+<span><span class="co">#&gt; 1          cold        B=0 0.0            0               0  0.0000000</span></span>
+<span><span class="co">#&gt; 2          cold      B=0.5 0.5            1               1  0.3333333</span></span>
+<span><span class="co">#&gt; 3          cold        B=1 1.0            3               3  1.0000000</span></span>
+<span><span class="co">#&gt; 4          cold        B=2 2.0            6               6  2.0000000</span></span>
+<span><span class="co">#&gt; 5          cold        N-2  NA            4               4  1.3333333</span></span>
+<span><span class="co">#&gt; 6          cold        N-1  NA            5               5  1.6666667</span></span>
+<span><span class="co">#&gt; 7          cold          N  NA            6               6  2.0000000</span></span>
+<span><span class="co">#&gt; 8    estimation        B=0 0.0            0               0  0.0000000</span></span>
+<span><span class="co">#&gt; 9    estimation      B=0.5 0.5            1               1  0.3333333</span></span>
+<span><span class="co">#&gt; 10   estimation        B=1 1.0            3               3  1.0000000</span></span>
+<span><span class="co">#&gt; 11   estimation        B=2 2.0            6               6  2.0000000</span></span>
+<span><span class="co">#&gt; 12   estimation        N-2  NA            4               4  1.3333333</span></span>
+<span><span class="co">#&gt; 13   estimation        N-1  NA            5               5  1.6666667</span></span>
+<span><span class="co">#&gt; 14   estimation          N  NA            6               6  2.0000000</span></span>
+<span><span class="co">#&gt; 15 legacy_graph        B=0 0.0            0               0  0.0000000</span></span>
+<span><span class="co">#&gt; 16 legacy_graph      B=0.5 0.5            1               1  0.3333333</span></span>
+<span><span class="co">#&gt; 17 legacy_graph        B=1 1.0            3               3  1.0000000</span></span>
+<span><span class="co">#&gt; 18 legacy_graph        B=2 2.0            6               6  2.0000000</span></span>
+<span><span class="co">#&gt; 19 legacy_graph        N-2  NA            4               4  1.3333333</span></span>
+<span><span class="co">#&gt; 20 legacy_graph        N-1  NA            5               5  1.6666667</span></span>
+<span><span class="co">#&gt; 21 legacy_graph          N  NA            6               6  2.0000000</span></span>
+<span><span class="co">#&gt; 22    selection        B=0 0.0            0               0  0.0000000</span></span>
+<span><span class="co">#&gt; 23    selection      B=0.5 0.5            1               1  0.3333333</span></span>
+<span><span class="co">#&gt; 24    selection        B=1 1.0            3               3  1.0000000</span></span>
+<span><span class="co">#&gt; 25    selection        B=2 2.0            6               6  2.0000000</span></span>
+<span><span class="co">#&gt; 26    selection        N-2  NA            4               4  1.3333333</span></span>
+<span><span class="co">#&gt; 27    selection        N-1  NA            5               5  1.6666667</span></span>
+<span><span class="co">#&gt; 28    selection          N  NA            6               6  2.0000000</span></span>
+<span><span class="co">#&gt; 29         full        B=0 0.0            0               0  0.0000000</span></span>
+<span><span class="co">#&gt; 30         full      B=0.5 0.5            1               1  0.3333333</span></span>
+<span><span class="co">#&gt; 31         full        B=1 1.0            3               3  1.0000000</span></span>
+<span><span class="co">#&gt; 32         full        B=2 2.0            6               6  2.0000000</span></span>
+<span><span class="co">#&gt; 33         full        N-2  NA            4               4  1.3333333</span></span>
+<span><span class="co">#&gt; 34         full        N-1  NA            5               5  1.6666667</span></span>
+<span><span class="co">#&gt; 35         full          N  NA            6               6  2.0000000</span></span>
+<span><span class="co">#&gt;    bootstrap_complete</span></span>
+<span><span class="co">#&gt; 1               FALSE</span></span>
+<span><span class="co">#&gt; 2               FALSE</span></span>
+<span><span class="co">#&gt; 3               FALSE</span></span>
+<span><span class="co">#&gt; 4                TRUE</span></span>
+<span><span class="co">#&gt; 5               FALSE</span></span>
+<span><span class="co">#&gt; 6                TRUE</span></span>
+<span><span class="co">#&gt; 7                TRUE</span></span>
+<span><span class="co">#&gt; 8               FALSE</span></span>
+<span><span class="co">#&gt; 9               FALSE</span></span>
+<span><span class="co">#&gt; 10              FALSE</span></span>
+<span><span class="co">#&gt; 11               TRUE</span></span>
+<span><span class="co">#&gt; 12              FALSE</span></span>
+<span><span class="co">#&gt; 13               TRUE</span></span>
+<span><span class="co">#&gt; 14               TRUE</span></span>
+<span><span class="co">#&gt; 15              FALSE</span></span>
+<span><span class="co">#&gt; 16              FALSE</span></span>
+<span><span class="co">#&gt; 17              FALSE</span></span>
+<span><span class="co">#&gt; 18               TRUE</span></span>
+<span><span class="co">#&gt; 19              FALSE</span></span>
+<span><span class="co">#&gt; 20               TRUE</span></span>
+<span><span class="co">#&gt; 21               TRUE</span></span>
+<span><span class="co">#&gt; 22              FALSE</span></span>
+<span><span class="co">#&gt; 23              FALSE</span></span>
+<span><span class="co">#&gt; 24              FALSE</span></span>
+<span><span class="co">#&gt; 25               TRUE</span></span>
+<span><span class="co">#&gt; 26              FALSE</span></span>
+<span><span class="co">#&gt; 27               TRUE</span></span>
+<span><span class="co">#&gt; 28               TRUE</span></span>
+<span><span class="co">#&gt; 29              FALSE</span></span>
+<span><span class="co">#&gt; 30              FALSE</span></span>
+<span><span class="co">#&gt; 31              FALSE</span></span>
+<span><span class="co">#&gt; 32               TRUE</span></span>
+<span><span class="co">#&gt; 33              FALSE</span></span>
+<span><span class="co">#&gt; 34               TRUE</span></span>
+<span><span class="co">#&gt; 35               TRUE</span></span></code></pre></div>
 <p>Predictive sessions save their initial distribution, mapping
 identity, tree policy/version, seed, ordered queue, diagnostics, and
 SHA-256 digest. Session metadata repeats the policy/version and digest.
@@ -498,7 +634,7 @@ Resume validates these frozen artifacts without predicting, initializing
 ratings, or rebuilding the tree. Keep the original reservoir to recreate
 its judge; changing its membership, orientation, or outcomes is
 rejected.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">bootstrap_session</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="st">"predictive-bootstrap-"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/save_adaptive_session.html">save_adaptive_session</a></span><span class="op">(</span><span class="va">bootstrap_partial</span>, <span class="va">bootstrap_session</span><span class="op">)</span></span>
 <span><span class="va">bootstrap_restored</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_resume.html">adaptive_rank_resume</a></span><span class="op">(</span><span class="va">bootstrap_session</span><span class="op">)</span></span>
@@ -514,6 +650,43 @@ metadata retain their shuffled queue, current ratings, and progress.
 Default summary columns remain unchanged; use
 <code>include_bootstrap = TRUE</code> for the additional audit
 list-column.</p>
+<p>The same continuation check applies to every arm, including
+prior-only and partially connected sessions. This example crosses the
+connectivity boundary and compares the exact observed presentations and
+outcomes with uninterrupted collection. Fresh-process continuation is
+also covered by the package tests.</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">continuation_checks</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">bootstrap_states</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">arm</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">partial</span> <span class="op">&lt;-</span> <span class="va">checkpoint_states</span><span class="op">[[</span><span class="va">arm</span><span class="op">]</span><span class="op">]</span><span class="op">[[</span><span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">n</span> <span class="op">-</span> <span class="fl">2L</span><span class="op">)</span><span class="op">]</span><span class="op">]</span></span>
+<span>  <span class="va">session</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="st">"five-arm-session-"</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span><span class="va">session</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>, add <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="../reference/save_adaptive_session.html">save_adaptive_session</a></span><span class="op">(</span><span class="va">partial</span>, <span class="va">session</span><span class="op">)</span></span>
+<span>  <span class="va">restored</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_resume.html">adaptive_rank_resume</a></span><span class="op">(</span><span class="va">session</span><span class="op">)</span></span>
+<span>  <span class="va">continued</span> <span class="op">&lt;-</span> <span class="fu">collect_committed</span><span class="op">(</span><span class="va">restored</span>, <span class="va">n</span> <span class="op">+</span> <span class="fl">1L</span>, <span class="va">bootstrap_judge</span><span class="op">)</span></span>
+<span>  <span class="va">uninterrupted</span> <span class="op">&lt;-</span> <span class="fu">collect_committed</span><span class="op">(</span><span class="va">partial</span>, <span class="va">n</span> <span class="op">+</span> <span class="fl">1L</span>, <span class="va">bootstrap_judge</span><span class="op">)</span></span>
+<span>  <span class="va">fields</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"A_id"</span>, <span class="st">"B_id"</span>, <span class="st">"Y"</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="fu"><a href="../reference/adaptive_step_log.html">adaptive_step_log</a></span><span class="op">(</span><span class="va">continued</span><span class="op">)</span><span class="op">[</span><span class="va">fields</span><span class="op">]</span>,</span>
+<span>    <span class="fu"><a href="../reference/adaptive_step_log.html">adaptive_step_log</a></span><span class="op">(</span><span class="va">uninterrupted</span><span class="op">)</span><span class="op">[</span><span class="va">fields</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">continued</span><span class="op">$</span><span class="va">trueskill_state</span>, <span class="va">uninterrupted</span><span class="op">$</span><span class="va">trueskill_state</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>arm <span class="op">=</span> <span class="va">arm</span>, committed_pairs <span class="op">=</span> <span class="fu"><a href="../reference/summarize_adaptive.html">summarize_adaptive</a></span><span class="op">(</span><span class="va">continued</span><span class="op">)</span><span class="op">$</span><span class="va">committed_pairs</span>,</span>
+<span>    bootstrap_complete <span class="op">=</span> <span class="va">continued</span><span class="op">$</span><span class="va">warm_start_done</span><span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="va">continuation_checks</span><span class="op">)</span></span>
+<span><span class="co">#&gt;            arm committed_pairs bootstrap_complete</span></span>
+<span><span class="co">#&gt; 1         cold               7               TRUE</span></span>
+<span><span class="co">#&gt; 2   estimation               7               TRUE</span></span>
+<span><span class="co">#&gt; 3 legacy_graph               7               TRUE</span></span>
+<span><span class="co">#&gt; 4    selection               7               TRUE</span></span>
+<span><span class="co">#&gt; 5         full               7               TRUE</span></span></code></pre></div>
+<p>The frozen graph is outcome-blind, but the replay identity includes
+selectable outcomes so a changed judge cannot silently continue an old
+session. In a new session with changed selectable Y, the initial prior,
+mapped distribution and tree remain unchanged while judged updates can
+differ. Held-out outcomes, reversal audits and human scores belong
+outside initialization and selection. Synthetic qualification tests this
+separation; it does not establish upstream uncertainty calibration or a
+scientific advantage for any arm.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="a-complete-example-with-three-algorithms">A complete example with three algorithms<a class="anchor" aria-label="anchor" href="#a-complete-example-with-three-algorithms"></a>
@@ -532,7 +705,7 @@ texts, so you can run the rest of this example without Python. The first
 40 texts are used for training; eight different texts are reserved for
 prediction. The example’s <code>theta</code> values are invented, not
 estimates from a BTL analysis.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">example</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"extdata"</span>, <span class="st">"warm-start-example.rds"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">training</span> <span class="op">&lt;-</span> <span class="va">example</span><span class="op">$</span><span class="va">training</span></span>
 <span><span class="va">new_items</span> <span class="op">&lt;-</span> <span class="va">example</span><span class="op">$</span><span class="va">new_items</span></span>
@@ -569,7 +742,7 @@ traits, develop a model from the corresponding trait’s scores.</p>
 without execution in an ordinary render because they require your
 existing Python environment. Substitute your own aligned texts and IDs
 when using real data.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">python</span> <span class="op">&lt;-</span> <span class="st">"/path/to/venv/bin/python"</span></span>
 <span><span class="va">status</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/warm_start_python_status.html">warm_start_python_status</a></span><span class="op">(</span>python <span class="op">=</span> <span class="va">python</span>, schema <span class="op">=</span> <span class="va">schema</span><span class="op">)</span></span>
 <span><span class="va">status</span><span class="op">$</span><span class="va">problems</span></span>
@@ -585,7 +758,7 @@ The schema attribute identifies the expected columns; it does not prove
 where cached features came from. Saved v1 models still require v1
 features.</p>
 <p>The installed setup instructions are available with:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"python"</span>, <span class="st">"README.md"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "/home/runner/work/_temp/Library/pairwiseLLM/python/README.md"</span></span></code></pre></div>
 <p>Extraction uses the pinned Python 3.12.3, spaCy 3.7.5,
@@ -609,7 +782,7 @@ algorithm the same training and held-out samples, making their
 validation results comparable. The plan checks the task label, ordered
 IDs, and outcomes; it cannot be reused with different scores or a
 different order of items.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">plan</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_warm_start_cv_plan.html">make_warm_start_cv_plan</a></span><span class="op">(</span><span class="va">training</span><span class="op">$</span><span class="va">item_id</span>, <span class="va">training</span><span class="op">$</span><span class="va">theta</span>,</span>
 <span>  task_id <span class="op">=</span> <span class="st">"example-assessment"</span>, seed <span class="op">=</span> <span class="fl">259L</span>, outer_folds <span class="op">=</span> <span class="fl">5L</span>, inner_folds <span class="op">=</span> <span class="fl">5L</span><span class="op">)</span></span></code></pre></div>
 <p>During fitting, missing-value handling and feature scaling are
@@ -656,7 +829,7 @@ overfitting</td>
 quick. These are demonstration settings, not recommendations selected
 from the results. The default grids and deterministic selection rules
 are documented in <code><a href="../reference/fit_warm_start_model.html">fit_warm_start_model()</a></code>.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">model</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_warm_start_model.html">fit_warm_start_model</a></span><span class="op">(</span><span class="va">training</span><span class="op">$</span><span class="va">item_id</span>, <span class="va">training</span><span class="op">$</span><span class="va">theta</span>, <span class="st">"example-assessment"</span>,</span>
 <span>  features <span class="op">=</span> <span class="va">features</span>, schema <span class="op">=</span> <span class="va">schema</span>, cv_plan <span class="op">=</span> <span class="va">plan</span>, alpha_grid <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.5</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">pls_model</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_warm_start_model.html">fit_warm_start_model</a></span><span class="op">(</span><span class="va">training</span><span class="op">$</span><span class="va">item_id</span>, <span class="va">training</span><span class="op">$</span><span class="va">theta</span>, <span class="st">"example-assessment"</span>,</span>
@@ -675,7 +848,7 @@ uses all training samples only after outer validation is complete.</p>
 <div class="section level3">
 <h3 id="inspect-validation-before-combining-models">Inspect validation before combining models<a class="anchor" aria-label="anchor" href="#inspect-validation-before-combining-models"></a>
 </h3>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">models</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>elastic_net <span class="op">=</span> <span class="va">model</span>, pls <span class="op">=</span> <span class="va">pls_model</span>, svr_rbf <span class="op">=</span> <span class="va">svr_model</span><span class="op">)</span></span>
 <span><span class="va">validation</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">models</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/unlist.html" class="external-link">unlist</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">validation</span><span class="op">$</span><span class="va">metrics</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"rmse"</span>, <span class="st">"mae"</span>, <span class="st">"pearson_r"</span>, <span class="st">"spearman_rho"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
@@ -733,7 +906,7 @@ population.</p>
 calibrated predictions of models trained on the same assessment. Supply
 named, full model objects with matching IDs, outcomes, feature schema,
 and CV plan:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">algorithm_ensemble</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ensemble_warm_start_algorithms.html">ensemble_warm_start_algorithms</a></span><span class="op">(</span></span>
 <span>  elastic_net <span class="op">=</span> <span class="va">model</span>, pls <span class="op">=</span> <span class="va">pls_model</span>, svr_rbf <span class="op">=</span> <span class="va">svr_model</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">algorithm_ensemble</span><span class="op">)</span><span class="op">$</span><span class="va">validation</span><span class="op">$</span><span class="va">metrics</span></span>
@@ -771,7 +944,7 @@ construct a new same-task ensemble.</p>
 <div class="section level3">
 <h3 id="predict-new-items-and-initialize-an-assessment">Predict new items and initialize an assessment<a class="anchor" aria-label="anchor" href="#predict-new-items-and-initialize-an-assessment"></a>
 </h3>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">algorithm_predictions</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">algorithm_ensemble</span>, <span class="va">new_features</span><span class="op">)</span></span>
 <span><span class="va">algorithm_predictions</span></span>
 <span><span class="co">#&gt; Warm-start ensemble predictions; sample SD is diagnostic, not Bayesian prior SD.</span></span>
@@ -806,7 +979,7 @@ these new items; it does not restore the old assessment’s raw BTL
 scale.</p>
 <p>Initialize any of the three predictive modes using the same resolved
 prior:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">btl_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_start.html">adaptive_rank_start</a></span><span class="op">(</span><span class="va">new_items</span><span class="op">$</span><span class="va">item_id</span>, seed <span class="op">=</span> <span class="fl">17L</span>,</span>
 <span>  warm_start_prior <span class="op">=</span> <span class="va">algorithm_prior</span>, warm_start_mode <span class="op">=</span> <span class="st">"btl_only"</span><span class="op">)</span></span>
 <span><span class="va">trueskill_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_start.html">adaptive_rank_start</a></span><span class="op">(</span><span class="va">new_items</span><span class="op">$</span><span class="va">item_id</span>, seed <span class="op">=</span> <span class="fl">17L</span>,</span>
@@ -837,7 +1010,7 @@ keeps its cold prior.</p>
 <p>Prediction from precomputed features needs neither Python nor any
 fitting engine. Ordinary save/load retains the full model and its
 validation evidence:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>  <span class="va">directory</span> <span class="op">&lt;-</span> <span class="fu">withr</span><span class="fu">::</span><span class="fu"><a href="https://withr.r-lib.org/reference/with_tempfile.html" class="external-link">local_tempdir</a></span><span class="op">(</span><span class="op">)</span></span>
 <span>  <span class="va">path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">directory</span>, <span class="st">"algorithm-ensemble.rds"</span><span class="op">)</span></span>
@@ -865,7 +1038,7 @@ explicitly. No pretrained models are currently listed by
 <p>To save an adaptive session, set <code>session_dir</code> at
 initialization. Resume uses the saved numeric prior even if the original
 model file is no longer available:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>  <span class="va">directory</span> <span class="op">&lt;-</span> <span class="fu">withr</span><span class="fu">::</span><span class="fu"><a href="https://withr.r-lib.org/reference/with_tempfile.html" class="external-link">local_tempdir</a></span><span class="op">(</span><span class="op">)</span></span>
 <span>  <span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_start.html">adaptive_rank_start</a></span><span class="op">(</span><span class="va">new_items</span><span class="op">$</span><span class="va">item_id</span>, session_dir <span class="op">=</span> <span class="va">directory</span>,</span>
@@ -894,7 +1067,7 @@ score.</p>
 feature values. It illustrates the separate API without suggesting that
 relabeling the first assessment would create independent training
 data.</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">features_b</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>  <span class="fu">withr</span><span class="fu">::</span><span class="fu"><a href="https://withr.r-lib.org/reference/with_seed.html" class="external-link">local_seed</a></span><span class="op">(</span><span class="fl">3104L</span><span class="op">)</span></span>
 <span>  <span class="va">x</span> <span class="op">&lt;-</span> <span class="va">features</span></span>
@@ -1111,7 +1284,7 @@ coefficients; requesting them produces an informative error, including
 when it belongs to an ensemble. Individual models return one row per
 frozen feature in schema order:</p>
 <pre class="text"><code><span><span class="va">feature</span> <span class="op">|</span> <span class="va">retained</span> <span class="op">|</span> <span class="va">calibrated_std_coefficient</span></span></code></pre>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">coef_tbl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/warm_start_coefficients.html">warm_start_coefficients</a></span><span class="op">(</span><span class="va">model</span><span class="op">)</span></span>
 <span><span class="va">coef_tbl</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 46 × 3</span></span></span>
@@ -1184,7 +1357,7 @@ original fitting engine. A nonlinear model does not provide linear
 feature coefficients.</p>
 <p><code>prepare_warm_start_model(x, omit_audit = TRUE)</code> makes a
 smaller deployment artifact while retaining the same predictions:</p>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">deployment</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_warm_start_model.html">prepare_warm_start_model</a></span><span class="op">(</span><span class="va">algorithm_ensemble</span>, omit_audit <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">deployment</span>, <span class="va">new_features</span><span class="op">)</span><span class="op">$</span><span class="va">ensemble_mean</span>,</span>
 <span>  <span class="va">algorithm_predictions</span><span class="op">$</span><span class="va">ensemble_mean</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
