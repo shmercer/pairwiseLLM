@@ -142,6 +142,8 @@ Phase 7 uses 9106 for the packaged offline vignette data, real optional extracti
 and the executable documentation workflow through all predictive modes.
 Keep 0025, 5025, 5027 and 6020 before 6100 when running mock-restoration regressions.
 Existing 4000-series tests retain their compatibility grouping; 6020 is a sampler test.
+Issue #318 reserves 4005 for model-aware OpenAI Batch caching, JSONL forwarding,
+retry/resume, cache usage and offline cost examples.
 
 Task 09 renamed the following files; earlier completion reports retain historical names.
 

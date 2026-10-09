@@ -1,5 +1,15 @@
 # pairwiseLLM (development version)
 
+* OpenAI Batch disables implicit prompt caching by default for verified GPT-5.6
+  and later model IDs (#318). `prompt_caching = "implicit"` restores provider
+  caching; recognized earlier models keep their defaults and cannot explicitly
+  disable caching. Unknown IDs require the explicit opt-in. Validation occurs
+  before IO, and segmented submissions/retries preserve the policy. Parsed
+  results now include `prompt_cache_write_tokens` alongside cached reads from
+  both endpoints, with `NA` for missing usage. The advanced batch guide explains
+  model-specific cache rates and Batch pricing. Live APIs, frozen requests and
+  study libraries are unchanged; savings depend on observed usage.
+
 * Five-arm synthetic qualification (#317) checks matched initialization,
   outcome-leakage boundaries, Pollitt selection, evidence budgets and continuation
   across the connected-bootstrap boundary. The warm-start guide now executes

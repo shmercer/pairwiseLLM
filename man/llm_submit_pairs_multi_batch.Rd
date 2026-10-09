@@ -72,7 +72,9 @@ has been created along with the input file path.  Defaults to \code{FALSE}.}
 
 \item{...}{Additional arguments passed through to the provider‑specific
 \verb{run_*_batch_pipeline()} function.  These may include arguments such as
-\code{include_thoughts}, \code{reasoning}, \code{include_raw}, \code{temperature}, etc.}
+\code{include_thoughts}, \code{reasoning}, \code{include_raw}, \code{temperature}, etc.
+For OpenAI, \code{prompt_caching} is validated before creating files and its
+effective policy is reused across all segments and submission retries.}
 
 \item{openai_max_retries}{Integer giving the maximum number of times
 to retry the initial OpenAI batch submission when a transient
@@ -111,6 +113,36 @@ chunk using the appropriate provider pipeline.  Each batch is created with
 have been created.  Metadata for each batch—including the \code{batch_id},
 provider type, and input/output file paths—is collected and (optionally)
 written to a CSV registry for later resumption.
+}
+
+\section{Batch prompt caching}{
+
+The default disables prompt caching for these verified model IDs:
+\code{gpt-5.6-luna}, \code{gpt-5.6-terra}, \code{gpt-5.6-sol}, \code{gpt-6-luna},
+\code{gpt-6-sol}, \code{gpt-6-astra}, and \code{gpt-6.1-sol}. Each request body gets
+\code{prompt_cache_options = list(mode = "explicit")}, with no breakpoints,
+on both endpoints. Set \code{prompt_caching = "implicit"} to omit that field
+and retain provider caching when prefix reuse is expected to be worthwhile.
+
+Recognized earlier OpenAI models retain their historical request bodies
+when the policy is omitted or \code{NULL}; explicitly disabling caching on
+those models errors. Unknown IDs (including unlisted snapshots, future
+models and custom aliases) require an explicit \code{"implicit"} opt-in or a
+verified model ID. Support is an offline allowlist; version numbers and
+snapshot suffixes never establish support for disabling caching. Older
+GPT-3.5/4, GPT-5 through GPT-5.5 and o-series naming forms, including
+recognized legacy date-suffixed names, retain provider defaults.
+
+Invalid policies and manual cache controls fail before submission, even
+with zero pairs. Raw \code{prompt_cache_options}, \code{prompt_cache_breakpoint},
+\code{prompt_cache_key}, retention and TTL controls are not accepted by these
+builders. Keys affect cache routing/accounting; retention and TTL affect
+lifetime; \code{store = FALSE} affects response storage. None substitutes for
+disabling implicit cache breakpoints. Prompt text and keys are not rewritten.
+This policy affects future package-built Batch requests only, not live
+requests or already submitted jobs. See the
+\href{https://developers.openai.com/api/docs/guides/prompt-caching}{prompt-caching guide}
+and \code{vignette("advanced-batch-workflows")} for usage-based cost comparisons.
 }
 
 \examples{

@@ -45,10 +45,15 @@ if \code{SAMPLE_2} was chosen, or \code{NA}.}
 \item{completion_tokens}{Completion/output token count (if reported).}
 \item{total_tokens}{Total tokens (if reported).}
 \item{prompt_cached_tokens}{Cached prompt tokens (if reported via
-\code{input_tokens_details$cached_tokens}); otherwise \code{NA}.}
+\code{input_tokens_details$cached_tokens} or Chat Completions'
+\code{prompt_tokens_details$cached_tokens}); otherwise \code{NA}.}
 \item{reasoning_tokens}{Reasoning tokens (if reported via
 \code{output_tokens_details$reasoning_tokens}); otherwise
 \code{NA}.}
+\item{prompt_cache_write_tokens}{Prompt tokens written to cache, from
+\code{input_tokens_details$cache_write_tokens} or
+\code{prompt_tokens_details$cache_write_tokens}; otherwise
+\code{NA}. Missing counts are not inferred from the request policy.}
 }
 }
 \description{

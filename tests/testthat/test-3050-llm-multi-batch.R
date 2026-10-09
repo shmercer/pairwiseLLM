@@ -40,6 +40,7 @@ test_that("llm_submit_pairs_multi_batch splits pairs correctly and writes regist
       res <- llm_submit_pairs_multi_batch(
         pairs             = pairs,
         model             = "fake-model",
+        prompt_caching = "implicit",
         trait_name        = td$name,
         trait_description = td$description,
         prompt_template   = tmpl,
@@ -93,6 +94,7 @@ test_that("llm_submit_pairs_multi_batch validates batch_size and n_segments inpu
         llm_submit_pairs_multi_batch(
           pairs             = pairs,
           model             = "fake-model",
+          prompt_caching = "implicit",
           trait_name        = td$name,
           trait_description = td$description,
           prompt_template   = tmpl,
@@ -109,6 +111,7 @@ test_that("llm_submit_pairs_multi_batch validates batch_size and n_segments inpu
         llm_submit_pairs_multi_batch(
           pairs             = pairs,
           model             = "fake-model",
+          prompt_caching = "implicit",
           trait_name        = td$name,
           trait_description = td$description,
           prompt_template   = tmpl,
@@ -519,6 +522,7 @@ test_that("openai batch submission retries on 5xx errors and eventually succeeds
       res <- llm_submit_pairs_multi_batch(
         pairs = pairs,
         model = "fake-model",
+        prompt_caching = "implicit",
         trait_name = td$name,
         trait_description = td$description,
         prompt_template = tmpl,
@@ -558,6 +562,7 @@ test_that("openai batch submission fails after maximum retries", {
         llm_submit_pairs_multi_batch(
           pairs = pairs,
           model = "fake-model",
+          prompt_caching = "implicit",
           trait_name = td$name,
           trait_description = td$description,
           prompt_template = tmpl,
@@ -742,6 +747,7 @@ test_that("llm_resume_multi_batches updates registry when write_registry=TRUE", 
       sub_res <- llm_submit_pairs_multi_batch(
         pairs             = pairs,
         model             = "fake",
+        prompt_caching = "implicit",
         trait_name        = td$name,
         trait_description = td$description,
         prompt_template   = tmpl,
@@ -916,6 +922,7 @@ test_that("llm_submit_pairs_multi_batch distributes segments with n_segments", {
       res <- llm_submit_pairs_multi_batch(
         pairs             = pairs,
         model             = "fake-model",
+        prompt_caching = "implicit",
         trait_name        = td$name,
         trait_description = td$description,
         prompt_template   = tmpl,
@@ -975,6 +982,7 @@ test_that("llm_submit_pairs_multi_batch splits pairs correctly using batch_size"
       res <- llm_submit_pairs_multi_batch(
         pairs             = pairs,
         model             = "fake-model",
+        prompt_caching = "implicit",
         trait_name        = td$name,
         trait_description = td$description,
         prompt_template   = tmpl,
@@ -1941,6 +1949,7 @@ test_that("llm_submit_pairs_multi_batch errors on retry exhaustion", {
         llm_submit_pairs_multi_batch(
           pairs = pairs,
           model = "m",
+          prompt_caching = "implicit",
           trait_name = td$name,
           trait_description = td$description,
           prompt_template = tmpl,
@@ -1972,6 +1981,7 @@ test_that("llm_submit_pairs_multi_batch surfaces non-retry errors", {
         llm_submit_pairs_multi_batch(
           pairs = pairs,
           model = "m",
+          prompt_caching = "implicit",
           trait_name = td$name,
           trait_description = td$description,
           prompt_template = tmpl,

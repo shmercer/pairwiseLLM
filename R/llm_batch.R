@@ -81,7 +81,7 @@
 #'   `run_*_batch_pipeline()` functions. This can include provider-specific
 #'   options such as temperature or batch configuration fields. For OpenAI,
 #'   this may include `endpoint`, `temperature`, `top_p`, `logprobs`,
-#'   `reasoning`, `store`, and Responses-only `max_output_tokens`. Select
+#'   `reasoning`, `store`, `prompt_caching`, and Responses-only `max_output_tokens`. Select
 #'   `endpoint = "responses"` explicitly for output limits. OpenAI Batch does
 #'   not accept `service_tier` through this helper. For Anthropic, this may include `reasoning`,
 #'   `max_tokens`, `temperature`, or `thinking_budget_tokens`. For Gemini, this
@@ -169,6 +169,7 @@
 #'
 #' @seealso [llm_download_batch_results()], [llm_submit_pairs_multi_batch()]
 #' @family batch backends
+#' @inheritSection build_openai_batch_requests Batch prompt caching
 #' @export
 llm_submit_pairs_batch <- function(
   pairs,
