@@ -16,6 +16,7 @@
 ^LICENSE\.md$
 ^dev$
 ^\.github$
+^\.git$
 ^README\.Rmd$
 ^dev-output$
 ^_pkgdown\.yml$

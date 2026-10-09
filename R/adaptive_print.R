@@ -863,6 +863,10 @@ adaptive_results_history <- function(state, committed_only = TRUE) {
 #' @param state Adaptive state.
 #' @param include_starvation Logical; append a \code{starvation_diagnostic}
 #'   list-column containing terminal hybrid exhaustion evidence. Default FALSE.
+#' @param include_bootstrap Logical; add a `bootstrap` list-column with policy,
+#'   version, initialization seed, integrity identities, and saved tree diagnostics.
+#'   Default FALSE retains the historical summary columns. Legacy sessions report
+#'   the shuffled policy and no predictive bootstrap digest or diagnostics.
 #'
 #' @details
 #' The optional diagnostic is NULL when no current terminal evidence is available,
@@ -885,7 +889,7 @@ adaptive_results_history <- function(state, committed_only = TRUE) {
 #' @return A one-row tibble with columns \code{n_items},
 #'   \code{steps_attempted}, \code{committed_pairs}, \code{n_refits},
 #'   \code{last_stop_decision}, and \code{last_stop_reason}, plus the optional
-#'   \code{starvation_diagnostic} list-column.
+#'   \code{starvation_diagnostic} and \code{bootstrap} list-columns.
 #'
 #' @examples
 #' state <- adaptive_rank_start(c("a", "b", "c"), seed = 1)
@@ -895,7 +899,7 @@ adaptive_results_history <- function(state, committed_only = TRUE) {
 #'
 #' @family adaptive ranking
 #' @export
-summarize_adaptive <- function(state, include_starvation = FALSE) {
+summarize_adaptive <- function(state, include_starvation = FALSE, include_bootstrap = FALSE) {
   .link_reject_legacy(state)
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
@@ -918,7 +922,11 @@ summarize_adaptive <- function(state, include_starvation = FALSE) {
     last_stop_decision = as.logical(last_stop_decision),
     last_stop_reason = as.character(last_stop_reason)
   )
+  if (!is.logical(include_bootstrap) || length(include_bootstrap) != 1L || is.na(include_bootstrap)) {
+    rlang::abort("`include_bootstrap` must be TRUE or FALSE.")
+  }
   if (include_starvation) out$starvation_diagnostic <- list(.adaptive_terminal_starvation(state))
+  if (include_bootstrap) out$bootstrap <- list(.adaptive_bootstrap_audit(state))
   out
 }
 

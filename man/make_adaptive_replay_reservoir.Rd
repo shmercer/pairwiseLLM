@@ -26,8 +26,11 @@ held-out edges and separate reversal audits. The allowed graph must connect
 every panel item. Reservoir replay supports ordinary within-set runs only.
 }
 \details{
-All strategies and warm-start modes share a seeded spanning-tree bootstrap of
-\code{N - 1} allowed edges. Subsequent selection uses unused allowed edges, and
+By default, all strategies and warm-start modes share a shuffled seeded tree
+of \code{N - 1} allowed edges. Opt into a frozen predictive tree with
+\code{bootstrap_policy = "predictive_connected"} in \code{\link[=adaptive_rank_start]{adaptive_rank_start()}}, with
+coherent predictive TrueSkill initialization and Pollitt subsequent pairing.
+Subsequent selection uses unused allowed edges, and
 commits their stored presentation without reversing or complementing outcomes.
 Consumption follows committed history, so discarded/failed transactions do
 not consume observations. Existing statistical stopping rules still apply.

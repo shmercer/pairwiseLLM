@@ -48,8 +48,11 @@
 #' held-out edges and separate reversal audits. The allowed graph must connect
 #' every panel item. Reservoir replay supports ordinary within-set runs only.
 #'
-#' All strategies and warm-start modes share a seeded spanning-tree bootstrap of
-#' `N - 1` allowed edges. Subsequent selection uses unused allowed edges, and
+#' By default, all strategies and warm-start modes share a shuffled seeded tree
+#' of `N - 1` allowed edges. Opt into a frozen predictive tree with
+#' `bootstrap_policy = "predictive_connected"` in [adaptive_rank_start()], with
+#' coherent predictive TrueSkill initialization and Pollitt subsequent pairing.
+#' Subsequent selection uses unused allowed edges, and
 #' commits their stored presentation without reversing or complementing outcomes.
 #' Consumption follows committed history, so discarded/failed transactions do
 #' not consume observations. Existing statistical stopping rules still apply.
@@ -162,6 +165,7 @@ make_adaptive_replay_reservoir <- function(outcomes, item_ids) {
 .adaptive_reservoir_validate_state <- function(state, metadata = NULL) {
   manifest <- state$replay_reservoir
   if (is.null(manifest)) {
+    .adaptive_bootstrap_validate(state, metadata)
     if (!is.null(state$meta$replay_reservoir_digest) || !is.null(metadata$replay_reservoir_digest)) {
       rlang::abort("Replay reservoir manifest is missing from the saved state.")
     }
@@ -176,16 +180,35 @@ make_adaptive_replay_reservoir <- function(outcomes, item_ids) {
     !identical(state$meta$replay_reservoir_digest, manifest$digest)) {
     rlang::abort("Replay reservoir state integrity mismatch.")
   }
-  # Reuse graph/ID validation without importing any unconsumed outcomes.
-  dummy <- manifest$edges
-  dummy$Y <- rep(0L, nrow(dummy))
-  canonical <- make_adaptive_replay_reservoir(dummy, manifest$item_ids)$manifest
+  if (.adaptive_bootstrap_saved_policy(state) == "predictive_connected") {
+    # The verified queue proves connectivity. Validate manifest membership
+    # and canonical order directly, without constructing any tree on resume.
+    edges <- manifest$edges
+    .adaptive_replay_ids(edges$A_id, "manifest A_id")
+    .adaptive_replay_ids(edges$B_id, "manifest B_id")
+    a <- match(edges$A_id, manifest$item_ids)
+    b <- match(edges$B_id, manifest$item_ids)
+    if (anyNA(a) || anyNA(b) || any(a == b) ||
+        anyDuplicated(.adaptive_reservoir_key(edges$A_id, edges$B_id)) ||
+        anyDuplicated(make_unordered_key(edges$A_id, edges$B_id))) {
+      rlang::abort("Replay reservoir manifest endpoints or edge integrity mismatch.")
+    }
+    canonical_edges <- edges[order(pmin(a, b), pmax(a, b)), , drop = FALSE]
+    canonical <- list(edges = canonical_edges,
+      manifest_digest = .adaptive_reservoir_manifest_hash(manifest$item_ids, canonical_edges))
+  } else {
+    # Preserve historical validation without importing unconsumed outcomes.
+    dummy <- manifest$edges
+    dummy$Y <- rep(0L, nrow(dummy))
+    canonical <- make_adaptive_replay_reservoir(dummy, manifest$item_ids)$manifest
+  }
   if (!identical(canonical$edges, manifest$edges) ||
     !identical(canonical$manifest_digest, manifest$manifest_digest) ||
     (!is.null(metadata) && (!identical(metadata$replay_reservoir_digest, manifest$digest) ||
       !identical(metadata$replay_manifest_digest, manifest$manifest_digest)))) {
     rlang::abort("Replay reservoir manifest or session metadata integrity mismatch.")
   }
+  .adaptive_bootstrap_validate(state, metadata)
   history <- state$history_pairs
   observed <- if (nrow(history) == 0L) character() else
     .adaptive_reservoir_ordered_key(history$A_id, history$B_id)
@@ -199,7 +222,11 @@ make_adaptive_replay_reservoir <- function(outcomes, item_ids) {
   if (!identical(logged, observed) || anyNA(committed$Y) || any(!committed$Y %in% c(0L, 1L))) {
     rlang::abort("Replay reservoir committed log and history integrity mismatch.")
   }
-  bootstrap <- .adaptive_reservoir_bootstrap(state)
+  bootstrap <- if (.adaptive_bootstrap_saved_policy(state) == "predictive_connected") {
+    state$warm_start_pairs
+  } else {
+    .adaptive_reservoir_bootstrap(state)
+  }
   n_done <- min(nrow(history), nrow(bootstrap))
   if (!identical(state$warm_start_pairs, bootstrap) ||
     !identical(state$warm_start_idx, as.integer(n_done + 1L)) ||

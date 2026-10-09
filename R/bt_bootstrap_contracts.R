@@ -131,7 +131,7 @@
   # fitted state into a valid outcome-independent initialization.
   fresh <- new_adaptive_state(state$items, now_fn = .bt_bootstrap_clock)
   fresh <- .warm_start_adaptive_init(fresh, prior = state$predictive_prior,
-    mode = state$meta$warm_start_mode %||% "cold")
+    mode = state$meta$warm_start_mode %||% "cold", trueskill = state$meta$warm_start_trueskill)
   fields <- c("trueskill_state", "history_state", "item_step_log", "item_index", "n_items")
   refit_fields <- setdiff(names(fresh$refit_meta), "link_refit_local_memo_env")
   expected_round <- .adaptive_new_round_state(state$item_ids, controller = state$controller)
