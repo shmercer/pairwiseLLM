@@ -280,9 +280,9 @@ summarize_bt_fit(fixed_fit)
 #> # A tibble: 6 × 6
 #>   ID      theta    se  rank engine reliability
 #>   <chr>   <dbl> <dbl> <int> <chr>        <dbl>
-#> 1 a     -0.535  0.403     5 alpha        0.590
+#> 1 a     -0.535  0.403     6 alpha        0.590
 #> 2 b     -0.358  0.396     4 alpha        0.590
-#> 3 c     -0.535  0.403     6 alpha        0.590
+#> 3 c     -0.535  0.403     5 alpha        0.590
 #> 4 d     -0.0136 0.391     3 alpha        0.590
 #> 5 e      0.333  0.398     2 alpha        0.590
 #> 6 f      1.11   0.460     1 alpha        0.590
