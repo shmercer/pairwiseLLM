@@ -18,7 +18,8 @@ adaptive_rank_start(
   warm_start_python = NULL,
   warm_start_prior_sd = NULL,
   warm_start_mode = NULL,
-  replay_reservoir = NULL
+  replay_reservoir = NULL,
+  warm_start_trueskill = NULL
 )
 }
 \arguments{
@@ -67,14 +68,17 @@ nor a fitting backend.}
 
 \item{warm_start_prior_sd}{Optional user-chosen raw theta prior SD for model input;
 scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
-Not accepted with \code{trueskill_only}; never controls TrueSkill sigma.}
+With \code{warm_start_trueskill = "predictive_distribution"}, explicit SD is
+required for model input, including \code{trueskill_only}, and also initializes
+TrueSkill sigma. Otherwise \code{trueskill_only} rejects this argument.}
 
 \item{warm_start_mode}{Predictive destination: \code{cold} (neither model), \code{btl_only}
 (BTL prior), \code{trueskill_only} (TrueSkill locations), or \code{both} (both models).
 Omitted/NULL mode defaults to \code{btl_only} with predictive input, otherwise \code{cold}.
 Request \code{both} explicitly to initialize both models. In TrueSkill-warm modes,
 exact item-ID alignment precedes \code{mu = mu0 + sigma0 * prior_mean}, with
-\code{mu0 = 25}, \code{sigma0 = 25/3}, fixed multiplier 1, and unchanged sigma.
+\code{mu0 = 25}, \code{sigma0 = 25/3}, fixed multiplier 1, and unchanged sigma
+unless \code{warm_start_trueskill} explicitly requests distribution initialization.
 Explicit \code{cold} with predictive input, or a non-cold mode without it, errors.}
 
 \item{replay_reservoir}{Optional \code{\link[=make_adaptive_replay_reservoir]{make_adaptive_replay_reservoir()}} object.
@@ -82,6 +86,15 @@ Requires ordinary within-set mode and a matching reservoir replay judge.
 Uses a seeded spanning-tree bootstrap and at most one committed observation
 per allowed unordered edge, always in its frozen observed orientation.
 On resume, omit this argument or supply the identical reservoir.}
+
+\item{warm_start_trueskill}{Optional explicit uncertainty policy: NULL retains
+legacy initialization; \code{"predictive_distribution"} requires \code{trueskill_only}
+or \code{both} and maps \code{mu = 25 + (25/3) * prior_mean} and
+\code{sigma = (25/3) * prior_sd}, with \code{beta = 25/6}. It overrides constructor
+means and sigmas, aligns by exact item ID, and never clips SD. Model input
+requires explicit \code{warm_start_prior_sd}; prior objects use their stored SD.
+Named SD vectors align by ID; unnamed vectors follow prediction-input order.
+Omit this argument on resume; the saved distribution policy is authoritative.}
 }
 \value{
 An adaptive state object containing \code{step_log}, \code{round_log}, and
@@ -129,8 +142,20 @@ Predictive initialization is separate from observed connectivity: every mode
 retains the same seeded connected shuffled bootstrap of N - 1 valid comparisons,
 with common presentation balancing and invalid-result retries. Predictive
 locations can affect later TrueSkill-based selection; they do not replace the
-initial observed spanning path. BTL prior SD and ensemble diagnostics never
-determine TrueSkill sigma. No historical training-score units are restored.
+initial observed spanning path. Without the distribution opt-in, BTL prior SD
+does not determine TrueSkill sigma. Ensemble disagreement never supplies SD
+automatically. No historical training-score units are restored.
+
+Distribution initialization assumes the supplied BTL prior SD and TrueSkill
+uncertainty describe comparable latent scales under the documented affine
+convention. BTL priors apply to \code{theta_raw}; centering induces dependence, so
+this is not the marginal SD of centered BTL effects and does not equate the
+models' posteriors. Existing BTL identifiability and prior rules are unchanged.
+Upstream predictive workflows must establish uncertainty calibration using
+training data only; supplying SD explicitly does not establish calibration.
+Scalar SD supports sensitivity analyses, not essay-specific calibration.
+Saved metadata records the versioned mapping, SD source and scalar/per-item
+rule, and integrity digests; calibration is recorded as upstream, unverified.
 
 Predictive BTL priors apply only in \code{btl_only} and \code{both}, including run-required
 linking Phase A. TrueSkill initialization applies in \code{trueskill_only} and \code{both}.

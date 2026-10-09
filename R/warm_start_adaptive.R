@@ -18,6 +18,87 @@
 .warm_start_uses_btl <- function(mode) mode %in% c("btl_only", "both")
 .warm_start_uses_trueskill <- function(mode) mode %in% c("trueskill_only", "both")
 
+.warm_start_trueskill_policy <- function(policy, mode) {
+  if (is.null(policy)) return(NULL)
+  if (!is.character(policy) || length(policy) != 1L || is.na(policy) ||
+      !is.null(dim(policy)) || policy != "predictive_distribution") {
+    rlang::abort("`warm_start_trueskill` must be NULL or predictive_distribution.")
+  }
+  if (!isTRUE(.warm_start_uses_trueskill(mode))) {
+    rlang::abort("`warm_start_trueskill` requires warm_start_mode = trueskill_only or both.")
+  }
+  unname(policy)
+}
+
+# This pure mapping has no graph, outcome, or selection-strategy inputs.
+.warm_start_trueskill_distribution <- function(prior, ids) {
+  .validate_warm_start_prior(prior, ids)
+  defaults <- .trueskill_defaults()
+  index <- match(ids, prior$item_id)
+  mu <- defaults$mu0 + defaults$sigma0 * prior$prior_mean[index]
+  sigma <- defaults$sigma0 * prior$prior_sd[index]
+  .warm_start_prior_numeric(mu, length(ids), "mapped TrueSkill means")
+  .warm_start_prior_numeric(sigma, length(ids), "mapped TrueSkill SDs", positive = TRUE)
+  list(item_id = as.character(ids), mu = mu, sigma = sigma, beta = defaults$beta)
+}
+
+.warm_start_trueskill_mapping <- function(prior, mode, sd_source) {
+  distribution <- .warm_start_trueskill_distribution(prior, prior$item_id)
+  defaults <- .trueskill_defaults()
+  mapping <- list(format_version = 1L, policy = "predictive_distribution",
+    warm_start_mode = mode, mu_offset = defaults$mu0, scale = defaults$sigma0,
+    beta = defaults$beta, clipping = "none", sd_source = sd_source,
+    sd_rule = prior$provenance$sd_rule, calibration = "upstream_not_verified",
+    predictive_prior_digest = prior$digest, item_id = prior$item_id,
+    distribution_digest = .warm_start_prior_hash(distribution))
+  mapping$digest <- .warm_start_prior_hash(mapping)
+  mapping
+}
+
+.warm_start_trueskill_validate <- function(state, metadata = NULL) {
+  policy <- state$meta$warm_start_trueskill
+  mapping <- state$meta$trueskill_mapping
+  if (!is.null(metadata) &&
+      (!identical(metadata$warm_start_trueskill, policy) ||
+       !identical(metadata$trueskill_mapping, mapping))) {
+    rlang::abort("Session metadata TrueSkill mapping integrity mismatch.")
+  }
+  if (is.null(policy) && is.null(mapping)) return(invisible(NULL))
+  mode <- state$meta$warm_start_mode
+  .warm_start_trueskill_policy(policy, mode)
+  if (is.null(policy) || !is.list(mapping) ||
+      !is.character(mapping$sd_source) || length(mapping$sd_source) != 1L ||
+      !mapping$sd_source %in% c("model_argument", "prior_object") ||
+      !identical(state$meta$trueskill_initialized_from_predictive, TRUE)) {
+    rlang::abort("Missing or invalid predictive TrueSkill mapping metadata.")
+  }
+  defaults <- .trueskill_defaults()
+  legacy_mapping <- list(trueskill_warm_scale = 1.0,
+    trueskill_mu0_used = defaults$mu0, trueskill_sigma0_used = defaults$sigma0)
+  if (!identical(state$meta[names(legacy_mapping)], legacy_mapping)) {
+    rlang::abort("Predictive TrueSkill mapping conflicts with initialization metadata.")
+  }
+  prior <- state$predictive_prior
+  .validate_warm_start_prior(prior, state$item_ids)
+  if (!identical(prior$item_id, state$item_ids) ||
+      !identical(mapping, .warm_start_trueskill_mapping(prior, mode, mapping$sd_source))) {
+    rlang::abort("Predictive TrueSkill mapping integrity mismatch.")
+  }
+  ts <- validate_trueskill_state(state$trueskill_state)
+  .validate_warm_start_prior(prior, ts$items$item_id)
+  if (!identical(ts$beta, mapping$beta)) {
+    rlang::abort("Predictive TrueSkill mapping requires beta = 25/6.")
+  }
+  # Check untouched initialization, but never compare evolved ratings to a prior.
+  if (nrow(state$history_pairs) == 0L) {
+    initial <- .warm_start_trueskill_distribution(prior, ts$items$item_id)
+    if (!identical(ts$items$mu, initial$mu) || !identical(ts$items$sigma, initial$sigma)) {
+      rlang::abort("Initial TrueSkill state disagrees with the saved predictive distribution.")
+    }
+  }
+  invisible(NULL)
+}
+
 .warm_start_btl_prior_for_state <- function(state) {
   # Legacy states retain historical BTL-only semantics; never reinitialize TrueSkill.
   mode <- .warm_start_mode(state$meta$warm_start_mode, !is.null(state$predictive_prior))
@@ -25,16 +106,30 @@
 }
 
 .warm_start_adaptive_init <- function(state, model = NULL, prior = NULL, features = NULL,
-                                      python = NULL, prior_sd = NULL, mode = NULL) {
+                                      python = NULL, prior_sd = NULL, mode = NULL,
+                                      trueskill = NULL) {
   if (!is.null(model) && !is.null(prior)) {
     rlang::abort("Supply only one of `warm_start_model` and `warm_start_prior`.")
   }
   mode <- .warm_start_mode(mode, !is.null(model) || !is.null(prior))
-  if (identical(mode, "trueskill_only") && !is.null(prior_sd)) {
+  trueskill <- .warm_start_trueskill_policy(trueskill, mode)
+  if (!is.null(state$meta$warm_start_trueskill) || !is.null(state$meta$trueskill_mapping) ||
+      (!is.null(trueskill) && (!is.null(state$meta$warm_start_mode) || nrow(state$history_pairs) > 0L))) {
+    rlang::abort("Cannot reinitialize predictive TrueSkill; resume must use the saved state.")
+  }
+  if (identical(mode, "trueskill_only") && !is.null(prior_sd) && is.null(trueskill)) {
     rlang::abort("`warm_start_prior_sd` controls BTL priors and cannot be used with trueskill_only.")
   }
   if (is.null(model) && any(!vapply(list(features, python, prior_sd), is.null, logical(1)))) {
     rlang::abort("Warm-start features, Python, and prior SD arguments require `warm_start_model`.")
+  }
+  if (!is.null(trueskill) && !is.null(model)) {
+    if (is.null(prior_sd)) {
+      rlang::abort("Predictive TrueSkill distribution with model input requires explicit `warm_start_prior_sd`.")
+    }
+    # Validate before model loading/extraction; final alignment follows prediction IDs.
+    .warm_start_prior_numeric(prior_sd, length(prior_sd), "SDs", positive = TRUE)
+    .warm_start_prior_sd(prior_sd, state$item_ids)
   }
   if (!is.null(model)) {
     resolved <- .warm_start_prior_resolve_model(model)
@@ -62,11 +157,20 @@
     defaults <- .trueskill_defaults()
     ts$items$mu <- defaults$mu0 + defaults$sigma0 *
       prior$prior_mean[match(ts$items$item_id, prior$item_id)]
+    if (!is.null(trueskill)) {
+      distribution <- .warm_start_trueskill_distribution(prior, ts$items$item_id)
+      ts$items$mu <- distribution$mu
+      ts$items$sigma <- distribution$sigma
+      state$meta$warm_start_trueskill <- trueskill
+      state$meta$trueskill_mapping <- .warm_start_trueskill_mapping(prior, mode,
+        if (is.null(model)) "prior_object" else "model_argument")
+    }
     state$trueskill_state <- validate_trueskill_state(ts)
     state$meta$trueskill_warm_scale <- 1.0
     state$meta$trueskill_mu0_used <- defaults$mu0
     state$meta$trueskill_sigma0_used <- defaults$sigma0
   }
+  .warm_start_trueskill_validate(state)
   state
 }
 
@@ -112,6 +216,7 @@
   if (!identical(digest, if (is.null(prior)) NULL else prior$digest)) {
     rlang::abort("Adaptive predictive prior integrity mismatch; saved predictions must remain authoritative.")
   }
+  .warm_start_trueskill_validate(state)
   invisible(state)
 }
 

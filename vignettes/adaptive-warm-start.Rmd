@@ -76,8 +76,51 @@ warmed$trueskill_state$items[, c("item_id", "mu", "sigma")]
 
 The output shows the saved mode and TrueSkill's initial locations (`mu`) and
 uncertainties (`sigma`). TrueSkill maps centered scores to its own scale as
-`25 + (25/3) * prior_mean`. Its initial sigma remains `25/3`; BTL prior SD does
-not set TrueSkill uncertainty. Both models can subsequently learn from judgments.
+`25 + (25/3) * prior_mean`. By default, its initial sigma remains `25/3`
+(or the constructor-supplied value); BTL prior SD does not set TrueSkill uncertainty.
+Both models can subsequently learn from judgments.
+
+
+### Opt in to predictive uncertainty
+
+Use `warm_start_trueskill = "predictive_distribution"` with `trueskill_only` or
+`both` to initialize the entire TrueSkill distribution. For each matching item ID,
+`mu = 25 + (25/3) * prior_mean` and `sigma = (25/3) * prior_sd`, with `beta = 25/6`.
+The mapping overrides constructor means and sigmas and never clips SD.
+
+```{r predictive-distribution}
+# Illustrative synthetic SD values; this example does not establish calibration.
+distribution_prior <- make_warm_start_prior(c(a = -1, b = 0, c = 1),
+  prior_sd = c(c = 0.8, a = 0.2, b = 0.5))
+distribution_state <- adaptive_rank_start(c("c", "a", "b"), seed = 11,
+  warm_start_prior = distribution_prior, warm_start_mode = "both",
+  warm_start_trueskill = "predictive_distribution")
+distribution_state$trueskill_state$items[, c("item_id", "mu", "sigma")]
+distribution_state$meta$trueskill_mapping
+```
+
+With `warm_start_model`, this opt-in requires explicit `warm_start_prior_sd`;
+it never silently substitutes the historical 0.5 default. Named vectors align by
+exact item ID; unnamed vectors follow prediction-input order. Prebuilt priors use
+their stored SD. A scalar remains available for sensitivity analyses but is not
+essay-specific calibration. Legacy modes retain their existing 0.5 fallback.
+
+The upstream predictive workflow must establish uncertainty calibration using
+training data only. Explicit provision alone does not prove calibration, and
+raw ensemble disagreement is not calibrated predictive uncertainty. Saved metadata
+records the SD source, scalar/per-item rule, mapping version and parameters,
+and integrity digests; calibration remains marked as upstream, unverified.
+
+This convention assumes transformed BTL prior SD and TrueSkill uncertainty are
+on comparable latent scales. BTL places the prior on `theta_raw`, then centers
+effects for identifiability; centering induces dependence. The mapped sigma is
+therefore not a marginal SD of centered BTL effects, and the two models' posteriors
+are not equivalent. BTL prior and identifiability rules remain unchanged.
+`trueskill_only` still leaves BTL cold; `both` also warms BTL. The mapping does not
+depend on the graph or later selection strategy; the connected bootstrap is unchanged.
+
+Resume retains the saved mapping and evolved ratings without initializing again.
+Omit `warm_start_trueskill` along with all other warm-start arguments on resume.
 
 ## A complete example with three algorithms
 
@@ -311,8 +354,9 @@ local({
 On resume, omit all warm-start arguments, including mode. The session retains its
 prior, mode, TrueSkill state, and progress. To change the starting information,
 start a new session. Model input and prior input are alternatives: do not supply
-both. `warm_start_prior_sd` is available with model input for BTL warming; a
-resolved prior already contains its chosen SDs.
+both. `warm_start_prior_sd` is available with model input for BTL warming and
+required for predictive-distribution initialization; a resolved prior already
+contains its chosen SDs.
 
 ## Combining models from separate assessments
 

@@ -1,5 +1,11 @@
 # pairwiseLLM (development version)
 
+* Adaptive ranking can opt into `warm_start_trueskill = "predictive_distribution"`
+  to initialize item-specific TrueSkill uncertainty from saved predictive prior SD
+  (#314). Model input requires explicit SD; prebuilt priors retain their stored SD.
+  Versioned mapping and SD provenance survive validated resume without remapping.
+  Legacy initialization, BTL prior rules, and bootstrap behavior are unchanged.
+
 * A new integrated CJ workflow guide connects pair selection, frequentist and
   Bayesian estimation, SSR and EAP reliability, empirical score recovery, scale
   dispersion, schedule-aware bootstrap, and held-out predictive evaluation (#306).
