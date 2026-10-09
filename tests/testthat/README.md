@@ -213,3 +213,7 @@ and provider-free; no sampler or study artifacts are required.
 
 Issue #314 reserves 5116 for opt-in predictive TrueSkill distribution mapping,
 metadata integrity, and fresh-process resume. All fixtures are synthetic and offline.
+
+Issue #315 reserves 5117 for the frozen predictive spanning tree, exposure-cap
+relaxation, outcome blindness, deterministic ordering, and operation bounds.
+The bounded provider-free benchmark is `scripts/benchmark-predictive-tree.R`.
