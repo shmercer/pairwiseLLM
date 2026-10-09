@@ -128,8 +128,20 @@ trueskill_win_probability <- function(i, j, trueskill_state) {
   sigma_i <- items$sigma[[i_pos]]
   sigma_j <- items$sigma[[j_pos]]
 
-  s2 <- sigma_i^2 + sigma_j^2 + 2 * trueskill_state$beta^2
-  stats::pnorm((mu_i - mu_j) / sqrt(s2))
+  .trueskill_win_probability_values(mu_i, mu_j, sigma_i, sigma_j, trueskill_state$beta)
+}
+
+# Shared scalar/vector kernel; callers validate and align the distribution once.
+# The predictive tree rejects overflow/underflow instead of ranking invalid
+# scores; the historical scalar helper retains its existing numeric behavior.
+.trueskill_win_probability_values <- function(mu_i, mu_j, sigma_i, sigma_j, beta,
+                                             check_finite = FALSE) {
+  difference <- mu_i - mu_j
+  s2 <- sigma_i^2 + sigma_j^2 + 2 * beta^2
+  if (check_finite && (any(!is.finite(difference)) || any(!is.finite(s2) | s2 <= 0))) {
+    rlang::abort("Nonfinite or zero predictive probability intermediates; check the initial distribution scale.")
+  }
+  stats::pnorm(difference / sqrt(s2))
 }
 
 #' @keywords internal

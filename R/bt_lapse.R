@@ -12,7 +12,7 @@
       boundary_zero_algorithm = "BFGS",
       start_epsilon = c(0.001, 0.05, 0.2, 0.5, 0.9), start_theta = 0, start_beta = 0,
       epsilon_interval = c(0, 1), epsilon_parameterization = "natural_bounded"),
-    identification = list(convention = "sum_to_zero", internal_reference = tail(ids, 1L),
+    identification = list(convention = "sum_to_zero", internal_reference = utils::tail(ids, 1L),
       transformation = transform, parameter_order = c(colnames(kernel$X), "epsilon")),
     convergence = list(status = "not_attempted", converged = FALSE),
     uncertainty = list(method = "inverse_joint_observed_information", valid = FALSE, status = "unavailable",
@@ -40,10 +40,10 @@
   if (is.na(opt$selected)) fail("optimizer_failure", "No finite lapse optimization candidate is available.")
   best <- opt$attempts[[opt$selected]]
   par <- best$par
-  theta <- tibble::tibble(ID = ids, theta = as.vector(transform %*% head(par, -2L)))
+  theta <- tibble::tibble(ID = ids, theta = as.vector(transform %*% utils::head(par, -2L)))
   provenance$theta_finite <- all(is.finite(theta$theta))
   beta <- par[length(ids)]
-  epsilon <- tail(par, 1L)
+  epsilon <- utils::tail(par, 1L)
   surface <- .bt_lapse_surface(par, kernel)
   diagnostics <- c(diagnostics, surface)
   provenance$convergence <- list(status = "candidate", converged = FALSE,
@@ -72,7 +72,7 @@
     best <- zero
     par <- zero$par
     surface <- zero_surface
-    theta$theta <- as.vector(transform %*% head(par, -2L))
+    theta$theta <- as.vector(transform %*% utils::head(par, -2L))
     provenance$theta_finite <- all(is.finite(theta$theta))
     beta <- par[length(ids)]
     epsilon <- 0
@@ -107,7 +107,8 @@
   } else {
     correction <- as.vector(backsolve(H$chol, forwardsolve(t(H$chol), surface$gradient)))
     diagnostics$gradient_max <- max(abs(surface$gradient))
-    diagnostics$newton_correction <- c(as.vector(transform %*% head(correction, -2L)), tail(correction, 2L))
+    diagnostics$newton_correction <- c(as.vector(transform %*% utils::head(correction, -2L)),
+                                      utils::tail(correction, 2L))
   }
   diagnostics$step_max <- max(abs(diagnostics$newton_correction))
   if (diagnostics$gradient_max > control$gradient_tol || diagnostics$step_max > control$step_tol) {

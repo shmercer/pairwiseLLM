@@ -87,6 +87,7 @@ Collate:
     'adaptive_logs.R'
     'adaptive_pairing_strategy.R'
     'adaptive_persist.R'
+    'adaptive_predictive_tree.R'
     'adaptive_print.R'
     'adaptive_rank.R'
     'adaptive_replay.R'

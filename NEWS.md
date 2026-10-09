@@ -1,5 +1,12 @@
 # pairwiseLLM (development version)
 
+* An internal frozen predictive spanning-tree builder (#315) ranks allowed edges
+  using initial TrueSkill probabilities near one third or two thirds. Degree
+  caps start at two and double only when stalled; exact ties are seeded, recorded
+  orientations are retained, and diagnostics describe relaxation and exposure.
+  Construction uses only permitted endpoints and frozen predictions. Public
+  opt-in integration is deferred to #316; existing bootstrap defaults are unchanged.
+
 * Adaptive ranking can opt into `warm_start_trueskill = "predictive_distribution"`
   to initialize item-specific TrueSkill uncertainty from saved predictive prior SD
   (#314). Model input requires explicit SD; prebuilt priors retain their stored SD.

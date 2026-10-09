@@ -66,11 +66,11 @@
 }
 
 .bt_lapse_objective <- function(par, kernel, boundary = FALSE) {
-  natural <- if (boundary) c(par, 0) else c(head(par, -1L), stats::plogis(tail(par, 1L)))
+  natural <- if (boundary) c(par, 0) else c(utils::head(par, -1L), stats::plogis(utils::tail(par, 1L)))
   surface <- .bt_lapse_surface(natural, kernel)
   k <- length(natural)
   if (boundary) {
-    surface$gradient <- head(surface$gradient, -1L)
+    surface$gradient <- utils::head(surface$gradient, -1L)
     surface$hessian <- surface$hessian[-k, -k, drop = FALSE]
   } else {
     epsilon <- natural[k]
@@ -85,8 +85,8 @@
 }
 
 .bt_lapse_information <- function(par, kernel) {
-  eta <- as.vector(kernel$X %*% head(par, -1L))
-  epsilon <- tail(par, 1L)
+  eta <- as.vector(kernel$X %*% utils::head(par, -1L))
+  epsilon <- utils::tail(par, 1L)
   p <- exp(.link_e1_log_probability(eta, epsilon))
   q <- exp(.link_e1_log_probability(-eta, epsilon))
   derivative <- cbind(kernel$X * ((1 - epsilon) * stats::plogis(eta) * stats::plogis(-eta)),
