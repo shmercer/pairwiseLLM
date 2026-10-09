@@ -45,7 +45,8 @@ adaptive_rank(
   warm_start_python = NULL,
   warm_start_prior_sd = NULL,
   warm_start_mode = NULL,
-  replay_reservoir = NULL
+  replay_reservoir = NULL,
+  warm_start_trueskill = NULL
 )
 ```
 
@@ -616,7 +617,10 @@ adaptive_rank(
 
   Optional user-chosen raw theta prior SD for model input; scalar or
   per-item vector, default 0.5. Supplied prior objects retain their SDs.
-  Not accepted with `trueskill_only`; never controls TrueSkill sigma.
+  With `warm_start_trueskill = "predictive_distribution"`, explicit SD
+  is required for model input, including `trueskill_only`, and also
+  initializes TrueSkill sigma. Otherwise `trueskill_only` rejects this
+  argument.
 
 - warm_start_mode:
 
@@ -626,7 +630,8 @@ adaptive_rank(
   input, otherwise `cold`. Request `both` explicitly to initialize both
   models. In TrueSkill-warm modes, exact item-ID alignment precedes
   `mu = mu0 + sigma0 * prior_mean`, with `mu0 = 25`, `sigma0 = 25/3`,
-  fixed multiplier 1, and unchanged sigma. Explicit `cold` with
+  fixed multiplier 1, and unchanged sigma unless `warm_start_trueskill`
+  explicitly requests distribution initialization. Explicit `cold` with
   predictive input, or a non-cold mode without it, errors.
 
 - replay_reservoir:
@@ -638,6 +643,18 @@ adaptive_rank(
   committed observation per allowed unordered edge, always in its frozen
   observed orientation. On resume, omit this argument or supply the
   identical reservoir.
+
+- warm_start_trueskill:
+
+  Optional explicit uncertainty policy: NULL retains legacy
+  initialization; `"predictive_distribution"` requires `trueskill_only`
+  or `both` and maps `mu = 25 + (25/3) * prior_mean` and
+  `sigma = (25/3) * prior_sd`, with `beta = 25/6`. It overrides
+  constructor means and sigmas, aligns by exact item ID, and never clips
+  SD. Model input requires explicit `warm_start_prior_sd`; prior objects
+  use their stored SD. Named SD vectors align by ID; unnamed vectors
+  follow prediction-input order. Omit this argument on resume; the saved
+  distribution policy is authoritative.
 
 ## Value
 
@@ -767,9 +784,23 @@ Predictive initialization is separate from observed connectivity: every
 mode retains the same seeded connected shuffled bootstrap of N - 1 valid
 comparisons, with common presentation balancing and invalid-result
 retries. Predictive locations can affect later TrueSkill-based
-selection; they do not replace the initial observed spanning path. BTL
-prior SD and ensemble diagnostics never determine TrueSkill sigma. No
-historical training-score units are restored.
+selection; they do not replace the initial observed spanning path.
+Without the distribution opt-in, BTL prior SD does not determine
+TrueSkill sigma. Ensemble disagreement never supplies SD automatically.
+No historical training-score units are restored.
+
+Distribution initialization assumes the supplied BTL prior SD and
+TrueSkill uncertainty describe comparable latent scales under the
+documented affine convention. BTL priors apply to `theta_raw`; centering
+induces dependence, so this is not the marginal SD of centered BTL
+effects and does not equate the models' posteriors. Existing BTL
+identifiability and prior rules are unchanged. Upstream predictive
+workflows must establish uncertainty calibration using training data
+only; supplying SD explicitly does not establish calibration. Scalar SD
+supports sensitivity analyses, not essay-specific calibration. Saved
+metadata records the versioned mapping, SD source and scalar/per-item
+rule, and integrity digests; calibration is recorded as upstream,
+unverified.
 
 Predictive BTL priors apply only in `btl_only` and `both`, including
 run-required linking Phase A. TrueSkill initialization applies in
@@ -834,10 +865,10 @@ head(out$logs$step_log)
 #> # A tibble: 4 × 97
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-10-03 01:17:40       1     1     4 S01   S04       4     1 S04  
-#> 2       2 2026-10-03 01:17:40       2     4     8 S04   S08       8     4 S08  
-#> 3       3 2026-10-03 01:17:40       3     8     2 S08   S02       2     8 S02  
-#> 4       4 2026-10-03 01:17:40       4     2     6 S02   S06       6     2 S06  
+#> 1       1 2026-10-09 17:51:16       1     1     4 S01   S04       4     1 S04  
+#> 2       2 2026-10-09 17:51:16       2     4     8 S04   S08       8     4 S08  
+#> 3       3 2026-10-09 17:51:16       3     8     2 S08   S02       2     8 S02  
+#> 4       4 2026-10-09 17:51:16       4     2     6 S02   S06       6     2 S06  
 #> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,

@@ -26,7 +26,8 @@ make_warm_start_prior(predictions, ids = NULL, prior_sd = 0.5)
 - prior_sd:
 
   Positive finite scalar or vector. An unnamed vector follows input
-  order; a named vector aligns by ID. Defaults to 0.5.
+  order; a named vector aligns by ID. Defaults to 0.5. This default is a
+  chosen prior width, not learned uncertainty calibration.
 
 ## Value
 
@@ -53,9 +54,17 @@ marginal SD of centered theta. Without predictive input, BTL retains raw
 prior mean 0 and SD 1. Adaptive BTL consumes this prior only in
 `btl_only` and `both` modes. Adaptive `trueskill_only` and `both` also
 use its centered `prior_mean` to initialize TrueSkill locations as
-`25 + (25/3) * prior_mean`, with unchanged sigma. The BTL prior SD and
-ensemble disagreement never determine TrueSkill sigma. Every adaptive
-mode retains the same seeded connected shuffled bootstrap. Standalone
+`25 + (25/3) * prior_mean`, with unchanged sigma by default. Explicit
+`warm_start_trueskill = "predictive_distribution"` additionally maps
+`sigma = (25/3) * prior_sd`, keeping `beta = 25/6`, without clipping. A
+prior object supplies its stored SD; model input requires explicit SD in
+that mode. This assumes comparable latent scales and does not turn
+raw-theta SD into the marginal SD of centered effects. Upstream
+workflows must establish calibration; explicit SD alone does not prove
+it. Scalar SD is a sensitivity assumption, not essay-specific
+calibration. Ensemble disagreement never supplies SD automatically.
+Every adaptive mode retains the same seeded connected shuffled
+bootstrap. Standalone
 [`fit_bayes_btl_mcmc()`](https://shmercer.github.io/pairwiseLLM/reference/fit_bayes_btl_mcmc.md)
 retains its `warm_start_prior` interface without the adaptive four-mode
 argument.

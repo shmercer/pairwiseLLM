@@ -82,7 +82,8 @@ they identify input positions. Defaults to the IDs in the input.</p></dd>
 
 <dt id="arg-prior-sd">prior_sd<a class="anchor" aria-label="anchor" href="#arg-prior-sd"></a></dt>
 <dd><p>Positive finite scalar or vector. An unnamed vector follows
-input order; a named vector aligns by ID. Defaults to 0.5.</p></dd>
+input order; a named vector aligns by ID. Defaults to 0.5. This default is
+a chosen prior width, not learned uncertainty calibration.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -104,8 +105,14 @@ Centering induces dependence, so the supplied SD is not the marginal SD of
 centered theta. Without predictive input, BTL retains raw prior mean 0 and SD 1.
 Adaptive BTL consumes this prior only in <code>btl_only</code> and <code>both</code> modes. Adaptive
 <code>trueskill_only</code> and <code>both</code> also use its centered <code>prior_mean</code> to initialize
-TrueSkill locations as <code>25 + (25/3) * prior_mean</code>, with unchanged sigma.
-The BTL prior SD and ensemble disagreement never determine TrueSkill sigma.
+TrueSkill locations as <code>25 + (25/3) * prior_mean</code>, with unchanged sigma by default.
+Explicit <code>warm_start_trueskill = "predictive_distribution"</code> additionally maps
+<code>sigma = (25/3) * prior_sd</code>, keeping <code>beta = 25/6</code>, without clipping. A prior
+object supplies its stored SD; model input requires explicit SD in that mode.
+This assumes comparable latent scales and does not turn raw-theta SD into the
+marginal SD of centered effects. Upstream workflows must establish calibration;
+explicit SD alone does not prove it. Scalar SD is a sensitivity assumption,
+not essay-specific calibration. Ensemble disagreement never supplies SD automatically.
 Every adaptive mode retains the same seeded connected shuffled bootstrap.
 Standalone <code><a href="fit_bayes_btl_mcmc.html">fit_bayes_btl_mcmc()</a></code> retains its <code>warm_start_prior</code> interface
 without the adaptive four-mode argument.</p>

@@ -104,7 +104,8 @@ returns state plus summary outputs.</p>
 <span>  warm_start_python <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  warm_start_prior_sd <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  warm_start_mode <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  replay_reservoir <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  replay_reservoir <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  warm_start_trueskill <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -606,7 +607,9 @@ nor a fitting backend.</p></dd>
 <dt id="arg-warm-start-prior-sd">warm_start_prior_sd<a class="anchor" aria-label="anchor" href="#arg-warm-start-prior-sd"></a></dt>
 <dd><p>Optional user-chosen raw theta prior SD for model input;
 scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
-Not accepted with <code>trueskill_only</code>; never controls TrueSkill sigma.</p></dd>
+With <code>warm_start_trueskill = "predictive_distribution"</code>, explicit SD is
+required for model input, including <code>trueskill_only</code>, and also initializes
+TrueSkill sigma. Otherwise <code>trueskill_only</code> rejects this argument.</p></dd>
 
 
 <dt id="arg-warm-start-mode">warm_start_mode<a class="anchor" aria-label="anchor" href="#arg-warm-start-mode"></a></dt>
@@ -615,7 +618,8 @@ Not accepted with <code>trueskill_only</code>; never controls TrueSkill sigma.</
 Omitted/NULL mode defaults to <code>btl_only</code> with predictive input, otherwise <code>cold</code>.
 Request <code>both</code> explicitly to initialize both models. In TrueSkill-warm modes,
 exact item-ID alignment precedes <code>mu = mu0 + sigma0 * prior_mean</code>, with
-<code>mu0 = 25</code>, <code>sigma0 = 25/3</code>, fixed multiplier 1, and unchanged sigma.
+<code>mu0 = 25</code>, <code>sigma0 = 25/3</code>, fixed multiplier 1, and unchanged sigma
+unless <code>warm_start_trueskill</code> explicitly requests distribution initialization.
 Explicit <code>cold</code> with predictive input, or a non-cold mode without it, errors.</p></dd>
 
 
@@ -625,6 +629,17 @@ Requires ordinary within-set mode and a matching reservoir replay judge.
 Uses a seeded spanning-tree bootstrap and at most one committed observation
 per allowed unordered edge, always in its frozen observed orientation.
 On resume, omit this argument or supply the identical reservoir.</p></dd>
+
+
+<dt id="arg-warm-start-trueskill">warm_start_trueskill<a class="anchor" aria-label="anchor" href="#arg-warm-start-trueskill"></a></dt>
+<dd><p>Optional explicit uncertainty policy: NULL retains
+legacy initialization; <code>"predictive_distribution"</code> requires <code>trueskill_only</code>
+or <code>both</code> and maps <code>mu = 25 + (25/3) * prior_mean</code> and
+<code>sigma = (25/3) * prior_sd</code>, with <code>beta = 25/6</code>. It overrides constructor
+means and sigmas, aligns by exact item ID, and never clips SD. Model input
+requires explicit <code>warm_start_prior_sd</code>; prior objects use their stored SD.
+Named SD vectors align by ID; unnamed vectors follow prediction-input order.
+Omit this argument on resume; the saved distribution policy is authoritative.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -724,8 +739,19 @@ fresh run silently.</p>
 retains the same seeded connected shuffled bootstrap of N - 1 valid comparisons,
 with common presentation balancing and invalid-result retries. Predictive
 locations can affect later TrueSkill-based selection; they do not replace the
-initial observed spanning path. BTL prior SD and ensemble diagnostics never
-determine TrueSkill sigma. No historical training-score units are restored.</p>
+initial observed spanning path. Without the distribution opt-in, BTL prior SD
+does not determine TrueSkill sigma. Ensemble disagreement never supplies SD
+automatically. No historical training-score units are restored.</p>
+<p>Distribution initialization assumes the supplied BTL prior SD and TrueSkill
+uncertainty describe comparable latent scales under the documented affine
+convention. BTL priors apply to <code>theta_raw</code>; centering induces dependence, so
+this is not the marginal SD of centered BTL effects and does not equate the
+models' posteriors. Existing BTL identifiability and prior rules are unchanged.
+Upstream predictive workflows must establish uncertainty calibration using
+training data only; supplying SD explicitly does not establish calibration.
+Scalar SD supports sensitivity analyses, not essay-specific calibration.
+Saved metadata records the versioned mapping, SD source and scalar/per-item
+rule, and integrity digests; calibration is recorded as upstream, unverified.</p>
 <p>Predictive BTL priors apply only in <code>btl_only</code> and <code>both</code>, including run-required
 linking Phase A. TrueSkill initialization applies in <code>trueskill_only</code> and <code>both</code>.
 Imported Phase-A artifacts retain their own generation identity and are not
@@ -781,10 +807,10 @@ and the <a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-wor
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 4 × 97</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-10-03 <span style="color: #949494;">01:17:40</span>       1     1     4 S01   S04       4     1 S04  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-10-03 <span style="color: #949494;">01:17:40</span>       2     4     8 S04   S08       8     4 S08  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-10-03 <span style="color: #949494;">01:17:40</span>       3     8     2 S08   S02       2     8 S02  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-10-03 <span style="color: #949494;">01:17:40</span>       4     2     6 S02   S06       6     2 S06  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-10-09 <span style="color: #949494;">17:51:16</span>       1     1     4 S01   S04       4     1 S04  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-10-09 <span style="color: #949494;">17:51:16</span>       2     4     8 S04   S08       8     4 S08  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-10-09 <span style="color: #949494;">17:51:16</span>       3     8     2 S08   S02       2     8 S02  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-10-09 <span style="color: #949494;">17:51:16</span>       4     2     6 S02   S06       6     2 S06  </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 87 more variables: B_id &lt;chr&gt;, unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   Y &lt;int&gt;, status &lt;chr&gt;, judge_backend &lt;chr&gt;, judge_model &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   judge_endpoint &lt;chr&gt;, judge_valid &lt;lgl&gt;, judge_invalid_reason &lt;chr&gt;,</span></span>

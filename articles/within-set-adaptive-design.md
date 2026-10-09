@@ -161,11 +161,18 @@ exact ID alignment precedes the mapping
 ```
 
 The fixed scale multiplier is 1. The centered predictive location comes
-from the saved prior; no training-task raw score scale is restored.
-TrueSkill sigma is unchanged by initialization. Neither BTL prior SD nor
-ensemble disagreement, calibration error, or RMSE determines that sigma.
-BTL retains cold priors in `trueskill_only`, even though the predictive
-record remains in state.
+from the saved prior; no training-task raw score scale is restored. By
+default, TrueSkill sigma is unchanged by initialization. Explicit
+`warm_start_trueskill = "predictive_distribution"` also maps
+`sigma = (25/3) * prior_sd`, with `beta = 25/6`, without clipping. Model
+input then requires explicit SD; prebuilt priors retain their stored SD.
+Upstream calibration is required: supplying a value or raw ensemble
+disagreement does not establish calibrated uncertainty. Scalar SD is a
+sensitivity assumption, not essay-specific calibration. See [predictive
+uncertainty](https://shmercer.github.io/pairwiseLLM/articles/adaptive-warm-start.html#opt-in-to-predictive-uncertainty)
+for the latent-scale assumption, centering caveat, and saved mapping
+metadata. BTL retains cold priors in `trueskill_only`, even though the
+predictive record remains in state.
 
 Given a deterministic run seed, the item IDs are shuffled to produce
 $`(s_1,\ldots,s_N)`$. Every mode uses the same connected bootstrap queue

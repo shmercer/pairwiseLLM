@@ -34,6 +34,12 @@ shuffled bootstrap queue and its index, and round progress remain
 authoritative; loading never recomputes predictions or initializes
 TrueSkill again.
 
+Predictive-distribution sessions also record a versioned TrueSkill
+mapping, SD provenance, and integrity digests in state and session
+metadata. Loading validates their agreement without recomputing
+predictions or resetting ratings. Legacy sessions retain their existing
+migration rules and fixed-sigma policy.
+
 `metadata.rds` records effective `warm_start_mode` and
 `pairing_strategy` for session-level audit. Direct step logs already
 record `pairing_strategy`, the presented A-over-B TrueSkill probability

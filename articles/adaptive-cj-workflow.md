@@ -243,7 +243,7 @@ summarize_bt_fit(firth_fit)
 #> 6 f      1.08   0.455     1 brglm2       0.570
 firth_fit$provenance[c("engine_version", "adjustment", "identification")]
 #> $engine_version
-#> [1] "1.1.0"
+#> [1] "1.1.1"
 #> 
 #> $adjustment
 #> $adjustment$method

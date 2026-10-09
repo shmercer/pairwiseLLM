@@ -192,9 +192,102 @@ connect each starting score to its item:</p>
 <p>The output shows the saved mode and TrueSkill’s initial locations
 (<code>mu</code>) and uncertainties (<code>sigma</code>). TrueSkill maps
 centered scores to its own scale as
-<code>25 + (25/3) * prior_mean</code>. Its initial sigma remains
-<code>25/3</code>; BTL prior SD does not set TrueSkill uncertainty. Both
-models can subsequently learn from judgments.</p>
+<code>25 + (25/3) * prior_mean</code>. By default, its initial sigma
+remains <code>25/3</code> (or the constructor-supplied value); BTL prior
+SD does not set TrueSkill uncertainty. Both models can subsequently
+learn from judgments.</p>
+<div class="section level3">
+<h3 id="opt-in-to-predictive-uncertainty">Opt in to predictive uncertainty<a class="anchor" aria-label="anchor" href="#opt-in-to-predictive-uncertainty"></a>
+</h3>
+<p>Use <code>warm_start_trueskill = "predictive_distribution"</code>
+with <code>trueskill_only</code> or <code>both</code> to initialize the
+entire TrueSkill distribution. For each matching item ID,
+<code>mu = 25 + (25/3) * prior_mean</code> and
+<code>sigma = (25/3) * prior_sd</code>, with <code>beta = 25/6</code>.
+The mapping overrides constructor means and sigmas and never clips
+SD.</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Illustrative synthetic SD values; this example does not establish calibration.</span></span>
+<span><span class="va">distribution_prior</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_warm_start_prior.html">make_warm_start_prior</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>a <span class="op">=</span> <span class="op">-</span><span class="fl">1</span>, b <span class="op">=</span> <span class="fl">0</span>, c <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>,</span>
+<span>  prior_sd <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>c <span class="op">=</span> <span class="fl">0.8</span>, a <span class="op">=</span> <span class="fl">0.2</span>, b <span class="op">=</span> <span class="fl">0.5</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">distribution_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_start.html">adaptive_rank_start</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"c"</span>, <span class="st">"a"</span>, <span class="st">"b"</span><span class="op">)</span>, seed <span class="op">=</span> <span class="fl">11</span>,</span>
+<span>  warm_start_prior <span class="op">=</span> <span class="va">distribution_prior</span>, warm_start_mode <span class="op">=</span> <span class="st">"both"</span>,</span>
+<span>  warm_start_trueskill <span class="op">=</span> <span class="st">"predictive_distribution"</span><span class="op">)</span></span>
+<span><span class="va">distribution_state</span><span class="op">$</span><span class="va">trueskill_state</span><span class="op">$</span><span class="va">items</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"item_id"</span>, <span class="st">"mu"</span>, <span class="st">"sigma"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 3</span></span></span>
+<span><span class="co">#&gt;   item_id    mu sigma</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> c        33.3  6.67</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> a        16.7  1.67</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> b        25    4.17</span></span>
+<span><span class="va">distribution_state</span><span class="op">$</span><span class="va">meta</span><span class="op">$</span><span class="va">trueskill_mapping</span></span>
+<span><span class="co">#&gt; $format_version</span></span>
+<span><span class="co">#&gt; [1] 1</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $policy</span></span>
+<span><span class="co">#&gt; [1] "predictive_distribution"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $warm_start_mode</span></span>
+<span><span class="co">#&gt; [1] "both"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $mu_offset</span></span>
+<span><span class="co">#&gt; [1] 25</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $scale</span></span>
+<span><span class="co">#&gt; [1] 8.333333</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $beta</span></span>
+<span><span class="co">#&gt; [1] 4.166667</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $clipping</span></span>
+<span><span class="co">#&gt; [1] "none"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $sd_source</span></span>
+<span><span class="co">#&gt; [1] "prior_object"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $sd_rule</span></span>
+<span><span class="co">#&gt; [1] "per_item"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $calibration</span></span>
+<span><span class="co">#&gt; [1] "upstream_not_verified"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $predictive_prior_digest</span></span>
+<span><span class="co">#&gt; [1] "99312d5deb3fc84cce0f49a3eeefefe6"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $item_id</span></span>
+<span><span class="co">#&gt; [1] "c" "a" "b"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $distribution_digest</span></span>
+<span><span class="co">#&gt; [1] "2833810099643bab99132e6f9814ce88"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $digest</span></span>
+<span><span class="co">#&gt; [1] "1ac44a08bd262bb4029e128c07e40882"</span></span></code></pre></div>
+<p>With <code>warm_start_model</code>, this opt-in requires explicit
+<code>warm_start_prior_sd</code>; it never silently substitutes the
+historical 0.5 default. Named vectors align by exact item ID; unnamed
+vectors follow prediction-input order. Prebuilt priors use their stored
+SD. A scalar remains available for sensitivity analyses but is not
+essay-specific calibration. Legacy modes retain their existing 0.5
+fallback.</p>
+<p>The upstream predictive workflow must establish uncertainty
+calibration using training data only. Explicit provision alone does not
+prove calibration, and raw ensemble disagreement is not calibrated
+predictive uncertainty. Saved metadata records the SD source,
+scalar/per-item rule, mapping version and parameters, and integrity
+digests; calibration remains marked as upstream, unverified.</p>
+<p>This convention assumes transformed BTL prior SD and TrueSkill
+uncertainty are on comparable latent scales. BTL places the prior on
+<code>theta_raw</code>, then centers effects for identifiability;
+centering induces dependence. The mapped sigma is therefore not a
+marginal SD of centered BTL effects, and the two models’ posteriors are
+not equivalent. BTL prior and identifiability rules remain unchanged.
+<code>trueskill_only</code> still leaves BTL cold; <code>both</code>
+also warms BTL. The mapping does not depend on the graph or later
+selection strategy; the connected bootstrap is unchanged.</p>
+<p>Resume retains the saved mapping and evolved ratings without
+initializing again. Omit <code>warm_start_trueskill</code> along with
+all other warm-start arguments on resume.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="a-complete-example-with-three-algorithms">A complete example with three algorithms<a class="anchor" aria-label="anchor" href="#a-complete-example-with-three-algorithms"></a>
@@ -213,7 +306,7 @@ texts, so you can run the rest of this example without Python. The first
 40 texts are used for training; eight different texts are reserved for
 prediction. The example’s <code>theta</code> values are invented, not
 estimates from a BTL analysis.</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">example</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"extdata"</span>, <span class="st">"warm-start-example.rds"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">training</span> <span class="op">&lt;-</span> <span class="va">example</span><span class="op">$</span><span class="va">training</span></span>
 <span><span class="va">new_items</span> <span class="op">&lt;-</span> <span class="va">example</span><span class="op">$</span><span class="va">new_items</span></span>
@@ -250,7 +343,7 @@ traits, develop a model from the corresponding trait’s scores.</p>
 without execution in an ordinary render because they require your
 existing Python environment. Substitute your own aligned texts and IDs
 when using real data.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">python</span> <span class="op">&lt;-</span> <span class="st">"/path/to/venv/bin/python"</span></span>
 <span><span class="va">status</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/warm_start_python_status.html">warm_start_python_status</a></span><span class="op">(</span>python <span class="op">=</span> <span class="va">python</span>, schema <span class="op">=</span> <span class="va">schema</span><span class="op">)</span></span>
 <span><span class="va">status</span><span class="op">$</span><span class="va">problems</span></span>
@@ -266,7 +359,7 @@ The schema attribute identifies the expected columns; it does not prove
 where cached features came from. Saved v1 models still require v1
 features.</p>
 <p>The installed setup instructions are available with:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"python"</span>, <span class="st">"README.md"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "/home/runner/work/_temp/Library/pairwiseLLM/python/README.md"</span></span></code></pre></div>
 <p>Extraction uses the pinned Python 3.12.3, spaCy 3.7.5,
@@ -290,7 +383,7 @@ algorithm the same training and held-out samples, making their
 validation results comparable. The plan checks the task label, ordered
 IDs, and outcomes; it cannot be reused with different scores or a
 different order of items.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">plan</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_warm_start_cv_plan.html">make_warm_start_cv_plan</a></span><span class="op">(</span><span class="va">training</span><span class="op">$</span><span class="va">item_id</span>, <span class="va">training</span><span class="op">$</span><span class="va">theta</span>,</span>
 <span>  task_id <span class="op">=</span> <span class="st">"example-assessment"</span>, seed <span class="op">=</span> <span class="fl">259L</span>, outer_folds <span class="op">=</span> <span class="fl">5L</span>, inner_folds <span class="op">=</span> <span class="fl">5L</span><span class="op">)</span></span></code></pre></div>
 <p>During fitting, missing-value handling and feature scaling are
@@ -337,7 +430,7 @@ overfitting</td>
 quick. These are demonstration settings, not recommendations selected
 from the results. The default grids and deterministic selection rules
 are documented in <code><a href="../reference/fit_warm_start_model.html">fit_warm_start_model()</a></code>.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">model</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_warm_start_model.html">fit_warm_start_model</a></span><span class="op">(</span><span class="va">training</span><span class="op">$</span><span class="va">item_id</span>, <span class="va">training</span><span class="op">$</span><span class="va">theta</span>, <span class="st">"example-assessment"</span>,</span>
 <span>  features <span class="op">=</span> <span class="va">features</span>, schema <span class="op">=</span> <span class="va">schema</span>, cv_plan <span class="op">=</span> <span class="va">plan</span>, alpha_grid <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.5</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">pls_model</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_warm_start_model.html">fit_warm_start_model</a></span><span class="op">(</span><span class="va">training</span><span class="op">$</span><span class="va">item_id</span>, <span class="va">training</span><span class="op">$</span><span class="va">theta</span>, <span class="st">"example-assessment"</span>,</span>
@@ -356,7 +449,7 @@ uses all training samples only after outer validation is complete.</p>
 <div class="section level3">
 <h3 id="inspect-validation-before-combining-models">Inspect validation before combining models<a class="anchor" aria-label="anchor" href="#inspect-validation-before-combining-models"></a>
 </h3>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">models</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>elastic_net <span class="op">=</span> <span class="va">model</span>, pls <span class="op">=</span> <span class="va">pls_model</span>, svr_rbf <span class="op">=</span> <span class="va">svr_model</span><span class="op">)</span></span>
 <span><span class="va">validation</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="va">models</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/unlist.html" class="external-link">unlist</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">validation</span><span class="op">$</span><span class="va">metrics</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"rmse"</span>, <span class="st">"mae"</span>, <span class="st">"pearson_r"</span>, <span class="st">"spearman_rho"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
@@ -414,7 +507,7 @@ population.</p>
 calibrated predictions of models trained on the same assessment. Supply
 named, full model objects with matching IDs, outcomes, feature schema,
 and CV plan:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">algorithm_ensemble</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/ensemble_warm_start_algorithms.html">ensemble_warm_start_algorithms</a></span><span class="op">(</span></span>
 <span>  elastic_net <span class="op">=</span> <span class="va">model</span>, pls <span class="op">=</span> <span class="va">pls_model</span>, svr_rbf <span class="op">=</span> <span class="va">svr_model</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">algorithm_ensemble</span><span class="op">)</span><span class="op">$</span><span class="va">validation</span><span class="op">$</span><span class="va">metrics</span></span>
@@ -452,7 +545,7 @@ construct a new same-task ensemble.</p>
 <div class="section level3">
 <h3 id="predict-new-items-and-initialize-an-assessment">Predict new items and initialize an assessment<a class="anchor" aria-label="anchor" href="#predict-new-items-and-initialize-an-assessment"></a>
 </h3>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">algorithm_predictions</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">algorithm_ensemble</span>, <span class="va">new_features</span><span class="op">)</span></span>
 <span><span class="va">algorithm_predictions</span></span>
 <span><span class="co">#&gt; Warm-start ensemble predictions; sample SD is diagnostic, not Bayesian prior SD.</span></span>
@@ -487,7 +580,7 @@ these new items; it does not restore the old assessment’s raw BTL
 scale.</p>
 <p>Initialize any of the three predictive modes using the same resolved
 prior:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">btl_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_start.html">adaptive_rank_start</a></span><span class="op">(</span><span class="va">new_items</span><span class="op">$</span><span class="va">item_id</span>, seed <span class="op">=</span> <span class="fl">17L</span>,</span>
 <span>  warm_start_prior <span class="op">=</span> <span class="va">algorithm_prior</span>, warm_start_mode <span class="op">=</span> <span class="st">"btl_only"</span><span class="op">)</span></span>
 <span><span class="va">trueskill_state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_start.html">adaptive_rank_start</a></span><span class="op">(</span><span class="va">new_items</span><span class="op">$</span><span class="va">item_id</span>, seed <span class="op">=</span> <span class="fl">17L</span>,</span>
@@ -518,7 +611,7 @@ keeps its cold prior.</p>
 <p>Prediction from precomputed features needs neither Python nor any
 fitting engine. Ordinary save/load retains the full model and its
 validation evidence:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>  <span class="va">directory</span> <span class="op">&lt;-</span> <span class="fu">withr</span><span class="fu">::</span><span class="fu"><a href="https://withr.r-lib.org/reference/with_tempfile.html" class="external-link">local_tempdir</a></span><span class="op">(</span><span class="op">)</span></span>
 <span>  <span class="va">path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">directory</span>, <span class="st">"algorithm-ensemble.rds"</span><span class="op">)</span></span>
@@ -546,7 +639,7 @@ explicitly. No pretrained models are currently listed by
 <p>To save an adaptive session, set <code>session_dir</code> at
 initialization. Resume uses the saved numeric prior even if the original
 model file is no longer available:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>  <span class="va">directory</span> <span class="op">&lt;-</span> <span class="fu">withr</span><span class="fu">::</span><span class="fu"><a href="https://withr.r-lib.org/reference/with_tempfile.html" class="external-link">local_tempdir</a></span><span class="op">(</span><span class="op">)</span></span>
 <span>  <span class="va">state</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/adaptive_rank_start.html">adaptive_rank_start</a></span><span class="op">(</span><span class="va">new_items</span><span class="op">$</span><span class="va">item_id</span>, session_dir <span class="op">=</span> <span class="va">directory</span>,</span>
@@ -558,7 +651,8 @@ model file is no longer available:</p>
 retains its prior, mode, TrueSkill state, and progress. To change the
 starting information, start a new session. Model input and prior input
 are alternatives: do not supply both. <code>warm_start_prior_sd</code>
-is available with model input for BTL warming; a resolved prior already
+is available with model input for BTL warming and required for
+predictive-distribution initialization; a resolved prior already
 contains its chosen SDs.</p>
 </div>
 <div class="section level2">
@@ -574,7 +668,7 @@ score.</p>
 feature values. It illustrates the separate API without suggesting that
 relabeling the first assessment would create independent training
 data.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">features_b</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/eval.html" class="external-link">local</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>  <span class="fu">withr</span><span class="fu">::</span><span class="fu"><a href="https://withr.r-lib.org/reference/with_seed.html" class="external-link">local_seed</a></span><span class="op">(</span><span class="fl">3104L</span><span class="op">)</span></span>
 <span>  <span class="va">x</span> <span class="op">&lt;-</span> <span class="va">features</span></span>
@@ -791,7 +885,7 @@ coefficients; requesting them produces an informative error, including
 when it belongs to an ensemble. Individual models return one row per
 frozen feature in schema order:</p>
 <pre class="text"><code><span><span class="va">feature</span> <span class="op">|</span> <span class="va">retained</span> <span class="op">|</span> <span class="va">calibrated_std_coefficient</span></span></code></pre>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">coef_tbl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/warm_start_coefficients.html">warm_start_coefficients</a></span><span class="op">(</span><span class="va">model</span><span class="op">)</span></span>
 <span><span class="va">coef_tbl</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 46 × 3</span></span></span>
@@ -864,7 +958,7 @@ original fitting engine. A nonlinear model does not provide linear
 feature coefficients.</p>
 <p><code>prepare_warm_start_model(x, omit_audit = TRUE)</code> makes a
 smaller deployment artifact while retaining the same predictions:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">deployment</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prepare_warm_start_model.html">prepare_warm_start_model</a></span><span class="op">(</span><span class="va">algorithm_ensemble</span>, omit_audit <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">deployment</span>, <span class="va">new_features</span><span class="op">)</span><span class="op">$</span><span class="va">ensemble_mean</span>,</span>
 <span>  <span class="va">algorithm_predictions</span><span class="op">$</span><span class="va">ensemble_mean</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
