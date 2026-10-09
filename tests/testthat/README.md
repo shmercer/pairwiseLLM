@@ -217,3 +217,7 @@ metadata integrity, and fresh-process resume. All fixtures are synthetic and off
 Issue #315 reserves 5117 for the frozen predictive spanning tree, exposure-cap
 relaxation, outcome blindness, deterministic ordering, and operation bounds.
 The bounded provider-free benchmark is `scripts/benchmark-predictive-tree.R`.
+
+Issue #316 reserves 5118 for predictive bootstrap API integration, five-arm
+contracts, queue integrity, transaction retries, and fresh-process resume.
+Fixtures are synthetic and offline; no provider calls or real sampler runs.

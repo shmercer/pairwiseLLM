@@ -4,19 +4,28 @@
 \alias{summarize_adaptive}
 \title{Summarize an adaptive state.}
 \usage{
-summarize_adaptive(state, include_starvation = FALSE)
+summarize_adaptive(
+  state,
+  include_starvation = FALSE,
+  include_bootstrap = FALSE
+)
 }
 \arguments{
 \item{state}{Adaptive state.}
 
 \item{include_starvation}{Logical; append a \code{starvation_diagnostic}
 list-column containing terminal hybrid exhaustion evidence. Default FALSE.}
+
+\item{include_bootstrap}{Logical; add a \code{bootstrap} list-column with policy,
+version, initialization seed, integrity identities, and saved tree diagnostics.
+Default FALSE retains the historical summary columns. Legacy sessions report
+the shuffled policy and no predictive bootstrap digest or diagnostics.}
 }
 \value{
 A one-row tibble with columns \code{n_items},
 \code{steps_attempted}, \code{committed_pairs}, \code{n_refits},
 \code{last_stop_decision}, and \code{last_stop_reason}, plus the optional
-\code{starvation_diagnostic} list-column.
+\code{starvation_diagnostic} and \code{bootstrap} list-columns.
 }
 \description{
 Summarize an adaptive state.

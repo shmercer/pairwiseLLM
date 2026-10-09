@@ -1258,6 +1258,9 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
   }
 
   state <- .adaptive_backfill_session_behavior(state)
+  # Resolve legacy policy only in the copy being saved; never rebuild its queue.
+  state$meta$bootstrap_policy <- .adaptive_bootstrap_saved_policy(state)
+  state$meta$bootstrap_policy_version <- state$meta$bootstrap_policy_version %||% 1L
   dir.create(session_dir, recursive = TRUE, showWarnings = FALSE)
   paths <- .adaptive_session_paths(session_dir)
   phase_a_artifacts <- state$linking$phase_a$artifacts %||% list()
@@ -1306,6 +1309,9 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
     predictive_prior_digest = state$meta$predictive_prior_digest %||% NULL,
     warm_start_mode = state$meta$warm_start_mode,
     pairing_strategy = state$controller$pairing_strategy,
+    bootstrap_policy = state$meta$bootstrap_policy,
+    bootstrap_policy_version = state$meta$bootstrap_policy_version,
+    bootstrap_digest = state$meta$bootstrap_digest,
     replay_reservoir_digest = state$meta$replay_reservoir_digest,
     replay_manifest_digest = state$replay_reservoir$manifest_digest
   )
@@ -1356,7 +1362,7 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
 #' Legacy sessions without a saved predictive mode migrate to \code{cold} when
 #' no predictive prior exists, and \code{btl_only} otherwise. An absent pairing
 #' strategy migrates to \code{hybrid}. Saved TrueSkill values, the connected
-#' shuffled bootstrap queue and its index, and round progress remain authoritative;
+#' bootstrap policy, frozen queue and its index, and round progress remain authoritative;
 #' loading never recomputes predictions or initializes TrueSkill again.
 #'
 #' Predictive-distribution sessions also record a versioned TrueSkill mapping,
@@ -1365,7 +1371,11 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
 #' Legacy sessions retain their existing migration rules and fixed-sigma policy.
 #'
 #' \code{metadata.rds} records effective \code{warm_start_mode} and
-#' \code{pairing_strategy} for session-level audit. Direct step logs already record
+#' \code{pairing_strategy}, plus bootstrap policy/version and the predictive
+#' SHA-256 identity for session-level audit. Predictive queues are verified from
+#' frozen inputs and the digest without repeating graph selection. Missing legacy
+#' bootstrap policy fields retain shuffled behavior. [summarize_adaptive()] with
+#' `include_bootstrap = TRUE` exposes the saved bootstrap audit. Direct step logs record
 #' \code{pairing_strategy}, the presented A-over-B TrueSkill probability
 #' \code{p_ij}, and \code{target_distance} (missing for random pairing). Predictive
 #' vectors and provenance are retained once in \code{state$predictive_prior}.

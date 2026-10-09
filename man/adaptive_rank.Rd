@@ -42,7 +42,8 @@ adaptive_rank(
   warm_start_prior_sd = NULL,
   warm_start_mode = NULL,
   replay_reservoir = NULL,
-  warm_start_trueskill = NULL
+  warm_start_trueskill = NULL,
+  bootstrap_policy = "shuffled_connected"
 )
 }
 \arguments{
@@ -103,9 +104,9 @@ Supported keys (with defaults) include:
 \describe{
 \item{\code{pairing_strategy}}{Post-bootstrap strategy: \code{hybrid} (default), \code{random},
 \code{trueskill_p50}, or \code{trueskill_pollitt}. Direct strategies currently require
-\code{run_mode = "within_set"}. All strategies retain the same connected shuffled
-bootstrap. Direct strategies choose a focal item uniformly from sorted IDs
-at minimum committed degree, using the run seed and committed count; invalid
+\code{run_mode = "within_set"}. The default bootstrap is connected and shuffled;
+predictive graphs require Pollitt. Direct strategies choose a focal item from sorted IDs
+uniformly at minimum committed degree, using the run seed and committed count; invalid
 judgments retry the same draw. Among legal partners, \code{random} chooses uniformly,
 \code{trueskill_p50} minimizes distance to TrueSkill probability 0.50, and
 \code{trueskill_pollitt} minimizes distance to 1/3 or 2/3, with item-ID tie breaking.
@@ -394,6 +395,17 @@ means and sigmas, aligns by exact item ID, and never clips SD. Model input
 requires explicit \code{warm_start_prior_sd}; prior objects use their stored SD.
 Named SD vectors align by ID; unnamed vectors follow prediction-input order.
 Omit this argument on resume; the saved distribution policy is authoritative.}
+
+\item{bootstrap_policy}{Initial graph policy, default \code{"shuffled_connected"}.
+\code{"predictive_connected"} requires a selectable \code{replay_reservoir}, ordinary
+within-set mode, \code{warm_start_trueskill = "predictive_distribution"}, and
+\code{adaptive_config = list(pairing_strategy = "trueskill_pollitt")}.
+Build the reservoir from selectable primary observations only, excluding
+held-out edges and reversal audits. The graph uses only manifest endpoints,
+frozen initial TrueSkill means/SDs, and the seed, never outcomes. The queue
+is built once before judging and retained across updates and resume.
+On wrapper resume, omit this argument or supply the saved policy; a different
+policy or explicit predictive initialization seed is rejected.}
 }
 \value{
 A list with:
@@ -459,7 +471,7 @@ with explicit evidence for E1--E3 estimation. Every wrapper call returns canonic
 \code{adaptive_config$phase_a_artifacts}.
 
 Selection semantics:
-selection uses one-pair transactional steps after the connected shuffled bootstrap.
+selection uses one-pair transactional steps after the configured connected bootstrap.
 In the default hybrid strategy, TrueSkill supplies live ranks, strata, pair
 probabilities, base utility, and rolling anchors throughout within-set and
 Phase-A work. Rolling anchors use current TrueSkill ranks, and anchor-link
@@ -491,11 +503,13 @@ when \code{resume = TRUE} and \code{session_dir} already contains adaptive artif
 failed session loads abort with an actionable error instead of starting a
 fresh run silently.
 
-Predictive initialization is separate from observed connectivity: every mode
-retains the same seeded connected shuffled bootstrap of N - 1 valid comparisons,
-with common presentation balancing and invalid-result retries. Predictive
-locations can affect later TrueSkill-based selection; they do not replace the
-initial observed spanning path. Without the distribution opt-in, BTL prior SD
+Predictive destinations and initial connectivity are separate choices.
+By default, every warm mode retains the same seeded shuffled bootstrap of
+N - 1 valid comparisons. The explicit predictive graph policy uses a frozen
+allowed spanning tree with Pollitt probability targets and degree-cap
+relaxation. Both policies preserve invalid-result retries and recorded
+reservoir orientation. Later pairing retains the configured strategy.
+Without the distribution opt-in, BTL prior SD
 does not determine TrueSkill sigma. Ensemble disagreement never supplies SD
 automatically. No historical training-score units are restored.
 

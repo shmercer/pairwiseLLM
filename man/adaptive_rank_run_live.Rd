@@ -129,7 +129,7 @@ pair probabilities, and utility
 \deqn{U_0 = p_{ij}(1 - p_{ij})}.
 The long-link probability gate uses TrueSkill throughout within-set/Phase-A
 hybrid selection. Direct strategies apply their partner targets after the same
-connected shuffled bootstrap and currently require ordinary within-set mode.
+connected bootstrap and currently require ordinary within-set mode.
 Adaptive Phase B selection is unavailable pending separate validation.
 Use \code{\link[=prepare_link_input]{prepare_link_input()}}, \code{\link[=fit_link]{fit_link()}}, and \code{\link[=start_link_session]{start_link_session()}} with
 explicit cross-set evidence and an explicit E1--E3 estimator. Legacy Phase B

@@ -19,7 +19,8 @@ adaptive_rank_start(
   warm_start_prior_sd = NULL,
   warm_start_mode = NULL,
   replay_reservoir = NULL,
-  warm_start_trueskill = NULL
+  warm_start_trueskill = NULL,
+  bootstrap_policy = "shuffled_connected"
 )
 }
 \arguments{
@@ -29,7 +30,7 @@ include integer \code{set_id} values and globally unique \code{global_item_id}
 values. Item IDs may be character; internal logs use integer indices
 derived from these IDs.}
 
-\item{seed}{Integer seed used for deterministic connected-bootstrap shuffling and
+\item{seed}{Integer seed used for deterministic connected-bootstrap choices and
 selection randomness. Default is \code{1L}.}
 
 \item{session_dir}{Optional directory for saving session artifacts.
@@ -43,7 +44,7 @@ for timestamps.}
 
 \item{adaptive_config}{Optional named list of adaptive controller overrides.
 \code{pairing_strategy} defaults to \code{hybrid}; \code{random}, \code{trueskill_p50}, and
-\code{trueskill_pollitt} select direct pairs after the common connected shuffled
+\code{trueskill_pollitt} select direct pairs after the configured connected
 bootstrap and currently require \code{run_mode = "within_set"}.
 Unknown fields and invalid values abort with an actionable error. See
 \code{\link[=adaptive_rank]{adaptive_rank()}} for the full list of supported keys, detailed semantics,
@@ -95,11 +96,22 @@ means and sigmas, aligns by exact item ID, and never clips SD. Model input
 requires explicit \code{warm_start_prior_sd}; prior objects use their stored SD.
 Named SD vectors align by ID; unnamed vectors follow prediction-input order.
 Omit this argument on resume; the saved distribution policy is authoritative.}
+
+\item{bootstrap_policy}{Initial graph policy, default \code{"shuffled_connected"}.
+\code{"predictive_connected"} requires a selectable \code{replay_reservoir}, ordinary
+within-set mode, \code{warm_start_trueskill = "predictive_distribution"}, and
+\code{adaptive_config = list(pairing_strategy = "trueskill_pollitt")}.
+Build the reservoir from selectable primary observations only, excluding
+held-out edges and reversal audits. The graph uses only manifest endpoints,
+frozen initial TrueSkill means/SDs, and the seed, never outcomes. The queue
+is built once before judging and retained across updates and resume.
+On wrapper resume, omit this argument or supply the saved policy; a different
+policy or explicit predictive initialization seed is rejected.}
 }
 \value{
 An adaptive state object containing \code{step_log}, \code{round_log}, and
 \code{item_log}. The object includes class \code{"adaptive_state"}, item ID
-mappings, TrueSkill state, connected bootstrap queue, refit metadata, and runtime
+mappings, TrueSkill state, frozen bootstrap policy/queue, refit metadata, and runtime
 configuration.
 }
 \description{
@@ -107,9 +119,9 @@ Initialize an adaptive ranking session and canonical state object.
 }
 \details{
 This function creates the stepwise controller state and seeds all canonical
-logs used in the adaptive pairing workflow. Connected bootstrap pair construction
-follows the same seeded shuffled chain in every mode, giving a connected comparison
-graph after \eqn{N - 1} committed comparisons.
+logs used in the adaptive pairing workflow. The default connected bootstrap uses
+a seeded shuffled chain, or a shuffled allowed tree for replay reservoirs. Either
+graph policy connects all items after \eqn{N - 1} committed comparisons.
 
 Pair selection in this framework is stepwise and uncertainty-aware.
 Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling anchors,
@@ -138,11 +150,13 @@ The returned state contains canonical logs:
 If \code{session_dir} is supplied, the initialized state is persisted
 immediately using \code{\link[=save_adaptive_session]{save_adaptive_session()}}.
 
-Predictive initialization is separate from observed connectivity: every mode
-retains the same seeded connected shuffled bootstrap of N - 1 valid comparisons,
-with common presentation balancing and invalid-result retries. Predictive
-locations can affect later TrueSkill-based selection; they do not replace the
-initial observed spanning path. Without the distribution opt-in, BTL prior SD
+Predictive destinations and initial connectivity are separate choices.
+By default, every warm mode retains the same seeded shuffled bootstrap of
+N - 1 valid comparisons. The explicit predictive graph policy uses a frozen
+allowed spanning tree with Pollitt probability targets and degree-cap
+relaxation. Both policies preserve invalid-result retries and recorded
+reservoir orientation. Later pairing retains the configured strategy.
+Without the distribution opt-in, BTL prior SD
 does not determine TrueSkill sigma. Ensemble disagreement never supplies SD
 automatically. No historical training-score units are restored.
 

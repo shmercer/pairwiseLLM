@@ -3928,9 +3928,9 @@
 #'
 #' @details
 #' This function creates the stepwise controller state and seeds all canonical
-#' logs used in the adaptive pairing workflow. Connected bootstrap pair construction
-#' follows the same seeded shuffled chain in every mode, giving a connected comparison
-#' graph after \eqn{N - 1} committed comparisons.
+#' logs used in the adaptive pairing workflow. The default connected bootstrap uses
+#' a seeded shuffled chain, or a shuffled allowed tree for replay reservoirs. Either
+#' graph policy connects all items after \eqn{N - 1} committed comparisons.
 #'
 #' Pair selection in this framework is stepwise and uncertainty-aware.
 #' Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling anchors,
@@ -3964,11 +3964,11 @@
 #'   include integer `set_id` values and globally unique `global_item_id`
 #'   values. Item IDs may be character; internal logs use integer indices
 #'   derived from these IDs.
-#' @param seed Integer seed used for deterministic connected-bootstrap shuffling and
+#' @param seed Integer seed used for deterministic connected-bootstrap choices and
 #'   selection randomness. Default is `1L`.
 #' @param adaptive_config Optional named list of adaptive controller overrides.
 #'   `pairing_strategy` defaults to `hybrid`; `random`, `trueskill_p50`, and
-#'   `trueskill_pollitt` select direct pairs after the common connected shuffled
+#'   `trueskill_pollitt` select direct pairs after the configured connected
 #'   bootstrap and currently require `run_mode = "within_set"`.
 #'   Unknown fields and invalid values abort with an actionable error. See
 #'   [adaptive_rank()] for the full list of supported keys, detailed semantics,
@@ -3992,7 +3992,7 @@
 #'
 #' @return An adaptive state object containing `step_log`, `round_log`, and
 #'   `item_log`. The object includes class \code{"adaptive_state"}, item ID
-#'   mappings, TrueSkill state, connected bootstrap queue, refit metadata, and runtime
+#'   mappings, TrueSkill state, frozen bootstrap policy/queue, refit metadata, and runtime
 #'   configuration.
 #'
 #' @examples
@@ -4039,12 +4039,24 @@
 #'   requires explicit `warm_start_prior_sd`; prior objects use their stored SD.
 #'   Named SD vectors align by ID; unnamed vectors follow prediction-input order.
 #'   Omit this argument on resume; the saved distribution policy is authoritative.
+#' @param bootstrap_policy Initial graph policy, default `"shuffled_connected"`.
+#'   `"predictive_connected"` requires a selectable `replay_reservoir`, ordinary
+#'   within-set mode, `warm_start_trueskill = "predictive_distribution"`, and
+#'   `adaptive_config = list(pairing_strategy = "trueskill_pollitt")`.
+#'   Build the reservoir from selectable primary observations only, excluding
+#'   held-out edges and reversal audits. The graph uses only manifest endpoints,
+#'   frozen initial TrueSkill means/SDs, and the seed, never outcomes. The queue
+#'   is built once before judging and retained across updates and resume.
+#'   On wrapper resume, omit this argument or supply the saved policy; a different
+#'   policy or explicit predictive initialization seed is rejected.
 #' @details
-#' Predictive initialization is separate from observed connectivity: every mode
-#' retains the same seeded connected shuffled bootstrap of N - 1 valid comparisons,
-#' with common presentation balancing and invalid-result retries. Predictive
-#' locations can affect later TrueSkill-based selection; they do not replace the
-#' initial observed spanning path. Without the distribution opt-in, BTL prior SD
+#' Predictive destinations and initial connectivity are separate choices.
+#' By default, every warm mode retains the same seeded shuffled bootstrap of
+#' N - 1 valid comparisons. The explicit predictive graph policy uses a frozen
+#' allowed spanning tree with Pollitt probability targets and degree-cap
+#' relaxation. Both policies preserve invalid-result retries and recorded
+#' reservoir orientation. Later pairing retains the configured strategy.
+#' Without the distribution opt-in, BTL prior SD
 #' does not determine TrueSkill sigma. Ensemble disagreement never supplies SD
 #' automatically. No historical training-score units are restored.
 #'
@@ -4084,7 +4096,9 @@ adaptive_rank_start <- function(items,
                                 warm_start_prior_sd = NULL,
                                 warm_start_mode = NULL,
                                 replay_reservoir = NULL,
-                                warm_start_trueskill = NULL) {
+                                warm_start_trueskill = NULL,
+                                bootstrap_policy = "shuffled_connected") {
+  bootstrap_policy <- .adaptive_bootstrap_policy(bootstrap_policy)
   dots <- list(...)
   if (length(dots) > 0L) {
     dot_names <- names(dots)
@@ -4114,17 +4128,12 @@ adaptive_rank_start <- function(items,
   state <- new_adaptive_state(items, now_fn = now_fn)
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   state <- .adaptive_reservoir_bind(state, replay_reservoir)
+  .adaptive_bootstrap_check_inputs(state, bootstrap_policy, warm_start_trueskill)
   state <- .warm_start_adaptive_init(state, warm_start_model, warm_start_prior,
     warm_start_features, warm_start_python, warm_start_prior_sd, warm_start_mode,
     trueskill = warm_start_trueskill)
   state$meta$seed <- seed
-  state$warm_start_pairs <- if (.adaptive_reservoir_active(state)) {
-    .adaptive_reservoir_bootstrap(state)
-  } else {
-    .adaptive_build_warm_start_pairs(state$item_ids, seed)
-  }
-  state$warm_start_idx <- 1L
-  state$warm_start_done <- nrow(state$warm_start_pairs) == 0L
+  state <- .adaptive_bootstrap_init(state, bootstrap_policy)
   state$controller <- .adaptive_controller_with_phase_scope(state, controller = .adaptive_controller_resolve(state))
   state <- .adaptive_phase_a_prepare(state)
   state <- .adaptive_phase_a_finalize_if_ready(state)
@@ -4162,7 +4171,7 @@ adaptive_rank_start <- function(items,
 #' \deqn{U_0 = p_{ij}(1 - p_{ij})}.
 #' The long-link probability gate uses TrueSkill throughout within-set/Phase-A
 #' hybrid selection. Direct strategies apply their partner targets after the same
-#' connected shuffled bootstrap and currently require ordinary within-set mode.
+#' connected bootstrap and currently require ordinary within-set mode.
 #' Adaptive Phase B selection is unavailable pending separate validation.
 #' Use [prepare_link_input()], [fit_link()], and [start_link_session()] with
 #' explicit cross-set evidence and an explicit E1--E3 estimator. Legacy Phase B
@@ -4554,6 +4563,7 @@ adaptive_rank_run_live <- function(state,
   }
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   .adaptive_reservoir_check_mode(state)
+  .adaptive_bootstrap_validate(state)
   if (isTRUE(resumed_from_session)) {
     state <- .adaptive_validate_probe_state_for_resume(state)
   }
@@ -4845,8 +4855,11 @@ adaptive_rank_run_live <- function(state,
 #' and log-shape checks during load. Returned state preserves canonical
 #' \code{step_log}, \code{round_log}, and \code{item_log} contents used for
 #' adaptive auditability. The saved predictive mode, prior, pairing strategy,
-#' current TrueSkill state, and connected shuffled bootstrap queue are authoritative.
-#' Resume does not reload a predictive model or regenerate its predictions.
+#' current TrueSkill state, bootstrap policy, and frozen queue are authoritative.
+#' Resume does not reload a predictive model, regenerate predictions, initialize
+#' ratings, or rebuild a predictive tree. SHA-256 validates the frozen predictive
+#' inputs and queue against saved session metadata. Legacy shuffled sessions
+#' retain their original behavior.
 #'
 #' @param session_dir Directory containing session artifacts.
 #' @param ... Reserved; must be empty. Resume uses persisted predictive priors.
