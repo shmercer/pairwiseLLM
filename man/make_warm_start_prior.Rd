@@ -16,7 +16,8 @@ match the input ID set exactly and determine output order. For unnamed scores
 they identify input positions. Defaults to the IDs in the input.}
 
 \item{prior_sd}{Positive finite scalar or vector. An unnamed vector follows
-input order; a named vector aligns by ID. Defaults to 0.5.}
+input order; a named vector aligns by ID. Defaults to 0.5. This default is
+a chosen prior width, not learned uncertainty calibration.}
 }
 \value{
 A version-1 \code{pairwiseLLM_warm_prior} list containing \code{item_id}, \code{scores},
@@ -39,8 +40,14 @@ Centering induces dependence, so the supplied SD is not the marginal SD of
 centered theta. Without predictive input, BTL retains raw prior mean 0 and SD 1.
 Adaptive BTL consumes this prior only in \code{btl_only} and \code{both} modes. Adaptive
 \code{trueskill_only} and \code{both} also use its centered \code{prior_mean} to initialize
-TrueSkill locations as \code{25 + (25/3) * prior_mean}, with unchanged sigma.
-The BTL prior SD and ensemble disagreement never determine TrueSkill sigma.
+TrueSkill locations as \code{25 + (25/3) * prior_mean}, with unchanged sigma by default.
+Explicit \code{warm_start_trueskill = "predictive_distribution"} additionally maps
+\code{sigma = (25/3) * prior_sd}, keeping \code{beta = 25/6}, without clipping. A prior
+object supplies its stored SD; model input requires explicit SD in that mode.
+This assumes comparable latent scales and does not turn raw-theta SD into the
+marginal SD of centered effects. Upstream workflows must establish calibration;
+explicit SD alone does not prove it. Scalar SD is a sensitivity assumption,
+not essay-specific calibration. Ensemble disagreement never supplies SD automatically.
 Every adaptive mode retains the same seeded connected shuffled bootstrap.
 Standalone \code{\link[=fit_bayes_btl_mcmc]{fit_bayes_btl_mcmc()}} retains its \code{warm_start_prior} interface
 without the adaptive four-mode argument.

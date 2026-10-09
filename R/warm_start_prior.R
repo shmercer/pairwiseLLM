@@ -7,7 +7,8 @@
 #'   match the input ID set exactly and determine output order. For unnamed scores
 #'   they identify input positions. Defaults to the IDs in the input.
 #' @param prior_sd Positive finite scalar or vector. An unnamed vector follows
-#'   input order; a named vector aligns by ID. Defaults to 0.5.
+#'   input order; a named vector aligns by ID. Defaults to 0.5. This default is
+#'   a chosen prior width, not learned uncertainty calibration.
 #' @return A version-1 `pairwiseLLM_warm_prior` list containing `item_id`, `scores`,
 #'   `prior_mean`, `prior_sd`, compact `diagnostics`, `provenance`, and an integrity
 #'   `digest`. Pass this object to [fit_bayes_btl_mcmc()] or [adaptive_rank_start()].
@@ -24,8 +25,14 @@
 #' centered theta. Without predictive input, BTL retains raw prior mean 0 and SD 1.
 #' Adaptive BTL consumes this prior only in `btl_only` and `both` modes. Adaptive
 #' `trueskill_only` and `both` also use its centered `prior_mean` to initialize
-#' TrueSkill locations as `25 + (25/3) * prior_mean`, with unchanged sigma.
-#' The BTL prior SD and ensemble disagreement never determine TrueSkill sigma.
+#' TrueSkill locations as `25 + (25/3) * prior_mean`, with unchanged sigma by default.
+#' Explicit `warm_start_trueskill = "predictive_distribution"` additionally maps
+#' `sigma = (25/3) * prior_sd`, keeping `beta = 25/6`, without clipping. A prior
+#' object supplies its stored SD; model input requires explicit SD in that mode.
+#' This assumes comparable latent scales and does not turn raw-theta SD into the
+#' marginal SD of centered effects. Upstream workflows must establish calibration;
+#' explicit SD alone does not prove it. Scalar SD is a sensitivity assumption,
+#' not essay-specific calibration. Ensemble disagreement never supplies SD automatically.
 #' Every adaptive mode retains the same seeded connected shuffled bootstrap.
 #' Standalone [fit_bayes_btl_mcmc()] retains its `warm_start_prior` interface
 #' without the adaptive four-mode argument.

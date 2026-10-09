@@ -151,6 +151,11 @@ test_that("numeric warm-start and directed replay vignette examples execute offl
     warm$historical$trueskill_state$items$sigma)
   expect_identical(warm$warmed$warm_start_pairs, warm$historical$warm_start_pairs)
 
+  distribution <- run_chunk("adaptive-warm-start", "predictive-distribution")
+  expect_identical(distribution$distribution_state$trueskill_state$items$sigma,
+    (25 / 3) * c(0.8, 0.2, 0.5))
+  expect_identical(distribution$distribution_state$meta$trueskill_mapping$sd_rule, "per_item")
+
   replay <- run_chunk("adaptive-pairing", "directed-replay")
   log <- pairwiseLLM::adaptive_step_log(replay$replay_state)
   expect_identical(nrow(log), 5L)

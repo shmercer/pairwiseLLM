@@ -426,6 +426,7 @@ read_log <- function(path) {
     rlang::abort("Session `meta` and `controller` must be lists.")
   }
   .warm_start_adaptive_validate(state)
+  .warm_start_trueskill_validate(state, metadata)
   .adaptive_reservoir_validate_state(state, metadata)
   # Only absent fields migrate. Never infer initialization from current mu values,
   # or rerun initialization: saved TrueSkill and bootstrap/round state are authoritative.
@@ -1309,6 +1310,11 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
     replay_manifest_digest = state$replay_reservoir$manifest_digest
   )
 
+  if (!is.null(state$meta$warm_start_trueskill)) {
+    metadata$warm_start_trueskill <- state$meta$warm_start_trueskill
+    metadata$trueskill_mapping <- state$meta$trueskill_mapping
+  }
+
   write_log(tibble::as_tibble(state$step_log), paths$step_log)
   write_log(tibble::as_tibble(state$round_log), paths$round_log)
   write_log(tibble::as_tibble(state$link_stage_log %||% new_link_stage_log()), paths$link_stage_log)
@@ -1352,6 +1358,11 @@ save_adaptive_session <- function(state, session_dir, overwrite = FALSE) {
 #' strategy migrates to \code{hybrid}. Saved TrueSkill values, the connected
 #' shuffled bootstrap queue and its index, and round progress remain authoritative;
 #' loading never recomputes predictions or initializes TrueSkill again.
+#'
+#' Predictive-distribution sessions also record a versioned TrueSkill mapping,
+#' SD provenance, and integrity digests in state and session metadata. Loading
+#' validates their agreement without recomputing predictions or resetting ratings.
+#' Legacy sessions retain their existing migration rules and fixed-sigma policy.
 #'
 #' \code{metadata.rds} records effective \code{warm_start_mode} and
 #' \code{pairing_strategy} for session-level audit. Direct step logs already record

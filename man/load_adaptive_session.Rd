@@ -29,6 +29,11 @@ strategy migrates to \code{hybrid}. Saved TrueSkill values, the connected
 shuffled bootstrap queue and its index, and round progress remain authoritative;
 loading never recomputes predictions or initializes TrueSkill again.
 
+Predictive-distribution sessions also record a versioned TrueSkill mapping,
+SD provenance, and integrity digests in state and session metadata. Loading
+validates their agreement without recomputing predictions or resetting ratings.
+Legacy sessions retain their existing migration rules and fixed-sigma policy.
+
 \code{metadata.rds} records effective \code{warm_start_mode} and
 \code{pairing_strategy} for session-level audit. Direct step logs already record
 \code{pairing_strategy}, the presented A-over-B TrueSkill probability

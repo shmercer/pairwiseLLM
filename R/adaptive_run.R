@@ -4015,7 +4015,9 @@
 #' @param warm_start_python Explicit Python interpreter for text extraction only.
 #' @param warm_start_prior_sd Optional user-chosen raw theta prior SD for model input;
 #'   scalar or per-item vector, default 0.5. Supplied prior objects retain their SDs.
-#'   Not accepted with `trueskill_only`; never controls TrueSkill sigma.
+#'   With `warm_start_trueskill = "predictive_distribution"`, explicit SD is
+#'   required for model input, including `trueskill_only`, and also initializes
+#'   TrueSkill sigma. Otherwise `trueskill_only` rejects this argument.
 #' @param replay_reservoir Optional [make_adaptive_replay_reservoir()] object.
 #'   Requires ordinary within-set mode and a matching reservoir replay judge.
 #'   Uses a seeded spanning-tree bootstrap and at most one committed observation
@@ -4026,15 +4028,36 @@
 #'   Omitted/NULL mode defaults to `btl_only` with predictive input, otherwise `cold`.
 #'   Request `both` explicitly to initialize both models. In TrueSkill-warm modes,
 #'   exact item-ID alignment precedes `mu = mu0 + sigma0 * prior_mean`, with
-#'   `mu0 = 25`, `sigma0 = 25/3`, fixed multiplier 1, and unchanged sigma.
+#'   `mu0 = 25`, `sigma0 = 25/3`, fixed multiplier 1, and unchanged sigma
+#'   unless `warm_start_trueskill` explicitly requests distribution initialization.
 #'   Explicit `cold` with predictive input, or a non-cold mode without it, errors.
+#' @param warm_start_trueskill Optional explicit uncertainty policy: NULL retains
+#'   legacy initialization; `"predictive_distribution"` requires `trueskill_only`
+#'   or `both` and maps `mu = 25 + (25/3) * prior_mean` and
+#'   `sigma = (25/3) * prior_sd`, with `beta = 25/6`. It overrides constructor
+#'   means and sigmas, aligns by exact item ID, and never clips SD. Model input
+#'   requires explicit `warm_start_prior_sd`; prior objects use their stored SD.
+#'   Named SD vectors align by ID; unnamed vectors follow prediction-input order.
+#'   Omit this argument on resume; the saved distribution policy is authoritative.
 #' @details
 #' Predictive initialization is separate from observed connectivity: every mode
 #' retains the same seeded connected shuffled bootstrap of N - 1 valid comparisons,
 #' with common presentation balancing and invalid-result retries. Predictive
 #' locations can affect later TrueSkill-based selection; they do not replace the
-#' initial observed spanning path. BTL prior SD and ensemble diagnostics never
-#' determine TrueSkill sigma. No historical training-score units are restored.
+#' initial observed spanning path. Without the distribution opt-in, BTL prior SD
+#' does not determine TrueSkill sigma. Ensemble disagreement never supplies SD
+#' automatically. No historical training-score units are restored.
+#'
+#' Distribution initialization assumes the supplied BTL prior SD and TrueSkill
+#' uncertainty describe comparable latent scales under the documented affine
+#' convention. BTL priors apply to `theta_raw`; centering induces dependence, so
+#' this is not the marginal SD of centered BTL effects and does not equate the
+#' models' posteriors. Existing BTL identifiability and prior rules are unchanged.
+#' Upstream predictive workflows must establish uncertainty calibration using
+#' training data only; supplying SD explicitly does not establish calibration.
+#' Scalar SD supports sensitivity analyses, not essay-specific calibration.
+#' Saved metadata records the versioned mapping, SD source and scalar/per-item
+#' rule, and integrity digests; calibration is recorded as upstream, unverified.
 #'
 #' Predictive BTL priors apply only in `btl_only` and `both`, including run-required
 #' linking Phase A. TrueSkill initialization applies in `trueskill_only` and `both`.
@@ -4060,7 +4083,8 @@ adaptive_rank_start <- function(items,
                                 warm_start_python = NULL,
                                 warm_start_prior_sd = NULL,
                                 warm_start_mode = NULL,
-                                replay_reservoir = NULL) {
+                                replay_reservoir = NULL,
+                                warm_start_trueskill = NULL) {
   dots <- list(...)
   if (length(dots) > 0L) {
     dot_names <- names(dots)
@@ -4091,7 +4115,8 @@ adaptive_rank_start <- function(items,
   state <- .adaptive_apply_controller_config(state, adaptive_config = adaptive_config)
   state <- .adaptive_reservoir_bind(state, replay_reservoir)
   state <- .warm_start_adaptive_init(state, warm_start_model, warm_start_prior,
-    warm_start_features, warm_start_python, warm_start_prior_sd, warm_start_mode)
+    warm_start_features, warm_start_python, warm_start_prior_sd, warm_start_mode,
+    trueskill = warm_start_trueskill)
   state$meta$seed <- seed
   state$warm_start_pairs <- if (.adaptive_reservoir_active(state)) {
     .adaptive_reservoir_bootstrap(state)

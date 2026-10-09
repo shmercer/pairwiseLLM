@@ -210,3 +210,6 @@ selection baselines and pre-fix saved-session compatibility. All fixtures are sy
 Issue #298 reserves 5112 for terminal hybrid starvation evidence, scoped capacity
 bounds, unchanged selection, and saved-session reporting. Fixtures are synthetic
 and provider-free; no sampler or study artifacts are required.
+
+Issue #314 reserves 5116 for opt-in predictive TrueSkill distribution mapping,
+metadata integrity, and fresh-process resume. All fixtures are synthetic and offline.
