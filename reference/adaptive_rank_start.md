@@ -20,7 +20,8 @@ adaptive_rank_start(
   warm_start_prior_sd = NULL,
   warm_start_mode = NULL,
   replay_reservoir = NULL,
-  warm_start_trueskill = NULL
+  warm_start_trueskill = NULL,
+  bootstrap_policy = "shuffled_connected"
 )
 ```
 
@@ -36,7 +37,7 @@ adaptive_rank_start(
 
 - seed:
 
-  Integer seed used for deterministic connected-bootstrap shuffling and
+  Integer seed used for deterministic connected-bootstrap choices and
   selection randomness. Default is `1L`.
 
 - session_dir:
@@ -57,8 +58,8 @@ adaptive_rank_start(
 
   Optional named list of adaptive controller overrides.
   `pairing_strategy` defaults to `hybrid`; `random`, `trueskill_p50`,
-  and `trueskill_pollitt` select direct pairs after the common connected
-  shuffled bootstrap and currently require `run_mode = "within_set"`.
+  and `trueskill_pollitt` select direct pairs after the configured
+  connected bootstrap and currently require `run_mode = "within_set"`.
   Unknown fields and invalid values abort with an actionable error. See
   [`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
   for the full list of supported keys, detailed semantics, and defaults.
@@ -135,20 +136,35 @@ adaptive_rank_start(
   follow prediction-input order. Omit this argument on resume; the saved
   distribution policy is authoritative.
 
+- bootstrap_policy:
+
+  Initial graph policy, default `"shuffled_connected"`.
+  `"predictive_connected"` requires a selectable `replay_reservoir`,
+  ordinary within-set mode,
+  `warm_start_trueskill = "predictive_distribution"`, and
+  `adaptive_config = list(pairing_strategy = "trueskill_pollitt")`.
+  Build the reservoir from selectable primary observations only,
+  excluding held-out edges and reversal audits. The graph uses only
+  manifest endpoints, frozen initial TrueSkill means/SDs, and the seed,
+  never outcomes. The queue is built once before judging and retained
+  across updates and resume. On wrapper resume, omit this argument or
+  supply the saved policy; a different policy or explicit predictive
+  initialization seed is rejected.
+
 ## Value
 
 An adaptive state object containing `step_log`, `round_log`, and
 `item_log`. The object includes class `"adaptive_state"`, item ID
-mappings, TrueSkill state, connected bootstrap queue, refit metadata,
-and runtime configuration.
+mappings, TrueSkill state, frozen bootstrap policy/queue, refit
+metadata, and runtime configuration.
 
 ## Details
 
 This function creates the stepwise controller state and seeds all
-canonical logs used in the adaptive pairing workflow. Connected
-bootstrap pair construction follows the same seeded shuffled chain in
-every mode, giving a connected comparison graph after \\N - 1\\
-committed comparisons.
+canonical logs used in the adaptive pairing workflow. The default
+connected bootstrap uses a seeded shuffled chain, or a shuffled allowed
+tree for replay reservoirs. Either graph policy connects all items after
+\\N - 1\\ committed comparisons.
 
 Pair selection in this framework is stepwise and uncertainty-aware.
 Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling
@@ -185,14 +201,15 @@ If `session_dir` is supplied, the initialized state is persisted
 immediately using
 [`save_adaptive_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_adaptive_session.md).
 
-Predictive initialization is separate from observed connectivity: every
-mode retains the same seeded connected shuffled bootstrap of N - 1 valid
-comparisons, with common presentation balancing and invalid-result
-retries. Predictive locations can affect later TrueSkill-based
-selection; they do not replace the initial observed spanning path.
-Without the distribution opt-in, BTL prior SD does not determine
-TrueSkill sigma. Ensemble disagreement never supplies SD automatically.
-No historical training-score units are restored.
+Predictive destinations and initial connectivity are separate choices.
+By default, every warm mode retains the same seeded shuffled bootstrap
+of N - 1 valid comparisons. The explicit predictive graph policy uses a
+frozen allowed spanning tree with Pollitt probability targets and
+degree-cap relaxation. Both policies preserve invalid-result retries and
+recorded reservoir orientation. Later pairing retains the configured
+strategy. Without the distribution opt-in, BTL prior SD does not
+determine TrueSkill sigma. Ensemble disagreement never supplies SD
+automatically. No historical training-score units are restored.
 
 Distribution initialization assumes the supplied BTL prior SD and
 TrueSkill uncertainty describe comparable latent scales under the

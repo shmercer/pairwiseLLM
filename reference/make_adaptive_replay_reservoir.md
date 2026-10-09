@@ -37,12 +37,16 @@ and for
 
 ## Details
 
-All strategies and warm-start modes share a seeded spanning-tree
-bootstrap of `N - 1` allowed edges. Subsequent selection uses unused
-allowed edges, and commits their stored presentation without reversing
-or complementing outcomes. Consumption follows committed history, so
-discarded/failed transactions do not consume observations. Existing
-statistical stopping rules still apply.
+By default, all strategies and warm-start modes share a shuffled seeded
+tree of `N - 1` allowed edges. Opt into a frozen predictive tree with
+`bootstrap_policy = "predictive_connected"` in
+[`adaptive_rank_start()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank_start.md),
+with coherent predictive TrueSkill initialization and Pollitt subsequent
+pairing. Subsequent selection uses unused allowed edges, and commits
+their stored presentation without reversing or complementing outcomes.
+Consumption follows committed history, so discarded/failed transactions
+do not consume observations. Existing statistical stopping rules still
+apply.
 
 State stores an outcome-free manifest and identity; retain the reservoir
 to recreate the judge on resume. Identity includes the panel, edge

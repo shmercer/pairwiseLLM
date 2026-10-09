@@ -87,14 +87,18 @@ with explicit errors.</p>
 <p>Legacy sessions without a saved predictive mode migrate to <code>cold</code> when
 no predictive prior exists, and <code>btl_only</code> otherwise. An absent pairing
 strategy migrates to <code>hybrid</code>. Saved TrueSkill values, the connected
-shuffled bootstrap queue and its index, and round progress remain authoritative;
+bootstrap policy, frozen queue and its index, and round progress remain authoritative;
 loading never recomputes predictions or initializes TrueSkill again.</p>
 <p>Predictive-distribution sessions also record a versioned TrueSkill mapping,
 SD provenance, and integrity digests in state and session metadata. Loading
 validates their agreement without recomputing predictions or resetting ratings.
 Legacy sessions retain their existing migration rules and fixed-sigma policy.</p>
 <p><code>metadata.rds</code> records effective <code>warm_start_mode</code> and
-<code>pairing_strategy</code> for session-level audit. Direct step logs already record
+<code>pairing_strategy</code>, plus bootstrap policy/version and the predictive
+SHA-256 identity for session-level audit. Predictive queues are verified from
+frozen inputs and the digest without repeating graph selection. Missing legacy
+bootstrap policy fields retain shuffled behavior. <code><a href="summarize_adaptive.html">summarize_adaptive()</a></code> with
+<code>include_bootstrap = TRUE</code> exposes the saved bootstrap audit. Direct step logs record
 <code>pairing_strategy</code>, the presented A-over-B TrueSkill probability
 <code>p_ij</code>, and <code>target_distance</code> (missing for random pairing). Predictive
 vectors and provenance are retained once in <code>state$predictive_prior</code>.</p>

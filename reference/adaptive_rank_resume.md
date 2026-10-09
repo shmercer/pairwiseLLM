@@ -29,9 +29,12 @@ This is a thin wrapper around
 and performs schema and log-shape checks during load. Returned state
 preserves canonical `step_log`, `round_log`, and `item_log` contents
 used for adaptive auditability. The saved predictive mode, prior,
-pairing strategy, current TrueSkill state, and connected shuffled
-bootstrap queue are authoritative. Resume does not reload a predictive
-model or regenerate its predictions.
+pairing strategy, current TrueSkill state, bootstrap policy, and frozen
+queue are authoritative. Resume does not reload a predictive model,
+regenerate predictions, initialize ratings, or rebuild a predictive
+tree. SHA-256 validates the frozen predictive inputs and queue against
+saved session metadata. Legacy shuffled sessions retain their original
+behavior.
 
 ## See also
 

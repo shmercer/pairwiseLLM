@@ -5,7 +5,11 @@ Summarize an adaptive state.
 ## Usage
 
 ``` r
-summarize_adaptive(state, include_starvation = FALSE)
+summarize_adaptive(
+  state,
+  include_starvation = FALSE,
+  include_bootstrap = FALSE
+)
 ```
 
 ## Arguments
@@ -19,12 +23,20 @@ summarize_adaptive(state, include_starvation = FALSE)
   Logical; append a `starvation_diagnostic` list-column containing
   terminal hybrid exhaustion evidence. Default FALSE.
 
+- include_bootstrap:
+
+  Logical; add a `bootstrap` list-column with policy, version,
+  initialization seed, integrity identities, and saved tree diagnostics.
+  Default FALSE retains the historical summary columns. Legacy sessions
+  report the shuffled policy and no predictive bootstrap digest or
+  diagnostics.
+
 ## Value
 
 A one-row tibble with columns `n_items`, `steps_attempted`,
 `committed_pairs`, `n_refits`, `last_stop_decision`, and
-`last_stop_reason`, plus the optional `starvation_diagnostic`
-list-column.
+`last_stop_reason`, plus the optional `starvation_diagnostic` and
+`bootstrap` list-columns.
 
 ## Details
 

@@ -30,7 +30,7 @@ abort with explicit errors.
 Legacy sessions without a saved predictive mode migrate to `cold` when
 no predictive prior exists, and `btl_only` otherwise. An absent pairing
 strategy migrates to `hybrid`. Saved TrueSkill values, the connected
-shuffled bootstrap queue and its index, and round progress remain
+bootstrap policy, frozen queue and its index, and round progress remain
 authoritative; loading never recomputes predictions or initializes
 TrueSkill again.
 
@@ -41,10 +41,16 @@ predictions or resetting ratings. Legacy sessions retain their existing
 migration rules and fixed-sigma policy.
 
 `metadata.rds` records effective `warm_start_mode` and
-`pairing_strategy` for session-level audit. Direct step logs already
-record `pairing_strategy`, the presented A-over-B TrueSkill probability
-`p_ij`, and `target_distance` (missing for random pairing). Predictive
-vectors and provenance are retained once in `state$predictive_prior`.
+`pairing_strategy`, plus bootstrap policy/version and the predictive
+SHA-256 identity for session-level audit. Predictive queues are verified
+from frozen inputs and the digest without repeating graph selection.
+Missing legacy bootstrap policy fields retain shuffled behavior.
+[`summarize_adaptive()`](https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.md)
+with `include_bootstrap = TRUE` exposes the saved bootstrap audit.
+Direct step logs record `pairing_strategy`, the presented A-over-B
+TrueSkill probability `p_ij`, and `target_distance` (missing for random
+pairing). Predictive vectors and provenance are retained once in
+`state$predictive_prior`.
 
 ## See also
 

@@ -39,7 +39,7 @@ model accuracy or disagreement.
 
 `warm_start_mode` chooses which model receives this information:
 
-| Mode | BTL predictive prior | TrueSkill predictive `mu` | Connected bootstrap |
+| Mode | BTL predictive prior | TrueSkill predictive `mu` | Default connected bootstrap |
 |----|----|----|----|
 | `cold` | no | no | seeded shuffled chain |
 | `btl_only` | yes | no | same seeded shuffled chain |
@@ -47,9 +47,10 @@ model accuracy or disagreement.
 | `both` | yes | yes | same seeded shuffled chain |
 
 The bootstrap is the initial connected set of observed comparisons. It
-is the same for all modes when the items and seed are the same. Later
-pair choices can differ as TrueSkill updates from its starting values
-and the observed judgments.
+is the same for all modes under the default
+`bootstrap_policy = "shuffled_connected"` when the items and seed are
+the same. Later pair choices can differ as TrueSkill updates from its
+starting values and the observed judgments.
 
 With no predictive input, the default mode is `cold`. With predictive
 input, the default is `btl_only`. Request `both` explicitly to
@@ -171,12 +172,202 @@ dependence. The mapped sigma is therefore not a marginal SD of centered
 BTL effects, and the two models’ posteriors are not equivalent. BTL
 prior and identifiability rules remain unchanged. `trueskill_only` still
 leaves BTL cold; `both` also warms BTL. The mapping does not depend on
-the graph or later selection strategy; the connected bootstrap is
-unchanged.
+the graph or later selection strategy. Changing the distribution alone
+retains the default shuffled bootstrap.
 
 Resume retains the saved mapping and evolved ratings without
 initializing again. Omit `warm_start_trueskill` along with all other
 warm-start arguments on resume.
+
+## Choose the initial graph independently
+
+`bootstrap_policy = "shuffled_connected"` preserves historical
+initialization. Use `"predictive_connected"` to choose the initial
+connected tree from the frozen predictive TrueSkill distribution. This
+requires `warm_start_trueskill = "predictive_distribution"`, mode
+`trueskill_only` or `both`, a replay reservoir, ordinary `within_set`
+mode, and explicit `pairing_strategy = "trueskill_pollitt"`. Linking and
+Phase B are unsupported for this graph policy.
+
+Create the reservoir from **selectable primary observations only**.
+Exclude held-out edges and separate reversal audits before calling
+[`make_adaptive_replay_reservoir()`](https://shmercer.github.io/pairwiseLLM/reference/make_adaptive_replay_reservoir.md).
+The package validates the supplied manifest; it cannot infer which
+observations your study designated as held out.
+
+The tree builder receives only allowed A/B endpoints, frozen initial
+means/SDs, and a seed. It favors probabilities near 1/3 or 2/3, starts
+with degree cap two, and doubles that cap only when needed to connect
+the graph. Exact-score ties use a local seeded permutation. It builds
+once before judging, preserves recorded A/B orientation, and never reads
+outcomes or evolving ratings. After `N - 1` successful bootstrap
+comparisons, the existing Pollitt selector continues using current
+ratings and its existing degree rules.
+
+These five configurations separate estimation, selection state, and
+graph effects:
+
+| Arm | `warm_start_mode` | Predictive prior | `warm_start_trueskill` | `bootstrap_policy` |
+|----|----|----|----|----|
+| Cold | `cold` | omitted | `NULL` | `shuffled_connected` |
+| Estimation warm | `btl_only` | supplied | `NULL` | `shuffled_connected` |
+| Legacy-graph coherent | `both` | supplied | `predictive_distribution` | `shuffled_connected` |
+| Selection warm | `trueskill_only` | supplied | `predictive_distribution` | `predictive_connected` |
+| Fully coherent | `both` | supplied | `predictive_distribution` | `predictive_connected` |
+
+All five use the same selectable reservoir, seed, and Pollitt selector.
+Legacy-graph coherent and fully coherent have identical predictive BTL
+priors and initial TrueSkill means **and SDs**; only graph policy
+changes. The word “legacy” here describes the graph, not historical
+fixed-sigma initialization.
+
+This small example uses invented scores, SDs, and outcomes. They
+demonstrate the API and do not establish predictive calibration or
+improved ranking accuracy.
+
+``` r
+
+bootstrap_ids <- letters[1:6]
+bootstrap_observations <- data.frame(
+  A_id = c("b", "c", "d", "e", "f", "a", "d", "b", "f"),
+  B_id = c("a", "b", "c", "d", "e", "f", "a", "e", "c"),
+  Y = c(1L, 1L, 0L, 0L, 1L, 0L, 1L, 0L, 1L))
+bootstrap_reservoir <- make_adaptive_replay_reservoir(
+  bootstrap_observations, bootstrap_ids)
+bootstrap_prior <- make_warm_start_prior(
+  setNames(c(-1, -0.6, -0.2, 0.2, 0.6, 1), bootstrap_ids),
+  prior_sd = setNames(c(0.2, 0.7, 0.3, 0.8, 0.4, 0.6), bootstrap_ids))
+bootstrap_modes <- c(cold = "cold", estimation = "btl_only",
+  legacy_graph = "both", selection = "trueskill_only", full = "both")
+bootstrap_states <- lapply(names(bootstrap_modes), function(arm) {
+  adaptive_rank_start(bootstrap_ids, seed = 87L,
+    replay_reservoir = bootstrap_reservoir,
+    warm_start_mode = bootstrap_modes[[arm]],
+    warm_start_prior = if (arm == "cold") NULL else bootstrap_prior,
+    warm_start_trueskill = if (arm %in% c("cold", "estimation")) NULL else
+      "predictive_distribution",
+    bootstrap_policy = if (arm %in% c("selection", "full"))
+      "predictive_connected" else "shuffled_connected",
+    adaptive_config = list(pairing_strategy = "trueskill_pollitt"))
+})
+names(bootstrap_states) <- names(bootstrap_modes)
+stopifnot(identical(bootstrap_states$selection$warm_start_pairs,
+  bootstrap_states$full$warm_start_pairs))
+stopifnot(identical(bootstrap_states$legacy_graph$trueskill_state,
+  bootstrap_states$full$trueskill_state))
+bootstrap_judge <- make_adaptive_judge_replay(bootstrap_reservoir)
+bootstrap_partial <- adaptive_rank_run_live(bootstrap_states$full,
+  bootstrap_judge, n_steps = 2L, progress = "none")
+summarize_adaptive(bootstrap_partial, include_bootstrap = TRUE)$bootstrap[[1]]
+#> $policy
+#> [1] "predictive_connected"
+#> 
+#> $version
+#> [1] 1
+#> 
+#> $seed
+#> [1] 87
+#> 
+#> $digest
+#> [1] "6710d0337e006fe5b0f7319e12877b3a3cb0084ca0860a40989e29f834a842fe"
+#> 
+#> $trueskill_mapping_digest
+#> [1] "20c80bcbb6d2c827f54bc6ce51bbb33a"
+#> 
+#> $manifest_digest
+#> [1] "5bd49db4fb30374d7e7f8804b01cdf33"
+#> 
+#> $diagnostics
+#> $diagnostics$policy
+#> $diagnostics$policy$version
+#> [1] 1
+#> 
+#> $diagnostics$policy$targets
+#> [1] 0.3333333 0.6666667
+#> 
+#> $diagnostics$policy$initial_degree_cap
+#> [1] 2
+#> 
+#> $diagnostics$policy$degree_cap_multiplier
+#> [1] 2
+#> 
+#> $diagnostics$policy$ties
+#> [1] "canonical_seeded_permutation_v1"
+#> 
+#> 
+#> $diagnostics$seed
+#> [1] 87
+#> 
+#> $diagnostics$relaxations
+#> # A tibble: 0 × 4
+#> # ℹ 4 variables: old_cap <dbl>, new_cap <dbl>, selected_edges <int>,
+#> #   components <int>
+#> 
+#> $diagnostics$degrees
+#> # A tibble: 6 × 2
+#>   item_id degree
+#>   <chr>    <int>
+#> 1 a            1
+#> 2 b            2
+#> 3 c            2
+#> 4 d            2
+#> 5 e            2
+#> 6 f            1
+#> 
+#> $diagnostics$degree_histogram
+#> # A tibble: 2 × 2
+#>   degree n_items
+#>    <int>   <int>
+#> 1      1       2
+#> 2      2       4
+#> 
+#> $diagnostics$operations
+#> $diagnostics$operations$probability_evaluations
+#> [1] 9
+#> 
+#> $diagnostics$operations$candidate_visits
+#> [1] 5
+#> 
+#> $diagnostics$operations$component_checks
+#> [1] 5
+#> 
+#> $diagnostics$operations$passes
+#> [1] 1
+```
+
+An invalid judgment leaves queue progress and reservoir consumption
+unchanged; retry uses the same ordered edge. `n_steps` counts attempts.
+When comparing arms at equal budgets, count committed comparisons with
+`summarize_adaptive(state)$committed_pairs`, not attempted requests.
+
+Predictive sessions save their initial distribution, mapping identity,
+tree policy/version, seed, ordered queue, diagnostics, and SHA-256
+digest. Session metadata repeats the policy/version and digest. Resume
+validates these frozen artifacts without predicting, initializing
+ratings, or rebuilding the tree. Keep the original reservoir to recreate
+its judge; changing its membership, orientation, or outcomes is
+rejected.
+
+``` r
+
+bootstrap_session <- tempfile("predictive-bootstrap-")
+save_adaptive_session(bootstrap_partial, bootstrap_session)
+bootstrap_restored <- adaptive_rank_resume(bootstrap_session)
+stopifnot(identical(bootstrap_restored$bootstrap, bootstrap_partial$bootstrap))
+bootstrap_continued <- adaptive_rank_run_live(bootstrap_restored,
+  make_adaptive_judge_replay(bootstrap_reservoir), n_steps = 1L, progress = "none")
+unlink(bootstrap_session, recursive = TRUE)
+```
+
+On
+[`adaptive_rank()`](https://shmercer.github.io/pairwiseLLM/reference/adaptive_rank.md)
+wrapper resume, omit initialization arguments. An explicit bootstrap
+policy must match the saved policy; an explicit predictive seed must
+also match. Warm-start mapping/model/prior overrides are rejected. Older
+saved sessions without bootstrap policy metadata retain their shuffled
+queue, current ratings, and progress. Default summary columns remain
+unchanged; use `include_bootstrap = TRUE` for the additional audit
+list-column.
 
 ## A complete example with three algorithms
 

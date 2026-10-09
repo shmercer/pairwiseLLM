@@ -105,7 +105,8 @@ returns state plus summary outputs.</p>
 <span>  warm_start_prior_sd <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  warm_start_mode <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  replay_reservoir <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  warm_start_trueskill <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  warm_start_trueskill <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  bootstrap_policy <span class="op">=</span> <span class="st">"shuffled_connected"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -201,9 +202,9 @@ Unknown fields and invalid values abort with actionable errors.</p>
 <p>Supported keys (with defaults) include:</p><dl><dt><code>pairing_strategy</code></dt>
 <dd><p>Post-bootstrap strategy: <code>hybrid</code> (default), <code>random</code>,
 <code>trueskill_p50</code>, or <code>trueskill_pollitt</code>. Direct strategies currently require
-<code>run_mode = "within_set"</code>. All strategies retain the same connected shuffled
-bootstrap. Direct strategies choose a focal item uniformly from sorted IDs
-at minimum committed degree, using the run seed and committed count; invalid
+<code>run_mode = "within_set"</code>. The default bootstrap is connected and shuffled;
+predictive graphs require Pollitt. Direct strategies choose a focal item from sorted IDs
+uniformly at minimum committed degree, using the run seed and committed count; invalid
 judgments retry the same draw. Among legal partners, <code>random</code> chooses uniformly,
 <code>trueskill_p50</code> minimizes distance to TrueSkill probability 0.50, and
 <code>trueskill_pollitt</code> minimizes distance to 1/3 or 2/3, with item-ID tie breaking.
@@ -641,6 +642,19 @@ requires explicit <code>warm_start_prior_sd</code>; prior objects use their stor
 Named SD vectors align by ID; unnamed vectors follow prediction-input order.
 Omit this argument on resume; the saved distribution policy is authoritative.</p></dd>
 
+
+<dt id="arg-bootstrap-policy">bootstrap_policy<a class="anchor" aria-label="anchor" href="#arg-bootstrap-policy"></a></dt>
+<dd><p>Initial graph policy, default <code>"shuffled_connected"</code>.
+<code>"predictive_connected"</code> requires a selectable <code>replay_reservoir</code>, ordinary
+within-set mode, <code>warm_start_trueskill = "predictive_distribution"</code>, and
+<code>adaptive_config = list(pairing_strategy = "trueskill_pollitt")</code>.
+Build the reservoir from selectable primary observations only, excluding
+held-out edges and reversal audits. The graph uses only manifest endpoints,
+frozen initial TrueSkill means/SDs, and the seed, never outcomes. The queue
+is built once before judging and retained across updates and resume.
+On wrapper resume, omit this argument or supply the saved policy; a different
+policy or explicit predictive initialization seed is rejected.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -708,7 +722,7 @@ with explicit evidence for E1–E3 estimation. Every wrapper call returns canoni
 <code>phase_a</code> outputs that can be fed back into a later linking run through
 <code>adaptive_config$phase_a_artifacts</code>.</p>
 <p>Selection semantics:
-selection uses one-pair transactional steps after the connected shuffled bootstrap.
+selection uses one-pair transactional steps after the configured connected bootstrap.
 In the default hybrid strategy, TrueSkill supplies live ranks, strata, pair
 probabilities, base utility, and rolling anchors throughout within-set and
 Phase-A work. Rolling anchors use current TrueSkill ranks, and anchor-link
@@ -735,11 +749,13 @@ pending validation; use <code><a href="prepare_link_input.html">prepare_link_inp
 when <code>resume = TRUE</code> and <code>session_dir</code> already contains adaptive artifacts,
 failed session loads abort with an actionable error instead of starting a
 fresh run silently.</p>
-<p>Predictive initialization is separate from observed connectivity: every mode
-retains the same seeded connected shuffled bootstrap of N - 1 valid comparisons,
-with common presentation balancing and invalid-result retries. Predictive
-locations can affect later TrueSkill-based selection; they do not replace the
-initial observed spanning path. Without the distribution opt-in, BTL prior SD
+<p>Predictive destinations and initial connectivity are separate choices.
+By default, every warm mode retains the same seeded shuffled bootstrap of
+N - 1 valid comparisons. The explicit predictive graph policy uses a frozen
+allowed spanning tree with Pollitt probability targets and degree-cap
+relaxation. Both policies preserve invalid-result retries and recorded
+reservoir orientation. Later pairing retains the configured strategy.
+Without the distribution opt-in, BTL prior SD
 does not determine TrueSkill sigma. Ensemble disagreement never supplies SD
 automatically. No historical training-score units are restored.</p>
 <p>Distribution initialization assumes the supplied BTL prior SD and TrueSkill
@@ -807,10 +823,10 @@ and the <a href="https://shmercer.github.io/pairwiseLLM/articles/adaptive-cj-wor
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 4 × 97</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dttm&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-10-09 <span style="color: #949494;">19:24:32</span>       1     1     4 S01   S04       4     1 S04  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-10-09 <span style="color: #949494;">19:24:32</span>       2     4     8 S04   S08       8     4 S08  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-10-09 <span style="color: #949494;">19:24:32</span>       3     8     2 S08   S02       2     8 S02  </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-10-09 <span style="color: #949494;">19:24:32</span>       4     2     6 S02   S06       6     2 S06  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span>       1 2026-10-09 <span style="color: #949494;">20:16:36</span>       1     1     4 S01   S04       4     1 S04  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span>       2 2026-10-09 <span style="color: #949494;">20:16:36</span>       2     4     8 S04   S08       8     4 S08  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">3</span>       3 2026-10-09 <span style="color: #949494;">20:16:36</span>       3     8     2 S08   S02       2     8 S02  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">4</span>       4 2026-10-09 <span style="color: #949494;">20:16:36</span>       4     2     6 S02   S06       6     2 S06  </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># ℹ 87 more variables: B_id &lt;chr&gt;, unordered_key &lt;chr&gt;, ordered_key &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   Y &lt;int&gt;, status &lt;chr&gt;, judge_backend &lt;chr&gt;, judge_model &lt;chr&gt;,</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;">#   judge_endpoint &lt;chr&gt;, judge_valid &lt;lgl&gt;, judge_invalid_reason &lt;chr&gt;,</span></span>

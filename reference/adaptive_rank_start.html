@@ -76,7 +76,8 @@
 <span>  warm_start_prior_sd <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  warm_start_mode <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  replay_reservoir <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  warm_start_trueskill <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  warm_start_trueskill <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  bootstrap_policy <span class="op">=</span> <span class="st">"shuffled_connected"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -93,7 +94,7 @@ derived from these IDs.</p></dd>
 
 
 <dt id="arg-seed">seed<a class="anchor" aria-label="anchor" href="#arg-seed"></a></dt>
-<dd><p>Integer seed used for deterministic connected-bootstrap shuffling and
+<dd><p>Integer seed used for deterministic connected-bootstrap choices and
 selection randomness. Default is <code>1L</code>.</p></dd>
 
 
@@ -115,7 +116,7 @@ for timestamps.</p></dd>
 <dt id="arg-adaptive-config">adaptive_config<a class="anchor" aria-label="anchor" href="#arg-adaptive-config"></a></dt>
 <dd><p>Optional named list of adaptive controller overrides.
 <code>pairing_strategy</code> defaults to <code>hybrid</code>; <code>random</code>, <code>trueskill_p50</code>, and
-<code>trueskill_pollitt</code> select direct pairs after the common connected shuffled
+<code>trueskill_pollitt</code> select direct pairs after the configured connected
 bootstrap and currently require <code>run_mode = "within_set"</code>.
 Unknown fields and invalid values abort with an actionable error. See
 <code><a href="adaptive_rank.html">adaptive_rank()</a></code> for the full list of supported keys, detailed semantics,
@@ -186,20 +187,33 @@ requires explicit <code>warm_start_prior_sd</code>; prior objects use their stor
 Named SD vectors align by ID; unnamed vectors follow prediction-input order.
 Omit this argument on resume; the saved distribution policy is authoritative.</p></dd>
 
+
+<dt id="arg-bootstrap-policy">bootstrap_policy<a class="anchor" aria-label="anchor" href="#arg-bootstrap-policy"></a></dt>
+<dd><p>Initial graph policy, default <code>"shuffled_connected"</code>.
+<code>"predictive_connected"</code> requires a selectable <code>replay_reservoir</code>, ordinary
+within-set mode, <code>warm_start_trueskill = "predictive_distribution"</code>, and
+<code>adaptive_config = list(pairing_strategy = "trueskill_pollitt")</code>.
+Build the reservoir from selectable primary observations only, excluding
+held-out edges and reversal audits. The graph uses only manifest endpoints,
+frozen initial TrueSkill means/SDs, and the seed, never outcomes. The queue
+is built once before judging and retained across updates and resume.
+On wrapper resume, omit this argument or supply the saved policy; a different
+policy or explicit predictive initialization seed is rejected.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>An adaptive state object containing <code>step_log</code>, <code>round_log</code>, and
 <code>item_log</code>. The object includes class <code>"adaptive_state"</code>, item ID
-mappings, TrueSkill state, connected bootstrap queue, refit metadata, and runtime
+mappings, TrueSkill state, frozen bootstrap policy/queue, refit metadata, and runtime
 configuration.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>This function creates the stepwise controller state and seeds all canonical
-logs used in the adaptive pairing workflow. Connected bootstrap pair construction
-follows the same seeded shuffled chain in every mode, giving a connected comparison
-graph after \(N - 1\) committed comparisons.</p>
+logs used in the adaptive pairing workflow. The default connected bootstrap uses
+a seeded shuffled chain, or a shuffled allowed tree for replay reservoirs. Either
+graph policy connects all items after \(N - 1\) committed comparisons.</p>
 <p>Pair selection in this framework is stepwise and uncertainty-aware.
 Within-set/Phase-A hybrid routing uses TrueSkill ranks, strata, rolling anchors,
 pair probabilities, and base utility
@@ -222,11 +236,13 @@ summaries/diagnostics are logged per spoke at each linking refit.</p>
 <li><p><code>item_log</code>: per-item posterior summaries by refit.</p></li>
 </ul><p>If <code>session_dir</code> is supplied, the initialized state is persisted
 immediately using <code><a href="save_adaptive_session.html">save_adaptive_session()</a></code>.</p>
-<p>Predictive initialization is separate from observed connectivity: every mode
-retains the same seeded connected shuffled bootstrap of N - 1 valid comparisons,
-with common presentation balancing and invalid-result retries. Predictive
-locations can affect later TrueSkill-based selection; they do not replace the
-initial observed spanning path. Without the distribution opt-in, BTL prior SD
+<p>Predictive destinations and initial connectivity are separate choices.
+By default, every warm mode retains the same seeded shuffled bootstrap of
+N - 1 valid comparisons. The explicit predictive graph policy uses a frozen
+allowed spanning tree with Pollitt probability targets and degree-cap
+relaxation. Both policies preserve invalid-result retries and recorded
+reservoir orientation. Later pairing retains the configured strategy.
+Without the distribution opt-in, BTL prior SD
 does not determine TrueSkill sigma. Ensemble disagreement never supplies SD
 automatically. No historical training-score units are restored.</p>
 <p>Distribution initialization assumes the supplied BTL prior SD and TrueSkill

@@ -65,6 +65,15 @@ validate_session_dir(dir)
 #> $pairing_strategy
 #> [1] "hybrid"
 #> 
+#> $bootstrap_policy
+#> [1] "shuffled_connected"
+#> 
+#> $bootstrap_policy_version
+#> [1] 1
+#> 
+#> $bootstrap_digest
+#> NULL
+#> 
 #> $replay_reservoir_digest
 #> NULL
 #> 

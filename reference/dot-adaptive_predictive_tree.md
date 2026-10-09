@@ -5,8 +5,8 @@ persistence. Supply only selectable primary endpoints, for example
 `reservoir$manifest$edges`, and the initial calibrated TrueSkill
 distribution. Calibration is an upstream responsibility. No outcomes,
 reservoir identities, histories, held-out edges, reversal audits, or
-evolved ratings are consumed. A future caller must build once at
-initialization and retain the returned queue for all bootstrap steps,
+evolved ratings are consumed. Adaptive start builds once at
+initialization and retains the returned queue for all bootstrap steps,
 rather than rebuild it from updated ratings.
 
 ## Usage

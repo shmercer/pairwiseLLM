@@ -46,7 +46,8 @@ adaptive_rank(
   warm_start_prior_sd = NULL,
   warm_start_mode = NULL,
   replay_reservoir = NULL,
-  warm_start_trueskill = NULL
+  warm_start_trueskill = NULL,
+  bootstrap_policy = "shuffled_connected"
 )
 ```
 
@@ -157,26 +158,27 @@ adaptive_rank(
 
   :   Post-bootstrap strategy: `hybrid` (default), `random`,
       `trueskill_p50`, or `trueskill_pollitt`. Direct strategies
-      currently require `run_mode = "within_set"`. All strategies retain
-      the same connected shuffled bootstrap. Direct strategies choose a
-      focal item uniformly from sorted IDs at minimum committed degree,
-      using the run seed and committed count; invalid judgments retry
-      the same draw. Among legal partners, `random` chooses uniformly,
-      `trueskill_p50` minimizes distance to TrueSkill probability 0.50,
-      and `trueskill_pollitt` minimizes distance to 1/3 or 2/3, with
-      item-ID tie breaking. This is a Pollitt-inspired strategy using
-      TrueSkill probabilities; the earlier article used BTL
-      probabilities, so this is not an exact replication. Direct
-      strategies allow at most two observations per unordered pair, with
-      canonical presentation balancing and reversal on repeat. They stop
-      on focal partner exhaustion and do not use hybrid stage quotas or
-      coverage overrides. Step logs identify `direct_pairing`,
-      `pairing_strategy`, and `target_distance`; `i_id` is the focal
-      item and `p_ij` is the pre-judgment TrueSkill probability for
-      presented A over B. Target distance is symmetric under reversal
-      and is NA for random pairing. BTL estimation, refit cadence, and
-      stopping remain unchanged. On resume, omit this field or supply
-      the saved strategy; changing strategy requires a new session.
+      currently require `run_mode = "within_set"`. The default bootstrap
+      is connected and shuffled; predictive graphs require Pollitt.
+      Direct strategies choose a focal item from sorted IDs uniformly at
+      minimum committed degree, using the run seed and committed count;
+      invalid judgments retry the same draw. Among legal partners,
+      `random` chooses uniformly, `trueskill_p50` minimizes distance to
+      TrueSkill probability 0.50, and `trueskill_pollitt` minimizes
+      distance to 1/3 or 2/3, with item-ID tie breaking. This is a
+      Pollitt-inspired strategy using TrueSkill probabilities; the
+      earlier article used BTL probabilities, so this is not an exact
+      replication. Direct strategies allow at most two observations per
+      unordered pair, with canonical presentation balancing and reversal
+      on repeat. They stop on focal partner exhaustion and do not use
+      hybrid stage quotas or coverage overrides. Step logs identify
+      `direct_pairing`, `pairing_strategy`, and `target_distance`;
+      `i_id` is the focal item and `p_ij` is the pre-judgment TrueSkill
+      probability for presented A over B. Target distance is symmetric
+      under reversal and is NA for random pairing. BTL estimation, refit
+      cadence, and stopping remain unchanged. On resume, omit this field
+      or supply the saved strategy; changing strategy requires a new
+      session.
 
   `dup_max_obs_relaxed`
 
@@ -656,6 +658,21 @@ adaptive_rank(
   follow prediction-input order. Omit this argument on resume; the saved
   distribution policy is authoritative.
 
+- bootstrap_policy:
+
+  Initial graph policy, default `"shuffled_connected"`.
+  `"predictive_connected"` requires a selectable `replay_reservoir`,
+  ordinary within-set mode,
+  `warm_start_trueskill = "predictive_distribution"`, and
+  `adaptive_config = list(pairing_strategy = "trueskill_pollitt")`.
+  Build the reservoir from selectable primary observations only,
+  excluding held-out edges and reversal audits. The graph uses only
+  manifest endpoints, frozen initial TrueSkill means/SDs, and the seed,
+  never outcomes. The queue is built once before judging and retained
+  across updates and resume. On wrapper resume, omit this argument or
+  supply the saved policy; a different policy or explicit predictive
+  initialization seed is rejected.
+
 ## Value
 
 A list with:
@@ -747,7 +764,7 @@ canonical `phase_a` outputs that can be fed back into a later linking
 run through `adaptive_config$phase_a_artifacts`.
 
 Selection semantics: selection uses one-pair transactional steps after
-the connected shuffled bootstrap. In the default hybrid strategy,
+the configured connected bootstrap. In the default hybrid strategy,
 TrueSkill supplies live ranks, strata, pair probabilities, base utility,
 and rolling anchors throughout within-set and Phase-A work. Rolling
 anchors use current TrueSkill ranks, and anchor-link routing compares
@@ -780,14 +797,15 @@ Resume behavior: when `resume = TRUE` and `session_dir` already contains
 adaptive artifacts, failed session loads abort with an actionable error
 instead of starting a fresh run silently.
 
-Predictive initialization is separate from observed connectivity: every
-mode retains the same seeded connected shuffled bootstrap of N - 1 valid
-comparisons, with common presentation balancing and invalid-result
-retries. Predictive locations can affect later TrueSkill-based
-selection; they do not replace the initial observed spanning path.
-Without the distribution opt-in, BTL prior SD does not determine
-TrueSkill sigma. Ensemble disagreement never supplies SD automatically.
-No historical training-score units are restored.
+Predictive destinations and initial connectivity are separate choices.
+By default, every warm mode retains the same seeded shuffled bootstrap
+of N - 1 valid comparisons. The explicit predictive graph policy uses a
+frozen allowed spanning tree with Pollitt probability targets and
+degree-cap relaxation. Both policies preserve invalid-result retries and
+recorded reservoir orientation. Later pairing retains the configured
+strategy. Without the distribution opt-in, BTL prior SD does not
+determine TrueSkill sigma. Ensemble disagreement never supplies SD
+automatically. No historical training-score units are restored.
 
 Distribution initialization assumes the supplied BTL prior SD and
 TrueSkill uncertainty describe comparable latent scales under the
@@ -865,10 +883,10 @@ head(out$logs$step_log)
 #> # A tibble: 4 × 97
 #>   step_id timestamp           pair_id     i     j i_id  j_id      A     B A_id 
 #>     <int> <dttm>                <int> <int> <int> <chr> <chr> <int> <int> <chr>
-#> 1       1 2026-10-09 19:24:32       1     1     4 S01   S04       4     1 S04  
-#> 2       2 2026-10-09 19:24:32       2     4     8 S04   S08       8     4 S08  
-#> 3       3 2026-10-09 19:24:32       3     8     2 S08   S02       2     8 S02  
-#> 4       4 2026-10-09 19:24:32       4     2     6 S02   S06       6     2 S06  
+#> 1       1 2026-10-09 20:16:36       1     1     4 S01   S04       4     1 S04  
+#> 2       2 2026-10-09 20:16:36       2     4     8 S04   S08       8     4 S08  
+#> 3       3 2026-10-09 20:16:36       3     8     2 S08   S02       2     8 S02  
+#> 4       4 2026-10-09 20:16:36       4     2     6 S02   S06       6     2 S06  
 #> # ℹ 87 more variables: B_id <chr>, unordered_key <chr>, ordered_key <chr>,
 #> #   Y <int>, status <chr>, judge_backend <chr>, judge_model <chr>,
 #> #   judge_endpoint <chr>, judge_valid <lgl>, judge_invalid_reason <chr>,
