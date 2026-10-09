@@ -11,7 +11,7 @@
       # optim requests value and gradient at the same point. Cache only that
       # point; this changes neither evaluated values nor the optimization path.
       if (!identical(x, cache$previous)) {
-        if (!boundary && (tail(x, 1L) < 0 || tail(x, 1L) > 1)) {
+        if (!boundary && (utils::tail(x, 1L) < 0 || utils::tail(x, 1L) > 1)) {
           stop("Lapse optimizer evaluated epsilon outside [0, 1].")
         }
         cache$surface <- if (boundary) .bt_lapse_objective(x, kernel, TRUE) else .bt_lapse_surface(x, kernel)
@@ -38,7 +38,7 @@
       for (i in seq_len(10L)) {
         obj <- objective(fit$par)
         free <- seq_along(fit$par)
-        if (!boundary && tail(fit$par, 1L) == 0) free <- head(free, -1L)
+        if (!boundary && utils::tail(fit$par, 1L) == 0) free <- utils::head(free, -1L)
         H <- .bt_alpha_matrix(obj$hessian[free, free, drop = FALSE])
         if (!H$positive_definite) break
         step <- numeric(length(fit$par))
@@ -47,7 +47,7 @@
         accepted <- FALSE
         for (fraction in 2^-(0:20)) {
           candidate <- fit$par - fraction * step
-          if (!boundary && (tail(candidate, 1L) < 0 || tail(candidate, 1L) > 1)) next
+          if (!boundary && (utils::tail(candidate, 1L) < 0 || utils::tail(candidate, 1L) > 1)) next
           value <- objective(candidate)$value
           if (is.finite(value) && value <= obj$value + 1e-12 * max(1, abs(obj$value))) {
             fit$par <- candidate
@@ -74,14 +74,14 @@
 .bt_lapse_boundary_checks <- function(surface, kernel, control) {
   k <- length(surface$gradient)
   H <- .bt_alpha_matrix(surface$hessian[-k, -k, drop = FALSE])
-  score <- head(surface$gradient, -1L)
+  score <- utils::head(surface$gradient, -1L)
   step <- if (H$positive_definite && all(is.finite(score))) {
     as.vector(backsolve(H$chol, forwardsolve(t(H$chol), score)))
   } else {
     rep(Inf, length(score))
   }
-  centered <- c(as.vector(kernel$transform %*% head(step, -1L)), tail(step, 1L))
-  epsilon_score <- tail(surface$gradient, 1L)
+  centered <- c(as.vector(kernel$transform %*% utils::head(step, -1L)), utils::tail(step, 1L))
+  epsilon_score <- utils::tail(surface$gradient, 1L)
   finite <- all(is.finite(c(surface$value, surface$gradient, surface$hessian, step, H$rcond)))
   list(gradient_max = max(abs(score)), step_max = max(abs(c(step, centered))),
     newton_correction = centered, hessian_rcond = H$rcond, epsilon_score = epsilon_score,

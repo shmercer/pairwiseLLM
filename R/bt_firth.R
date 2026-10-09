@@ -73,7 +73,7 @@
     effective_settings = list(family = "binomial", link = "logit", intercept = FALSE,
                               start = rep(0, ncol(transform)), control = fit$control),
     adjustment = list(method = "firth", type = "AS_mean", log_determinant_multiplier = 0.5),
-    identification = list(convention = "sum_to_zero", internal_reference = tail(ids, 1L),
+    identification = list(convention = "sum_to_zero", internal_reference = utils::tail(ids, 1L),
                           transformation = transform),
     convergence = list(status = "converged", converged = fit$converged, iterations = fit$iter),
     uncertainty = list(method = "inverse_expected_information", coordinates = "sum_to_zero", valid = TRUE),
