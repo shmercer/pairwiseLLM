@@ -276,7 +276,10 @@ test_that("legacy sessions and public audit fields remain compatible across the 
     expect_identical(audit$manifest_digest, state$replay_reservoir$manifest_digest)
     other_policy <- if (arm %in% c("selection", "full")) "shuffled_connected" else "predictive_connected"
     expect_error(pairwiseLLM::adaptive_rank(data.frame(item_id = f$ids, text = "synthetic"),
-      session_dir = path, bootstrap_policy = other_policy, progress = "none"), "Cannot change.*bootstrap_policy")
+      session_dir = path, bootstrap_policy = other_policy,
+      judge = pairwiseLLM::make_adaptive_judge_replay(
+        pairwiseLLM::make_adaptive_replay_reservoir(f$primary, f$ids)),
+      progress = "none"), "Cannot change.*bootstrap_policy")
     if (arm %in% c("selection", "full")) {
       expect_identical(audit$digest, state$bootstrap$digest)
       expect_identical(audit$diagnostics, state$bootstrap$diagnostics)
