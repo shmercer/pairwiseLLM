@@ -1,0 +1,9 @@
+implementation,workers,run,n_rep,n_success,elapsed_seconds,successes_per_second,exact_bootstrap_agreement
+baseline,1,1,200,200,12.35,16.1943319838057,TRUE
+prepared,1,1,200,200,11.476,17.4276751481352,TRUE
+prepared,1,2,200,200,11.537,17.3355291670278,TRUE
+baseline,1,2,200,200,12.348,16.1969549724652,TRUE
+baseline,12,1,200,200,5.536,36.1271676300578,TRUE
+prepared,12,1,200,200,4.641,43.0941607412196,TRUE
+prepared,12,2,200,200,4.613,43.3557337957945,TRUE
+baseline,12,2,200,200,5.563,35.9518245550962,TRUE

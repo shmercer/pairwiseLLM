@@ -1,0 +1,5 @@
+"field","indexed_max_abs_error","guarded_max_abs_error","hessian_rcond","exact_guarded_diagnostics"
+"hessian",2.22044604925031e-16,0,1.01224119587061e-11,TRUE
+"information",2.22044604925031e-16,0,1.01224119587061e-11,TRUE
+"newton_correction",2.27639627037746e-10,0,1.01224119587061e-11,TRUE
+"step_max",2.27639627037746e-10,0,1.01224119587061e-11,TRUE

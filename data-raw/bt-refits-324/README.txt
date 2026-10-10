@@ -15,6 +15,22 @@ uses a provider, or reads study outcomes:
     'testthat::test_local(filter="0044", reporter="summary")'
   Rscript --vanilla scripts/benchmark-bt-refits-components.R /tmp/bt-components
   python3 scripts/benchmark-bt-refits.py /tmp/bt-workers
+  Rscript --vanilla scripts/summarize-bt-refits.R \
+    /tmp/bt-components /tmp/bt-workers /tmp/bt-summary
+  Rscript --vanilla scripts/check-bt-conditioning.R /tmp/bt-conditioning.csv
+  Rscript --vanilla scripts/check-bt-refits-coverage.R /tmp/bt-coverage
+  R CMD build .
+  R CMD check pairwiseLLM_1.6.0.tar.gz
+
+results.txt explains the measured outcomes. fit-summary.csv and
+worker-summary.csv summarize the raw fits.csv and bootstrap.csv;
+allocations.csv reports separate allocation profiling. baseline-profile.csv
+and public-profile.csv separate the six original computation stages.
+worker-provenance.json records source hashes and hardware for the final
+end-to-end measurements. Session and validation logs accompany the tables.
+The coverage script needs a fresh output directory: covr can reuse trace
+files left in an earlier installation. coverage.csv uses tally_coverage's
+source-line expansion, not counts of instrumented expressions.
 
 The worker driver installs the six original R files into a temporary baseline
 package and the current source into a separate temporary prepared package.
@@ -23,13 +39,28 @@ R_LIBS, avoiding startup differences from exporting sourced baseline functions.
 It uses OUTPUT/baseline-library and OUTPUT/prepared-library, launches fresh R
 processes, and uses the public bootstrap interface, including simulation,
 validation, preparation, fitting, uncertainty checks, collection and worker
-startup/shutdown. It compares 24 successful replicates in each of two runs
+startup/shutdown. Parent package loading and a two-item engine warmup are
+outside the bootstrap timer; process_seconds additionally records the entire
+fresh R invocation. It compares 24 successful replicates in each of two runs
 at 1,2,4,8,12 workers. Baseline/prepared order alternates between runs. All
 scientific results must be identical to the first baseline serial run.
 Twenty-four is divisible by every tested worker count, so all workers receive
 whole waves of work (at least two fits per worker at the largest setting).
 Local sockets are required for future multisession. This is not a tuning
 recommendation for longer production runs or concurrent study workloads.
+
+Short N=91 Firth runs showed regressions in some settings. A separate
+sensitivity check uses 200 replicates, two runs and 1/12 workers, retaining
+the same isolated installed libraries and exact scientific-result oracle:
+
+  R_LIBS=/tmp/bt-workers/baseline-library Rscript --vanilla \
+    scripts/benchmark-bt-firth-long.R /tmp/bt-firth-long baseline 1 1
+
+Repeat for prepared-library/"prepared", workers 1 and 12, and runs 1 and 2;
+run 1 orders baseline then prepared, run 2 prepared then baseline. Run the
+baseline serial run 1 first to create its oracle. firth-long.csv contains
+all eight cells, with source provenance in firth-long-provenance.json.
+This additional check does not replace or filter the original 24-fit results.
 
 The components benchmark reports six unprofiled per-fit times per estimator
 and N (three fits in each of two runs), with GC before each timing. Graph
@@ -108,3 +139,6 @@ and repeated covariance checks are deliberately retained; worker startup
 and serialization can dominate short jobs. Dense cached alpha designs trade
 retained per-worker memory for fewer repeated allocations. Production study
 qualification and any repinning remain separate from this synthetic evidence.
+
+Evidence text has trailing whitespace removed and CSV line endings normalized
+to LF for repository checks; recorded values and log messages are unchanged.

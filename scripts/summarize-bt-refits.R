@@ -21,6 +21,8 @@ worker_summary <- do.call(rbind, lapply(worker_groups, function(x) {
   data.frame(n = x$n[1], engine = x$engine[1], workers = x$workers[1],
     baseline_mean_seconds_per_fit = mean(old$seconds_per_success),
     prepared_mean_seconds_per_fit = mean(new$seconds_per_success),
+    baseline_median_seconds_per_fit = median(old$seconds_per_success),
+    prepared_median_seconds_per_fit = median(new$seconds_per_success),
     baseline_min_successes_per_second = min(old$successes_per_second),
     prepared_min_successes_per_second = min(new$successes_per_second),
     baseline_mean_successes_per_second = mean(old$successes_per_second),

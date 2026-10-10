@@ -1,0 +1,518 @@
+
+R version 4.6.1 (2026-06-24) -- "Happy Hop"
+Copyright (C) 2026 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> # This file is part of the standard setup for testthat.
+> # It is recommended that you do not modify it.
+> #
+> # Where should you do additional test configuration?
+> # Learn more about the roles of various files in:
+> # * https://r-pkgs.org/testing-design.html#sec-tests-files-overview
+> # * https://testthat.r-lib.org/articles/special-files.html
+>
+> library(testthat)
+> library(pairwiseLLM)
+>
+> test_check("pairwiseLLM")
+- OpenAI (openai): OPENAI_API_KEY is set.
+- Anthropic (anthropic): ANTHROPIC_API_KEY is not set.
+  Set it for this session with:
+    Sys.setenv(ANTHROPIC_API_KEY = "YOUR_KEY_HERE")
+  Or persistently via:
+    usethis::edit_r_environ()
+  and add a line like:
+    ANTHROPIC_API_KEY = "YOUR_KEY_HERE"
+- Google Gemini (gemini): GEMINI_API_KEY is not set.
+  Set it for this session with:
+    Sys.setenv(GEMINI_API_KEY = "YOUR_KEY_HERE")
+  Or persistently via:
+    usethis::edit_r_environ()
+  and add a line like:
+    GEMINI_API_KEY = "YOUR_KEY_HERE"
+- Vertex AI Gemini API (vertex): VERTEX_API_KEY is not set.
+  Set it for this session with:
+    Sys.setenv(VERTEX_API_KEY = "YOUR_KEY_HERE")
+  Or persistently via:
+    usethis::edit_r_environ()
+  and add a line like:
+    VERTEX_API_KEY = "YOUR_KEY_HERE"
+- Together.ai (together): TOGETHER_API_KEY is not set.
+  Set it for this session with:
+    Sys.setenv(TOGETHER_API_KEY = "YOUR_KEY_HERE")
+  Or persistently via:
+    usethis::edit_r_environ()
+  and add a line like:
+    TOGETHER_API_KEY = "YOUR_KEY_HERE"
+Transient HTTP 500 from API (attempt 1 of 3); retrying in 0.0 seconds...
+Transient HTTP 500 from API (attempt 2 of 3); retrying in 0.0 seconds...
+Timeout from API (attempt 1 of 2); retrying in 0.0 seconds...
+Transient error (attempt 1 of 3); retrying in 0.0 seconds...
+Transient error (attempt 2 of 3); retrying in 0.0 seconds...
+Transient error (attempt 1 of 2); retrying in 0.0 seconds...
+Transient error (attempt 1 of 2); retrying in 0.0 seconds...
+Transient HTTP 503 from API (attempt 1 of 2); retrying in 0.0 seconds...
+Transient HTTP 503 from API (attempt 1 of 2); retrying in 0.0 seconds...
+No new pairs to process.
+
+  |
+  |                                                                      |   0%
+  |
+  |===================================                                   |  50%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |===================================                                   |  50%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+Setting up parallel plan with 2 workers (multisession)...
+Processing 2 pairs in PARALLEL...
+Completed 2 pairs in 0.9s (avg 0.45s/pair).
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+No new pairs to process.
+No new pairs to process.
+
+  |
+  |                                                                      |   0%
+  |
+  |===================================                                   |  50%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |===================================                                   |  50%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+No new pairs to process.
+No new pairs to process.
+
+  |
+  |                                                                      |   0%
+  |
+  |===================================                                   |  50%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |===================================                                   |  50%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+Found existing file at '/tmp/Rtmp4ezcz6/file20f90a85741d.csv'. Checking for resumable pairs...
+Skipping 1 pairs already present in '/tmp/Rtmp4ezcz6/file20f90a85741d.csv'.
+Submitting 1 live pair(s) for comparison (model=model, backend=gemini, thinking_level=low, include_thoughts=FALSE)...
+
+  |
+  |                                                                      |   0%[Gemini live pair 1 of 1] Comparing S3 vs S4 ...
+
+  |
+  |======================================================================| 100%  Elapsed: 0.0s | Avg per pair: 0.0s | Est. remaining: 0.0s
+
+Completed 1 pairs in 0.0s (avg 0.00s/pair).
+Setting up parallel plan with 2 workers (multisession)...
+Processing 3 pairs in PARALLEL (Gemini)...
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+Completed 3 pairs in 0.0s (avg 0.00s/pair).
+
+  |
+  |                                                                      |   0%
+  |
+  |===================================                                   |  50%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+No new pairs to process.
+
+  |
+  |                                                                      |   0%
+  |
+  |===================================                                   |  50%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |===================================                                   |  50%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+Found existing file at '/tmp/Rtmp4ezcz6/file20f905edef69b.csv'. Checking for resumable pairs...
+No new pairs to process.
+No new pairs to process.
+No new pairs to process.
+
+  |
+  |                                                                      |   0%
+  |
+  |===================================                                   |  50%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |===================================                                   |  50%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+Setting up parallel plan with 2 workers (multisession)...
+Processing 2 pairs in PARALLEL (Together.ai)...
+Completed 2 pairs in 0.6s (avg 0.29s/pair).
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+Submitting 1 live pair(s) for comparison (backend=ollama, model=mistral-small3.2:24b)...
+
+  |
+  |                                                                      |   0%[Live pair 1 of 1] Comparing S01 vs S02 ...
+
+  |
+  |======================================================================| 100%
+Completed 1 live pair(s) in 0.0s (avg 0.00s per pair).
+Submitting 1 live pair(s) for comparison (backend=ollama, model=mistral-small3.2:24b)...
+[Live pair 1 of 1] Comparing S01 vs S02 ...
+    Result: S01 preferred (SAMPLE_1) | tokens: prompt=10, completion=5, total=15
+    Timing: elapsed=0.0s | avg/pair=0.0s | est remaining=0.0s
+Completed 1 live pair(s) in 0.0s (avg 0.00s per pair).
+Unable to run `ollama ps`: simulated failure from ollama ps
+`ollama ps` failed or returned no output; no models will be unloaded.
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |===================================                                   |  50%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+Submitting 1 live pair(s) for comparison (backend=ollama, model=mistral-small3.2:24b)...
+
+  |
+  |                                                                      |   0%[Live pair 1 of 1] Comparing S01 vs S02 ...
+
+  |
+  |======================================================================| 100%
+Completed 1 live pair(s) in 0.0s (avg 0.00s per pair).
+Submitting 1 live pair(s) for comparison (backend=ollama, model=mistral-small3.2:24b)...
+[Live pair 1 of 1] Comparing S01 vs S02 ...
+    Result: S01 preferred (SAMPLE_1) | tokens: prompt=10, completion=5, total=15
+    Timing: elapsed=0.0s | avg/pair=0.0s | est remaining=0.0s
+Completed 1 live pair(s) in 0.0s (avg 0.00s per pair).
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+
+  |
+  |                                                                      |   0%
+  |
+  |======================================================================| 100%
+Batch batch_123 status: in_progress | processing=NA, succeeded=NA, errored=NA,
+        canceled=NA, expired=NA
+Batch batch_123 status: in_progress | processing=NA, succeeded=NA, errored=NA,
+        canceled=NA, expired=NA
+Batch b state: RUNNING
+[llm_submit_pairs_multi_batch] Submitting segment 1 of 2 (2 pairs) to openai...
+[llm_submit_pairs_multi_batch] Segment 1: OpenAI batch created (id = openai-0001). Input path: /tmp/Rtmp4ezcz6/test_multi_batch_20f9013e76368/batch_01_input.jsonl
+[llm_submit_pairs_multi_batch] Submitting segment 2 of 2 (2 pairs) to openai...
+[llm_submit_pairs_multi_batch] Segment 2: OpenAI batch created (id = openai-0002). Input path: /tmp/Rtmp4ezcz6/test_multi_batch_20f9013e76368/batch_02_input.jsonl
+[llm_resume_multi_batches] Polling segment 1 (provider=openai, id=openai-001)...
+[llm_resume_multi_batches] OpenAI batch openai-001 status: completed
+[llm_resume_multi_batches] Completed 1 of 1 jobs; 0 remaining.
+Transient error (attempt 1 of 2); retrying in 0.5 seconds...
+Transient error (attempt 1 of 2); retrying in 0.5 seconds...
+[llm_resume_multi_batches] Polling segment 1 (provider=openai, id=openai-retry-get)...
+[llm_resume_multi_batches] Error retrieving OpenAI batch openai-retry-get after HTTP retries: temporary error; will retry in next round.
+[llm_resume_multi_batches] Completed 0 of 1 jobs; 1 remaining.
+[llm_resume_multi_batches] Polling segment 1 (provider=openai, id=openai-retry-get)...
+[llm_resume_multi_batches] OpenAI batch openai-retry-get status: completed
+[llm_resume_multi_batches] Completed 1 of 1 jobs; 0 remaining.
+[ FAIL 0 | WARN 0 | SKIP 57 | PASS 36296 ]
+
+══ Skipped tests (57) ══════════════════════════════════════════════════════════
+• all(file.exists(paths)) is not TRUE (1):
+  'test-0026-documentation-contracts.R:543:3'
+• Audited Python environment not explicitly selected (1):
+  'test-5100-warm-start-adaptive.R:218:3'
+• Maintainer workflow is excluded from installed/source packages. (3):
+  'test-9100-warm-start-bundle-workflow.R:30:3',
+  'test-9100-warm-start-bundle-workflow.R:48:3',
+  'test-9100-warm-start-bundle-workflow.R:115:3'
+• Repository docs unavailable. (1): 'test-9204-rubric-documentation.R:37:3'
+• Repository documentation sources are unavailable in installed-package tests.
+  (8): 'test-0026-documentation-contracts.R:197:3',
+  'test-0026-documentation-contracts.R:229:3',
+  'test-0026-documentation-contracts.R:247:3',
+  'test-0026-documentation-contracts.R:355:3',
+  'test-0026-documentation-contracts.R:374:3',
+  'test-0026-documentation-contracts.R:397:3',
+  'test-0026-documentation-contracts.R:450:3',
+  'test-0026-documentation-contracts.R:469:3'
+• Repository promotion helpers are unavailable in installed-package tests. (2):
+  'test-0027-smoke-runner.R:163:3', 'test-0027-smoke-runner.R:233:3'
+• Repository Roxygen sources are unavailable in installed-package tests. (1):
+  'test-0026-documentation-contracts.R:121:3'
+• Repository smoke evidence is unavailable in installed-package tests. (1):
+  'test-0026-documentation-contracts.R:53:3'
+• Repository smoke helpers are unavailable in installed-package tests. (1):
+  'test-0027-smoke-runner.R:92:3'
+• Repository smoke matrix is unavailable in installed-package tests. (2):
+  'test-0026-documentation-contracts.R:24:3', 'test-0027-smoke-runner.R:57:3'
+• Repository smoke runner is unavailable in installed-package tests. (3):
+  'test-0027-smoke-runner.R:4:3', 'test-0027-smoke-runner.R:142:3',
+  'test-0027-smoke-runner.R:247:3'
+• Repository vignette source is unavailable. (5):
+  'test-9204-rubric-documentation.R:66:3',
+  'test-9204-rubric-documentation.R:76:3',
+  'test-9204-rubric-documentation.R:98:3',
+  'test-9204-rubric-documentation.R:108:3',
+  'test-9204-rubric-documentation.R:130:3'
+• Repository vignette sources are unavailable in installed-package tests. (4):
+  'test-0026-documentation-contracts.R:170:3',
+  'test-0026-documentation-contracts.R:499:3',
+  'test-0026-documentation-contracts.R:555:3',
+  'test-0026-documentation-contracts.R:642:3'
+• set PAIRWISELLM_TEST_E3_STAN=true for real E3 Stan parity (5):
+  'test-6021-link-e3-stan-parity.R:3:3',
+  'test-6021-link-e3-stan-parity.R:43:3',
+  'test-6021-link-e3-stan-parity.R:62:3',
+  'test-6021-link-e3-stan-parity.R:123:3',
+  'test-6021-link-e3-stan-parity.R:154:3'
+• Set PAIRWISELLM_TEST_PYTHON for real extraction. (1):
+  'test-9100-warm-start-bundle-workflow.R:142:3'
+• Set PAIRWISELLM_TEST_PYTHON to an explicitly provisioned interpreter (3):
+  'test-0102-warm-start-features.R:125:3',
+  'test-0115-warm-start-writing-v2.R:163:3',
+  'test-9106-warm-start-documentation-workflow.R:63:3'
+• Set PAIRWISELLM_TEST_PYTHON to run the audited text-to-model integration.
+  (1): 'test-0108-warm-start-cv.R:194:3'
+• Set PAIRWISELLM_TEST_PYTHON to the audited interpreter. (1):
+  'test-0109-warm-start-ensemble.R:214:3'
+• Source documentation unavailable (6):
+  'test-0031-warm-start-documentation.R:11:3',
+  'test-0031-warm-start-documentation.R:32:3',
+  'test-0031-warm-start-documentation.R:58:3',
+  'test-0031-warm-start-documentation.R:88:3',
+  'test-0031-warm-start-documentation.R:112:3',
+  'test-0031-warm-start-documentation.R:133:3'
+• Source vignette unavailable in installed-package tests (5):
+  'test-0026-documentation-contracts.R:328:3',
+  'test-9005-adaptive-cj-documentation.R:26:3',
+  'test-9005-adaptive-cj-documentation.R:119:3',
+  'test-9005-adaptive-cj-documentation.R:132:3',
+  'test-9106-warm-start-documentation-workflow.R:23:3'
+• Tasklist evidence is unavailable in installed-package tests. (1):
+  'test-0026-documentation-contracts.R:78:3'
+• Vignette source is absent from the installed test bundle (1):
+  'test-4005-openai-batch-caching.R:366:3'
+
+[ FAIL 0 | WARN 0 | SKIP 57 | PASS 36296 ]
+>
+> proc.time()
+   user  system elapsed
+694.264  13.911 728.995

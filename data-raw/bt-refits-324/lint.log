@@ -1,0 +1,4 @@
+Implementation R/test lint passed before implementation commit 76bb81cf.
+Additional scripts checked with lintr: check-bt-refits-coverage.R, benchmark-bt-firth-long.R, summarize-bt-refits.R.
+NULL
+git diff --check: passed.
