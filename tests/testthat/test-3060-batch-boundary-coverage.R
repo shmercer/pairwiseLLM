@@ -1,7 +1,7 @@
 test_that("batch builders retain request identity and reject incompatible thinking", {
   pairs <- tibble::tibble(ID1 = "a", ID2 = "b", text1 = "one", text2 = "two", pair_uid = "exact-id")
   args <- list(pairs = pairs, model = "fixture", trait_name = "quality", trait_description = "quality")
-  out <- do.call(pairwiseLLM:::build_openai_batch_requests, args)
+  out <- do.call(pairwiseLLM:::build_openai_batch_requests, c(args, list(prompt_caching = "implicit")))
   expect_identical(out$custom_id, "exact-id")
   args$model <- "claude-haiku-4-5"
   out <- do.call(pairwiseLLM:::build_anthropic_batch_requests,

@@ -168,6 +168,7 @@ Collate:
     'normalize_results.R'
     'ollama_live.R'
     'openai_batch_api.R'
+    'openai_batch_cache.R'
     'openai_live.R'
     'openai_params.R'
     'pairing.R'

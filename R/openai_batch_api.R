@@ -489,7 +489,7 @@ openai_poll_batch_until_complete <- function(
 #'   `Sys.getenv("OPENAI_API_KEY")`.
 #' @param ... Additional arguments passed through to
 #'   [build_openai_batch_requests()], e.g. `temperature`, `top_p`, `logprobs`,
-#'   `reasoning`, `store`, and `max_output_tokens`. Explicitly select
+#'   `reasoning`, `store`, `prompt_caching`, and `max_output_tokens`. Explicitly select
 #'   `endpoint = "responses"` when supplying `max_output_tokens`.
 #'
 #' @details Omitted or `NULL` `store` preserves provider defaults. Responses
@@ -548,6 +548,7 @@ openai_poll_batch_until_complete <- function(
 #'
 #' @seealso [llm_submit_pairs_batch()], [llm_resume_multi_batches()]
 #' @family batch backends
+#' @inheritSection build_openai_batch_requests Batch prompt caching
 #' @export
   run_openai_batch_pipeline <- function(
     pairs,
@@ -706,6 +707,38 @@ openai_poll_batch_until_complete <- function(
 #' @param max_output_tokens Optional positive whole numeric scalar, at most
 #'   `.Machine$integer.max`, for the Responses endpoint only. Includes visible
 #'   output and reasoning tokens. Omitted or `NULL` leaves the field absent.
+#' @param prompt_caching Batch caching policy: `NULL` (model-aware default),
+#'   `"disabled"`, or `"implicit"`. See the compatibility rules below.
+#' @param ... Reserved; must be empty. Raw provider caching controls are not
+#'   accepted. Use `prompt_caching` instead.
+#'
+#' @section Batch prompt caching:
+#' The default disables prompt caching for these verified model IDs:
+#' `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-6-luna`,
+#' `gpt-6-sol`, `gpt-6-astra`, and `gpt-6.1-sol`. Each request body gets
+#' `prompt_cache_options = list(mode = "explicit")`, with no breakpoints,
+#' on both endpoints. Set `prompt_caching = "implicit"` to omit that field
+#' and retain provider caching when prefix reuse is expected to be worthwhile.
+#'
+#' Recognized earlier OpenAI models retain their historical request bodies
+#' when the policy is omitted or `NULL`; explicitly disabling caching on
+#' those models errors. Unknown IDs (including unlisted snapshots, future
+#' models and custom aliases) require an explicit `"implicit"` opt-in or a
+#' verified model ID. Support is an offline allowlist; version numbers and
+#' snapshot suffixes never establish support for disabling caching. Older
+#' GPT-3.5/4, GPT-5 through GPT-5.5 and o-series naming forms, including
+#' recognized legacy date-suffixed names, retain provider defaults.
+#'
+#' Invalid policies and manual cache controls fail before submission, even
+#' with zero pairs. Raw `prompt_cache_options`, `prompt_cache_breakpoint`,
+#' `prompt_cache_key`, retention and TTL controls are not accepted by these
+#' builders. Keys affect cache routing/accounting; retention and TTL affect
+#' lifetime; `store = FALSE` affects response storage. None substitutes for
+#' disabling implicit cache breakpoints. Prompt text and keys are not rewritten.
+#' This policy affects future package-built Batch requests only, not live
+#' requests or already submitted jobs. See the
+#' [prompt-caching guide](https://developers.openai.com/api/docs/guides/prompt-caching)
+#' and `vignette("advanced-batch-workflows")` for usage-based cost comparisons.
 #'
 #' @details Invalid controls fail even for empty `pairs`. Responses are stored
 #'   for later API retrieval by default; set `store = FALSE` to disable response
@@ -782,8 +815,12 @@ openai_poll_batch_until_complete <- function(
                                           include_thoughts = FALSE,
                                           request_id_prefix = "EXP",
                                           store = NULL,
-                                          max_output_tokens = NULL) {
+                                          max_output_tokens = NULL,
+                                          prompt_caching = NULL,
+                                          ...) {
     endpoint <- match.arg(endpoint)
+    cache_policy <- .openai_batch_cache_policy(model, prompt_caching, list(...))
+    rlang::check_dots_empty()
     if (!is.null(store) &&
         (!is.logical(store) || length(store) != 1L ||
          !is.null(dim(store)) || is.na(store))) {
@@ -872,6 +909,7 @@ openai_poll_batch_until_complete <- function(
         obj <- list(custom_id = custom_id, method = "POST", url = "/v1/responses", body = body)
       }
     if (!is.null(store)) obj$body$store <- store
+    if (cache_policy == "disabled") obj$body$prompt_cache_options <- list(mode = "explicit")
     out_list[[i]] <- obj
   }
 
@@ -1045,10 +1083,15 @@ write_openai_batch_file <- function(batch_tbl, path) {
 #'     \item{completion_tokens}{Completion/output token count (if reported).}
 #'     \item{total_tokens}{Total tokens (if reported).}
 #'     \item{prompt_cached_tokens}{Cached prompt tokens (if reported via
-#'           \code{input_tokens_details$cached_tokens}); otherwise \code{NA}.}
+#'           \code{input_tokens_details$cached_tokens} or Chat Completions'
+#'           \code{prompt_tokens_details$cached_tokens}); otherwise \code{NA}.}
 #'     \item{reasoning_tokens}{Reasoning tokens (if reported via
 #'           \code{output_tokens_details$reasoning_tokens}); otherwise
 #'           \code{NA}.}
+#'     \item{prompt_cache_write_tokens}{Prompt tokens written to cache, from
+#'           \code{input_tokens_details$cache_write_tokens} or
+#'           \code{prompt_tokens_details$cache_write_tokens}; otherwise
+#'           \code{NA}. Missing counts are not inferred from the request policy.}
 #'   }
 #'
 #' @examples
@@ -1178,7 +1221,8 @@ parse_openai_batch_output <- function(path,
         completion_tokens = NA_real_,
         total_tokens = NA_real_,
         prompt_cached_tokens = NA_real_,
-        reasoning_tokens = NA_real_
+        reasoning_tokens = NA_real_,
+        prompt_cache_write_tokens = NA_real_
       )
       next
     }
@@ -1303,16 +1347,19 @@ parse_openai_batch_output <- function(path,
 
     # Chat completions: prompt_tokens, completion_tokens, total_tokens
     # Responses (gpt-5.x): input_tokens, output_tokens, total_tokens
-    prompt_tokens <- usage$prompt_tokens %||% usage$input_tokens %||% NA_real_
-    completion_tokens <- usage$completion_tokens %||% usage$output_tokens %||%
+    # Exact lookup avoids partial matching counts to *_tokens_details when
+    # the provider omits a total but supplies a cache breakdown.
+    prompt_tokens <- usage[["prompt_tokens"]] %||% usage[["input_tokens"]] %||% NA_real_
+    completion_tokens <- usage[["completion_tokens"]] %||% usage[["output_tokens"]] %||%
       NA_real_
-    total_tokens <- usage$total_tokens %||% NA_real_
+    total_tokens <- usage[["total_tokens"]] %||% NA_real_
 
     # Detailed token info when available
-    input_details <- usage$input_tokens_details %||% list()
+    input_details <- usage$input_tokens_details %||% usage$prompt_tokens_details %||% list()
     output_details <- usage$output_tokens_details %||% list()
 
     prompt_cached_tokens <- input_details$cached_tokens %||% NA_real_
+    prompt_cache_write_tokens <- input_details$cache_write_tokens %||% NA_real_
     reasoning_tokens <- output_details$reasoning_tokens %||% NA_real_
 
     out[[i]] <- tibble::tibble(
@@ -1331,7 +1378,8 @@ parse_openai_batch_output <- function(path,
       completion_tokens    = as.numeric(completion_tokens),
       total_tokens         = as.numeric(total_tokens),
       prompt_cached_tokens = as.numeric(prompt_cached_tokens),
-      reasoning_tokens     = as.numeric(reasoning_tokens)
+      reasoning_tokens     = as.numeric(reasoning_tokens),
+      prompt_cache_write_tokens = as.numeric(prompt_cache_write_tokens)
     )
   }
 

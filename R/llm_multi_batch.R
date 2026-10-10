@@ -68,6 +68,8 @@
 #' @param ... Additional arguments passed through to the provider‑specific
 #'   `run_*_batch_pipeline()` function.  These may include arguments such as
 #'   `include_thoughts`, `reasoning`, `include_raw`, `temperature`, etc.
+#'   For OpenAI, `prompt_caching` is validated before creating files and its
+#'   effective policy is reused across all segments and submission retries.
 
 #' @param openai_max_retries Integer giving the maximum number of times
 #'   to retry the initial OpenAI batch submission when a transient
@@ -133,6 +135,7 @@
 #'
 #' @seealso [llm_submit_pairs_batch()], [llm_download_batch_results()]
 #' @family batch backends
+#' @inheritSection build_openai_batch_requests Batch prompt caching
 #' @export
 llm_submit_pairs_multi_batch <- function(
   pairs,
@@ -177,6 +180,15 @@ llm_submit_pairs_multi_batch <- function(
   }
   if (is.null(batch_size) && is.null(n_segments)) {
     rlang::abort("Either 'batch_size' or 'n_segments' must be supplied.")
+  }
+
+  # Resolve once before any filesystem/provider IO, including zero-row calls.
+  # Keep the same policy for all segments and every submission retry.
+  if (backend == "openai") {
+    openai_args <- list(...)
+    openai_args$prompt_caching <- .openai_batch_cache_policy(
+      model, openai_args[["prompt_caching"]], openai_args
+    )
   }
 
   n_pairs <- nrow(pairs)
@@ -234,7 +246,7 @@ llm_submit_pairs_multi_batch <- function(
         {
           .pairwiseLLM_retry_backoff(
             fn = function() {
-              run_openai_batch_pipeline(
+              do.call(run_openai_batch_pipeline, c(list(
                 pairs             = pairs_seg,
                 model             = model,
                 trait_name        = trait_name,
@@ -242,9 +254,8 @@ llm_submit_pairs_multi_batch <- function(
                 prompt_template   = prompt_template,
                 batch_input_path  = input_path,
                 batch_output_path = output_path,
-                poll              = FALSE,
-                ...
-              )
+                poll              = FALSE
+              ), openai_args))
             },
             max_attempts = openai_max_retries
           )$result

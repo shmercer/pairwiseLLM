@@ -18,7 +18,9 @@ build_openai_batch_requests(
   include_thoughts = FALSE,
   request_id_prefix = "EXP",
   store = NULL,
-  max_output_tokens = NULL
+  max_output_tokens = NULL,
+  prompt_caching = NULL,
+  ...
 )
 }
 \arguments{
@@ -69,6 +71,12 @@ are forwarded unchanged; omitted or \code{NULL} leaves the field absent.}
 \item{max_output_tokens}{Optional positive whole numeric scalar, at most
 \code{.Machine$integer.max}, for the Responses endpoint only. Includes visible
 output and reasoning tokens. Omitted or \code{NULL} leaves the field absent.}
+
+\item{prompt_caching}{Batch caching policy: \code{NULL} (model-aware default),
+\code{"disabled"}, or \code{"implicit"}. See the compatibility rules below.}
+
+\item{...}{Reserved; must be empty. Raw provider caching controls are not
+accepted. Use \code{prompt_caching} instead.}
 }
 \value{
 A tibble with one row per pair and columns:
@@ -94,6 +102,36 @@ This parameter does not control Batch input/output/error file retention
 and does not imply zero data retention. See
 \url{https://developers.openai.com/api/docs/guides/your-data}.
 }
+\section{Batch prompt caching}{
+
+The default disables prompt caching for these verified model IDs:
+\code{gpt-5.6-luna}, \code{gpt-5.6-terra}, \code{gpt-5.6-sol}, \code{gpt-6-luna},
+\code{gpt-6-sol}, \code{gpt-6-astra}, and \code{gpt-6.1-sol}. Each request body gets
+\code{prompt_cache_options = list(mode = "explicit")}, with no breakpoints,
+on both endpoints. Set \code{prompt_caching = "implicit"} to omit that field
+and retain provider caching when prefix reuse is expected to be worthwhile.
+
+Recognized earlier OpenAI models retain their historical request bodies
+when the policy is omitted or \code{NULL}; explicitly disabling caching on
+those models errors. Unknown IDs (including unlisted snapshots, future
+models and custom aliases) require an explicit \code{"implicit"} opt-in or a
+verified model ID. Support is an offline allowlist; version numbers and
+snapshot suffixes never establish support for disabling caching. Older
+GPT-3.5/4, GPT-5 through GPT-5.5 and o-series naming forms, including
+recognized legacy date-suffixed names, retain provider defaults.
+
+Invalid policies and manual cache controls fail before submission, even
+with zero pairs. Raw \code{prompt_cache_options}, \code{prompt_cache_breakpoint},
+\code{prompt_cache_key}, retention and TTL controls are not accepted by these
+builders. Keys affect cache routing/accounting; retention and TTL affect
+lifetime; \code{store = FALSE} affects response storage. None substitutes for
+disabling implicit cache breakpoints. Prompt text and keys are not rewritten.
+This policy affects future package-built Batch requests only, not live
+requests or already submitted jobs. See the
+\href{https://developers.openai.com/api/docs/guides/prompt-caching}{prompt-caching guide}
+and \code{vignette("advanced-batch-workflows")} for usage-based cost comparisons.
+}
+
 \examples{
 data("example_writing_samples", package = "pairwiseLLM")
 
