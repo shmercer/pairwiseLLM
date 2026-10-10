@@ -22,7 +22,8 @@ bootstrap_bt_model(
   schedule_fit_fn = NULL,
   min_success = n_rep,
   workers = 1L,
-  keep = c("summary", "theta", "full")
+  keep = c("summary", "theta", "full"),
+  executor = NULL
 )
 ```
 
@@ -131,6 +132,18 @@ bootstrap_bt_model(
   failure diagnostics (which can include dense matrices). Full artifacts
   can be large.
 
+- executor:
+
+  Optional ordered map function with arguments `X`, `FUN`, and `...`,
+  for example an adapter to a caller-owned worker pool. It must apply
+  `FUN` to each element of `X`, forwarding `...`, and return a list of
+  results in input order, without retries or seed replacement. `workers`
+  bounds the number of chunks submitted at once; the caller must
+  allocate consistent CPU/memory capacity, including any native sampler
+  chains. NULL retains the existing serial/temporary-multisession
+  behavior. A supplied executor owns its resources; this function
+  neither changes its plan nor closes its pool.
+
 ## Value
 
 A `pairwiseLLM_bt_bootstrap` list containing `theta` (ID, initial theta,
@@ -172,7 +185,12 @@ restarting repeats the run. Built-in final estimators reuse immutable
 item contrasts within this call. Fixed schedules also reuse pair indexes
 and designs; alpha retains its all-pairs pseudo-count design, including
 unobserved pairs. Outcome counts, estimation and numerical validity
-checks are recomputed for every replicate.
+checks are recomputed for every replicate. Worker chunks hold at most
+eight replicates for summary/theta retention and two for full retention.
+Designs are constructed inside each chunk, never transferred from the
+parent or retained in a global cache. An executor is an execution
+resource and is not stored in scientific provenance. Its transport
+errors propagate without replacement replicates or a serial fallback.
 
 `bootstrap_sd` describes replicate-estimate dispersion, whereas
 `mcse_bias` is `bootstrap_sd / sqrt(n_success)`: simulation error in the

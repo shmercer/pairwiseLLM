@@ -281,14 +281,14 @@ the interpretation: the average then describes successful refits. An
 unmet threshold raises an error whose <code>result</code> field retains
 diagnostics, with missing corrected scores. No failed estimates are
 silently included and no other estimator is substituted.</p>
-<p>Each replicate costs a schedule simulation and final refit; hybrid
-can also require multiple Bayesian fits. Use <code>workers = 2</code>
-for parallel execution with the optional <code>future</code> and
-<code>future.apply</code> packages. Reproducible seeds and ordered
-aggregation give the same scientific results as serial execution. Avoid
-oversubscribing CPUs with both bootstrap workers and many sampler
-chains. Custom callbacks must honor supplied seeds and avoid mutable
-external state.</p>
+<p>Each replicate costs a schedule simulation and final refit. All
+adaptive strategies retain their scheduled native Bayesian fits. Use
+<code>workers = 2</code> for parallel execution with the optional
+<code>future</code> and <code>future.apply</code> packages. Reproducible
+seeds and ordered aggregation give the same scientific results as serial
+execution. Avoid oversubscribing CPUs with both bootstrap workers and
+many sampler chains. Custom callbacks must honor supplied seeds and
+avoid mutable external state.</p>
 <p>The default <code>keep = "summary"</code> discards large replicate
 states. Use <code>"theta"</code> to retain score draws, or
 <code>"full"</code> when individual schedules or detailed numerical
@@ -297,6 +297,52 @@ matrices. Save the returned object with <code><a href="https://rdrr.io/r/base/re
 inputs, settings, seeds, software versions and diagnostics. There is no
 checkpoint/resume interface; restarting with the same inputs and
 compatible software repeats the run.</p>
+</div>
+<div class="section level2">
+<h2 id="reusing-an-external-worker-pool">Reusing an external worker pool<a class="anchor" aria-label="anchor" href="#reusing-an-external-worker-pool"></a>
+</h2>
+<p>For many conditions, a caller-owned pool avoids starting new workers
+for each bootstrap call. Pass an ordered map function through
+<code>executor</code>; it receives chunks of replicate indices, the
+worker function, and its arguments. It must return one result per chunk
+in the supplied order. It must not retry failed tasks, substitute seeds,
+or return partial results. Transport failures propagate to the caller.
+The package still handles and reports ordinary replicate failures.</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">old_plan</span> <span class="op">&lt;-</span> <span class="fu">future</span><span class="fu">::</span><span class="fu"><a href="https://future.futureverse.org/reference/plan.html" class="external-link">plan</a></span><span class="op">(</span><span class="st">"list"</span><span class="op">)</span></span>
+<span><span class="fu">future</span><span class="fu">::</span><span class="fu"><a href="https://future.futureverse.org/reference/plan.html" class="external-link">plan</a></span><span class="op">(</span><span class="fu">future</span><span class="fu">::</span><span class="va"><a href="https://future.futureverse.org/reference/multisession.html" class="external-link">multisession</a></span>, workers <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="va">executor</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">X</span>, <span class="va">FUN</span>, <span class="va">...</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu">future.apply</span><span class="fu">::</span><span class="fu"><a href="https://future.apply.futureverse.org/reference/future_lapply.html" class="external-link">future_lapply</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">FUN</span>, <span class="va">...</span>, future.seed <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>  <span class="co"># Repeat this call for independent conditions using the same pool.</span></span>
+<span>  <span class="va">pooled</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/bootstrap_bt_model.html">bootstrap_bt_model</a></span><span class="op">(</span><span class="va">fit</span>, mode <span class="op">=</span> <span class="st">"fixed"</span>, n_rep <span class="op">=</span> <span class="fl">24</span>, seed <span class="op">=</span> <span class="fl">1304</span>,</span>
+<span>    workers <span class="op">=</span> <span class="fl">2</span>, executor <span class="op">=</span> <span class="va">executor</span>, keep <span class="op">=</span> <span class="st">"summary"</span><span class="op">)</span></span>
+<span><span class="op">}</span>, finally <span class="op">=</span> <span class="fu">future</span><span class="fu">::</span><span class="fu"><a href="https://future.futureverse.org/reference/plan.html" class="external-link">plan</a></span><span class="op">(</span><span class="va">old_plan</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p><code>workers</code> bounds the number of submitted chunks; configure
+the executor’s actual concurrency consistently. The package leaves pool
+ownership with the caller. It prepares immutable fitting designs inside
+each worker chunk and recomputes counts for each replicate.
+Summary/theta dispatch blocks hold at most eight replicates per worker;
+full-retention blocks hold at most two. Prepared designs are not
+included in returned provenance or sent over worker sockets.</p>
+<p>An external scheduler may instead dispatch independent conditions,
+with each condition calling
+<code>bootstrap_bt_model(..., workers = 1)</code>. This avoids nested
+bootstrap pools and requires no executor argument. Keep each condition’s
+own master seed and replicate numbering unchanged.</p>
+<p>For native Bayesian scheduling, budget outer workers together with
+concurrent chains and threads per chain. Four total chains need not run
+simultaneously, but changing chain concurrency requires posterior and
+trajectory parity checks on the intended platform. A future worker
+normally advertises one CPU slot; assign any larger per-task allocation
+explicitly only after reserving that capacity across the whole pool. Do
+not disable the sampler’s resource checks. The bounded native
+benchmarking scripts in the source repository demonstrate this
+allocation and report parent, worker and CmdStan process memory
+together. At N=229, allow approximately 139 MiB per worker for the
+retained alpha design alone, in addition to adaptive state, posterior
+draws and temporary fit memory.</p>
 </div>
 <div class="section level2">
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
