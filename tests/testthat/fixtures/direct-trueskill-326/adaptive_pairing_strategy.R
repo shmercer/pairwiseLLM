@@ -30,35 +30,6 @@
   )
 }
 
-# Score a fixed focal item against all eligible partners after validating one
-# TrueSkill state and matching item IDs once. This is the same pnorm kernel used
-# by the scalar public helper; it does not select pairs or change RNG/stopping.
-.adaptive_direct_partner_probabilities <- function(focal, partners, trueskill_state) {
-  state <- validate_trueskill_state(trueskill_state)
-  if (length(focal) != 1L || anyNA(focal) ||
-      anyNA(partners) || any(!nzchar(as.character(partners)))) {
-    rlang::abort("Focal and partner IDs must be present, non-missing item IDs.")
-  }
-  if (length(partners) == 0L) return(numeric())
-  items <- state$items
-  ids <- as.character(items$item_id)
-  focal_idx <- match(as.character(focal), ids)
-  partner_idx <- match(as.character(partners), ids)
-  if (is.na(focal_idx) || anyNA(partner_idx)) {
-    rlang::abort("Focal and partner IDs must be present in the TrueSkill state.")
-  }
-  if (any(partner_idx == focal_idx)) {
-    rlang::abort("Focal and partner IDs must be distinct.")
-  }
-  p <- .trueskill_win_probability_values(
-    mu_i = items$mu[[focal_idx]], mu_j = items$mu[partner_idx],
-    sigma_i = items$sigma[[focal_idx]], sigma_j = items$sigma[partner_idx],
-    beta = state$beta
-  )
-  # The original vapply() produces a vector named by candidate partner IDs.
-  stats::setNames(as.double(p), as.character(partners))
-}
-
 .adaptive_select_direct <- function(state, strategy, history_state, counts, defaults) {
   ids <- sort(as.character(state$item_ids))
   seed_base <- as.integer(state$meta$seed %||% 1L)
@@ -114,8 +85,9 @@
     partner_seed <- .adaptive_stage_seed(seed_base, decision_id, 1L, offset = 302L)
     picked <- withr::with_seed(partner_seed, sample.int(n_legal, 1L))
   } else {
-    p <- .adaptive_direct_partner_probabilities(
-      focal, candidates$j, state$trueskill_state)
+    p <- vapply(candidates$j, function(partner) {
+      trueskill_win_probability(focal, partner, state$trueskill_state)
+    }, numeric(1L))
     distance <- .adaptive_pairing_target_distance(p, strategy)
     picked <- order(distance, candidates$j)[[1L]]
   }

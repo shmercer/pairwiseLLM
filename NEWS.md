@@ -1,5 +1,11 @@
 # pairwiseLLM (development version)
 
+* Direct `trueskill_p50` and `trueskill_pollitt` candidate scoring validates and
+  aligns the TrueSkill state once per candidate vector (#326). Frozen scalar
+  references check exact probabilities, pair selection, presentation order,
+  diagnostics and RNG behavior. An offline benchmark measures scoring, complete
+  selection and synthetic trajectories; fitting and stopping rules are unchanged.
+
 * OpenAI Batch disables implicit prompt caching by default for verified GPT-5.6
   and later model IDs (#318). `prompt_caching = "implicit"` restores provider
   caching; recognized earlier models keep their defaults and cannot explicitly
