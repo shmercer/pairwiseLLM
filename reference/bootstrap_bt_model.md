@@ -168,7 +168,11 @@ the scheduling seed, committed comparison count, stage 1, and offset
 zero. Serial and parallel results use the same seeds and aggregation
 order. Exact reproducibility requires compatible R/package/engine
 versions and deterministic callbacks. There is no checkpoint/resume API;
-restarting repeats the run.
+restarting repeats the run. Built-in final estimators reuse immutable
+item contrasts within this call. Fixed schedules also reuse pair indexes
+and designs; alpha retains its all-pairs pseudo-count design, including
+unobserved pairs. Outcome counts, estimation and numerical validity
+checks are recomputed for every replicate.
 
 `bootstrap_sd` describes replicate-estimate dispersion, whereas
 `mcse_bias` is `bootstrap_sd / sqrt(n_success)`: simulation error in the

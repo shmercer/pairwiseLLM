@@ -2,6 +2,15 @@
 
 ## pairwiseLLM (development version)
 
+- Frequentist BT bootstrap refits reuse item contrasts and pair designs
+  within each call
+  ([\#324](https://github.com/shmercer/pairwiseLLM/issues/324)). Indexed
+  counts replace repeated aggregation, and alpha information matrices
+  use the equivalent weighted graph Laplacian. Original Firth mean bias
+  reduction, all-pairs alpha pseudo-counts, solver controls, uncertainty
+  checks and public interfaces are preserved. Frozen-source oracles and
+  offline benchmarks cover numerical equivalence and worker scaling.
+
 - Direct `trueskill_p50` and `trueskill_pollitt` candidate scoring
   validates and aligns the TrueSkill state once per candidate vector
   ([\#326](https://github.com/shmercer/pairwiseLLM/issues/326)). Frozen
