@@ -150,12 +150,19 @@ if <code>SAMPLE_2</code> was chosen, or <code>NA</code>.</p></dd>
 
 <dt>prompt_cached_tokens</dt>
 <dd><p>Cached prompt tokens (if reported via
-<code>input_tokens_details$cached_tokens</code>); otherwise <code>NA</code>.</p></dd>
+<code>input_tokens_details$cached_tokens</code> or Chat Completions'
+<code>prompt_tokens_details$cached_tokens</code>); otherwise <code>NA</code>.</p></dd>
 
 <dt>reasoning_tokens</dt>
 <dd><p>Reasoning tokens (if reported via
 <code>output_tokens_details$reasoning_tokens</code>); otherwise
 <code>NA</code>.</p></dd>
+
+<dt>prompt_cache_write_tokens</dt>
+<dd><p>Prompt tokens written to cache, from
+<code>input_tokens_details$cache_write_tokens</code> or
+<code>prompt_tokens_details$cache_write_tokens</code>; otherwise
+<code>NA</code>. Missing counts are not inferred from the request policy.</p></dd>
 
 
 </dl></div>

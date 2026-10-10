@@ -96,12 +96,20 @@ A tibble with one row per successfully parsed comparison and columns:
 - prompt_cached_tokens:
 
   Cached prompt tokens (if reported via
-  `input_tokens_details$cached_tokens`); otherwise `NA`.
+  `input_tokens_details$cached_tokens` or Chat Completions'
+  `prompt_tokens_details$cached_tokens`); otherwise `NA`.
 
 - reasoning_tokens:
 
   Reasoning tokens (if reported via
   `output_tokens_details$reasoning_tokens`); otherwise `NA`.
+
+- prompt_cache_write_tokens:
+
+  Prompt tokens written to cache, from
+  `input_tokens_details$cache_write_tokens` or
+  `prompt_tokens_details$cache_write_tokens`; otherwise `NA`. Missing
+  counts are not inferred from the request policy.
 
 ## Details
 

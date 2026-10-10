@@ -135,9 +135,9 @@ run_openai_batch_pipeline(
 
   Additional arguments passed through to
   [`build_openai_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_openai_batch_requests.md),
-  e.g. `temperature`, `top_p`, `logprobs`, `reasoning`, `store`, and
-  `max_output_tokens`. Explicitly select `endpoint = "responses"` when
-  supplying `max_output_tokens`.
+  e.g. `temperature`, `top_p`, `logprobs`, `reasoning`, `store`,
+  `prompt_caching`, and `max_output_tokens`. Explicitly select
+  `endpoint = "responses"` when supplying `max_output_tokens`.
 
 ## Value
 
@@ -188,6 +188,37 @@ or
 [`openai_poll_batch_until_complete()`](https://shmercer.github.io/pairwiseLLM/reference/openai_poll_batch_until_complete.md)
 and the error downloader; this pipeline's `poll = TRUE` path still
 requires an output file.
+
+## Batch prompt caching
+
+The default disables prompt caching for these verified model IDs:
+`gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-6-luna`,
+`gpt-6-sol`, `gpt-6-astra`, and `gpt-6.1-sol`. Each request body gets
+`prompt_cache_options = list(mode = "explicit")`, with no breakpoints,
+on both endpoints. Set `prompt_caching = "implicit"` to omit that field
+and retain provider caching when prefix reuse is expected to be
+worthwhile.
+
+Recognized earlier OpenAI models retain their historical request bodies
+when the policy is omitted or `NULL`; explicitly disabling caching on
+those models errors. Unknown IDs (including unlisted snapshots, future
+models and custom aliases) require an explicit `"implicit"` opt-in or a
+verified model ID. Support is an offline allowlist; version numbers and
+snapshot suffixes never establish support for disabling caching. Older
+GPT-3.5/4, GPT-5 through GPT-5.5 and o-series naming forms, including
+recognized legacy date-suffixed names, retain provider defaults.
+
+Invalid policies and manual cache controls fail before submission, even
+with zero pairs. Raw `prompt_cache_options`, `prompt_cache_breakpoint`,
+`prompt_cache_key`, retention and TTL controls are not accepted by these
+builders. Keys affect cache routing/accounting; retention and TTL affect
+lifetime; `store = FALSE` affects response storage. None substitutes for
+disabling implicit cache breakpoints. Prompt text and keys are not
+rewritten. This policy affects future package-built Batch requests only,
+not live requests or already submitted jobs. See the [prompt-caching
+guide](https://developers.openai.com/api/docs/guides/prompt-caching) and
+[`vignette("advanced-batch-workflows")`](https://shmercer.github.io/pairwiseLLM/articles/advanced-batch-workflows.md)
+for usage-based cost comparisons.
 
 ## See also
 

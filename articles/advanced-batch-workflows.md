@@ -280,6 +280,115 @@ validation errors can instead appear in `batch$errors`. The pipeline’s
 above also handle errors-only batches. See the [OpenAI Batch
 guide](https://developers.openai.com/api/docs/guides/batch).
 
+## OpenAI Batch prompt caching and costs
+
+For verified GPT-5.6 and later model IDs, new package-built Batch
+requests turn off implicit caching by default. Both endpoints receive
+exactly `prompt_cache_options: {"mode": "explicit"}` without explicit
+breakpoints. This avoids cache writes for unique long prompts. Reuse can
+instead make caching cheaper: opt in with `prompt_caching = "implicit"`,
+which omits the field and keeps provider caching available. The same
+option passes through
+[`build_openai_batch_requests()`](https://shmercer.github.io/pairwiseLLM/reference/build_openai_batch_requests.md),
+[`run_openai_batch_pipeline()`](https://shmercer.github.io/pairwiseLLM/reference/run_openai_batch_pipeline.md),
+`llm_submit_pairs_batch(backend = "openai")`, and
+`llm_submit_pairs_multi_batch(backend = "openai")`.
+
+The supported allowlist, verified on 2026-10-09, is `gpt-5.6-luna`,
+`gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-6-luna`, `gpt-6-sol`,
+`gpt-6-astra`, and `gpt-6.1-sol`. Recognized earlier model names retain
+their historical bodies for omitted/`NULL` policy, but reject
+`"disabled"`. Unknown IDs, including unlisted snapshots,
+fine-tuned/custom aliases and future models, require `"implicit"` or a
+verified ID. The allowlist is offline and requires a package update to
+add support; a newer-looking version alone is insufficient.
+
+``` r
+
+requests <- build_openai_batch_requests(
+  pairs = pairs_forward,
+  model = "gpt-5.6-luna",
+  trait_name = "Cohesion",
+  trait_description = "How clearly the ideas connect.",
+  endpoint = "responses",
+  prompt_caching = "implicit"
+)
+```
+
+The builder accepts only this policy, not raw provider cache options or
+breakpoints. `prompt_cache_key` concerns routing/accounting,
+`prompt_cache_retention` and `prompt_cache_options.ttl` concern
+lifetime, and `store = FALSE` concerns response storage. None disables
+implicit caching. See the [OpenAI prompt-caching
+guide](https://developers.openai.com/api/docs/guides/prompt-caching).
+
+[`parse_openai_batch_output()`](https://shmercer.github.io/pairwiseLLM/reference/parse_openai_batch_output.md)
+reports `prompt_cached_tokens` and `prompt_cache_write_tokens` from
+either endpoint. Missing counters remain `NA`, even when the submitted
+policy was disabled. Use the parsed raw output for billing audits:
+normalized comparison tables can exclude failed or unparseable judgments
+that still consumed tokens. Reconcile all provider output/error records
+and any retried submissions before estimating total spend.
+
+Compute ordinary input as total input minus cached reads minus cache
+writes. Multiply each category by its own applicable rate. As documented
+on 2026-10-09, GPT-5.6+ writes cost 1.25 times ordinary input; reads
+cost 0.1 times on most models, but 0.05 times on GPT-6.1 Sol. Select
+rates for the actual model, context length and Batch tier from [OpenAI
+pricing](https://developers.openai.com/api/docs/pricing). When using
+Batch rates, do not apply its discount a second time. Output tokens and
+any additional charges are separate.
+
+This executable example uses hypothetical rates per million tokens,
+already chosen for the desired billing tier. It demonstrates
+calculation, not savings measured on a provider workload. Replace the
+synthetic counts with parsed usage and the rates with those applicable
+to each request.
+
+``` r
+
+cache_usage <- tibble::tibble(
+  scenario = c("unique prefix write", "reused prefix", "missing counters"),
+  prompt_tokens = c(4000, 4000, 4000),
+  prompt_cached_tokens = c(0, 3000, NA_real_),
+  prompt_cache_write_tokens = c(3000, 0, NA_real_)
+)
+input_rates <- c(ordinary = 1, cached = 0.1, write = 1.25)
+cache_costs <- cache_usage |>
+  dplyr::mutate(
+    ordinary_tokens = prompt_tokens - prompt_cached_tokens - prompt_cache_write_tokens,
+    input_charge = (ordinary_tokens * input_rates[["ordinary"]] +
+      prompt_cached_tokens * input_rates[["cached"]] +
+      prompt_cache_write_tokens * input_rates[["write"]]) / 1e6,
+    uncached_input_charge = prompt_tokens * input_rates[["ordinary"]] / 1e6
+  )
+cache_costs
+#> # A tibble: 3 × 7
+#>   scenario            prompt_tokens prompt_cached_tokens prompt_cache_write_to…¹
+#>   <chr>                       <dbl>                <dbl>                   <dbl>
+#> 1 unique prefix write          4000                    0                    3000
+#> 2 reused prefix                4000                 3000                       0
+#> 3 missing counters             4000                   NA                      NA
+#> # ℹ abbreviated name: ¹​prompt_cache_write_tokens
+#> # ℹ 3 more variables: ordinary_tokens <dbl>, input_charge <dbl>,
+#> #   uncached_input_charge <dbl>
+# Missing counters make the total unknown; do not hide them with na.rm = TRUE.
+sum(cache_costs$input_charge)
+#> [1] NA
+```
+
+Submission validates the policy before IO, including for zero rows.
+Multi-batch segments and retries reuse the resolved policy. Resume only
+retrieves existing jobs; it does not change caching or resubmit their
+requests.
+
+This change applies only to future JSONL built by the package. Frozen
+W007/W010 Luna requests, running adaptive analyses and their installed
+libraries remain untouched. Separately authored W-series builders need
+their own explicit code audit, authorized package repin where
+applicable, and JSONL preflight; updating this package does not update
+those builders.
+
 ## Designing the Batch Grid
 
 Suppose we want to test several prompt templates across:

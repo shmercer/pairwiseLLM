@@ -364,6 +364,107 @@ errors-only batches. See the <a href="https://developers.openai.com/api/docs/gui
 guide</a>.</p>
 </div>
 <div class="section level2">
+<h2 id="openai-batch-prompt-caching-and-costs">OpenAI Batch prompt caching and costs<a class="anchor" aria-label="anchor" href="#openai-batch-prompt-caching-and-costs"></a>
+</h2>
+<p>For verified GPT-5.6 and later model IDs, new package-built Batch
+requests turn off implicit caching by default. Both endpoints receive
+exactly <code>prompt_cache_options: {"mode": "explicit"}</code> without
+explicit breakpoints. This avoids cache writes for unique long prompts.
+Reuse can instead make caching cheaper: opt in with
+<code>prompt_caching = "implicit"</code>, which omits the field and
+keeps provider caching available. The same option passes through
+<code><a href="../reference/build_openai_batch_requests.html">build_openai_batch_requests()</a></code>,
+<code><a href="../reference/run_openai_batch_pipeline.html">run_openai_batch_pipeline()</a></code>,
+<code>llm_submit_pairs_batch(backend = "openai")</code>, and
+<code>llm_submit_pairs_multi_batch(backend = "openai")</code>.</p>
+<p>The supported allowlist, verified on 2026-10-09, is
+<code>gpt-5.6-luna</code>, <code>gpt-5.6-terra</code>,
+<code>gpt-5.6-sol</code>, <code>gpt-6-luna</code>,
+<code>gpt-6-sol</code>, <code>gpt-6-astra</code>, and
+<code>gpt-6.1-sol</code>. Recognized earlier model names retain their
+historical bodies for omitted/<code>NULL</code> policy, but reject
+<code>"disabled"</code>. Unknown IDs, including unlisted snapshots,
+fine-tuned/custom aliases and future models, require
+<code>"implicit"</code> or a verified ID. The allowlist is offline and
+requires a package update to add support; a newer-looking version alone
+is insufficient.</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">requests</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/build_openai_batch_requests.html">build_openai_batch_requests</a></span><span class="op">(</span></span>
+<span>  pairs <span class="op">=</span> <span class="va">pairs_forward</span>,</span>
+<span>  model <span class="op">=</span> <span class="st">"gpt-5.6-luna"</span>,</span>
+<span>  trait_name <span class="op">=</span> <span class="st">"Cohesion"</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="st">"How clearly the ideas connect."</span>,</span>
+<span>  endpoint <span class="op">=</span> <span class="st">"responses"</span>,</span>
+<span>  prompt_caching <span class="op">=</span> <span class="st">"implicit"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>The builder accepts only this policy, not raw provider cache options
+or breakpoints. <code>prompt_cache_key</code> concerns
+routing/accounting, <code>prompt_cache_retention</code> and
+<code>prompt_cache_options.ttl</code> concern lifetime, and
+<code>store = FALSE</code> concerns response storage. None disables
+implicit caching. See the <a href="https://developers.openai.com/api/docs/guides/prompt-caching" class="external-link">OpenAI
+prompt-caching guide</a>.</p>
+<p><code><a href="../reference/parse_openai_batch_output.html">parse_openai_batch_output()</a></code> reports
+<code>prompt_cached_tokens</code> and
+<code>prompt_cache_write_tokens</code> from either endpoint. Missing
+counters remain <code>NA</code>, even when the submitted policy was
+disabled. Use the parsed raw output for billing audits: normalized
+comparison tables can exclude failed or unparseable judgments that still
+consumed tokens. Reconcile all provider output/error records and any
+retried submissions before estimating total spend.</p>
+<p>Compute ordinary input as total input minus cached reads minus cache
+writes. Multiply each category by its own applicable rate. As documented
+on 2026-10-09, GPT-5.6+ writes cost 1.25 times ordinary input; reads
+cost 0.1 times on most models, but 0.05 times on GPT-6.1 Sol. Select
+rates for the actual model, context length and Batch tier from <a href="https://developers.openai.com/api/docs/pricing" class="external-link">OpenAI
+pricing</a>. When using Batch rates, do not apply its discount a second
+time. Output tokens and any additional charges are separate.</p>
+<p>This executable example uses hypothetical rates per million tokens,
+already chosen for the desired billing tier. It demonstrates
+calculation, not savings measured on a provider workload. Replace the
+synthetic counts with parsed usage and the rates with those applicable
+to each request.</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">cache_usage</span> <span class="op">&lt;-</span> <span class="fu">tibble</span><span class="fu">::</span><span class="fu"><a href="https://tibble.tidyverse.org/reference/tibble.html" class="external-link">tibble</a></span><span class="op">(</span></span>
+<span>  scenario <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"unique prefix write"</span>, <span class="st">"reused prefix"</span>, <span class="st">"missing counters"</span><span class="op">)</span>,</span>
+<span>  prompt_tokens <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">4000</span>, <span class="fl">4000</span>, <span class="fl">4000</span><span class="op">)</span>,</span>
+<span>  prompt_cached_tokens <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">3000</span>, <span class="cn">NA_real_</span><span class="op">)</span>,</span>
+<span>  prompt_cache_write_tokens <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">3000</span>, <span class="fl">0</span>, <span class="cn">NA_real_</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">input_rates</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>ordinary <span class="op">=</span> <span class="fl">1</span>, cached <span class="op">=</span> <span class="fl">0.1</span>, write <span class="op">=</span> <span class="fl">1.25</span><span class="op">)</span></span>
+<span><span class="va">cache_costs</span> <span class="op">&lt;-</span> <span class="va">cache_usage</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
+<span>    ordinary_tokens <span class="op">=</span> <span class="va">prompt_tokens</span> <span class="op">-</span> <span class="va">prompt_cached_tokens</span> <span class="op">-</span> <span class="va">prompt_cache_write_tokens</span>,</span>
+<span>    input_charge <span class="op">=</span> <span class="op">(</span><span class="va">ordinary_tokens</span> <span class="op">*</span> <span class="va">input_rates</span><span class="op">[[</span><span class="st">"ordinary"</span><span class="op">]</span><span class="op">]</span> <span class="op">+</span></span>
+<span>      <span class="va">prompt_cached_tokens</span> <span class="op">*</span> <span class="va">input_rates</span><span class="op">[[</span><span class="st">"cached"</span><span class="op">]</span><span class="op">]</span> <span class="op">+</span></span>
+<span>      <span class="va">prompt_cache_write_tokens</span> <span class="op">*</span> <span class="va">input_rates</span><span class="op">[[</span><span class="st">"write"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span> <span class="op">/</span> <span class="fl">1e6</span>,</span>
+<span>    uncached_input_charge <span class="op">=</span> <span class="va">prompt_tokens</span> <span class="op">*</span> <span class="va">input_rates</span><span class="op">[[</span><span class="st">"ordinary"</span><span class="op">]</span><span class="op">]</span> <span class="op">/</span> <span class="fl">1e6</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="va">cache_costs</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 7</span></span></span>
+<span><span class="co">#&gt;   scenario            prompt_tokens prompt_cached_tokens prompt_cache_write_to…¹</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                       <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>                <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>                   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> unique prefix write          <span style="text-decoration: underline;">4</span>000                    0                    <span style="text-decoration: underline;">3</span>000</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> reused prefix                <span style="text-decoration: underline;">4</span>000                 <span style="text-decoration: underline;">3</span>000                       0</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> missing counters             <span style="text-decoration: underline;">4</span>000                   <span style="color: #BB0000;">NA</span>                      <span style="color: #BB0000;">NA</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ abbreviated name: ¹​prompt_cache_write_tokens</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 3 more variables: ordinary_tokens &lt;dbl&gt;, input_charge &lt;dbl&gt;,</span></span></span>
+<span><span class="co">#&gt; <span style="color: #949494;">#   uncached_input_charge &lt;dbl&gt;</span></span></span>
+<span><span class="co"># Missing counters make the total unknown; do not hide them with na.rm = TRUE.</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">cache_costs</span><span class="op">$</span><span class="va">input_charge</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] NA</span></span></code></pre></div>
+<p>Submission validates the policy before IO, including for zero rows.
+Multi-batch segments and retries reuse the resolved policy. Resume only
+retrieves existing jobs; it does not change caching or resubmit their
+requests.</p>
+<p>This change applies only to future JSONL built by the package. Frozen
+W007/W010 Luna requests, running adaptive analyses and their installed
+libraries remain untouched. Separately authored W-series builders need
+their own explicit code audit, authorized package repin where
+applicable, and JSONL preflight; updating this package does not update
+those builders.</p>
+</div>
+<div class="section level2">
 <h2 id="designing-the-batch-grid">Designing the Batch Grid<a class="anchor" aria-label="anchor" href="#designing-the-batch-grid"></a>
 </h2>
 <p>Suppose we want to test several prompt templates across:</p>
@@ -373,7 +474,7 @@ guide</a>.</p>
 <li>Gemini models (with “thinking” enabled)</li>
 </ul>
 <p>Here we define a small grid:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">anthropic_models</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
 <span>  <span class="st">"claude-haiku-4-5-20251001"</span></span>
 <span><span class="op">)</span></span>
@@ -432,7 +533,7 @@ guide</a>.</p>
 <p>We will also imagine multiple prompt templates have been registered.
 For simplicity, we use the same <code>tmpl</code> string, but in
 practice you would substitute different text:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">templates_tbl</span> <span class="op">&lt;-</span> <span class="fu">tibble</span><span class="fu">::</span><span class="fu"><a href="https://tibble.tidyverse.org/reference/tibble.html" class="external-link">tibble</a></span><span class="op">(</span></span>
 <span>  template_id     <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"test1"</span>, <span class="st">"test2"</span>, <span class="st">"test3"</span>, <span class="st">"test4"</span>, <span class="st">"test5"</span><span class="op">)</span>,</span>
 <span>  prompt_template <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">tmpl</span>, <span class="va">tmpl</span>, <span class="va">tmpl</span>, <span class="va">tmpl</span>, <span class="va">tmpl</span><span class="op">)</span></span>
@@ -466,7 +567,7 @@ never collide)</li>
 <div class="section level3">
 <h3 id="create-a-run-plan-and-output-directory">Create a run plan and output directory<a class="anchor" aria-label="anchor" href="#create-a-run-plan-and-output-directory"></a>
 </h3>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">out_root</span> <span class="op">&lt;-</span> <span class="st">"dev-output/advanced-multi-batch"</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="va">out_root</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
@@ -496,7 +597,7 @@ the example below we:</p>
 <li>Ask providers to include raw outputs in addition to parsed tags
 (helpful for debugging)</li>
 </ul>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">submit_one_run</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">template_id</span>, <span class="va">prompt_template</span>, <span class="va">provider</span>, <span class="va">model</span>, <span class="va">thinking</span>, <span class="va">direction</span>, <span class="va">run_dir</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">pairs_use</span>   <span class="op">&lt;-</span> <span class="fu">get_pairs_for_direction</span><span class="op">(</span><span class="va">direction</span><span class="op">)</span></span>
 <span>  <span class="va">is_thinking</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">thinking</span>, <span class="st">"with_thinking"</span><span class="op">)</span></span>
@@ -583,7 +684,7 @@ If you restart R, you can resume <strong>without</strong> keeping the
 <code>jobs</code> objects in memory by setting <code>jobs = NULL</code>
 and pointing to <code>output_dir</code> (the function will load
 <code>jobs_registry.csv</code>).</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">manifest_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_root</span>, <span class="st">"run_manifest.csv"</span><span class="op">)</span></span>
 <span><span class="va">manifest</span> <span class="op">&lt;-</span> <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/read_delim.html" class="external-link">read_csv</a></span><span class="op">(</span><span class="va">manifest_path</span>, show_col_types <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
@@ -610,7 +711,7 @@ and pointing to <code>output_dir</code> (the function will load
 tibble for that run (i.e., all segments bound together). We can attach
 run metadata (template/provider/model/thinking/direction) and then bind
 all runs into one master table.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">combined_all</span> <span class="op">&lt;-</span> <span class="fu">purrr</span><span class="fu">::</span><span class="fu"><a href="https://purrr.tidyverse.org/reference/map_dfr.html" class="external-link">map2_dfr</a></span><span class="op">(</span></span>
 <span>  <span class="va">polled</span>,</span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">manifest</span><span class="op">)</span><span class="op">)</span>,</span>
@@ -652,7 +753,7 @@ loop</li>
 </ul>
 <p>Example: resume only unfinished runs (based on each run’s
 registry):</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">manifest</span> <span class="op">&lt;-</span> <span class="fu">readr</span><span class="fu">::</span><span class="fu"><a href="https://readr.tidyverse.org/reference/read_delim.html" class="external-link">read_csv</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">out_root</span>, <span class="st">"run_manifest.csv"</span><span class="op">)</span>, show_col_types <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">needs_poll</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">run_dir</span><span class="op">)</span> <span class="op">{</span></span>

@@ -175,7 +175,9 @@ has been created along with the input file path.  Defaults to <code>FALSE</code>
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
 <dd><p>Additional arguments passed through to the provider‑specific
 <code>run_*_batch_pipeline()</code> function.  These may include arguments such as
-<code>include_thoughts</code>, <code>reasoning</code>, <code>include_raw</code>, <code>temperature</code>, etc.</p></dd>
+<code>include_thoughts</code>, <code>reasoning</code>, <code>include_raw</code>, <code>temperature</code>, etc.
+For OpenAI, <code>prompt_caching</code> is validated before creating files and its
+effective policy is reused across all segments and submission retries.</p></dd>
 
 
 <dt id="arg-openai-max-retries">openai_max_retries<a class="anchor" aria-label="anchor" href="#arg-openai-max-retries"></a></dt>
@@ -210,6 +212,35 @@ chunk using the appropriate provider pipeline.  Each batch is created with
 have been created.  Metadata for each batch—including the <code>batch_id</code>,
 provider type, and input/output file paths—is collected and (optionally)
 written to a CSV registry for later resumption.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="batch-prompt-caching">Batch prompt caching<a class="anchor" aria-label="anchor" href="#batch-prompt-caching"></a></h2>
+
+
+<p>The default disables prompt caching for these verified model IDs:
+<code>gpt-5.6-luna</code>, <code>gpt-5.6-terra</code>, <code>gpt-5.6-sol</code>, <code>gpt-6-luna</code>,
+<code>gpt-6-sol</code>, <code>gpt-6-astra</code>, and <code>gpt-6.1-sol</code>. Each request body gets
+<code>prompt_cache_options = list(mode = "explicit")</code>, with no breakpoints,
+on both endpoints. Set <code>prompt_caching = "implicit"</code> to omit that field
+and retain provider caching when prefix reuse is expected to be worthwhile.</p>
+<p>Recognized earlier OpenAI models retain their historical request bodies
+when the policy is omitted or <code>NULL</code>; explicitly disabling caching on
+those models errors. Unknown IDs (including unlisted snapshots, future
+models and custom aliases) require an explicit <code>"implicit"</code> opt-in or a
+verified model ID. Support is an offline allowlist; version numbers and
+snapshot suffixes never establish support for disabling caching. Older
+GPT-3.5/4, GPT-5 through GPT-5.5 and o-series naming forms, including
+recognized legacy date-suffixed names, retain provider defaults.</p>
+<p>Invalid policies and manual cache controls fail before submission, even
+with zero pairs. Raw <code>prompt_cache_options</code>, <code>prompt_cache_breakpoint</code>,
+<code>prompt_cache_key</code>, retention and TTL controls are not accepted by these
+builders. Keys affect cache routing/accounting; retention and TTL affect
+lifetime; <code>store = FALSE</code> affects response storage. None substitutes for
+disabling implicit cache breakpoints. Prompt text and keys are not rewritten.
+This policy affects future package-built Batch requests only, not live
+requests or already submitted jobs. See the
+<a href="https://developers.openai.com/api/docs/guides/prompt-caching" class="external-link">prompt-caching guide</a>
+and <code><a href="../articles/advanced-batch-workflows.html">vignette("advanced-batch-workflows")</a></code> for usage-based cost comparisons.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
