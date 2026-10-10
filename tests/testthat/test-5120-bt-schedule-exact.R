@@ -133,14 +133,23 @@ test_that("the shared loop preserves stochastic invalid retries and per-attempt 
 })
 
 test_that("the attempt cap crosses neither initialization nor native refit boundaries", {
-  # Scaling test: N=70 is needed to exercise the 64-attempt cap itself.
+  # N=257 makes the default initial round longer than the 64-attempt cap.
+  # A cheap callback isolates scheduler scaling from dense final estimation.
   ref <- bt_reference_325()
-  args <- bt_schedule_args_325("trueskill_p50", n = 70L, budget = 71L)
-  args$initial_state <- adaptive_rank_start(names(args$object), seed = 325L,
-    adaptive_config = list(pairing_strategy = "trueskill_p50", round_pairs_target = 1000L))
+  args <- bt_schedule_args_325("trueskill_p50", n = 257L, budget = 258L)
+  args$estimator <- function(bt_data, item_ids) stats::setNames(rep(0, length(item_ids)), item_ids)
+  args$estimator_args <- list()
   expected <- bt_result_325(ref$bootstrap_bt_model, args)
+  execute <- pairwiseLLM:::.adaptive_run_execute
+  attempts <- integer()
+  local_mocked_bindings(.adaptive_run_execute = function(state, judge, n_steps, ...) {
+    attempts <<- c(attempts, n_steps)
+    execute(state, judge, n_steps, ...)
+  }, .package = "pairwiseLLM")
   actual <- bt_result_325(bootstrap_bt_model, args)
   expect_identical(bt_scientific_325(actual), bt_scientific_325(expected))
-  expect_identical(actual$replicates$n_comparisons, c(71L, 71L))
+  expect_identical(actual$replicates$n_comparisons, c(258L, 258L))
   expect_identical(actual$replicates$n_scheduling_refits, c(1L, 1L))
+  expect_true(64L %in% attempts)
+  expect_true(all(attempts <= 64L))
 })
