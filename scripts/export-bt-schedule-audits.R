@@ -15,7 +15,8 @@ for (folder in folders) {
   for (path in paths) {
     if (!file.exists(file.path(dirname(path), "cell.csv"))) next
     run <- substring(dirname(path), nchar(root) + 2L)
-    for (row in readRDS(path)) {
+    native <- readRDS(path)
+    for (row in native) {
       records[[length(records) + 1L]] <- data.frame(run = run,
         seed = row$seed, committed = row$committed, elapsed_seconds = row$elapsed,
         fields = paste(row$fields, collapse = ";"),
@@ -24,6 +25,8 @@ for (folder in folders) {
         diagnostics = paste(deparse(row$diagnostics), collapse = " "))
     }
     conditions <- readRDS(file.path(dirname(path), "conditions.rds"))
+    stopifnot(length(native) == sum(vapply(conditions,
+      function(x) sum(x$replicates$n_scheduling_refits), 0)))
     for (condition in seq_along(conditions)) {
       result <- conditions[[condition]]
       cfg <- result$provenance$btl_config

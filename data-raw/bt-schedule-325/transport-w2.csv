@@ -1,0 +1,17 @@
+"stage","n","workers","repetitions","elapsed_seconds","parent_cpu_seconds","serialized_bytes_per_object"
+"pool_initialization_and_namespace_load",NA,2,1,1.028,0.192,NA
+"serialize_input_spec",57,2,100,0.0149999999999999,0.0139999999999999,56389
+"socket_roundtrip_input_spec",57,2,10,1.963,1.62,56389
+"serialize_compact_result",57,2,100,0.00100000000000033,0.00099999999999989,2346
+"socket_roundtrip_compact_result",57,2,10,0.59,0.139,2346
+"original_ordered_reduction",57,2,100,0.21,0.209,NA
+"serialize_input_spec",91,2,100,0.0190000000000001,0.0190000000000001,65885
+"socket_roundtrip_input_spec",91,2,10,1.855,1.477,65885
+"serialize_compact_result",91,2,100,0.00100000000000033,0.00100000000000033,3128
+"socket_roundtrip_compact_result",91,2,10,0.577000000000001,0.125,3128
+"original_ordered_reduction",91,2,100,0.129,0.129,NA
+"serialize_input_spec",229,2,100,0.032,0.0319999999999999,104664
+"socket_roundtrip_input_spec",229,2,10,1.907,1.49,104664
+"serialize_compact_result",229,2,100,0.00199999999999889,0.00199999999999978,6302
+"socket_roundtrip_compact_result",229,2,10,0.58,0.121000000000001,6302
+"original_ordered_reduction",229,2,100,0.125999999999999,0.125999999999999,NA

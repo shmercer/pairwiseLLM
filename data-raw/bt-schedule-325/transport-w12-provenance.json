@@ -1,0 +1,5 @@
+{
+  "namespace_path": "/tmp/pairwiseLLM-325-evidence/final-libraries/post328-library/pairwiseLLM",
+  "workers": 12,
+  "description": "Stage measurements only; no scheduled fits are bypassed in throughput cells"
+}

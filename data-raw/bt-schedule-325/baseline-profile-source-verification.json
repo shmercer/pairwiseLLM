@@ -1,0 +1,8 @@
+{
+  "source_sha": "7999c15c6c50b0d8de670ff49702648630d8235b",
+  "R_and_Stan_source_files_checked": 146,
+  "source_hash_reference": "installations.json:post328",
+  "independent_native_and_full_state_comparison": "baseline-profile-exact-equivalence.csv",
+  "completed_cells": 9,
+  "profiler_prepared_design_function": ".bt_bootstrap_prepare"
+}

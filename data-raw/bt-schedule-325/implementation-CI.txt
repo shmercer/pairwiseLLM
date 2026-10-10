@@ -1,0 +1,11 @@
+All seven checks passed at 6d8853e3eded3ccc8275e0a8900df88a338fc780.
+Later evidence commits do not change package R/Stan/help/tests.
+Final-head CI status is reported in the PR and delivery message.
+
+macOS-latest (release)	pass	32m38s	https://github.com/shmercer/pairwiseLLM/actions/runs/38090692974/job/114326329640
+pkgdown	pass	4m39s	https://github.com/shmercer/pairwiseLLM/actions/runs/38090692955/job/114326329840
+test-coverage	pass	51m58s	https://github.com/shmercer/pairwiseLLM/actions/runs/38090692912/job/114326329308
+ubuntu-latest (devel)	pass	27m17s	https://github.com/shmercer/pairwiseLLM/actions/runs/38090692974/job/114326329742
+ubuntu-latest (oldrel-1)	pass	26m31s	https://github.com/shmercer/pairwiseLLM/actions/runs/38090692974/job/114326329857
+ubuntu-latest (release)	pass	26m49s	https://github.com/shmercer/pairwiseLLM/actions/runs/38090692974/job/114326329808
+windows-latest (release)	pass	35m3s	https://github.com/shmercer/pairwiseLLM/actions/runs/38090692974/job/114326329889

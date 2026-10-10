@@ -52,7 +52,7 @@ def main():
         if data:
             fields = list(dict.fromkeys(key for row in data for key in row))
             with (args.output / name).open("w", newline="") as out:
-                writer = csv.DictWriter(out, fieldnames=fields)
+                writer = csv.DictWriter(out, fieldnames=fields, lineterminator="\n")
                 writer.writeheader()
                 writer.writerows(data)
 

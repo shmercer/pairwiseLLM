@@ -13,7 +13,7 @@ import subprocess
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("section", choices=("serial", "strategies", "firth", "workers", "chain-parity"))
+    parser.add_argument("section", choices=("serial", "strategies", "firth", "workers", "chain-parity", "large-chain-parity"))
     parser.add_argument("--libraries", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--versions", default="post328,optimized,study")
@@ -38,6 +38,15 @@ def main():
                          "--workers", str(w), "--parallel-chains", str(pc),
                          "--replicates", str(max(4, 2 * w)), "--conditions", "2",
                          "--keep", "summary", "--execution",
+                         "pool" if version == "optimized" and w > 1 else "managed"]))
+    elif args.section == "large-chain-parity":
+        for w, pc in configurations:
+            for n, b, engine in [(91, 8, "brglm2"), (229, 4, "alpha")]:
+                for version in versions:
+                    jobs.append((f"{version}-w{w}-pc{pc}-n{n}", version,
+                        ["--n", str(n), "--B", str(b), "--engines", engine,
+                         "--workers", str(w), "--parallel-chains", str(pc),
+                         "--replicates", "2", "--keep", "full", "--execution",
                          "pool" if version == "optimized" and w > 1 else "managed"]))
     elif args.section == "chain-parity":
         for w, pc in configurations:

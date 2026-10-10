@@ -1,0 +1,12 @@
+{
+  "namespace_path": "/tmp/pairwiseLLM-325-evidence/final-check-library/pairwiseLLM",
+  "exact_match_to_measured_optimized_namespace": true,
+  "function_sha256": {
+    "bootstrap_bt_model": "bd689045a2ba99572e9b14c36e796430f6223a42a18de7c3b9b372dfb6990458",
+    ".bt_bootstrap_collect": "6479c8adab60d27b428cfb75756cbde7b7f15baf964ccb252f1fd6935018d3e5",
+    ".bt_bootstrap_schedule": "ddbde719886e91e12b9f4046668eb3a6503d87d924df578bf982d38e07f528ff",
+    "adaptive_rank_run_live": "a352a95e8b2b510a4848137f9ec632ee33aa03f1cbd8311963b62d8522736d41",
+    ".adaptive_run_prepare": "7623719c1a1cc4dc3b9562fd6cc323f4aa789a6d69b53932a49cfcb450b496ad",
+    ".adaptive_run_execute": "34876eb255dabe815cad6231b38d11f92a8f10c1ad5bc08a72c9c4f850a6fb39"
+  }
+}
