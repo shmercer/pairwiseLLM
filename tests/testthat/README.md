@@ -72,6 +72,13 @@ on 2026-10-01).
 
 ## Determinism Rules
 
+Issue #325 reserves 0045 for external bootstrap execution and 5120 for exact
+bounded schedule execution. `fixtures/bt-schedule-325/` contains unchanged
+source from post-#328 `7999c15c6c50b0d8de670ff49702648630d8235b`.
+Scientific state, RNG, scores, posterior-contract fixtures and failures require
+exact equality. Real four-chain native qualification and bounded process-tree
+benchmarks run explicitly through `scripts/benchmark-bt-schedule.py`, never CI.
+
 Issue #305 reserves 0041–0043 for lapse likelihood/derivative contracts,
 estimation/recovery, and boundary/failure handling (verified unused on 2026-10-02).
 The frozen synthetic qualification matrix is in `scripts/validate-bt-lapse.R`;

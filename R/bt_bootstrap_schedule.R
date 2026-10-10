@@ -54,9 +54,24 @@
   }
   fit_fn <- .bt_bootstrap_schedule_fit(spec$schedule_fit_fn, seeds[["scheduling_refit"]])
   tryCatch({
+    context <- .adaptive_run_prepare(state, judge, btl_config = spec$btl_config, progress = "none")
+    # If an internal step/refit throws, retain the last state that the original
+    # n_steps=1 loop would have returned. In particular, do not lose earlier
+    # successful iterations or retain the incomplete failing transaction.
+    schedule_frame <- environment()
+    context$cfg$iteration_completed <- function(completed) assign("state", completed, envir = schedule_frame)
+    current <- context$state
     while (nrow(state$history_pairs) < spec$budget) {
-      state <- adaptive_rank_run_live(state, judge, n_steps = 1L, fit_fn = fit_fn,
-        btl_config = spec$btl_config, progress = "none")
+      committed <- nrow(current$history_pairs)
+      until_refit <- context$btl_cfg$refit_pairs_target -
+        (committed - current$refit_meta$last_refit_M_done)
+      until_round <- current$round$round_pairs_target - current$round$round_committed
+      until_tree <- if (isTRUE(current$warm_start_done)) Inf else
+        nrow(current$warm_start_pairs) - current$warm_start_idx + 1L
+      n_steps <- as.integer(max(1, min(64L, spec$budget - committed,
+        max(1, until_refit), max(1, until_round), until_tree)))
+      state <- .adaptive_run_execute(current, judge, n_steps, fit_fn, context$btl_cfg, context$cfg)
+      current <- state
       if (isTRUE(state$meta$stop_decision) && nrow(state$history_pairs) < spec$budget) {
         .bt_bootstrap_abort(paste0("Schedule ended before the comparison budget: ", state$meta$stop_reason),
           failure_reason = state$meta$stop_reason)

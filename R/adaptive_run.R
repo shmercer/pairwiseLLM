@@ -4519,6 +4519,26 @@ adaptive_rank_run_live <- function(state,
                                    progress_show_events = TRUE,
                                    progress_errors = TRUE,
                                    ...) {
+  context <- .adaptive_run_prepare(state, judge, n_steps,
+    adaptive_config = adaptive_config, btl_config = btl_config,
+    session_dir = session_dir, persist_item_log = persist_item_log,
+    checkpoint_every_steps = checkpoint_every_steps, progress = progress,
+    progress_redraw_every = progress_redraw_every,
+    progress_show_events = progress_show_events, progress_errors = progress_errors)
+  .adaptive_run_execute(context$state, judge, context$n_steps, fit_fn,
+    context$btl_cfg, context$cfg, ...)
+}
+
+# Shared entry validation and setup. Bootstrap owns a pristine within-set state
+# and can retain this context between bounded chunks; public calls always enter
+# here, including resumed sessions and linking workflows.
+.adaptive_run_prepare <- function(state, judge, n_steps = 1L,
+                                  adaptive_config = NULL, btl_config = NULL,
+                                  session_dir = NULL, persist_item_log = NULL,
+                                  checkpoint_every_steps = NULL,
+                                  progress = c("all", "refits", "steps", "none"),
+                                  progress_redraw_every = 10L,
+                                  progress_show_events = TRUE, progress_errors = TRUE) {
   if (!inherits(state, "adaptive_state")) {
     rlang::abort("`state` must be an adaptive_state object.")
   }
@@ -4612,6 +4632,13 @@ adaptive_rank_run_live <- function(state,
     controller = state$controller
   )
 
+  list(state = state, n_steps = n_steps, btl_cfg = btl_cfg, cfg = cfg)
+}
+
+# This is the canonical attempted-step loop, also used by the public live
+# runner. The private observer records fully returned scalar iterations for
+# bootstrap failure artifacts; it never selects pairs or changes the state.
+.adaptive_run_execute <- function(state, judge, n_steps, fit_fn, btl_cfg, cfg, ...) {
   progress_handle <- adaptive_progress_init(state, cfg)
   on.exit(adaptive_progress_finish(progress_handle), add = TRUE)
 
@@ -4850,6 +4877,7 @@ adaptive_rank_run_live <- function(state,
     persist_session(force = isTRUE(force_persist_after_iteration) || identical(remaining, 1L))
     persist_session(force = FALSE)
     progress_handle <- adaptive_progress_update(progress_handle, state, cfg)
+    if (!is.null(cfg$iteration_completed)) cfg$iteration_completed(state)
     remaining <- remaining - 1L
   }
 

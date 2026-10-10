@@ -18,7 +18,8 @@ bootstrap_bt_model(
   schedule_fit_fn = NULL,
   min_success = n_rep,
   workers = 1L,
-  keep = c("summary", "theta", "full")
+  keep = c("summary", "theta", "full"),
+  executor = NULL
 )
 }
 \arguments{
@@ -87,6 +88,15 @@ The previous plan and caller RNG state are restored.}
 diagnostics; \code{"theta"} also keeps aligned replicate estimates; \code{"full"}
 additionally keeps comparisons, adaptive states and detailed failure
 diagnostics (which can include dense matrices). Full artifacts can be large.}
+
+\item{executor}{Optional ordered map function with arguments \code{X}, \code{FUN}, and
+\code{...}, for example an adapter to a caller-owned worker pool. It must apply
+\code{FUN} to each element of \code{X}, forwarding \code{...}, and return a list of results
+in input order, without retries or seed replacement. \code{workers} bounds the
+number of chunks submitted at once; the caller must allocate consistent
+CPU/memory capacity, including any native sampler chains. NULL retains the
+existing serial/temporary-multisession behavior. A supplied executor owns
+its resources; this function neither changes its plan nor closes its pool.}
 }
 \value{
 A \code{pairwiseLLM_bt_bootstrap} list containing \code{theta} (ID, initial theta,
@@ -130,6 +140,11 @@ Built-in final estimators reuse immutable item contrasts within this call.
 Fixed schedules also reuse pair indexes and designs; alpha retains its
 all-pairs pseudo-count design, including unobserved pairs. Outcome counts,
 estimation and numerical validity checks are recomputed for every replicate.
+Worker chunks hold at most eight replicates for summary/theta retention and
+two for full retention. Designs are constructed inside each chunk, never
+transferred from the parent or retained in a global cache. An executor is an
+execution resource and is not stored in scientific provenance. Its transport
+errors propagate without replacement replicates or a serial fallback.
 
 \code{bootstrap_sd} describes replicate-estimate dispersion, whereas \code{mcse_bias}
 is \code{bootstrap_sd / sqrt(n_success)}: simulation error in the estimated bias.
