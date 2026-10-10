@@ -81,6 +81,10 @@
 #' Serial and parallel results use the same seeds and aggregation order. Exact
 #' reproducibility requires compatible R/package/engine versions and deterministic
 #' callbacks. There is no checkpoint/resume API; restarting repeats the run.
+#' Built-in final estimators reuse immutable item contrasts within this call.
+#' Fixed schedules also reuse pair indexes and designs; alpha retains its
+#' all-pairs pseudo-count design, including unobserved pairs. Outcome counts,
+#' estimation and numerical validity checks are recomputed for every replicate.
 #'
 #' `bootstrap_sd` describes replicate-estimate dispersion, whereas `mcse_bias`
 #' is `bootstrap_sd / sqrt(n_success)`: simulation error in the estimated bias.
@@ -150,7 +154,24 @@ bootstrap_bt_model <- function(object, mode, n_rep, seed, schedule = NULL,
   .bt_bootstrap_with_seed(seed, .bt_bootstrap_collect(spec, n_rep, min_success, workers))
 }
 
+.bt_bootstrap_prepare <- function(spec) {
+  # Keep preparation out of provenance/serialized results. A changing adaptive
+  # graph shares item contrasts and the alpha design, never observed pair counts.
+  if (is.function(spec$refit$estimator)) return(NULL)
+  items <- .bt_prepare_items(names(spec$theta), all_pairs = identical(spec$refit$estimator, "alpha"),
+    binary = identical(spec$refit$estimator, "alpha") && spec$refit$args$alpha > 0)
+  if (spec$mode == "fixed") .bt_prepare_schedule(spec$schedule, items) else items
+}
+
+.bt_bootstrap_chunk <- function(indices, spec) {
+  # Build dense designs on the worker, once per bounded chunk. Transferring
+  # them over a socket for each task costs more than rebuilding the structure.
+  prepared <- .bt_bootstrap_prepare(spec)
+  lapply(indices, .bt_bootstrap_one, spec = spec, prepared = prepared)
+}
+
 .bt_bootstrap_collect <- function(spec, n_rep, min_success, workers) {
+  prepared <- if (workers == 1L) .bt_bootstrap_prepare(spec) else NULL
   if (workers > 1L) {
     old_plan <- future::plan("list")
     on.exit(future::plan(old_plan), add = TRUE)
@@ -166,8 +187,15 @@ bootstrap_bt_model <- function(object, mode, n_rep, seed, schedule = NULL,
   # order, using the same update in serial and parallel execution.
   blocks <- split(seq_len(n_rep), ceiling(seq_len(n_rep) / max(1, 2 * as.double(workers))))
   for (indices in blocks) {
-    results <- if (workers == 1L) lapply(indices, .bt_bootstrap_one, spec = spec) else
-      future.apply::future_lapply(indices, .bt_bootstrap_one, spec = spec, future.seed = TRUE)
+    if (workers == 1L) {
+      results <- lapply(indices, .bt_bootstrap_one, spec = spec, prepared = prepared)
+    } else {
+      # Keep all requested workers useful even for a final short block, retain
+      # at most 2 * workers results, and reduce in the original replicate order.
+      chunks <- split(indices, ceiling(seq_along(indices) * min(workers, length(indices)) / length(indices)))
+      results <- future.apply::future_lapply(chunks, .bt_bootstrap_chunk, spec = spec, future.seed = TRUE)
+      results <- do.call(c, unname(results))
+    }
     for (j in seq_along(indices)) {
       i <- indices[[j]]
       out <- results[[j]]

@@ -98,11 +98,21 @@
   list(estimator = estimator, args = args)
 }
 
-.bt_bootstrap_refit <- function(data, ids, spec) {
+.bt_bootstrap_refit <- function(data, ids, spec, prepared = NULL) {
   if (is.function(spec$estimator)) {
     fit <- do.call(spec$estimator, c(list(bt_data = data, item_ids = ids), spec$args))
-  } else {
+  } else if (is.null(prepared)) {
     fit <- do.call(fit_bt_model, c(list(bt_data = data, engine = spec$estimator, verbose = FALSE), spec$args))
+  } else {
+    if (is.null(prepared$index)) {
+      .bt_validate_data(data)
+      prepared <- .bt_prepare_schedule(data, prepared)
+    }
+    fit <- if (identical(spec$estimator, "alpha")) {
+      .bt_fit_alpha(data, spec$args$alpha, FALSE, spec$args[setdiff(names(spec$args), "alpha")], prepared)
+    } else {
+      .bt_fit_firth(data, FALSE, spec$args, prepared)
+    }
   }
   .bt_bootstrap_theta(fit, ids)
 }

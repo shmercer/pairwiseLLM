@@ -86,7 +86,7 @@
     stop_boundary_step_id = if (is.null(state)) NA_integer_ else state$meta$stop_boundary_step_id)
 }
 
-.bt_bootstrap_one <- function(index, spec) {
+.bt_bootstrap_one <- function(index, spec, prepared = NULL) {
   seeds <- .bt_bootstrap_seeds(spec$seed, index)
   state <- NULL
   data <- data.frame(object1 = character(), object2 = character(), result = double())
@@ -104,7 +104,7 @@
     }
     if (nrow(data) != spec$budget) .bt_bootstrap_abort("Replicate did not attain the exact comparison budget.")
     phase <- "estimator"
-    .bt_bootstrap_with_seed(seeds[["estimator"]], .bt_bootstrap_refit(data, names(spec$theta), spec$refit))
+    .bt_bootstrap_with_seed(seeds[["estimator"]], .bt_bootstrap_refit(data, names(spec$theta), spec$refit, prepared))
   }, warning = function(w) {
     warnings <<- c(warnings, conditionMessage(w))
     invokeRestart("muffleWarning")
