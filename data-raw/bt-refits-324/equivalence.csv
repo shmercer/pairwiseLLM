@@ -1,0 +1,7 @@
+"n","engine","theta_max_abs","se_max_abs","covariance_max_abs","information_max_abs","exact_convergence"
+57,"alpha",0,4.44089209850063e-16,7.28583859910259e-16,7.105427357601e-15,TRUE
+57,"brglm2",0,0,0,0,TRUE
+91,"alpha",0,6.55031584528842e-15,9.65894031423886e-15,2.8421709430404e-14,TRUE
+91,"brglm2",0,0,0,0,TRUE
+229,"alpha",0,4.89608353859694e-14,7.43849426498855e-14,2.27373675443232e-13,TRUE
+229,"brglm2",0,0,0,0,TRUE

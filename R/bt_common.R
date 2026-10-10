@@ -1,14 +1,6 @@
 # Shared binary BT data, centered uncertainty and plug-in prediction contracts.
-.bt_binary_design <- function(dat) {
-  ids <- sort(unique(c(as.character(dat[[1L]]), as.character(dat[[2L]]))), method = "radix")
-  first <- match(as.character(dat[[1L]]), ids)
-  second <- match(as.character(dat[[2L]]), ids)
-  pairs <- data.frame(first = pmin(first, second), second = pmax(first, second),
-                      wins = ifelse(first < second, dat[[3L]], 1 - dat[[3L]]))
-  pairs$losses <- 1 - pairs$wins
-  counts <- stats::aggregate(cbind(wins, losses) ~ first + second, data = pairs, FUN = sum)
-  counts <- counts[order(counts$first, counts$second), , drop = FALSE]
-
+.bt_prepare_items <- function(ids, all_pairs = FALSE, complete = FALSE, binary = TRUE) {
+  ids <- sort(as.character(ids), method = "radix")
   # Reference-coordinate coefficients are contrasts to the last sorted item.
   # Centering the full coordinate map gives item estimates AND their covariance
   # under the same deterministic sum-to-zero constraint.
@@ -16,8 +8,80 @@
   transform <- sweep(transform, 2L, colMeans(transform))
   rownames(transform) <- ids
   colnames(transform) <- paste0("contrast", seq_len(ncol(transform)))
-  design <- transform[counts$first, , drop = FALSE] - transform[counts$second, , drop = FALSE]
-  list(ids = ids, counts = counts, transform = transform, design = design)
+  out <- list(ids = ids, transform = transform)
+  if (all_pairs) {
+    n <- length(ids)
+    first <- rep(seq_len(n - 1L), n - seq_len(n - 1L))
+    second <- sequence(n - seq_len(n - 1L), from = seq_len(n - 1L) + 1L)
+    # merge(all.x = TRUE) historically sorts complete graphs by pasted keys,
+    # but incomplete graphs by numeric columns. Retain BOTH solver row orders.
+    if (complete) {
+      order <- sort.list(paste(first, second, sep = "\r"))
+      first <- first[order]
+      second <- second[order]
+    }
+    design <- transform[first, , drop = FALSE] - transform[second, , drop = FALSE]
+    out$alpha <- list(first = first, second = second, design = design,
+      binary_design = if (binary) design[rep(seq_along(first), 2L), , drop = FALSE] else NULL,
+      pair_index = .bt_pair_index(first, second, n), complete = complete)
+  }
+  out
+}
+
+# Lexicographic index in all unordered pairs, independent of observed outcomes.
+.bt_pair_index <- function(first, second, n) {
+  (first - 1) * (2 * n - first) / 2 + second - first
+}
+
+# An ordinary list owned by one bootstrap invocation, never a global cache.
+# Only graph structure is retained; every call below recomputes outcome counts.
+.bt_prepare_schedule <- function(dat, items = NULL) {
+  object1 <- as.character(dat[[1L]])
+  object2 <- as.character(dat[[2L]])
+  if (is.null(items)) items <- .bt_prepare_items(unique(c(object1, object2)))
+  first <- match(object1, items$ids)
+  second <- match(object2, items$ids)
+  lo <- pmin(first, second)
+  hi <- pmax(first, second)
+  key <- .bt_pair_index(lo, hi, length(items$ids))
+  keys <- sort(unique(key), method = "radix")
+  index <- match(key, keys)
+  observed <- match(keys, key)
+  counts <- data.frame(first = lo[observed], second = hi[observed])
+  complete <- nrow(counts) == length(items$ids) * (length(items$ids) - 1) / 2
+  if (!is.null(items$alpha) && !identical(items$alpha$complete, complete)) {
+    items <- .bt_prepare_items(items$ids, all_pairs = TRUE, complete = complete,
+      binary = !is.null(items$alpha$binary_design))
+  }
+  # Preserve aggregate()'s historical row names as well as its pair ordering.
+  rownames(counts) <- order(order(counts$second, counts$first))
+  list(ids = items$ids, transform = items$transform, alpha = items$alpha,
+    counts = counts, design = items$transform[counts$first, , drop = FALSE] -
+      items$transform[counts$second, , drop = FALSE],
+    object1 = object1, object2 = object2, forward = first < second,
+    index = index, totals = tabulate(index, nrow(counts)), all_pair_index = keys)
+}
+
+.bt_binary_design <- function(dat, prepared = NULL) {
+  if (is.null(prepared)) prepared <- .bt_prepare_schedule(dat)
+  if (!identical(as.character(dat[[1L]]), prepared$object1) ||
+      !identical(as.character(dat[[2L]]), prepared$object2)) {
+    .bt_abort("Prepared BT schedule does not match the supplied comparison rows.")
+  }
+  y <- dat[[3L]]
+  if (!.bt_real_vector(y) || length(y) != length(prepared$index) ||
+      anyNA(y) || any(!y %in% c(0, 0.5, 1))) {
+    .bt_abort("Comparison results must be finite numeric 0, 0.5 (tie), or 1.")
+  }
+  wins <- ifelse(prepared$forward, y, 1 - y)
+  counts <- prepared$counts
+  counts$wins <- as.double(tabulate(prepared$index[wins == 1], nrow(counts)))
+  if (any(wins == 0.5)) {
+    counts$wins <- counts$wins + 0.5 * tabulate(prepared$index[wins == 0.5], nrow(counts))
+  }
+  counts$losses <- prepared$totals - counts$wins
+  list(ids = prepared$ids, counts = counts, transform = prepared$transform,
+    design = prepared$design, alpha = prepared$alpha, all_pair_index = prepared$all_pair_index)
 }
 
 .bt_item_covariance <- function(covariance, transform, ids, method) {

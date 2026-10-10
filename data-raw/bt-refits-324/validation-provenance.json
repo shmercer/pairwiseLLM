@@ -1,0 +1,84 @@
+{
+  "implementation_sha": "76bb81cf41209e36a758e348fbf3c0165d531173",
+  "baseline_sha": "5a3fc17a77e31a88edacd58207537adc430a0f9a",
+  "focused_filter": "003[6-9]|0040|0044|511[3-5]",
+  "focused_libraries": [
+    "ordinary reference BLAS",
+    "temporary OpenBLAS 0.3.26 pthread"
+  ],
+  "extended_final": {
+    "filter": "0044",
+    "environment": {
+      "PAIRWISELLM_TEST_BT_REFITS_LARGE": "true",
+      "OPENBLAS_NUM_THREADS": "1",
+      "LD_PRELOAD": "/tmp/bt324-blas/extracted/usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3"
+    },
+    "sizes": [
+      8,
+      57,
+      91,
+      229
+    ],
+    "graphs": [
+      "complete",
+      "sparse",
+      "reversed",
+      "unbalanced",
+      "near_separated",
+      "near_zero",
+      "separated"
+    ],
+    "alpha_values": [
+      0,
+      1e-10,
+      0.5
+    ],
+    "estimators": [
+      "alpha",
+      "brglm2"
+    ],
+    "fit_comparisons": 112,
+    "log": "large-equivalence-openblas.log"
+  },
+  "reference_blas_extended_log": "large-equivalence.log (before the conditioning guard; final full check and focused suite use reference BLAS)",
+  "full_check": {
+    "command": "R CMD check --output=/tmp/bt324-check-guard pairwiseLLM_1.6.0.tar.gz",
+    "status": "OK",
+    "pass": 36296,
+    "skip": 57,
+    "warnings": 0,
+    "failures": 0
+  },
+  "openblas_package": "libopenblas0-pthread_0.3.26+ds-1ubuntu0.1_amd64.deb, extracted under /tmp without installation",
+  "r_source_sha256": {
+    "R/bt_alpha.R": "0d7cb1b97d86137dc286af8b9edfb7d0d6038dad76b045e1af22ecde178eaf3e",
+    "R/btl_mcmc_model_variant.R": "f507cb8957046035c4d3d08c65eeb2e80e64cf48e04b34d89abf3aa77702a410",
+    "R/bt_lapse_optimizer.R": "5c2a377d97fbc0d44cf60d8009df5b1bc363b9eb2d3337b75b6931195d07d9b2",
+    "R/bt_firth.R": "9d5e5943838c3fa2b27b5f96039777c4c2aaa89b5110cf8640cc9217541617d5",
+    "R/btl_mcmc_resources.R": "c393869b522fcb2e8ef89303738ad68de776bc99cbea7ea0358e8cf219d4ce00",
+    "R/btl_mcmc_constraints.R": "63641c62d76f853ba37a4d7bdbc8ab99fa372e99e68235aa324c9aec1fa6c10d",
+    "R/btl_mcmc_theta_summary_stubs.R": "e06841da2eb3a2ff1b3dd115d69e468a274f2b2395c52484eee5e39c24a31184",
+    "R/btl_mcmc_ingest.R": "eecf7bba32867ebf41326a9e25d89be5b2f08f511b3bda477825bd40c377d3be",
+    "R/bt_helpers.R": "6a9406e84c4029b32e3563ce969e3d37d43ba28c762b29dcb3769096b472d296",
+    "R/bt_lapse_likelihood.R": "cdcbb6316e0eb165343e920d4ed1b6fb436d56c7ed1a6a7d8e50bf530856b094",
+    "R/bt_bootstrap_schedule.R": "13a0f52efb3183b68f0572a295b96e51dfebaa4bb1fcaadc67bef1e83c6ce4ba",
+    "R/bt_provenance.R": "f58e1f156ae1888124c66f6acad3e542098e343c8f9d45b38104bf755ad5f0c5",
+    "R/btl_mcmc_stopping.R": "33a7c420b8fec6acadba17f12b591b34eb1bb0bf2624b84052b07507594960fd",
+    "R/btl_mcmc_summaries.R": "37c75224834097a42bd013f98052423d238a7baf52945b508fd7131f5c79086a",
+    "R/bt_common.R": "0a455f7039e3e50a60296b9ff1cddfba19d17aa9bcfb416b552b9d3b31053278",
+    "R/bt_model.R": "82fc7dfff1f283f13444dd65d0b3b5a439ecbe544c37b87a9548568c5bcbd182",
+    "R/bt_bootstrap_contracts.R": "fb2ba52a869de637dcb8fce105172d33a26cd5ae0ec81b52f7171372cf1c93a9",
+    "R/btl_mcmc_fit_contracts.R": "b70f8f4b8dd2f8762a70bda554944afa51d0b06c311fed3530e2cfb1b3615ffa",
+    "R/bt_bootstrap.R": "38c5766a9fb9950d701581b945a3cba7d56205eeb70d718cfd440b00a5b78038",
+    "R/btl_evidence_identity.R": "fb2f3157e73db756a45513caa59a3efcf85a578f95787d6a1a14bae9649b6acf",
+    "R/btl_mcmc_state.R": "d0ef7c2f4b6d924708e4bf0d3bfb4a2ef159b676044794ebfca78570adab6b8f",
+    "R/btl_mcmc_contracts.R": "c371fe5cf41f528fab896cb9acb85129b60d3adeca3ec5d5b4a20c6ffe0950b9",
+    "R/bt_lapse.R": "81d3406b2295e13375554cbef073683548508c011c74726451a820817288c1e4"
+  },
+  "coverage": {
+    "filter": "003[5-9]|004[0-4]|511[3-5]",
+    "measurement": "covr::tally_coverage(coverage, by=\"line\")",
+    "script": "scripts/check-bt-refits-coverage.R",
+    "recomputed_from_saved_trace_without_repeating_tests": true
+  }
+}

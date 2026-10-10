@@ -56,6 +56,16 @@ parity tests (#278). Prefixes verified unused on 2026-09-22. Run 6021 with
 Issue #307 reserves 0036 for Firth BT numerical, uncertainty, prediction, and
 compatibility contracts (verified unused on 2026-10-01).
 
+Issue #324 reserves 0044 for prepared frequentist BT refit equivalence. The
+six files in `fixtures/bt-refits-324/` are unchanged source from
+`5a3fc17a77e31a88edacd58207537adc430a0f9a`. Small full-fit oracles and large
+design/count oracles run routinely. Set `PAIRWISELLM_TEST_BT_REFITS_LARGE=true`
+to also fit all graph families at N=57/91/229 (several minutes). Scores and
+solver iterations must be exact; algebraically reordered information and
+covariance use an elementwise bound of `1e-10 * (1 + abs(reference))`, fixed
+before evaluating results. No timing assertions. Offline profiling, fit timing,
+and fresh-process worker/RSS scripts are `scripts/*bt-refits*`.
+
 Issue #303 reserves 0037 for alpha-adjusted BT objectives, numerical derivatives,
 conditional uncertainty, diagnostic failures and compatibility (verified unused
 on 2026-10-01).

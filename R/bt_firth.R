@@ -42,14 +42,14 @@
 
 .bt_firth_ssr <- function(theta, se) .bt_centered_ssr(theta, se, "Firth")
 
-.bt_fit_firth <- function(dat, verbose, dots) {
+.bt_fit_firth <- function(dat, verbose, dots, prepared = NULL) {
   if (any(dat[[3L]] == 0.5)) .bt_abort("brglm2 requires binary outcomes; ties are not supported here.")
   if (!.require_ns("brglm2", quietly = TRUE)) {
     .bt_abort(paste0("Package 'brglm2' must be installed to use engine = 'brglm2'. ",
                      "Install it with install.packages('brglm2')."))
   }
   control <- .bt_firth_control(dots, verbose)
-  prepared <- .bt_binary_design(dat)
+  prepared <- .bt_binary_design(dat, prepared)
   ids <- prepared$ids
   counts <- prepared$counts
   transform <- prepared$transform

@@ -1,0 +1,167 @@
+Issue #324: measured refit optimization and equivalence evidence
+
+Baseline: 5a3fc17a77e31a88edacd58207537adc430a0f9a
+Implementation/validation: 76bb81cf41209e36a758e348fbf3c0165d531173
+PR: https://github.com/shmercer/pairwiseLLM/pull/328
+
+Synthetic sparse graphs at N=57/91/229; alpha=0.5 or Firth AS_mean.
+Hardware: AMD Ryzen 9 5900XT (16 physical cores, 32 logical CPUs).
+Final timing uses the ordinary local reference BLAS; exact software versions
+are in fit-session.txt and worker-session.txt. Baseline and prepared variants
+use the same environment. worker-provenance.json records source hashes, CPU
+affinity and the two-run/24-replicate design. These are measurements on this
+machine, with no unstable timing assertions in CI or production tuning claim.
+
+Warmed repeated fits (seconds; six observations per estimator and N):
+Estimator N   baseline mean/median   prepared mean/median   baseline/prepared fits/s   mean speedup
+alpha     57    0.04450/0.04400     0.03217/0.03200       22.472/31.088       1.383x
+alpha     91    0.23317/0.23150     0.17767/0.17750        4.289/5.629       1.312x
+alpha     229   8.87167/8.87150     6.85917/6.86100        0.113/0.146       1.293x
+brglm2    57    0.01800/0.01800     0.01550/0.01500       55.556/64.516       1.161x
+brglm2    91    0.04700/0.04700     0.04417/0.04400       21.277/22.642       1.064x
+brglm2    229   0.57683/0.57600     0.57167/0.56800        1.734/1.749       1.009x
+
+Separate cumulative R allocation profiles (mean of two runs; MiB=2^20 bytes):
+Estimator N   baseline/prepared MiB   reduction   baseline/prepared allocation counts   cache MiB
+alpha      57     26.73/21.23        20.58%         1231/854                 2.30
+alpha      91     95.27/75.43        20.83%         1262/851                 9.01
+alpha     229   1316.69/1029.41        21.82%         1401/851                 139.48
+brglm2     57     16.56/15.58         5.94%         1649/1336                 0.17
+brglm2     91     41.71/39.76         4.67%         1808/1461                 0.39
+brglm2    229    260.48/252.44         3.09%         2498/2013                 2.19
+
+End-to-end bootstrap (24 successful fits/run, two fresh runs per cell):
+Estimator N   workers   mean speedup   minimum successful fits/s baseline/prepared   peak summed RSS GiB baseline/prepared
+alpha     57  1            1.360x          22.642/30.928                      0.151/0.151
+alpha     57  2            1.427x           9.547/13.801                      0.471/0.474
+alpha     57  4            1.326x          13.115/17.455                      0.802/0.807
+alpha     57  8            1.216x          14.528/17.699                      1.476/1.467
+alpha     57  12           1.125x          15.404/17.279                      2.144/2.060
+alpha     91  1            1.409x           4.280/6.076                      0.185/0.175
+alpha     91  2            1.410x           4.879/6.873                      0.506/0.513
+alpha     91  4            1.268x           8.013/10.114                      0.853/0.854
+alpha     91  8            1.201x          10.634/12.766                      1.578/1.567
+alpha     91  12           1.131x          12.121/13.913                      2.242/2.181
+alpha     229 1            1.323x           0.119/0.158                      0.846/0.864
+alpha     229 2            1.266x           0.204/0.259                      1.623/1.845
+alpha     229 4            1.192x           0.265/0.315                      3.125/3.395
+alpha     229 8            1.184x           0.271/0.321                      5.982/6.334
+alpha     229 12           1.174x           0.272/0.320                      8.366/9.519
+brglm2    57  1            1.328x          41.308/54.670                      0.250/0.252
+brglm2    57  2            1.237x           8.621/10.648                      0.732/0.732
+brglm2    57  4            1.103x          10.476/11.494                      1.237/1.239
+brglm2    57  8            1.116x          10.587/11.788                      2.222/2.212
+brglm2    57  12           1.047x          10.563/11.065                      3.114/3.105
+brglm2    91  1            0.941x          16.260/15.152                      0.254/0.256
+brglm2    91  2            1.175x           7.403/8.775                      0.742/0.741
+brglm2    91  4            1.021x           9.780/10.004                      1.258/1.255
+brglm2    91  8            0.928x          10.345/9.592                      2.275/2.267
+brglm2    91  12           0.856x          10.152/8.693                      3.287/3.294
+brglm2    229 1            1.038x           1.458/1.512                      0.289/0.283
+brglm2    229 2            1.068x           2.162/2.320                      0.828/0.792
+brglm2    229 4            1.082x           3.560/3.857                      1.405/1.358
+brglm2    229 8            1.096x           5.141/5.619                      2.605/2.479
+brglm2    229 12           0.991x           6.122/6.090                      3.616/3.592
+
+Highest observed minimum throughput for the prepared implementation:
+alpha     N=57: 1 workers, 30.928 successful fits/s (slower of two runs).
+alpha     N=91: 12 workers, 13.913 successful fits/s (slower of two runs).
+alpha     N=229: 8 workers, 0.321 successful fits/s (slower of two runs).
+brglm2    N=57: 1 workers, 54.670 successful fits/s (slower of two runs).
+brglm2    N=91: 1 workers, 15.152 successful fits/s (slower of two runs).
+brglm2    N=229: 12 workers, 6.090 successful fits/s (slower of two runs).
+These selections apply only to the measured 24-fit workloads.
+
+Measured short-job regressions (prepared elapsed increase relative to baseline):
+brglm2 N=91, workers=1: 6.25% longer mean elapsed time.
+brglm2 N=91, workers=8: 7.71% longer mean elapsed time.
+brglm2 N=91, workers=12: 16.77% longer mean elapsed time.
+brglm2 N=229, workers=12: 0.94% longer mean elapsed time.
+These results are retained, not screened out. Firth gains are workload- and
+worker-count-dependent; warmed single-fit savings do not guarantee lower
+end-to-end elapsed time for short fresh-process jobs.
+
+N=91 Firth sensitivity check: 200 replicates/run, two runs per setting.
+Workers   baseline mean seconds   prepared mean seconds   mean speedup
+1                       12.3490                 11.5065   1.073x
+12                       5.5495                  4.6270   1.199x
+All 1,600 sensitivity fits succeeded and their scientific outputs matched
+exactly. The longer jobs reverse the observed N=91 short-job regressions
+at 1/12 workers. This supports a workload-length effect, without isolating
+the contributions of startup, garbage collection, dispatch and fitting.
+Both sets of measurements remain in the evidence; the sensitivity check
+does not justify a universal Firth speedup claim.
+
+worker-summary.csv also reports mean/median amortized seconds per fit and
+mean successful fits/s. bootstrap.csv contains every run, its elapsed and
+parent CPU time, sampled peak RSS and system load. Parent package loading
+and a two-item engine warmup are outside the bootstrap timer; process_seconds
+records the full fresh R invocation. With two observations,
+the median and mean of amortized time are identical; minimum throughput
+shows the slower observed run. RSS is sampled every 50 ms over the process
+tree/session; shared pages can be counted repeatedly and short peaks missed.
+RSS includes startup and workers. Rprofmem totals are cumulative allocations,
+not peak live memory. A retained cache does not imply lower peak RSS.
+
+Why these changes:
+The original N=229 alpha Rprof sample attributed 78.26% of elapsed time to
+the IWLS solver and 19.76% to crossprod. The two standalone stage profiles
+averaged 0.005 s for IDs/counts, 0.002 s for contrast/design construction,
+0.080 s for alpha structures, 7.637 s for the solver, 1.874 s for uncertainty
+and diagnostics, and 0.002 s for result components. Firth's solver alone
+averaged 0.588 s against a 0.602 s full fit. These separately profiled calls
+include profiling/first-use overhead and must not be added or interpreted as
+the final unprofiled speedup. Public example_writing_pairs was also profiled.
+Indexed tabulation and the weighted Laplacian avoid repeated aggregation and
+zero products. candidates.csv compares isolated aggregate/tabulate/rowsum,
+dense/sparse/indexed information, and formula/direct Firth calls. The formula
+wrapper remains because removing it did not show a material solver gain and
+would change the raw model-object contract. No sparse solver was substituted.
+
+Numerical equivalence and validation:
+Frozen source files match the baseline SHA byte for byte. Counts, row order,
+scores, solver coefficients/iterations/deviance, flags, classes/reasons and
+bootstrap scientific summaries require exact equality. Other floating-point
+diagnostics, SE and covariance use the predeclared elementwise tolerance
+1e-10*(1+abs(reference)); it was never loosened to obtain passing results.
+The 112 extended fit cases span N=8/57/91/229, seven graph families and three
+alpha values (0, 1e-10, 0.5) plus Firth. A full reference-BLAS run passed before
+the conditioning guard; the final implementation passed all extended cases
+under OpenBLAS and the focused suites under both libraries. Full R CMD check
+uses reference BLAS. Large-graph design/count oracles also run in routine CI.
+OpenBLAS exposed a tiny-alpha near-separated case where 2.22e-16 Hessian
+roundoff amplified to 2.2764e-10 in the Newton correction. Fits whose already
+computed information/Hessian reciprocal condition estimate is nonfinite or
+below 1e-5 now retain the original dense BLAS products. This changes only the
+computational path, not an acceptance threshold. The regression requires
+exact original diagnostics; conditioning-openblas.csv records zero remaining
+difference. Original starts, objective, all-pairs pseudo-counts, centering,
+Firth AS_mean, uncertainty, convergence and failure gates remain in force.
+equivalence.csv records the measured score/SE/covariance/information errors
+for the final component benchmark. Every one of the 120 worker cells requires
+24 successes and exact agreement with its baseline serial scientific result:
+2,880 fits, including 1/2/4/8/12 workers. Fixed and changing adaptive schedules,
+custom callbacks, failures, RNG restoration and immutable cache behavior are
+covered by the regression suites.
+Final R CMD check: Status OK; PASS 36,296, SKIP 57, WARN 0, FAIL 0. Skips are
+documented in full-tests.log: source-only repository checks and optional
+explicitly provisioned Python/Stan integrations. Examples, vignettes and PDF
+manual passed. Changed-source lint and git diff --check passed. Scoped line
+coverage: bt_common, bt_alpha, bt_firth and bt_bootstrap 100%; contracts
+99.1736%; schedule 99.00%. Uncovered lines are listed in uncovered.csv.
+
+Remaining limits:
+Dense IWLS/QR dominates large-N fitting, especially Firth, so caching cannot
+produce a large speedup there. Ill-conditioned alpha fits deliberately retain
+the original diagnostic crossproducts. Alpha's cached dense all-pair/binary
+designs retain memory per worker. Parallel chunks build designs locally to
+avoid transferring dense matrices over sockets; they preserve the existing
+2*workers result bound, seeds and reduction order. Startup and scheduling can
+dominate short bootstrap jobs. Two repeated runs characterize these synthetic
+workloads, not longer production jobs or concurrent study resource demands.
+No provider was invoked; no study outcomes, settings, dependencies, pinned
+installed library or version were changed. Study qualification/repinning and
+merging remain explicit maintainer decisions.
+
+All seven CI checks passed at implementation SHA 76bb81cf: five R CMD check
+platforms, pkgdown and coverage. ci-implementation.json records their URLs.

@@ -1,0 +1,15 @@
+{
+  "implementation_sha": "76bb81cf41209e36a758e348fbf3c0165d531173",
+  "baseline_sha": "5a3fc17a77e31a88edacd58207537adc430a0f9a",
+  "environment": "Same installed libraries and machine as worker-provenance.json",
+  "n": 91,
+  "engine": "brglm2",
+  "n_rep": 200,
+  "workers": [
+    1,
+    12
+  ],
+  "repeated_runs": 2,
+  "seed": 324,
+  "script_sha256": "2101c2ab06aef9705b3386216673dd1c74df1f350f81f27ae44c772b9a950d42"
+}

@@ -50,15 +50,17 @@
 }
 
 .bt_alpha_kernel <- function(prepared, alpha) {
-  pairs <- t(utils::combn(seq_along(prepared$ids), 2L))
-  pairs <- data.frame(first = pairs[, 1L], second = pairs[, 2L])
-  counts <- merge(pairs, prepared$counts, by = c("first", "second"), all.x = TRUE, sort = TRUE)
-  counts$wins[is.na(counts$wins)] <- 0
-  counts$losses[is.na(counts$losses)] <- 0
+  complete <- nrow(prepared$counts) == length(prepared$ids) * (length(prepared$ids) - 1) / 2
+  fixed <- prepared$alpha %||% .bt_prepare_items(prepared$ids, all_pairs = TRUE,
+    complete = complete, binary = alpha > 0)$alpha
+  counts <- data.frame(first = fixed$first, second = fixed$second,
+    wins = numeric(length(fixed$first)), losses = numeric(length(fixed$first)))
+  index <- match(prepared$all_pair_index, fixed$pair_index)
+  counts$wins[index] <- prepared$counts$wins
+  counts$losses[index] <- prepared$counts$losses
   list(counts = counts, pseudo_count = alpha / (length(prepared$ids) - 1L),
        ids = prepared$ids, transform = prepared$transform,
-       design = prepared$transform[counts$first, , drop = FALSE] -
-         prepared$transform[counts$second, , drop = FALSE])
+       design = fixed$design, binary_design = fixed$binary_design)
 }
 
 .bt_alpha_glm <- function(kernel, control) {
@@ -73,10 +75,32 @@
   # cancellation in near-zero grouped-proportion deviance on well-fitting data.
   family <- stats::quasibinomial("logit")
   family$dispersion <- 1
-  stats::glm.fit(kernel$design[rows[used], , drop = FALSE], response[used],
+  design <- if (all(used) && !is.null(kernel$binary_design)) {
+    kernel$binary_design
+  } else {
+    kernel$design[rows[used], , drop = FALSE]
+  }
+  stats::glm.fit(design, response[used],
                  weights = weights[used], family = family, start = rep(0, ncol(kernel$design)),
                  intercept = FALSE, singular.ok = FALSE,
                  control = control[c("epsilon", "maxit", "trace")])
+}
+
+# X has one +1 and one -1 per pair (the reference column is omitted).
+# Thus X' W X is the reduced graph Laplacian. Pair weights remain in the
+# original lexicographic order; only the products with structural zeros vanish.
+.bt_pair_information <- function(weights, kernel) {
+  if (isTRUE(kernel$legacy_information)) {
+    return(crossprod(kernel$design, kernel$design * weights))
+  }
+  n <- length(kernel$ids)
+  information <- matrix(0, n, n)
+  information[cbind(kernel$counts$first, kernel$counts$second)] <- -weights
+  information <- information + t(information)
+  diag(information) <- -rowSums(information)
+  information <- information[-n, -n, drop = FALSE]
+  dimnames(information) <- list(colnames(kernel$design), colnames(kernel$design))
+  information
 }
 
 # Negative penalized log likelihood, its derivatives, and ORIGINAL-data information.
@@ -93,8 +117,8 @@
   log_penalty <- c0 * sum(lp + lq)
   pair_score <- (counts$wins + c0) * q - (counts$losses + c0) * p
   score <- rowsum(c(pair_score, -pair_score), c(counts$first, counts$second), reorder = TRUE)
-  information <- crossprod(kernel$design, kernel$design * ((counts$wins + counts$losses) * p * q))
-  hessian <- information + crossprod(kernel$design, kernel$design * (2 * c0 * p * q))
+  information <- .bt_pair_information((counts$wins + counts$losses) * p * q, kernel)
+  hessian <- information + .bt_pair_information(2 * c0 * p * q, kernel)
   list(value = -(log_likelihood + log_penalty), log_likelihood = log_likelihood,
        log_penalty = log_penalty, score = stats::setNames(as.vector(score), kernel$ids),
        gradient = -as.vector(crossprod(kernel$design, pair_score)),
@@ -116,13 +140,13 @@
                provenance = provenance, parent = parent)
 }
 
-.bt_fit_alpha <- function(dat, alpha, verbose, dots) {
+.bt_fit_alpha <- function(dat, alpha, verbose, dots, prepared = NULL) {
   if (!.bt_real_vector(alpha) || length(alpha) != 1L || !is.finite(alpha) || alpha < 0) {
     .bt_abort("`alpha` must be supplied explicitly as a finite nonnegative numeric scalar.")
   }
   if (any(dat[[3L]] == 0.5)) .bt_abort("Alpha estimation requires binary outcomes; ties are not supported here.")
   control <- .bt_alpha_control(dots, verbose)
-  prepared <- .bt_binary_design(dat)
+  prepared <- .bt_binary_design(dat, prepared)
   ids <- prepared$ids
   transform <- prepared$transform
   provenance <- list(
@@ -191,6 +215,20 @@
   }
   penalized <- .bt_alpha_matrix(surface$hessian)
   original <- .bt_alpha_matrix(surface$information)
+  # Ill conditioning can amplify different Laplacian summation roundoff in
+  # Newton corrections and covariance. Retain the original BLAS products in
+  # that case. 1e-5 is a conservative computational-path guard (machine epsilon
+  # divided by it is about 2e-11), NOT a change to any acceptance threshold.
+  # Reuse the already required matrix checks; ordinary fits pay no extra rcond.
+  if (!is.finite(penalized$rcond) || !is.finite(original$rcond) ||
+      min(penalized$rcond, original$rcond) < 1e-5) {
+    kernel$legacy_information <- TRUE
+    surface <- .bt_alpha_surface(beta, kernel)
+    surface$gradient <- stats::setNames(surface$gradient, colnames(transform))
+    diagnostics[names(surface)] <- surface
+    penalized <- .bt_alpha_matrix(surface$hessian)
+    original <- .bt_alpha_matrix(surface$information)
+  }
   diagnostics$hessian_checks <- penalized[setdiff(names(penalized), "chol")]
   diagnostics$information_checks <- original[setdiff(names(original), "chol")]
   if (!penalized$positive_definite || !is.finite(penalized$rcond) || penalized$rcond < control$min_rcond) {
