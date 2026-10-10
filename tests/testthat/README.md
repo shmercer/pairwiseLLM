@@ -230,3 +230,10 @@ and fresh-process continuation across all arms. B denotes mean exposures per
 item: floor(B * N / 2) total committed pairs, without adding bootstrap evidence.
 The benchmark in `scripts/benchmark-predictive-tree.R` reports unprofiled build
 time, fresh-process peak RSS, and separately profiled cumulative allocations.
+
+Issue #326 reserves 5119 for exact direct p50/Pollitt vectorization equivalence.
+The two files in `fixtures/direct-trueskill-326/` are unmodified source from
+`589cf73e073bcd9017ca14e5b3f8ceed62fce022`; preserve them as independent scalar
+references. Tests compare full selection records, trajectories, and RNG state.
+`scripts/benchmark-direct-trueskill.R` separately measures scoring, complete
+selection, and synthetic trajectories at N=57/91/229, with no timing assertions.
