@@ -1,0 +1,99 @@
+{
+  "issue": 326,
+  "pr": 327,
+  "base_sha": "589cf73e073bcd9017ca14e5b3f8ceed62fce022",
+  "implementation_sha": "f135e65d9d57e180f4b26f6049a45f671e6eb5af",
+  "protected_installation_sha": "4c4c01453077f90e987040c6a3c3d3cd711c6f21",
+  "regression": {
+    "contexts": 130,
+    "passing_assertions": 22237,
+    "skips": 3,
+    "warnings": 0,
+    "failures": 0
+  },
+  "exact_equivalence_assertions": 671,
+  "frozen_oracles": "Byte-for-byte copies of pre-PR adaptive_pairing_strategy.R and adaptive_trueskill.R",
+  "commands": {
+    "regression": "Rscript --vanilla -e 'devtools::test(filter=\"^(0028|0029|0038|0039|0040|310[3-6]|50|51|9005|910[0-3]|9107)\", reporter=\"summary\", stop_on_failure=TRUE)'",
+    "benchmark": "TZ=UTC OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 Rscript --vanilla scripts/benchmark-direct-trueskill.R OUTPUT_DIRECTORY",
+    "coverage": "covr::package_coverage(type=\"none\", install_path=TEMP_LIBRARY, code='testthat::test_package(\"pairwiseLLM\", filter=\"^(5102|5106|5108|5119)\", reporter=\"summary\", stop_on_failure=TRUE)'); covr::tally_coverage(coverage, by=\"line\")",
+    "package_check": "rcmdcheck::rcmdcheck(path=\".\", args=character(), build_args=character(), check_dir=TEMP_CHECK_DIRECTORY, libpath=c(TEMP_LIBRARY, .libPaths()), error_on=\"never\")"
+  },
+  "allocation_review": {
+    "retained": "Separate scalar focal match and vector partner match from original PR",
+    "rejected": "Combining focal and partners into one match adds 4 allocations per call",
+    "bytes_by_n": {
+      "57": {
+        "retained": 10752,
+        "rejected": 11872
+      },
+      "91": {
+        "retained": 16040,
+        "rejected": 17704
+      },
+      "229": {
+        "retained": 37408,
+        "rejected": 41280
+      }
+    },
+    "scope": "Trial wrappers construct candidate ID slices inside each call; compare alternatives within the trial, not absolute bytes against the main benchmark."
+  },
+  "benchmark": {
+    "cases": 12,
+    "timing_repetitions": 3192,
+    "scoring_repetitions_per_case_and_implementation": 100,
+    "selection_repetitions_per_case_and_implementation": 30,
+    "trajectory_repetitions_per_case_and_implementation": 3,
+    "equivalence": "All scoring, complete selections, full serialized trajectory results, memo side effects, and caller RNG match exactly."
+  },
+  "coverage": {
+    "file": "R/adaptive_pairing_strategy.R",
+    "covered_locations": 104,
+    "total_locations": 104,
+    "percent": 100.0,
+    "method": "covr package_coverage with focused tests 5102, 5106, 5108, 5119 and a temporary instrumented installation",
+    "covered_lines": 116,
+    "total_lines": 116
+  },
+  "lint": "No lints in the changed production R file, new test/helper, and benchmark script.",
+  "frozen_oracle_verification": "Both fixture files verified byte-for-byte against the base commit; 239 test files have unique numeric prefixes.",
+  "original_ci_failure": {
+    "head": "3e2ca52e8ae31458cfd6ec8a566cc0c847ae2064",
+    "reason": "test-0031-warm-start-documentation.R: duplicate numeric test prefix 5103",
+    "observed_logs": [
+      "https://github.com/shmercer/pairwiseLLM/actions/runs/38064581339/job/114249526082",
+      "https://github.com/shmercer/pairwiseLLM/actions/runs/38064581339/job/114249525971",
+      "https://github.com/shmercer/pairwiseLLM/actions/runs/38064581282/job/114249525798"
+    ],
+    "fix": "Rename the new regression to unique prefix 5119 and document its reservation."
+  },
+  "numbering_regression": {
+    "passes": 161,
+    "failures": 0,
+    "warnings": 0,
+    "skips": 0
+  },
+  "protected_installation": {
+    "unchanged_files": 74,
+    "verification": "SHA-256 digest comparison of every installed package file against the pre-work snapshot",
+    "version": "1.6.0",
+    "sha": "4c4c01453077f90e987040c6a3c3d3cd711c6f21",
+    "verified_after_full_check": true
+  },
+  "package_check": {
+    "errors": 0,
+    "warnings": 0,
+    "notes": 0,
+    "tests": {
+      "failures": 0,
+      "warnings": 0,
+      "skips": 57,
+      "passes": 34263
+    },
+    "manual": true,
+    "vignettes": true,
+    "examples": true,
+    "parallel_bootstrap_executed": true,
+    "skip_details": "\u2550\u2550 Skipped tests (57) \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u2022 all(file.exists(paths)) is not TRUE (1):\n  'test-0026-documentation-contracts.R:543:3'\n\u2022 Audited Python environment not explicitly selected (1):\n  'test-5100-warm-start-adaptive.R:218:3'\n\u2022 Maintainer workflow is excluded from installed/source packages. (3):\n  'test-9100-warm-start-bundle-workflow.R:30:3',\n  'test-9100-warm-start-bundle-workflow.R:48:3',\n  'test-9100-warm-start-bundle-workflow.R:115:3'\n\u2022 Repository docs unavailable. (1): 'test-9204-rubric-documentation.R:37:3'\n\u2022 Repository documentation sources are unavailable in installed-package tests.\n  (8): 'test-0026-documentation-contracts.R:197:3',\n  'test-0026-documentation-contracts.R:229:3',\n  'test-0026-documentation-contracts.R:247:3',\n  'test-0026-documentation-contracts.R:355:3',\n  'test-0026-documentation-contracts.R:374:3',\n  'test-0026-documentation-contracts.R:397:3',\n  'test-0026-documentation-contracts.R:450:3',\n  'test-0026-documentation-contracts.R:469:3'\n\u2022 Repository promotion helpers are unavailable in installed-package tests. (2):\n  'test-0027-smoke-runner.R:163:3', 'test-0027-smoke-runner.R:233:3'\n\u2022 Repository Roxygen sources are unavailable in installed-package tests. (1):\n  'test-0026-documentation-contracts.R:121:3'\n\u2022 Repository smoke evidence is unavailable in installed-package tests. (1):\n  'test-0026-documentation-contracts.R:53:3'\n\u2022 Repository smoke helpers are unavailable in installed-package tests. (1):\n  'test-0027-smoke-runner.R:92:3'\n\u2022 Repository smoke matrix is unavailable in installed-package tests. (2):\n  'test-0026-documentation-contracts.R:24:3', 'test-0027-smoke-runner.R:57:3'\n\u2022 Repository smoke runner is unavailable in installed-package tests. (3):\n  'test-0027-smoke-runner.R:4:3', 'test-0027-smoke-runner.R:142:3',\n  'test-0027-smoke-runner.R:247:3'\n\u2022 Repository vignette source is unavailable. (5):\n  'test-9204-rubric-documentation.R:66:3',\n  'test-9204-rubric-documentation.R:76:3',\n  'test-9204-rubric-documentation.R:98:3',\n  'test-9204-rubric-documentation.R:108:3',\n  'test-9204-rubric-documentation.R:130:3'\n\u2022 Repository vignette sources are unavailable in installed-package tests. (4):\n  'test-0026-documentation-contracts.R:170:3',\n  'test-0026-documentation-contracts.R:499:3',\n  'test-0026-documentation-contracts.R:555:3',\n  'test-0026-documentation-contracts.R:642:3'\n\u2022 set PAIRWISELLM_TEST_E3_STAN=true for real E3 Stan parity (5):\n  'test-6021-link-e3-stan-parity.R:3:3',\n  'test-6021-link-e3-stan-parity.R:43:3',\n  'test-6021-link-e3-stan-parity.R:62:3',\n  'test-6021-link-e3-stan-parity.R:123:3',\n  'test-6021-link-e3-stan-parity.R:154:3'\n\u2022 Set PAIRWISELLM_TEST_PYTHON for real extraction. (1):\n  'test-9100-warm-start-bundle-workflow.R:142:3'\n\u2022 Set PAIRWISELLM_TEST_PYTHON to an explicitly provisioned interpreter (3):\n  'test-0102-warm-start-features.R:125:3',\n  'test-0115-warm-start-writing-v2.R:163:3',\n  'test-9106-warm-start-documentation-workflow.R:63:3'\n\u2022 Set PAIRWISELLM_TEST_PYTHON to run the audited text-to-model integration.\n  (1): 'test-0108-warm-start-cv.R:194:3'\n\u2022 Set PAIRWISELLM_TEST_PYTHON to the audited interpreter. (1):\n  'test-0109-warm-start-ensemble.R:214:3'\n\u2022 Source documentation unavailable (6):\n  'test-0031-warm-start-documentation.R:11:3',\n  'test-0031-warm-start-documentation.R:32:3',\n  'test-0031-warm-start-documentation.R:58:3',\n  'test-0031-warm-start-documentation.R:88:3',\n  'test-0031-warm-start-documentation.R:112:3',\n  'test-0031-warm-start-documentation.R:133:3'\n\u2022 Source vignette unavailable in installed-package tests (5):\n  'test-0026-documentation-contracts.R:328:3',\n  'test-9005-adaptive-cj-documentation.R:26:3',\n  'test-9005-adaptive-cj-documentation.R:119:3',\n  'test-9005-adaptive-cj-documentation.R:132:3',\n  'test-9106-warm-start-documentation-workflow.R:23:3'\n\u2022 Tasklist evidence is unavailable in installed-package tests. (1):\n  'test-0026-documentation-contracts.R:78:3'\n\u2022 Vignette source is absent from the installed test bundle (1):\n  'test-4005-openai-batch-caching.R:366:3'"
+  }
+}
