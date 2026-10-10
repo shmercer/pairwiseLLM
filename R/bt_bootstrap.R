@@ -56,6 +56,14 @@
 #'   diagnostics; `"theta"` also keeps aligned replicate estimates; `"full"`
 #'   additionally keeps comparisons, adaptive states and detailed failure
 #'   diagnostics (which can include dense matrices). Full artifacts can be large.
+#' @param executor Optional ordered map function with arguments `X`, `FUN`, and
+#'   `...`, for example an adapter to a caller-owned worker pool. It must apply
+#'   `FUN` to each element of `X`, forwarding `...`, and return a list of results
+#'   in input order, without retries or seed replacement. `workers` bounds the
+#'   number of chunks submitted at once; the caller must allocate consistent
+#'   CPU/memory capacity, including any native sampler chains. NULL retains the
+#'   existing serial/temporary-multisession behavior. A supplied executor owns
+#'   its resources; this function neither changes its plan nor closes its pool.
 #'
 #' @details
 #' Each outcome has probability `plogis(theta[A] - theta[B])`. Initial scores and
@@ -85,6 +93,11 @@
 #' Fixed schedules also reuse pair indexes and designs; alpha retains its
 #' all-pairs pseudo-count design, including unobserved pairs. Outcome counts,
 #' estimation and numerical validity checks are recomputed for every replicate.
+#' Worker chunks hold at most eight replicates for summary/theta retention and
+#' two for full retention. Designs are constructed inside each chunk, never
+#' transferred from the parent or retained in a global cache. An executor is an
+#' execution resource and is not stored in scientific provenance. Its transport
+#' errors propagate without replacement replicates or a serial fallback.
 #'
 #' `bootstrap_sd` describes replicate-estimate dispersion, whereas `mcse_bias`
 #' is `bootstrap_sd / sqrt(n_success)`: simulation error in the estimated bias.
@@ -116,7 +129,8 @@
 bootstrap_bt_model <- function(object, mode, n_rep, seed, schedule = NULL,
                                initial_state = NULL, budget = NULL, estimator = NULL,
                                estimator_args = list(), btl_config = NULL, schedule_fit_fn = NULL,
-                               min_success = n_rep, workers = 1L, keep = c("summary", "theta", "full")) {
+                               min_success = n_rep, workers = 1L, keep = c("summary", "theta", "full"),
+                               executor = NULL) {
   mode <- match.arg(mode, c("fixed", "adaptive"))
   keep <- match.arg(keep)
   n_rep <- .bt_bootstrap_integer(n_rep, "n_rep", 2L)
@@ -124,7 +138,8 @@ bootstrap_bt_model <- function(object, mode, n_rep, seed, schedule = NULL,
   min_success <- .bt_bootstrap_integer(min_success, "min_success", 2L)
   workers <- .bt_bootstrap_integer(workers, "workers")
   if (min_success > n_rep) .bt_bootstrap_abort("`min_success` cannot exceed `n_rep`.")
-  for (pkg in c("withr", if (workers > 1L) c("future", "future.apply"))) {
+  if (!is.null(executor) && !is.function(executor)) .bt_bootstrap_abort("`executor` must be a function or NULL.")
+  for (pkg in c("withr", if (workers > 1L && is.null(executor)) c("future", "future.apply"))) {
     if (!.require_ns(pkg)) .bt_bootstrap_abort(paste0("Bootstrap execution requires optional package '", pkg, "'."))
   }
   theta <- .bt_bootstrap_theta(object)
@@ -151,7 +166,7 @@ bootstrap_bt_model <- function(object, mode, n_rep, seed, schedule = NULL,
   spec <- list(theta = theta, mode = mode, schedule = schedule, initial_state = initial_state,
     budget = budget, refit = refit, btl_config = btl_config, schedule_fit_fn = schedule_fit_fn,
     seed = seed, keep = keep)
-  .bt_bootstrap_with_seed(seed, .bt_bootstrap_collect(spec, n_rep, min_success, workers))
+  .bt_bootstrap_with_seed(seed, .bt_bootstrap_collect(spec, n_rep, min_success, workers, executor))
 }
 
 .bt_bootstrap_prepare <- function(spec) {
@@ -170,9 +185,10 @@ bootstrap_bt_model <- function(object, mode, n_rep, seed, schedule = NULL,
   lapply(indices, .bt_bootstrap_one, spec = spec, prepared = prepared)
 }
 
-.bt_bootstrap_collect <- function(spec, n_rep, min_success, workers) {
-  prepared <- if (workers == 1L) .bt_bootstrap_prepare(spec) else NULL
-  if (workers > 1L) {
+.bt_bootstrap_collect <- function(spec, n_rep, min_success, workers, executor = NULL) {
+  serial <- workers == 1L && is.null(executor)
+  prepared <- if (serial) .bt_bootstrap_prepare(spec) else NULL
+  if (workers > 1L && is.null(executor)) {
     old_plan <- future::plan("list")
     on.exit(future::plan(old_plan), add = TRUE)
     future::plan(future::multisession, workers = workers)
@@ -185,15 +201,20 @@ bootstrap_bt_model <- function(object, mode, n_rep, seed, schedule = NULL,
   artifacts <- if (spec$keep == "full") vector("list", n_rep) else NULL
   # Bound transient worker results as well as retained state. Reduce in index
   # order, using the same update in serial and parallel execution.
-  blocks <- split(seq_len(n_rep), ceiling(seq_len(n_rep) / max(1, 2 * as.double(workers))))
+  chunk_size <- if (spec$keep == "full") 2L else 8L
+  blocks <- split(seq_len(n_rep), ceiling(seq_len(n_rep) / (chunk_size * as.double(workers))))
   for (indices in blocks) {
-    if (workers == 1L) {
+    if (serial) {
       results <- lapply(indices, .bt_bootstrap_one, spec = spec, prepared = prepared)
     } else {
       # Keep all requested workers useful even for a final short block, retain
-      # at most 2 * workers results, and reduce in the original replicate order.
+      # at most chunk_size * workers results; reduce in replicate order.
       chunks <- split(indices, ceiling(seq_along(indices) * min(workers, length(indices)) / length(indices)))
-      results <- future.apply::future_lapply(chunks, .bt_bootstrap_chunk, spec = spec, future.seed = TRUE)
+      results <- if (is.null(executor)) {
+        future.apply::future_lapply(chunks, .bt_bootstrap_chunk, spec = spec, future.seed = TRUE)
+      } else {
+        .bt_bootstrap_execute(executor, chunks, spec)
+      }
       results <- do.call(c, unname(results))
     }
     for (j in seq_along(indices)) {
@@ -245,4 +266,32 @@ bootstrap_bt_model <- function(object, mode, n_rep, seed, schedule = NULL,
       class = "pairwiseLLM_bt_bootstrap_warning")
   }
   result
+}
+
+.bt_bootstrap_execute <- function(executor, chunks, spec) {
+  results <- executor(chunks, .bt_bootstrap_chunk, spec = spec)
+  diagnostic_fields <- c("replicate", "selector", "outcome", "scheduling_refit", "estimator",
+    "success", "failure_phase", "failure_reason", "message", "n_comparisons", "n_unique_pairs",
+    "n_repeated_comparisons", "min_degree", "max_degree", "connected", "schedule_digest",
+    "n_scheduling_refits", "n_attempts", "global_identified", "stop_boundary_step_id", "warnings")
+  valid <- is.list(results) && length(results) == length(chunks)
+  if (valid) {
+    valid <- all(vapply(seq_along(chunks), function(i) {
+      chunk <- results[[i]]
+      if (!is.list(chunk) || length(chunk) != length(chunks[[i]])) return(FALSE)
+      all(vapply(seq_along(chunk), function(j) {
+        out <- chunk[[j]]
+        is.list(out) && all(c("theta", "diagnostics", "failure", "artifacts") %in% names(out)) &&
+          is.data.frame(out$diagnostics) && nrow(out$diagnostics) == 1L &&
+          all(diagnostic_fields %in% names(out$diagnostics)) &&
+          identical(out$diagnostics$replicate, as.integer(chunks[[i]][[j]])) &&
+          identical(out$diagnostics$success, is.null(out$failure)) &&
+          identical(is.null(out$theta), !out$diagnostics$success) &&
+          (is.null(out$theta) ||
+            (is.numeric(out$theta) && identical(names(out$theta), names(spec$theta)) && all(is.finite(out$theta))))
+      }, logical(1L)))
+    }, logical(1L)))
+  }
+  if (!valid) .bt_bootstrap_abort("`executor` must return unmodified worker results in input chunk order.")
+  results
 }

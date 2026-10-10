@@ -1,0 +1,4 @@
+"file","covered","total","percent"
+"adaptive_run.R",3265,3339,97.7837675950883
+"bt_bootstrap_schedule.R",111,112,99.1071428571429
+"bt_bootstrap.R",128,128,100

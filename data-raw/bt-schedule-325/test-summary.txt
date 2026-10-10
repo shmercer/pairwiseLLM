@@ -1,0 +1,89 @@
+Offline full R CMD check: FAIL 0 | WARN 0 | SKIP 57 | PASS 36386
+
+══ Skipped tests (57) ══════════════════════════════════════════════════════════
+• all(file.exists(paths)) is not TRUE (1):
+  'test-0026-documentation-contracts.R:543:3'
+• Audited Python environment not explicitly selected (1):
+  'test-5100-warm-start-adaptive.R:218:3'
+• Maintainer workflow is excluded from installed/source packages. (3):
+  'test-9100-warm-start-bundle-workflow.R:30:3',
+  'test-9100-warm-start-bundle-workflow.R:48:3',
+  'test-9100-warm-start-bundle-workflow.R:115:3'
+• Repository docs unavailable. (1): 'test-9204-rubric-documentation.R:37:3'
+• Repository documentation sources are unavailable in installed-package tests.
+  (8): 'test-0026-documentation-contracts.R:197:3',
+  'test-0026-documentation-contracts.R:229:3',
+  'test-0026-documentation-contracts.R:247:3',
+  'test-0026-documentation-contracts.R:355:3',
+  'test-0026-documentation-contracts.R:374:3',
+  'test-0026-documentation-contracts.R:397:3',
+  'test-0026-documentation-contracts.R:450:3',
+  'test-0026-documentation-contracts.R:469:3'
+• Repository promotion helpers are unavailable in installed-package tests. (2):
+  'test-0027-smoke-runner.R:163:3', 'test-0027-smoke-runner.R:233:3'
+• Repository Roxygen sources are unavailable in installed-package tests. (1):
+  'test-0026-documentation-contracts.R:121:3'
+• Repository smoke evidence is unavailable in installed-package tests. (1):
+  'test-0026-documentation-contracts.R:53:3'
+• Repository smoke helpers are unavailable in installed-package tests. (1):
+  'test-0027-smoke-runner.R:92:3'
+• Repository smoke matrix is unavailable in installed-package tests. (2):
+  'test-0026-documentation-contracts.R:24:3', 'test-0027-smoke-runner.R:57:3'
+• Repository smoke runner is unavailable in installed-package tests. (3):
+  'test-0027-smoke-runner.R:4:3', 'test-0027-smoke-runner.R:142:3',
+  'test-0027-smoke-runner.R:247:3'
+• Repository vignette source is unavailable. (5):
+  'test-9204-rubric-documentation.R:66:3',
+  'test-9204-rubric-documentation.R:76:3',
+  'test-9204-rubric-documentation.R:98:3',
+  'test-9204-rubric-documentation.R:108:3',
+  'test-9204-rubric-documentation.R:130:3'
+• Repository vignette sources are unavailable in installed-package tests. (4):
+  'test-0026-documentation-contracts.R:170:3',
+  'test-0026-documentation-contracts.R:499:3',
+  'test-0026-documentation-contracts.R:555:3',
+  'test-0026-documentation-contracts.R:642:3'
+• set PAIRWISELLM_TEST_E3_STAN=true for real E3 Stan parity (5):
+  'test-6021-link-e3-stan-parity.R:3:3',
+  'test-6021-link-e3-stan-parity.R:43:3',
+  'test-6021-link-e3-stan-parity.R:62:3',
+  'test-6021-link-e3-stan-parity.R:123:3',
+  'test-6021-link-e3-stan-parity.R:154:3'
+• Set PAIRWISELLM_TEST_PYTHON for real extraction. (1):
+  'test-9100-warm-start-bundle-workflow.R:142:3'
+• Set PAIRWISELLM_TEST_PYTHON to an explicitly provisioned interpreter (3):
+  'test-0102-warm-start-features.R:125:3',
+  'test-0115-warm-start-writing-v2.R:163:3',
+  'test-9106-warm-start-documentation-workflow.R:63:3'
+• Set PAIRWISELLM_TEST_PYTHON to run the audited text-to-model integration.
+  (1): 'test-0108-warm-start-cv.R:194:3'
+• Set PAIRWISELLM_TEST_PYTHON to the audited interpreter. (1):
+  'test-0109-warm-start-ensemble.R:214:3'
+• Source documentation unavailable (6):
+  'test-0031-warm-start-documentation.R:11:3',
+  'test-0031-warm-start-documentation.R:32:3',
+  'test-0031-warm-start-documentation.R:58:3',
+  'test-0031-warm-start-documentation.R:88:3',
+  'test-0031-warm-start-documentation.R:112:3',
+  'test-0031-warm-start-documentation.R:133:3'
+• Source vignette unavailable in installed-package tests (5):
+  'test-0026-documentation-contracts.R:328:3',
+  'test-9005-adaptive-cj-documentation.R:26:3',
+  'test-9005-adaptive-cj-documentation.R:119:3',
+  'test-9005-adaptive-cj-documentation.R:132:3',
+  'test-9106-warm-start-documentation-workflow.R:23:3'
+• Tasklist evidence is unavailable in installed-package tests. (1):
+  'test-0026-documentation-contracts.R:78:3'
+• Vignette source is absent from the installed test bundle (1):
+  'test-4005-openai-batch-caching.R:366:3'
+
+
+Native qualification and benchmark cells run explicitly outside CI.
+
+The test runner additionally printed its namespace-path warning because it loaded
+/tmp/pairwiseLLM-325-evidence/final-check-library/pairwiseLLM, an isolated install
+of the checked code, rather than the installation below pairwiseLLM.Rcheck.
+All six execution-function body hashes match the measured optimized namespace
+exactly (check-namespace-verification.json). R CMD check status remains OK;
+testthat's WARN 0 above is its assertion summary, not a claim that this
+initialization warning was absent.

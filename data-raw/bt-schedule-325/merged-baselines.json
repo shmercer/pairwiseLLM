@@ -1,0 +1,20 @@
+[
+  {
+    "mergeCommit": {
+      "oid": "5a3fc17a77e31a88edacd58207537adc430a0f9a"
+    },
+    "mergedAt": "2026-10-10T17:10:46Z",
+    "number": 327,
+    "state": "MERGED",
+    "url": "https://github.com/shmercer/pairwiseLLM/pull/327"
+  },
+  {
+    "mergeCommit": {
+      "oid": "7999c15c6c50b0d8de670ff49702648630d8235b"
+    },
+    "mergedAt": "2026-10-10T20:04:32Z",
+    "number": 328,
+    "state": "MERGED",
+    "url": "https://github.com/shmercer/pairwiseLLM/pull/328"
+  }
+]

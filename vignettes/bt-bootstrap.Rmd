@@ -141,8 +141,8 @@ the average then describes successful refits. An unmet threshold raises an
 error whose `result` field retains diagnostics, with missing corrected scores.
 No failed estimates are silently included and no other estimator is substituted.
 
-Each replicate costs a schedule simulation and final refit; hybrid can also
-require multiple Bayesian fits. Use `workers = 2` for parallel execution with
+Each replicate costs a schedule simulation and final refit. All adaptive
+strategies retain their scheduled native Bayesian fits. Use `workers = 2` for parallel execution with
 the optional `future` and `future.apply` packages. Reproducible seeds and ordered
 aggregation give the same scientific results as serial execution. Avoid
 oversubscribing CPUs with both bootstrap workers and many sampler chains.
@@ -154,6 +154,51 @@ failure diagnostics need inspection. Detailed failures can contain large matrice
 Save the returned object with `saveRDS()` to retain inputs, settings, seeds,
 software versions and diagnostics. There is no checkpoint/resume interface;
 restarting with the same inputs and compatible software repeats the run.
+
+## Reusing an external worker pool
+
+For many conditions, a caller-owned pool avoids starting new workers for each
+bootstrap call. Pass an ordered map function through `executor`; it receives
+chunks of replicate indices, the worker function, and its arguments. It must
+return one result per chunk in the supplied order. It must not retry failed
+tasks, substitute seeds, or return partial results. Transport failures propagate
+to the caller. The package still handles and reports ordinary replicate failures.
+
+```{r external-bootstrap-pool, eval=FALSE}
+old_plan <- future::plan("list")
+future::plan(future::multisession, workers = 2)
+executor <- function(X, FUN, ...) {
+  future.apply::future_lapply(X, FUN, ..., future.seed = TRUE)
+}
+tryCatch({
+  # Repeat this call for independent conditions using the same pool.
+  pooled <- bootstrap_bt_model(fit, mode = "fixed", n_rep = 24, seed = 1304,
+    workers = 2, executor = executor, keep = "summary")
+}, finally = future::plan(old_plan))
+```
+
+`workers` bounds the number of submitted chunks; configure the executor's actual
+concurrency consistently. The package leaves pool ownership with the caller.
+It prepares immutable fitting designs inside each worker chunk and recomputes
+counts for each replicate. Summary/theta dispatch blocks hold at most eight
+replicates per worker; full-retention blocks hold at most two. Prepared designs
+are not included in returned provenance or sent over worker sockets.
+
+An external scheduler may instead dispatch independent conditions, with each
+condition calling `bootstrap_bt_model(..., workers = 1)`. This avoids nested
+bootstrap pools and requires no executor argument. Keep each condition's own
+master seed and replicate numbering unchanged.
+
+For native Bayesian scheduling, budget outer workers together with concurrent
+chains and threads per chain. Four total chains need not run simultaneously,
+but changing chain concurrency requires posterior and trajectory parity checks
+on the intended platform. A future worker normally advertises one CPU slot;
+assign any larger per-task allocation explicitly only after reserving that
+capacity across the whole pool. Do not disable the sampler's resource checks.
+The bounded native benchmarking scripts in the source repository demonstrate
+this allocation and report parent, worker and CmdStan process memory together.
+At N=229, allow approximately 139 MiB per worker for the retained alpha design
+alone, in addition to adaptive state, posterior draws and temporary fit memory.
 
 ## Citation
 

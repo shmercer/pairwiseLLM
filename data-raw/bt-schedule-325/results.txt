@@ -1,0 +1,188 @@
+Issue #325 measured results
+
+The measured change reuses the canonical adaptive loop and its validated setup
+across bounded blocks (at most 64 attempted comparisons, bounded further by
+initialization, round, native-refit and remaining-budget boundaries). Every
+comparison and native refit still runs. A completed-iteration observer preserves
+the original partial state when a later refit fails. The new optional ordered
+executor permits caller-owned pool reuse; summary/theta chunks reuse #328's
+prepared designs across up to eight replicates. Full chunks remain bounded at
+two. Outcome counts and numerical checks remain per replicate; dense designs
+are constructed in workers and never dispatched from the parent.
+
+Baseline findings before implementation
+  Nine complete profiles: N=57,91,229 x B=4,8,16, p50/alpha, two replicates each.
+  Disjoint elapsed stack samples: controller/state/log/checkpoint handling
+  55.1-61.7%; four-chain native refits 16.2-27.7%; repeated validation 5.1-8.3%;
+  pair selection 2.6-4.1%; TrueSkill updates 0.1-0.3%; cloning/hash/serialization
+  0.3-0.5%. Final estimation ranges from 0.1% to 16.2% (N229/B4).
+  Thus state/controller work dominates these workloads. Cloning pristine inputs
+  is small and was left intact. Bootstrap disables persistent checkpoints, so
+  this category contains state/log work and checkpoint decisions, not disk I/O.
+  Separate final-fitting components cover both alpha and Firth in all nine cells.
+  N229 alpha retained design: 144,420,888 bytes (137.7 MiB; approximately 139 MiB).
+  Its final prepared fits cost 8.951-10.942 seconds each in these measurements;
+  Firth costs 1.894-4.492 seconds. These timings reuse actual simulated outcomes.
+  The optimized B4 profiles retain 49.8-56.2% in state/controller handling,
+  18.3-29.0% in native fits, and 5.9-6.4% in dynamic validation. These are
+  descriptive stack fractions, not additional paired throughput estimates.
+  Transport microprofiles use actual-size specs/results. At N229 the input spec
+  serializes to 104,664 bytes and a compact result to 6,302 bytes. Two-worker
+  initialization/namespace loading takes 1.028 s; twelve-worker loading 1.140 s.
+  Ten twelve-way input roundtrips take 8.513 s, compact result roundtrips 0.823 s;
+  100 ordered reductions of actual results take 0.123 s. These isolate framework
+  overhead and do not replace complete-workload rates.
+  Native fit duration is also measured directly; stack categories are disjoint
+  and no inclusive profiler totals are added together.
+
+Scientific evidence
+  Independent installed post-#328 and historical study revisions are separate
+  from the active study installation. Exact revisions and all R/Stan source
+  hashes are in installations.json; loaded namespace/function hashes are in
+  benchmark-provenance.json. #327 and #328 are verified merged; the base is
+  7999c15c6c50b0d8de670ff49702648630d8235b, while the historical study reference is
+  4c4c01453077f90e987040c6a3c3d3cd711c6f21. Measured implementation source is
+  ad083c992c0fc548ebefb36fd553e07d21b8ed8d; subsequent changes are tests/evidence.
+  Frozen unmodified post-#328 top-level implementations are regression oracles.
+  Deterministic stochastic-contract fixtures check all four policies, warm and
+  reservoir initialization/orientation, starvation, invalid retries and exact
+  per-attempt RNG, positive B14 shadow stopping through B16, the 64-attempt cap,
+  and failures at comparisons 12/24 retaining 11/23 completed comparisons.
+  Native benchmarks retain the original four total chains and canonical seeds,
+  N-comparison cadence, 1000 warmup + 1000 sampling iterations, btl_e_b and native
+  Rhat=1.01. Numerical tolerances were not relaxed. See README.txt for the
+  explicitly verified wall-clock/resource-metadata normalization, including the
+  memo hash preimage proof when chain concurrency differs. Every comparison of
+  estimates, posterior draws and scientific native diagnostics is exact.
+
+Validation
+  R CMD check: Status OK; 36,386 passing assertions, zero failures/warnings,
+  57 expected optional/source-only skips (all reasons in test-summary.txt).
+  All new regression tests ran. Roxygen-generated help, lint and diff checks pass.
+  The test runner emitted a namespace-path notice for the isolated check library;
+  all six execution-function body hashes exactly match the measured candidate.
+  The assertion warning count above excludes this initialization notice; see
+  test-summary.txt and check-namespace-verification.json for full disclosure.
+  Whole-file scoped line coverage: adaptive_run.R 3265/3339 (97.78%),
+  bt_bootstrap_schedule.R 111/112 (99.11%), bt_bootstrap.R 128/128 (100%).
+  Final checked source is 0bd628af0353198f9f00a0468ad31a4ee504bada; later commits
+  add benchmark scripts and evidence excluded from the package build.
+
+Limits and remaining risks
+  The changes reduce repeated setup; substantial controller/phase-A/state work
+  remains. They do not claim to eliminate the dominant category. Pool ownership
+  is explicit: callers must configure concurrency consistently with workers and
+  reserve native-chain resources across all outer tasks. No dependency is added.
+  Scientific qualification is bounded and synthetic, with cold native trajectories
+  plus deterministic warm/reservoir/retry/positive-stop fixtures. It is not an
+  exhaustive native crossproduct of every supported adaptive configuration.
+  Firth complete-workload timing uses the diagonal N57/B4, N91/B8, N229/B16;
+  all nine N/B cells have isolated final-fitting components, not nine complete
+  Firth workloads. Worker measurements use summary retention; serial qualification
+  uses full retention. These rates must not be pooled into one scaling curve.
+  The native hybrid/Firth N57/B4 fixture preserves its original one-success,
+  one-failure result. Successful-replicate rates exclude failed estimates; no
+  replacement replicate, relaxed threshold, fallback fitter or retry is used.
+  Two seeded calls amortize startup in the worker grid, but these remain single
+  bounded-cell point estimates. Serial grids overlapped other qualification/check
+  jobs; recorded host load and timing variability limit small speedup comparisons.
+  Worker-grid jobs run sequentially without other native benchmark workloads.
+  Sum-RSS samples can double-count shared pages and miss transient peaks; CPU
+  samples can miss short-lived descendants. Parent/worker/CmdStan measurements
+  include sampling/audit overhead in elapsed time. Compilation and pool startup
+  are reported separately; the main throughput rate includes pool startup.
+  Historical integrated alpha peak RSS can exceed the study package's peak even
+  though execution is faster. The retained design alone is not a complete memory
+  forecast, and its size does not explain all integrated allocation differences.
+  At N229/B4, increasing the optimized pool from 8 to 12 workers raises measured
+  throughput from 0.09144 to 0.10832 successful replicates/s (18.5%) while peak
+  summed RSS rises from 9.03 to 13.50 GiB (49.6%). This is a bounded measurement,
+  not an optimal-production-concurrency claim. At 12 workers, alpha RSS is also
+  higher than the post-#328 temporary-pool reference (13.50 versus 9.75 GiB).
+  Measurements on this Ryzen 9 5900XT do not select production concurrency.
+  Scripts reserve 20% of actual physical CPU capacity, cap live summed RSS at
+  70% of MemAvailable, and restrict cells to 2-24 replicates. No production study,
+  provider, active study library, stopping threshold or release was changed.
+
+
+Completed evidence inventory
+  123 measured cells; 147 seeded condition results;
+  1340 audited actual native fits; 103 exact condition comparisons.
+  Additionally, nine original baseline profile cells have separate exact checks
+  against fresh post-#328 runs. The 123-cell inventory comprises 446 replicate
+  executions: 439 successful and seven preserved hybrid/Firth estimator failures.
+  Seeds repeat across versions/configurations; these are not 446 independent draws.
+  Qualification and profiled cells are excluded from throughput comparisons.
+
+
+Complete serial alpha workloads (two replicates, full retention)
+  N    B   post328 s   optimized s   study s   incremental x   total x
+   57    4      23.175        21.376    23.330           1.084     1.091
+   57    8      50.422        45.354    49.616           1.112     1.094
+   57   16     109.510        94.816   106.755           1.155     1.126
+   91    4      37.529        32.498    37.776           1.155     1.162
+   91    8      81.538        70.577    81.727           1.155     1.158
+   91   16     182.458       161.771   172.635           1.128     1.067
+  229    4     112.793       100.878   114.987           1.118     1.140
+  229    8     233.684       207.877   235.264           1.124     1.132
+  229   16     486.530       436.398   502.668           1.115     1.152
+
+Complete serial Firth workloads (two replicates, full retention)
+  N    B   post328 s   optimized s   study s   incremental x   total x
+   57    4      23.472        21.338    23.568           1.100     1.105
+   91    8      77.911        68.913    78.880           1.131     1.145
+  229   16     465.909       411.339   490.398           1.133     1.192
+
+Worker grid: N=91, brglm2, summary retention, two seeded conditions
+  pc = concurrent chains per trajectory; TOTAL chains always four.
+  Times/rates include explicit pool startup; baseline temporary-pool startup
+  is already inside its call time. Baseline and candidate counts/seeds match.
+  W pc reps   post328 s    optimized s    post328 succ/s   optimized succ/s   speedup
+  1  4    4     152.436        135.439           0.02624            0.02953     1.125
+  2  4    4      82.062         73.288           0.04874            0.05458     1.120
+  3  4    6      85.140         75.270           0.07047            0.07971     1.131
+  4  2    8      92.776         81.830           0.08623            0.09776     1.134
+  8  1   16     113.441        102.417           0.14104            0.15622     1.108
+ 12  1   24     124.020        113.008           0.19352            0.21237     1.097
+  CPU below is sampled workload utilization of all 16 physical cores.
+  Memory is summed workload R-parent/worker/CmdStan RSS (MiB), not PSS.
+  W pc   CPU old/new %     peak RSS old/new MiB   new pool s   pool share %
+  1  4    7.18/  7.27        442.5/482.4           0.000          0.00
+  2  4   14.30/ 14.48       1007.5/1118.6          0.936          1.28
+  3  4   21.27/ 21.63       1357.4/1496.9          0.913          1.21
+  4  2   26.33/ 26.87       1686.5/1954.4          0.962          1.18
+  8  1   47.04/ 46.61       3111.1/3529.9          1.064          1.04
+ 12  1   70.61/ 70.21       4511.2/5176.9          1.205          1.07
+
+Worker grid: N=229, alpha, summary retention, two seeded conditions
+  pc = concurrent chains per trajectory; TOTAL chains always four.
+  Times/rates include explicit pool startup; baseline temporary-pool startup
+  is already inside its call time. Baseline and candidate counts/seeds match.
+  W pc reps   post328 s    optimized s    post328 succ/s   optimized succ/s   speedup
+  1  4    4     208.294        183.517           0.01920            0.02180     1.135
+  2  4    4     113.578         99.859           0.03522            0.04006     1.137
+  3  4    6     121.905        107.673           0.04922            0.05572     1.132
+  4  2    8     137.782        123.507           0.05806            0.06477     1.116
+  8  1   16     191.078        174.977           0.08374            0.09144     1.092
+ 12  1   24     239.763        221.573           0.10010            0.10832     1.082
+  CPU below is sampled workload utilization of all 16 physical cores.
+  Memory is summed workload R-parent/worker/CmdStan RSS (MiB), not PSS.
+  W pc   CPU old/new %     peak RSS old/new MiB   new pool s   pool share %
+  1  4    6.97/  7.06       1344.9/1306.9          0.000          0.00
+  2  4   13.98/ 14.25       1992.2/2564.8          0.881          0.88
+  3  4   20.85/ 21.13       2673.5/3534.7          0.923          0.86
+  4  2   26.39/ 26.71       3803.9/4777.3          0.967          0.78
+  8  1   48.55/ 49.18       7337.5/9241.5          1.078          0.62
+ 12  1   73.58/ 73.76       9983.5/13828.7         1.193          0.54
+
+Startup share in short and longer complete workloads
+  Each share uses its own elapsed time; different retention/workloads are
+  not combined into a throughput scaling curve.
+  workload                     retention  reps calls   call s   pool s   share %
+  N57/B4 W2/pc4 alpha          full     2     1   10.818    0.927      7.89
+  N229/B4 W2/pc4 alpha       summary     4     2   98.978    0.881      0.88
+
+Per-condition times, whole-process CPU/RSS, host load, compilation, startup,
+retention and success/failure counts are in measurements.csv and condition-times.csv.
+Native audit counts match the bootstrap refit logs; contracts and source hashes
+are included alongside exact-equivalence and resource-memo preimage proofs.
