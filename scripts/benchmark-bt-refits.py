@@ -55,7 +55,7 @@ provenance = {
     "cpu": subprocess.check_output(["lscpu"], text=True),
     "allowed_cpus": sorted(os.sched_getaffinity(0)),
     "rss": "50-ms samples, summed process-tree/session RSS; shared pages can be counted repeatedly",
-    "replicates": 12, "repeated_runs": 2, "workers": [1, 2, 4, 8, 12], "seed": 324,
+    "replicates": 24, "repeated_runs": 2, "workers": [1, 2, 4, 8, 12], "seed": 324,
 }
 (output / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
 with (output / "install.log").open("w") as log:

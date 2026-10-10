@@ -2,11 +2,11 @@
 # bitwise identical (the solver input/order is unchanged). Algebraic information
 # calculations allow 1e-10 * (1 + abs(reference)) elementwise, three orders below
 # the 1e-7 stationarity gates. Flags, failures, IDs and integer counts are exact.
-bt_close_324 <- function(actual, expected) {
+bt_close_324 <- function(actual, expected, info = NULL) {
   expect_identical(is.na(actual), is.na(expected))
   good <- is.finite(expected)
   expect_identical(actual[!good], expected[!good])
-  expect_true(all(abs(actual[good] - expected[good]) <= 1e-10 * (1 + abs(expected[good]))))
+  expect_true(all(abs(actual[good] - expected[good]) <= 1e-10 * (1 + abs(expected[good]))), info = info)
 }
 
 bt_compare_324 <- function(actual, expected) {
@@ -32,7 +32,7 @@ bt_compare_324 <- function(actual, expected) {
     a <- actual$diagnostics[[name]]
     e <- expected$diagnostics[[name]]
     if (is.numeric(e)) {
-      bt_close_324(a, e)
+      bt_close_324(a, e, info = name)
     } else if (is.list(e) && "rcond" %in% names(e)) {
       bt_close_324(a$rcond, e$rcond)
       expect_identical(a[setdiff(names(a), "rcond")], e[setdiff(names(e), "rcond")])
@@ -66,6 +66,16 @@ test_that("prepared counts, orientation, designs and all-pairs pseudo-counts mat
       expect_identical(serialize(prepared, NULL), before)
     }
   }
+})
+
+test_that("ill-conditioned alpha fits retain the original BLAS diagnostics exactly", {
+  dat <- bt_fixture_324(8L, "near_separated")
+  reference <- bt_reference_324()
+  old <- tryCatch(reference$fit_bt_model(dat, "alpha", FALSE, alpha = 1e-10), error = identity)
+  new <- tryCatch(fit_bt_model(dat, "alpha", FALSE, alpha = 1e-10), error = identity)
+  expect_lt(old$diagnostics$hessian_checks$rcond, 1e-5)
+  expect_identical(new$diagnostics, old$diagnostics)
+  bt_compare_324(new, old)
 })
 
 test_that("prepared schedules reject stale rows and invalid outcomes", {

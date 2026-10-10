@@ -90,6 +90,9 @@
 # Thus X' W X is the reduced graph Laplacian. Pair weights remain in the
 # original lexicographic order; only the products with structural zeros vanish.
 .bt_pair_information <- function(weights, kernel) {
+  if (isTRUE(kernel$legacy_information)) {
+    return(crossprod(kernel$design, kernel$design * weights))
+  }
   n <- length(kernel$ids)
   information <- matrix(0, n, n)
   information[cbind(kernel$counts$first, kernel$counts$second)] <- -weights
@@ -212,6 +215,20 @@
   }
   penalized <- .bt_alpha_matrix(surface$hessian)
   original <- .bt_alpha_matrix(surface$information)
+  # Ill conditioning can amplify different Laplacian summation roundoff in
+  # Newton corrections and covariance. Retain the original BLAS products in
+  # that case. 1e-5 is a conservative computational-path guard (machine epsilon
+  # divided by it is about 2e-11), NOT a change to any acceptance threshold.
+  # Reuse the already required matrix checks; ordinary fits pay no extra rcond.
+  if (!is.finite(penalized$rcond) || !is.finite(original$rcond) ||
+      min(penalized$rcond, original$rcond) < 1e-5) {
+    kernel$legacy_information <- TRUE
+    surface <- .bt_alpha_surface(beta, kernel)
+    surface$gradient <- stats::setNames(surface$gradient, colnames(transform))
+    diagnostics[names(surface)] <- surface
+    penalized <- .bt_alpha_matrix(surface$hessian)
+    original <- .bt_alpha_matrix(surface$information)
+  }
   diagnostics$hessian_checks <- penalized[setdiff(names(penalized), "chol")]
   diagnostics$information_checks <- original[setdiff(names(original), "chol")]
   if (!penalized$positive_definite || !is.finite(penalized$rcond) || penalized$rcond < control$min_rcond) {

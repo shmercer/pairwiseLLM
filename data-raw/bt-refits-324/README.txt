@@ -23,9 +23,11 @@ R_LIBS, avoiding startup differences from exporting sourced baseline functions.
 It uses OUTPUT/baseline-library and OUTPUT/prepared-library, launches fresh R
 processes, and uses the public bootstrap interface, including simulation,
 validation, preparation, fitting, uncertainty checks, collection and worker
-startup/shutdown. It compares 12 successful replicates in each of two runs
+startup/shutdown. It compares 24 successful replicates in each of two runs
 at 1,2,4,8,12 workers. Baseline/prepared order alternates between runs. All
 scientific results must be identical to the first baseline serial run.
+Twenty-four is divisible by every tested worker count, so all workers receive
+whole waves of work (at least two fits per worker at the largest setting).
 Local sockets are required for future multisession. This is not a tuning
 recommendation for longer production runs or concurrent study workloads.
 
@@ -84,7 +86,14 @@ Implementation choices:
 - Alpha information uses the reduced weighted graph Laplacian, exactly
   X' W X for the retained incidence design. Unpenalized information still
   determines reported uncertainty; the penalized Hessian still determines
-  the independent Newton/stationarity check.
+  the independent Newton/stationarity check. When either already-computed
+  reciprocal condition estimate is nonfinite or below 1e-5, the original
+  dense BLAS cross-products are recomputed before numerical acceptance and
+  uncertainty calculations. This conservative computational-path guard
+  avoids amplified summation roundoff; it changes no scientific threshold.
+  A tiny-alpha near-separated regression requires exact original diagnostics.
+  It reproduced the Linux CI failure under a temporary OpenBLAS override;
+  both reference BLAS and OpenBLAS pass after retaining the original products.
 - Preserve the original merge() row-order distinction: complete graphs sort
   by pasted keys, incomplete graphs by numeric pair columns. This matters
   for bitwise solver equivalence once indices have multiple digits.
