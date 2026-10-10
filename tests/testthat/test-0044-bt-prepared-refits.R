@@ -90,8 +90,8 @@ test_that("zero-alpha preparation omits unused binary blocks, including complete
     items <- .bt_prepare_items(unique(c(dat[[1L]], dat[[2L]])), TRUE, binary = FALSE)
     prepared <- .bt_prepare_schedule(dat, items)
     expect_null(prepared$alpha$binary_design)
-    expect_identical(.bt_fit_alpha(dat, 0, FALSE, list(), prepared)$theta,
-      bt_reference_324()$fit_bt_model(dat, "alpha", FALSE, alpha = 0)$theta)
+    bt_compare_324(.bt_fit_alpha(dat, 0, FALSE, list(), prepared),
+      bt_reference_324()$fit_bt_model(dat, "alpha", FALSE, alpha = 0))
   }
 })
 
