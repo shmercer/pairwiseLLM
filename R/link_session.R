@@ -13,8 +13,23 @@
   .link_reject_legacy(state)
   .link_check(inherits(state, "pairwiseLLM_link_session") && identical(state$schema_version, 1L),
     "Unsupported linking session schema.")
-  .link_check(identical(state$identity_hash, .link_session_hash(state)),
-    "Link session evidence/configuration/continuation identity hash mismatch.")
+  identity_matches <- identical(state$identity_hash, .link_session_hash(state))
+  provenances <- list()
+  if (!identity_matches && is.list(state$linking) && is.list(state$linking$estimator)) {
+    results <- .link_session_results(state)
+    if (!is.list(results)) results <- list()
+    for (r in results) {
+      # Only consistent copies of recorded provenance explain an outer mismatch.
+      if (!is.list(r) || !is.list(r$continuation) || !is.list(r$continuation$input) ||
+        !is.list(r$provenance)) next
+      p <- r$continuation$input$provenance
+      if (is.list(p) && identical(r$provenance[names(p)], p)) {
+        provenances <- c(provenances, list(p))
+      }
+    }
+  }
+  .link_check_hash(identity_matches,
+    "Link session evidence/configuration/continuation identity hash mismatch.", provenances)
   .link_fields(state, c("schema_version", "refit_id", "linking", "status_by_spoke",
     "link_stage_log", "identity_hash"), label = "link session")
   .link_check(.link_data_only(state), "Link session must contain serializable data only.")
@@ -144,6 +159,24 @@ resume_link_session <- function(state, input, status = NULL) {
 #' modes and prediction data, including E3-MCMC draws. Reading never refits or
 #' migrates a posterior. Only open trusted RDS files. Unknown external Phase A
 #' provenance remains missing; computed payload hashes are always present.
+#' @details Hashes are verified using the current rlang engine. A failed check
+#'   with recorded `link-v1-rlang` provenance from before rlang 1.3.0 raises
+#'   `pairwiseLLM_link_hash_incompatibility` (also a linking-contract error), with
+#'   `stored_hash_scheme`, `stored_hash_engine_version`, and
+#'   `current_hash_engine_version` condition fields. Other mismatches remain
+#'   integrity/contract errors; a different version alone is not proof of
+#'   incompatibility. Missing engine provenance cannot establish the cause.
+#'
+#'   Keep the original artifact and hashes. Explicitly prepare new inputs from
+#'   the original saved judgments and compatible Phase A points/draws using
+#'   [prepare_link_input()]. This preparation needs no new LLM judgments or
+#'   sampling. A new standalone reference can reuse a saved completed fit through
+#'   [prepare_linked_rubric_reference()] only if its fit-time evidence identity
+#'   verifies. Otherwise investigate in its producing environment before deciding
+#'   separately whether a refit is needed. Creating a new E3 result itself refits
+#'   the saved outcomes; MCMC remains an explicit, potentially expensive choice.
+#'   Loading/validation never rebuilds, migrates hashes, overwrites artifacts,
+#'   contacts providers, or starts sampling.
 #' @param state A [start_link_session()] result.
 #' @param path File path for an RDS session.
 #' @param overwrite Whether to replace an existing file.

@@ -29,6 +29,26 @@ modes and prediction data, including E3-MCMC draws. Reading never refits or
 migrates a posterior. Only open trusted RDS files. Unknown external Phase A
 provenance remains missing; computed payload hashes are always present.
 }
+\details{
+Hashes are verified using the current rlang engine. A failed check
+with recorded \code{link-v1-rlang} provenance from before rlang 1.3.0 raises
+\code{pairwiseLLM_link_hash_incompatibility} (also a linking-contract error), with
+\code{stored_hash_scheme}, \code{stored_hash_engine_version}, and
+\code{current_hash_engine_version} condition fields. Other mismatches remain
+integrity/contract errors; a different version alone is not proof of
+incompatibility. Missing engine provenance cannot establish the cause.
+
+Keep the original artifact and hashes. Explicitly prepare new inputs from
+the original saved judgments and compatible Phase A points/draws using
+\code{\link[=prepare_link_input]{prepare_link_input()}}. This preparation needs no new LLM judgments or
+sampling. A new standalone reference can reuse a saved completed fit through
+\code{\link[=prepare_linked_rubric_reference]{prepare_linked_rubric_reference()}} only if its fit-time evidence identity
+verifies. Otherwise investigate in its producing environment before deciding
+separately whether a refit is needed. Creating a new E3 result itself refits
+the saved outcomes; MCMC remains an explicit, potentially expensive choice.
+Loading/validation never rebuilds, migrates hashes, overwrites artifacts,
+contacts providers, or starts sampling.
+}
 \seealso{
 \code{\link[=prepare_link_input]{prepare_link_input()}}, \code{\link[=fit_link]{fit_link()}}, \code{\link[=start_link_session]{start_link_session()}}, \code{\link[=save_link_session]{save_link_session()}}
 

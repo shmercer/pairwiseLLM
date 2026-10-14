@@ -56,6 +56,11 @@ The supplied comparisons must match the evidence recorded when the fit was
 made. Compatible item names alone are insufficient. Changed comparisons
 require a new fit and a new reference. Save the result with \code{\link[=saveRDS]{saveRDS()}} and
 restore it with \code{\link[=readRDS]{readRDS()}}; no live sampler is needed for later prediction.
+Hash-engine provenance is recorded for new references. Older references
+without it still require every identity hash to verify. Hashes from before
+rlang 1.3.0 use a different algorithm; see \code{\link[=save_link_session]{save_link_session()}} for error and
+recovery behavior. A completed fit with unverifiable fit-time evidence identity
+cannot be reused automatically to rebuild a reference.
 
 This constructor supports standalone fits with shared judge parameters.
 Import-ready adaptive Phase A artifacts continue to work directly with

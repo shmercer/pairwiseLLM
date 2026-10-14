@@ -72,6 +72,25 @@ on 2026-10-01).
 
 ## Determinism Rules
 
+### Supported dependency versions
+
+`DESCRIPTION` is the source of truth for supported minimum versions. Tests and
+development checks require `rlang >= 1.3.0` and `withr >= 3.0.3`; older versions
+are unsupported even when a test happens to pass. rlang 1.3.0 fixes object-hash
+stability and changes its hash algorithm. withr 3.0.3 fixes `local_seed()` cleanup;
+each test must establish its own seed instead of inheriting one from another test.
+`withr` and fitting engines remain optional package dependencies. No new glmnet
+minimum is required: oldrel qualification includes glmnet 4.1-10.
+
+CI resolves dependencies from `DESCRIPTION` on release and oldrel R; devel is
+best effort. The native macOS fallback installs direct Suggests and required
+transitive dependencies and allows updates instead of retaining stale versions.
+Adding a dependency floor requires a demonstrated API or correctness need,
+focused regression evidence, and checks of optionality and persisted artifacts.
+Newer dependency versions are allowed, but future hash-algorithm changes are not
+guaranteed to preserve persisted identities. Legacy hash fixtures are generated
+in isolated libraries; routine tests read them offline and never rewrite them.
+
 Issue #325 reserves 0045 for external bootstrap execution and 5120 for exact
 bounded schedule execution. `fixtures/bt-schedule-325/` contains unchanged
 source from post-#328 `7999c15c6c50b0d8de670ff49702648630d8235b`.

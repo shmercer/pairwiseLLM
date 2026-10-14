@@ -1,3 +1,43 @@
+test_that("reference hash provenance is descriptive and old missing metadata remains verifiable", {
+  local_mocked_bindings(.fit_bayes_btl_mcmc_adaptive = rubric_reference_sampler, .package = "pairwiseLLM")
+  reference <- rubric_reference_prepare(rubric_reference_completed())
+  expect_identical(reference$provenance$hash_scheme, "link-v1-rlang")
+  expect_identical(reference$provenance$hash_engine_version, as.character(packageVersion("rlang")))
+  old <- reference
+  old$provenance[c("hash_scheme", "hash_engine_version")] <- NULL
+  expect_identical(pairwiseLLM:::.rubric_standalone_hash(old), reference$reference_hash)
+  expect_identical(pairwiseLLM:::.rubric_validate_standalone_reference(old), old)
+  for (change in list(
+    function(x) {
+      x$provenance$hash_scheme <- NULL
+      x
+    },
+    function(x) {
+      x$provenance$hash_scheme <- "unknown"
+      x
+    },
+    function(x) {
+      x$provenance$hash_engine_version <- NA_character_
+      x
+    })) {
+    error <- tryCatch(pairwiseLLM:::.rubric_validate_standalone_reference(change(reference)), error = identity)
+    expect_s3_class(error, "pairwiseLLM_link_contract_error")
+    expect_false(inherits(error, "pairwiseLLM_link_hash_incompatibility"))
+  }
+  bad <- reference
+  bad$evidence$y_A[1] <- 1L - bad$evidence$y_A[1]
+  error <- tryCatch(pairwiseLLM:::.rubric_validate_standalone_reference(bad), error = identity)
+  expect_s3_class(error, "pairwiseLLM_link_contract_error")
+  expect_false(inherits(error, "pairwiseLLM_link_hash_incompatibility"))
+  legacy <- readRDS(test_path("fixtures", "link-hash-compatibility", "rlang-1.2.0.rds"))$reference
+  before <- serialize(legacy, NULL)
+  error <- tryCatch(pairwiseLLM:::.rubric_validate_standalone_reference(legacy), error = identity)
+  expect_s3_class(error, "pairwiseLLM_link_contract_error")
+  expect_false(inherits(error, "pairwiseLLM_link_hash_incompatibility"))
+  expect_match(conditionMessage(error), "cause cannot be identified", fixed = TRUE)
+  expect_identical(serialize(legacy, NULL), before)
+})
+
 test_that("standalone fits record canonical evidence for every actual fitted subset", {
   local_mocked_bindings(.fit_bayes_btl_mcmc_adaptive = rubric_reference_sampler, .package = "pairwiseLLM")
   evidence <- rubric_reference_evidence()

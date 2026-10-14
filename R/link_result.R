@@ -7,6 +7,14 @@
     "judge", "control", "basis", "item_transform", "counts", "hashes", "provenance"),
     c("schema_version", "estimator", "hub", "spoke", "phase_a", "cross", "judge", "control",
       "basis", "item_transform", "counts", "hashes", "provenance"), "link input")
+  .link_fields(input$provenance,
+    c("package_version", "source_commit", "hash_scheme", "hash_engine_version"),
+    c("package_version", "source_commit", "hash_scheme", "hash_engine_version"), "input provenance")
+  for (k in c("package_version", "hash_engine_version")) {
+    .link_check(is.character(input$provenance[[k]]) && length(input$provenance[[k]]) == 1L &&
+      !is.na(input$provenance[[k]]) && nzchar(input$provenance[[k]]), "Invalid version provenance.")
+  }
+  .link_check(identical(input$provenance$hash_scheme, "link-v1-rlang"), "Unsupported input hash scheme.")
   .link_fields(input$phase_a, c("hub", "spoke"), c("hub", "spoke"), "phase_a")
   for (a in input$phase_a) {
     .link_fields(a, c("kind", "value", "source", "centering"),
@@ -41,15 +49,8 @@
   hashes$phase_a_spoke <- .link_hash(input$phase_a$spoke)
   hashes$input <- NULL
   hashes$input <- .link_hash(list(hashes = hashes, counts = input$counts))
-  .link_check(identical(input$hashes, hashes), "Link input evidence/configuration hash mismatch.")
-  .link_fields(input$provenance,
-    c("package_version", "source_commit", "hash_scheme", "hash_engine_version"),
-    c("package_version", "source_commit", "hash_scheme", "hash_engine_version"), "input provenance")
-  for (k in c("package_version", "hash_engine_version")) {
-    .link_check(is.character(input$provenance[[k]]) && length(input$provenance[[k]]) == 1L &&
-      !is.na(input$provenance[[k]]) && nzchar(input$provenance[[k]]), "Invalid version provenance.")
-  }
-  .link_check(identical(input$provenance$hash_scheme, "link-v1-rlang"), "Unsupported input hash scheme.")
+  .link_check_hash(identical(input$hashes, hashes), "Link input evidence/configuration hash mismatch.",
+    list(input$provenance))
   invisible(TRUE)
 }
 

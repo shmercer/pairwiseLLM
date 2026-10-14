@@ -34,6 +34,11 @@
 #' made. Compatible item names alone are insufficient. Changed comparisons
 #' require a new fit and a new reference. Save the result with [saveRDS()] and
 #' restore it with [readRDS()]; no live sampler is needed for later prediction.
+#' Hash-engine provenance is recorded for new references. Older references
+#' without it still require every identity hash to verify. Hashes from before
+#' rlang 1.3.0 use a different algorithm; see [save_link_session()] for error and
+#' recovery behavior. A completed fit with unverifiable fit-time evidence identity
+#' cannot be reused automatically to rebuild a reference.
 #'
 #' This constructor supports standalone fits with shared judge parameters.
 #' Import-ready adaptive Phase A artifacts continue to work directly with
@@ -92,7 +97,8 @@ prepare_linked_rubric_reference <- function(cj, evidence, set_id, items = NULL,
     fit_contract = contract, fit_contract_hash = .link_hash(contract),
     fit_evidence = identity, evidence = observations, evidence_hash = .link_hash(observations),
     n_observations = nrow(observations), diagnostics = normalized$diagnostics, reliability = normalized$reliability,
-    provenance = list(package_version = as.character(utils::packageVersion("pairwiseLLM")), supplied = provenance)),
+    provenance = c(list(package_version = as.character(utils::packageVersion("pairwiseLLM")),
+      supplied = provenance), .link_hash_provenance())),
     class = "pairwiseLLM_linked_rubric_reference")
   out$reference_hash <- .rubric_standalone_hash(out)
   out$source <- .link_source(list(reference_hash = out$reference_hash, evidence_hash = out$evidence_hash,
@@ -110,10 +116,21 @@ prepare_linked_rubric_reference <- function(cj, evidence, set_id, items = NULL,
   .link_check(inherits(x, "pairwiseLLM_linked_rubric_reference") && identical(x$format_version, 1L) &&
     identical(x$source_type, "standalone_bayes_btl") && .link_data_only(unclass(x)),
     "Invalid frozen standalone rubric reference.")
-  .link_check(identical(x$reference_hash, .rubric_standalone_hash(x)) &&
+  p <- x$provenance
+  fields <- c("hash_scheme", "hash_engine_version")
+  if (is.list(p) && any(fields %in% names(p))) {
+    .link_check(all(fields %in% names(p)), "Incomplete frozen reference hash provenance.")
+    .link_check(identical(p$hash_scheme, "link-v1-rlang"), "Unsupported frozen reference hash scheme.")
+    .link_check(is.character(p$hash_engine_version) && length(p$hash_engine_version) == 1L &&
+      !is.na(p$hash_engine_version) && nzchar(p$hash_engine_version), "Invalid reference hash-engine version.")
+  }
+  .link_check_hash(identical(x$reference_hash, .rubric_standalone_hash(x)) &&
     identical(x$fit_contract_hash, .link_hash(x$fit_contract)) &&
     identical(x$evidence_hash, .link_hash(x$evidence)),
-    "Frozen reference identity has changed; prepare a new reference from its completed fit and exact evidence.")
+    paste0("Frozen reference identity has changed or cannot be verified; preserve the original and ",
+      "prepare a new reference from a completed fit with verified fit-time identity and exact evidence. ",
+      "If hash-engine provenance is missing, the cause cannot be identified from this artifact."),
+    list(x$provenance))
   .link_check(identical(x$source, .link_source(list(reference_hash = x$reference_hash,
     evidence_hash = x$evidence_hash, n_observations = x$n_observations,
     trait = x$trait, orientation = x$orientation))), "Frozen reference source identity does not match its contents.")

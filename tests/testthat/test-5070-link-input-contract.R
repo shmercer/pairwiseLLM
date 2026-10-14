@@ -1,3 +1,72 @@
+test_that("legacy rlang hashes fail distinctly without altering original inputs", {
+  path <- test_path("fixtures", "link-hash-compatibility", "rlang-1.2.0.rds")
+  expect_identical(unname(tools::md5sum(path)), "b7e3656d85e26bf3c218c61c37f3cb61")
+  legacy <- readRDS(path)$input
+  before <- serialize(legacy, NULL)
+  error <- tryCatch(fit_link(legacy), error = identity)
+  expect_s3_class(error, "pairwiseLLM_link_hash_incompatibility")
+  expect_s3_class(error, "pairwiseLLM_link_contract_error")
+  expect_identical(error$stored_hash_scheme, "link-v1-rlang")
+  expect_identical(error$stored_hash_engine_version, "1.2.0")
+  expect_identical(error$current_hash_engine_version, as.character(packageVersion("rlang")))
+  expect_match(conditionMessage(error), "prepare_link_input()", fixed = TRUE)
+  expect_match(conditionMessage(error), "No LLM requests", fixed = TRUE)
+  expect_identical(serialize(legacy, NULL), before)
+})
+
+test_that("tampering and unestablished version differences remain integrity failures", {
+  input <- link_contract_input(edges = 2L)
+  for (version in c(as.character(packageVersion("rlang")), "1.3.0.9000", "not-a-version")) {
+    bad <- input
+    bad$provenance$hash_engine_version <- version
+    bad$cross$y_A[1] <- 0L
+    error <- tryCatch(pairwiseLLM:::.link_validate_input(bad), error = identity)
+    expect_s3_class(error, "pairwiseLLM_link_contract_error")
+    expect_false(inherits(error, "pairwiseLLM_link_hash_incompatibility"))
+    expect_match(conditionMessage(error), "evidence/configuration hash mismatch", fixed = TRUE)
+  }
+  for (value in list(NULL, NA_character_, c("1.2.0", "1.3.0"))) {
+    bad <- input
+    bad$provenance$hash_engine_version <- value
+    expect_error(pairwiseLLM:::.link_validate_input(bad), "provenance")
+  }
+  bad <- input
+  bad$provenance$hash_scheme <- "unknown"
+  expect_error(pairwiseLLM:::.link_validate_input(bad), "Unsupported input hash scheme")
+  # Version differences alone do not invalidate hashes that actually verify.
+  for (version in c("1.2.0", "1.3.0.9000")) {
+    input$provenance$hash_engine_version <- version
+    expect_true(pairwiseLLM:::.link_validate_input(input))
+  }
+})
+
+test_that("normalized input hashes are stable across serialization and a fresh process", {
+  dir <- withr::local_tempdir()
+  script <- file.path(dir, "verify.R")
+  root <- getNamespaceInfo("pairwiseLLM", "path")
+  writeLines(c(paste0(".libPaths(", paste(deparse(.libPaths()), collapse = ""), ")"),
+    "args <- commandArgs(TRUE)",
+    "if (file.exists(file.path(args[1], 'Meta', 'package.rds'))) {",
+    "  suppressPackageStartupMessages(library(pairwiseLLM))",
+    "} else pkgload::load_all(args[1], quiet = TRUE)",
+    "input <- readRDS(args[2])",
+    "stopifnot(pairwiseLLM:::.link_validate_input(input))",
+    "cat(pairwiseLLM:::.link_hash(input$cross))"), script)
+  for (estimator in c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset")) {
+    input <- link_contract_input(estimator, 2L)
+    restored <- unserialize(serialize(input, NULL))
+    expect_identical(restored, input)
+    expect_true(pairwiseLLM:::.link_validate_input(restored))
+    expect_identical(restored$hashes, link_contract_input(estimator, 2L)$hashes)
+    path <- file.path(dir, "input.rds")
+    saveRDS(input, path)
+    output <- system2(file.path(R.home("bin"), "Rscript"),
+      c("--vanilla", shQuote(script), shQuote(root), shQuote(path)), stdout = TRUE, stderr = TRUE)
+    expect_null(attr(output, "status"))
+    expect_identical(output, input$hashes$cross)
+  }
+})
+
 test_that("explicit evidence is normalized, centered, and reconciled", {
   for (id in c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset")) {
     x <- link_contract_input(id, 2L)

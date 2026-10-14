@@ -1,3 +1,66 @@
+test_that("legacy sessions and results report the known hash boundary read-only", {
+  legacy <- readRDS(test_path("fixtures", "link-hash-compatibility", "rlang-1.2.0.rds"))
+  dir <- withr::local_tempdir()
+  path <- file.path(dir, "link-session.rds")
+  saveRDS(legacy$session, path)
+  before <- readBin(path, "raw", n = file.info(path)$size)
+  for (check in list(
+    function() load_link_session(path),
+    function() load_adaptive_session(dir),
+    function() validate_session_dir(dir),
+    function() save_link_session(legacy$session, path, overwrite = TRUE),
+    function() resume_link_session(legacy$session, link_contract_input(edges = 2L)),
+    function() pairwiseLLM:::.link_validate_result(legacy$result))) {
+    error <- tryCatch(check(), error = identity)
+    expect_s3_class(error, "pairwiseLLM_link_hash_incompatibility")
+    expect_identical(error$stored_hash_engine_version, "1.2.0")
+    expect_identical(error$current_hash_engine_version, as.character(packageVersion("rlang")))
+    expect_identical(readBin(path, "raw", n = file.info(path)$size), before)
+  }
+})
+
+test_that("session tampering cannot borrow inconsistent legacy provenance", {
+  state <- start_link_session(link_contract_input(edges = 2L))
+  for (change in list(
+    function(x) {
+      x$linking <- "tampered"
+      x
+    },
+    function(x) {
+      x$linking$estimator <- "tampered"
+      x
+    },
+    function(x) {
+      x$linking$estimator$accepted_state_by_spoke <- list(NULL)
+      x
+    },
+    function(x) {
+      x$linking$estimator$accepted_state_by_spoke <- new.env(parent = emptyenv())
+      x
+    },
+    function(x) {
+      x$linking$estimator$accepted_state_by_spoke$S$continuation <- NULL
+      x
+    },
+    function(x) {
+      x$linking$estimator$accepted_state_by_spoke$S$provenance <- NULL
+      x
+    },
+    function(x) {
+      x$linking$estimator$accepted_state_by_spoke$S$continuation$input$provenance$hash_engine_version <- "1.2.0"
+      x
+    },
+    function(x) {
+      x$linking$estimator$accepted_state_by_spoke$S$items$theta_link_mean[1] <- 99
+      x
+    })) {
+    error <- tryCatch(pairwiseLLM:::.link_session_validate(change(state)), error = identity)
+    expect_s3_class(error, "pairwiseLLM_link_contract_error")
+    expect_false(inherits(error, "pairwiseLLM_link_hash_incompatibility"))
+    expect_match(conditionMessage(error), "identity hash mismatch", fixed = TRUE)
+  }
+})
+
 test_that("E1--E3 session identity, predictions, and append-only resume round-trip exactly", {
   dir <- withr::local_tempdir()
   for (id in c("fixed_shape_offset", "gaussian_posterior_bridge", "joint_offset")) {
