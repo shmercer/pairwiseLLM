@@ -133,7 +133,12 @@ reliability are retained; failed diagnostics warn as in ordinary calibration.</p
     <p>The supplied comparisons must match the evidence recorded when the fit was
 made. Compatible item names alone are insufficient. Changed comparisons
 require a new fit and a new reference. Save the result with <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS()</a></code> and
-restore it with <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code>; no live sampler is needed for later prediction.</p>
+restore it with <code><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS()</a></code>; no live sampler is needed for later prediction.
+Hash-engine provenance is recorded for new references. Older references
+without it still require every identity hash to verify. Hashes from before
+rlang 1.3.0 use a different algorithm; see <code><a href="save_link_session.html">save_link_session()</a></code> for error and
+recovery behavior. A completed fit with unverifiable fit-time evidence identity
+cannot be reused automatically to rebuild a reference.</p>
 <p>This constructor supports standalone fits with shared judge parameters.
 Import-ready adaptive Phase A artifacts continue to work directly with
 <code><a href="fit_rubric_calibration.html">fit_rubric_calibration()</a></code>. Neither route changes the original reference

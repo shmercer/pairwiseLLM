@@ -102,6 +102,26 @@ new evidence after this identity check.</p></dd>
     <p>Saving invisibly returns <code>path</code>; loading returns the identical session.</p>
     </div>
     <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>Hashes are verified using the current rlang engine. A failed check
+with recorded <code>link-v1-rlang</code> provenance from before rlang 1.3.0 raises
+<code>pairwiseLLM_link_hash_incompatibility</code> (also a linking-contract error), with
+<code>stored_hash_scheme</code>, <code>stored_hash_engine_version</code>, and
+<code>current_hash_engine_version</code> condition fields. Other mismatches remain
+integrity/contract errors; a different version alone is not proof of
+incompatibility. Missing engine provenance cannot establish the cause.</p>
+<p>Keep the original artifact and hashes. Explicitly prepare new inputs from
+the original saved judgments and compatible Phase A points/draws using
+<code><a href="prepare_link_input.html">prepare_link_input()</a></code>. This preparation needs no new LLM judgments or
+sampling. A new standalone reference can reuse a saved completed fit through
+<code><a href="prepare_linked_rubric_reference.html">prepare_linked_rubric_reference()</a></code> only if its fit-time evidence identity
+verifies. Otherwise investigate in its producing environment before deciding
+separately whether a refit is needed. Creating a new E3 result itself refits
+the saved outcomes; MCMC remains an explicit, potentially expensive choice.
+Loading/validation never rebuilds, migrates hashes, overwrites artifacts,
+contacts providers, or starts sampling.</p>
+    </div>
+    <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="prepare_link_input.html">prepare_link_input()</a></code>, <code><a href="fit_link.html">fit_link()</a></code>, <code><a href="start_link_session.html">start_link_session()</a></code>, <code>save_link_session()</code></p>
 <p>Other linking:

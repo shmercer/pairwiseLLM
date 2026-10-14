@@ -194,7 +194,10 @@ coordinates; Phase A posterior summaries cannot supply data-derived priors.</p><
 <dd><p>List with optional <code>source_commit</code> (package source revision;
 unknown is <code>NA_character_</code>) and <code>expected</code>, a named subset of the computed
 <code>hashes</code> and <code>counts</code> lists against which to reconcile inputs. Hashes use a
-versioned <code><a href="https://rlang.r-lib.org/reference/hash.html" class="external-link">rlang::hash()</a></code> scheme; the producing rlang version is recorded.</p></dd>
+versioned <code><a href="https://rlang.r-lib.org/reference/hash.html" class="external-link">rlang::hash()</a></code> scheme; the producing rlang version is recorded.
+Hashes produced before rlang 1.3.0 cannot be verified with its new algorithm.
+Validation reports this known incompatibility without changing saved hashes.
+See <code><a href="save_link_session.html">save_link_session()</a></code> for recovery guidance.</p></dd>
 
 </dl></div>
     <div class="section level2">

@@ -396,6 +396,42 @@ anchored-joint Phase B sessions must be restarted from compatible Phase
 A results; they cannot be resumed as E1, E2 or E3.</p>
 </div>
 <div class="section level2">
+<h2 id="dependency-upgrades-and-saved-hashes">Dependency upgrades and saved hashes<a class="anchor" aria-label="anchor" href="#dependency-upgrades-and-saved-hashes"></a>
+</h2>
+<p>The package requires rlang &gt;= 1.3.0. That release changed the hash
+algorithm; hashes created with earlier versions cannot be verified with
+the new engine. When recorded provenance establishes this
+incompatibility, loading or validating raises
+<code>pairwiseLLM_link_hash_incompatibility</code>, identifying the
+saved scheme, saved rlang version, and current version. A tampered
+current artifact remains an integrity error. An older artifact without
+engine provenance cannot establish which version produced its hashes;
+failed verification does not prove that a dependency upgrade caused
+it.</p>
+<p>Keep the original artifacts and their hashes. To build a
+<strong>new</strong> input, supply the original saved arguments,
+judgments, and compatible Phase A points or draws:</p>
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"original-link-input-arguments.rds"</span><span class="op">)</span></span>
+<span><span class="va">new_input</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">prepare_link_input</span>, <span class="va">args</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">saveRDS</a></span><span class="op">(</span><span class="va">new_input</span>, <span class="st">"rebuilt-link-input.rds"</span><span class="op">)</span></span></code></pre></div>
+<p>Preparing this input makes no LLM requests and performs no sampling.
+It does not repair or resume the old session. Reuse saved original
+outcomes; new judgments are unnecessary. Do not replace the old input’s
+recorded hashes with new ones. Old normalized inputs are not a
+substitute for original Phase A payloads and their recorded
+centering/source information.</p>
+<p>A standalone reference can be prepared again from a saved completed
+fit and its exact evidence only if the fit-time evidence identity still
+verifies. That identity also uses rlang hashing, so some older completed
+fits cannot be reused this way. Investigate with the original producing
+environment before separately deciding whether to refit. A new E3 result
+refits the saved outcomes, and choosing E3-MCMC can require expensive
+sampling. Loading, validation, and input preparation never initiate that
+work automatically. A rebuilt reference has a new identity; dependent
+calibration/linking artifacts must be prepared explicitly as well.</p>
+</div>
+<div class="section level2">
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
 <p>Mercer, S. H. (2026). <em>Guide: Linking Saved Comparisons</em>. In

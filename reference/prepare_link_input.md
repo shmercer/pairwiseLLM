@@ -143,7 +143,11 @@ prepare_link_input(
   `hashes` and `counts` lists against which to reconcile inputs. Hashes
   use a versioned
   [`rlang::hash()`](https://rlang.r-lib.org/reference/hash.html) scheme;
-  the producing rlang version is recorded.
+  the producing rlang version is recorded. Hashes produced before rlang
+  1.3.0 cannot be verified with its new algorithm. Validation reports
+  this known incompatibility without changing saved hashes. See
+  [`save_link_session()`](https://shmercer.github.io/pairwiseLLM/reference/save_link_session.md)
+  for recovery guidance.
 
 ## Value
 
