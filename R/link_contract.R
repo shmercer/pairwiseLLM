@@ -34,6 +34,39 @@
   paste0("link-v1-rlang-", rlang::hash(x))
 }
 
+.link_hash_provenance <- function() {
+  list(hash_scheme = "link-v1-rlang",
+    hash_engine_version = as.character(utils::packageVersion("rlang")))
+}
+
+.link_check_hash <- function(ok, message, provenances = list()) {
+  if (isTRUE(ok)) return(invisible(TRUE))
+  current <- .link_hash_provenance()
+  for (p in provenances) {
+    if (!is.list(p) || !identical(p$hash_scheme, "link-v1-rlang") ||
+      !is.character(p$hash_engine_version) || length(p$hash_engine_version) != 1L ||
+      is.na(p$hash_engine_version)) next
+    stored_version <- tryCatch(package_version(p$hash_engine_version), error = function(e) NULL)
+    # Only the documented 1.3.0 algorithm boundary establishes incompatibility.
+    # Different versions alone do not establish the cause of a hash mismatch.
+    if (!is.null(stored_version) && stored_version < "1.3.0" &&
+      package_version(current$hash_engine_version) >= "1.3.0") {
+      rlang::abort(paste0(message, " Cannot verify stored hash scheme '", p$hash_scheme,
+        "' produced by rlang ", p$hash_engine_version, " with current rlang ", current$hash_engine_version,
+        ": rlang 1.3.0 changed the hashing algorithm. Preserve the original artifact and its hashes. ",
+        "Rebuild new linking inputs with prepare_link_input() from original saved evidence and compatible ",
+        "Phase A points/draws, or a new reference with prepare_linked_rubric_reference() from a completed ",
+        "fit whose fit-time evidence identity still verifies. If it does not verify, use the producing ",
+        "environment to investigate before separately deciding on a refit. No LLM requests, sampling, ",
+        "hash migration or artifact writes are performed by this validation."),
+        class = c("pairwiseLLM_link_hash_incompatibility", "pairwiseLLM_link_contract_error"),
+        stored_hash_scheme = p$hash_scheme, stored_hash_engine_version = p$hash_engine_version,
+        current_hash_engine_version = current$hash_engine_version)
+    }
+  }
+  .link_check(FALSE, message)
+}
+
 .link_identity <- function(x, label) {
   .link_fields(x, c("set_id", "items"), c("set_id", "items"), label)
   set_id <- .link_ids(x$set_id, paste0(label, " set_id"))
@@ -278,6 +311,9 @@
 #'   unknown is `NA_character_`) and `expected`, a named subset of the computed
 #'   `hashes` and `counts` lists against which to reconcile inputs. Hashes use a
 #'   versioned `rlang::hash()` scheme; the producing rlang version is recorded.
+#'   Hashes produced before rlang 1.3.0 cannot be verified with its new algorithm.
+#'   Validation reports this known incompatibility without changing saved hashes.
+#'   See [save_link_session()] for recovery guidance.
 #' @return A versioned `pairwiseLLM_link_input` list with normalized identities,
 #'   evidence, coordinates, controls, hashes, counts, and provenance. Raw Phase A
 #'   likelihood counts are zero for E1/E2; source observation counts are separate.
@@ -377,7 +413,6 @@ prepare_link_input <- function(estimator, hub, spoke, phase_a, cross, judge,
   structure(list(schema_version = 1L, estimator = estimator, hub = hub, spoke = spoke,
     phase_a = phase_a, cross = cross, judge = judge, control = control,
     basis = basis, item_transform = transform, counts = counts, hashes = hashes,
-    provenance = list(package_version = as.character(utils::packageVersion("pairwiseLLM")),
-      source_commit = commit, hash_scheme = "link-v1-rlang",
-      hash_engine_version = as.character(utils::packageVersion("rlang")))), class = "pairwiseLLM_link_input")
+    provenance = c(list(package_version = as.character(utils::packageVersion("pairwiseLLM")),
+      source_commit = commit), .link_hash_provenance())), class = "pairwiseLLM_link_input")
 }

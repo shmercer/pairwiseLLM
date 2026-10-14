@@ -108,7 +108,10 @@ coordinates; Phase A posterior summaries cannot supply data-derived priors.}
 \item{provenance}{List with optional \code{source_commit} (package source revision;
 unknown is \code{NA_character_}) and \code{expected}, a named subset of the computed
 \code{hashes} and \code{counts} lists against which to reconcile inputs. Hashes use a
-versioned \code{rlang::hash()} scheme; the producing rlang version is recorded.}
+versioned \code{rlang::hash()} scheme; the producing rlang version is recorded.
+Hashes produced before rlang 1.3.0 cannot be verified with its new algorithm.
+Validation reports this known incompatibility without changing saved hashes.
+See \code{\link[=save_link_session]{save_link_session()}} for recovery guidance.}
 }
 \value{
 A versioned \code{pairwiseLLM_link_input} list with normalized identities,

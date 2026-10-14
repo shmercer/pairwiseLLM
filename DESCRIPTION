@@ -33,7 +33,7 @@ Imports:
     httr2 (>= 1.1.0),
     jsonlite,
     openssl,
-    rlang,
+    rlang (>= 1.3.0),
     stats,
     tibble,
     tidyselect,
@@ -65,7 +65,7 @@ Suggests:
     testthat (>= 3.0.0),
     tidyr,
     vctrs,
-    withr
+    withr (>= 3.0.3)
 Additional_repositories:
     https://stan-dev.r-universe.dev/
 SystemRequirements: CmdStan and a C++17 toolchain (optional; needed only for

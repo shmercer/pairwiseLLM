@@ -64,8 +64,10 @@ jobs:
           options(install.packages.check.source = "no")
           install.packages(c("remotes", "rcmdcheck", "sessioninfo"), type = "both")
           remotes::install_deps(
-            dependencies = c("Depends", "Imports", "LinkingTo", "Suggests", "Config/Needs/check"),
-            upgrade = "never",
+            # TRUE includes this package's Suggests, but only required
+            # dependencies of those packages (not their recursive Suggests).
+            dependencies = TRUE,
+            upgrade = "always",
             type = "both"
           )
           sessioninfo::session_info()

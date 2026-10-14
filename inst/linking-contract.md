@@ -71,6 +71,22 @@ removed anchored-joint fields are not populated with invented equivalents.
 Supply `source_commit` explicitly; unknown revisions remain `NA_character_`.
 The `link-v1-rlang` scheme uses `rlang::hash()` and records its version.
 
+The supported engine is rlang >= 1.3.0. Its 1.3.0 algorithm change makes earlier
+rlang hashes incompatible. Failed verification with recorded pre-1.3.0 engine
+provenance raises `pairwiseLLM_link_hash_incompatibility`, inheriting
+`pairwiseLLM_link_contract_error`, with `stored_hash_scheme`,
+`stored_hash_engine_version`, and `current_hash_engine_version` fields. An engine
+version difference alone does not establish incompatibility. Other failures
+retain integrity errors, including artifacts with insufficient provenance to
+identify the cause. Original artifacts and hashes remain unchanged.
+
+New standalone rubric references record scheme/engine provenance outside their
+identity-hash payload. Earlier references without those metadata fields remain
+valid only when every identity check passes. Keep the producing environment and
+original evidence when archiving an analysis. See the linking-sessions guide for
+explicit reconstruction; verification never contacts providers, samples models,
+rehashes stored identities, or overwrites artifacts.
+
 Computed hashes bind normalized inputs, identities, judge and controls. Item
 order is canonicalized, but evidence row order is retained and hashed. Row
 permutations may yield equivalent estimates with different evidence hashes.

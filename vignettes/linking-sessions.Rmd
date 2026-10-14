@@ -239,6 +239,41 @@ The [rubric guide](rubric-calibration.html) explains how to apply a saved hub
 calibration to linked spoke scores. Old anchored-joint Phase B sessions must be
 restarted from compatible Phase A results; they cannot be resumed as E1, E2 or E3.
 
+## Dependency upgrades and saved hashes
+
+The package requires rlang >= 1.3.0. That release changed the hash algorithm;
+hashes created with earlier versions cannot be verified with the new engine.
+When recorded provenance establishes this incompatibility, loading or validating
+raises `pairwiseLLM_link_hash_incompatibility`, identifying the saved scheme,
+saved rlang version, and current version. A tampered current artifact remains an
+integrity error. An older artifact without engine provenance cannot establish
+which version produced its hashes; failed verification does not prove that a
+dependency upgrade caused it.
+
+Keep the original artifacts and their hashes. To build a **new** input, supply
+the original saved arguments, judgments, and compatible Phase A points or draws:
+
+```{r rebuild-link-input, eval=FALSE}
+args <- readRDS("original-link-input-arguments.rds")
+new_input <- do.call(prepare_link_input, args)
+saveRDS(new_input, "rebuilt-link-input.rds")
+```
+
+Preparing this input makes no LLM requests and performs no sampling. It does not
+repair or resume the old session. Reuse saved original outcomes; new judgments
+are unnecessary. Do not replace the old input's recorded hashes with new ones.
+Old normalized inputs are not a substitute for original Phase A payloads and
+their recorded centering/source information.
+
+A standalone reference can be prepared again from a saved completed fit and its
+exact evidence only if the fit-time evidence identity still verifies. That
+identity also uses rlang hashing, so some older completed fits cannot be reused
+this way. Investigate with the original producing environment before separately
+deciding whether to refit. A new E3 result refits the saved outcomes, and choosing
+E3-MCMC can require expensive sampling. Loading, validation, and input preparation
+never initiate that work automatically. A rebuilt reference has a new identity;
+dependent calibration/linking artifacts must be prepared explicitly as well.
+
 ## Citation
 
 Mercer, S. H. (2026). *Guide: Linking Saved Comparisons*. In *pairwiseLLM*

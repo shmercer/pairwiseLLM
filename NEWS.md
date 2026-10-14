@@ -1,5 +1,16 @@
 # pairwiseLLM (development version)
 
+* Require `rlang >= 1.3.0` for stable linked-input and runtime hashing, and
+  optional `withr >= 3.0.3` for correct local RNG restoration. `glmnet` remains
+  optional without a new minimum version. macOS CI updates its dependencies
+  through the existing installer without installing recursive optional packages.
+* Failed verification of linking hashes with recorded pre-1.3.0 rlang provenance
+  now reports a distinct `pairwiseLLM_link_hash_incompatibility` error, including
+  stored/current versions and explicit recovery guidance. New standalone rubric
+  references record hash-engine provenance. Existing hashes and artifacts are
+  never migrated; mismatches without an established version incompatibility
+  remain integrity errors.
+
 * Frequentist BT bootstrap refits reuse item contrasts and pair designs within
   each call (#324). Indexed counts replace repeated aggregation, and alpha
   information matrices use the equivalent weighted graph Laplacian. Original
