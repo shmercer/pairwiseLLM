@@ -98,6 +98,11 @@ Scientific state, RNG, scores, posterior-contract fixtures and failures require
 exact equality. Real four-chain native qualification and bounded process-tree
 benchmarks run explicitly through `scripts/benchmark-bt-schedule.py`, never CI.
 
+Issue #333 reserves 0046–0048 for frozen decision prompts/request provenance,
+provider-specific response contracts, and decision normalization/BT regressions.
+Prefixes were verified unused on 2026-10-15. Fixtures are synthetic and offline;
+the tests never submit provider requests or read study data.
+
 Issue #305 reserves 0041–0043 for lapse likelihood/derivative contracts,
 estimation/recovery, and boundary/failure handling (verified unused on 2026-10-02).
 The frozen synthetic qualification matrix is in `scripts/validate-bt-lapse.R`;

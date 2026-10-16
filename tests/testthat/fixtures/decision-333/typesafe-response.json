@@ -1,0 +1,18 @@
+{
+  "model": "jev-1.13.0",
+  "answers": {
+    "writing_trait": {
+      "type": "choice",
+      "choice": "SAMPLE_2",
+      "confidence": 0.2,
+      "probabilities": {
+        "SAMPLE_2": 0.7,
+        "SAMPLE_1": 0.3
+      }
+    }
+  },
+  "usage": {
+    "input_tokens": 12,
+    "output_tokens": 3
+  }
+}
