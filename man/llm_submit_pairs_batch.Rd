@@ -94,6 +94,9 @@ preserved.
 \code{llm_submit_pairs_batch()} is a backend-agnostic front-end for running
 provider batch pipelines (OpenAI, Anthropic, Gemini). Vertex, Together.ai,
 and Ollama are supported only for live comparisons in this series.
+OpenAI \code{endpoint = "decisions"} is not a managed Batch endpoint and is
+rejected before entering a provider pipeline. Use \code{\link[=llm_compare_pair]{llm_compare_pair()}} for
+single-pair Decisions; bulk decision execution is deferred.
 
 It mirrors \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} but uses the provider batch APIs under the
 hood via \code{run_openai_batch_pipeline()}, \code{run_anthropic_batch_pipeline()},

@@ -32,6 +32,9 @@ Failed decision responses are always retained, including mismatches.}
 A one-row tibble retaining \code{ID1}, \code{ID2}, actual \code{pair_uid}/\code{custom_id},
 \code{better_sample}, \code{better_id}, integer \code{winner_pos}, \code{model}, and usage
 (\code{prompt_tokens}, \code{completion_tokens}, \code{total_tokens}; \code{NA} when unavailable).
+Detailed usage columns \code{prompt_cached_tokens}, \code{prompt_cache_write_tokens},
+and \code{reasoning_tokens} retain nonnegative integer counts when reported;
+unavailable details are \code{NA}. Invalid supplied counts fail as malformed.
 \code{model} is the resolved model when supplied, otherwise the requested model;
 \code{requested_model} and \code{resolved_model} distinguish them without claiming
 resolution when the provider omits it. Additive scalar columns are:

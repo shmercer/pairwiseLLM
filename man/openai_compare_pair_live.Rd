@@ -13,7 +13,7 @@ openai_compare_pair_live(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  endpoint = c("chat.completions", "responses"),
+  endpoint = c("chat.completions", "responses", "decisions"),
   tag_prefix = "<BETTER_SAMPLE>",
   tag_suffix = "</BETTER_SAMPLE>",
   api_key = NULL,
@@ -30,20 +30,23 @@ openai_compare_pair_live(
 
 \item{text2}{Character string containing the second sample's text.}
 
-\item{model}{OpenAI model name (e.g. "gpt-4.1", "gpt-5.6-sol").}
+\item{model}{OpenAI model name (e.g. "gpt-4.1", "gpt-5.6-sol"). Decisions
+currently accepts only \code{"gpt-6-luna"}; other model IDs fail before HTTP.}
 
 \item{trait_name}{Short label for the trait (e.g. "Overall Quality").}
 
 \item{trait_description}{Full-text definition of the trait.}
 
-\item{prompt_template}{Prompt template string.}
+\item{prompt_template}{Generative prompt template string. For Decisions,
+omit this argument or use \code{NULL}; explicitly supplied non-NULL templates
+fail. Use \code{decision_template} in \code{...} for custom decision instructions.}
 
-\item{endpoint}{Which OpenAI endpoint to use: \code{"chat.completions"} or
-\code{"responses"}.}
+\item{endpoint}{Which OpenAI endpoint to use: \code{"chat.completions"}
+(the unchanged default), \code{"responses"}, or \code{"decisions"}.}
 
-\item{tag_prefix}{Prefix for the better-sample tag.}
+\item{tag_prefix}{Prefix for the better-sample tag. Must be omitted for Decisions.}
 
-\item{tag_suffix}{Suffix for the better-sample tag.}
+\item{tag_suffix}{Suffix for the better-sample tag. Must be omitted for Decisions.}
 
 \item{api_key}{Optional OpenAI API key.}
 
@@ -56,9 +59,9 @@ openai_compare_pair_live(
 positive integer and is supported only by the Responses endpoint. When
 \code{pair_uid} is supplied, it is used verbatim as \code{custom_id}.
 \code{store} accepts \code{NULL} or one non-missing logical value for
-either endpoint. \code{TRUE}/\code{FALSE} are sent unchanged; omission
+either generative endpoint. \code{TRUE}/\code{FALSE} are sent unchanged; omission
 or \code{NULL} leaves the field absent and preserves the OpenAI default.
-For either endpoint, \code{service_tier = "standard"} or \code{"default"}
+For either generative endpoint, \code{service_tier = "standard"} or \code{"default"}
 sends \code{"default"}; explicit \code{"auto"}, \code{"flex"}, and
 \code{"priority"} are sent unchanged. Omission or \code{NULL} leaves
 the field absent, allowing OpenAI's project-configured \code{"auto"}
@@ -70,7 +73,10 @@ gpt-5 models are applied as in \code{\link{build_openai_batch_requests}}.
 When using the Responses endpoint with reasoning models, you can request
 reasoning summaries in the \code{thoughts} column by setting
 \code{endpoint = "responses"}, a non-"none" reasoning effort, and
-\code{include_thoughts = TRUE}.}
+\code{include_thoughts = TRUE}.
+For Decisions, only \code{pair_uid}, \code{decision_template}, and
+\code{prompt_cache_options} are supported in \code{...}; see below. Duplicate,
+unnamed, unsupported, or misspelled settings fail before credentials or HTTP.}
 }
 \value{
 A tibble with one row and columns:
@@ -95,8 +101,22 @@ otherwise NA.}
 \item{completion_tokens}{Completion / output token count (if reported).}
 \item{total_tokens}{Total token count (if reported).}
 \item{raw_response}{(Optional) list-column containing the parsed JSON
-body.}
+body. Failed Decisions always retain their response, including invalid JSON
+text, regardless of \code{include_raw}.}
 }
+
+Decisions additionally returns the columns documented in \link{decision_results},
+including integer \code{winner_pos}, \code{pair_uid}, both probabilities, \code{p_chosen},
+independent \code{decision_confidence}, full \code{probabilities_json}, scientific
+provenance/fingerprint, requested/resolved model, and provider \code{x-request-id}.
+\code{object_type} is \code{"decision"}; \code{thoughts} and \code{content} are \code{NA}.
+\code{prompt_cached_tokens}, \code{prompt_cache_write_tokens}, and \code{reasoning_tokens}
+retain reported usage details, including zero; unavailable counts are \code{NA}.
+\code{request_controls_json} records submitted \code{prompt_cache_options} (or \code{null})
+and \code{effective_prompt_cache_options} with effective mode and TTL. These
+transport settings are separate from the scientific fingerprint.
+\code{retry_failures} is a list-column of transient attempt diagnostics, consumed
+by the existing normalizer for \code{failed_attempts}.
 }
 \description{
 This function sends a single pairwise comparison prompt to the OpenAI API
@@ -105,10 +125,12 @@ analogue of \code{\link{build_openai_batch_requests}} plus
 \code{\link{parse_openai_batch_output}}.
 }
 \details{
-It supports both the Chat Completions endpoint ("/v1/chat/completions") and
+It supports the Chat Completions endpoint ("/v1/chat/completions") and
 the Responses endpoint ("/v1/responses", for example gpt-5.6 with reasoning),
 using the same prompt template and model / parameter rules as the batch
 pipeline.
+The opt-in Decisions endpoint (\code{"/v1/decisions"}) instead uses one structured
+binary choice question; see the Decisions section below.
 
 For the Responses endpoint, the function collects:
 \itemize{
@@ -122,6 +144,59 @@ If \code{temperature} or \code{top_p} is not provided in \code{...}, the corresp
 field is omitted so the model/provider default applies. Reasoning modes that
 do not support sampling parameters continue to require them to be \code{NULL}.
 }
+\section{Decisions}{
+
+Decisions is single-pair, single-trait and binary only. \code{input} is the exact
+shared JSON-string evidence built by \link{decision_request}; \code{questions} contains
+one named \code{choice} question, \code{writing_trait}, with the ordered \code{SAMPLE_1} and
+\code{SAMPLE_2} values and symmetric descriptions. Omission of the generative
+prompt does not evaluate \code{\link[=set_prompt_template]{set_prompt_template()}}. The default instructions
+are the exact approved \code{decision_cj_v1}. A custom \code{decision_template} must
+contain \code{{TRAIT_NAME}} and \code{{TRAIT_DESCRIPTION}}, and cannot contain sample
+placeholders or generative output tags. The complete trait definition is
+inserted verbatim and fingerprinted. No instructions request generated
+probabilities, reasoning traces, or XML.
+
+The selected \code{choice} is preserved, never replaced with an argmax. Both
+probabilities must be finite numbers in \verb{[0,1]} summing to 1 within \code{1e-6};
+exact 0, 0.5 and 1 are kept. Independent confidence is required in \verb{[0,1]}.
+A selection below the alternative by more than \code{1e-8} is a diagnostic failure,
+retaining the original choice and probabilities. Malformed JSON/answers,
+refusals, and incomplete distributions return classified failed rows; they
+are never valid binary evidence or automatically retried. See \link{decision_results}
+for error codes and failure retention. HTTP errors/timeouts use the existing
+transport/retry conditions and attempt metadata; no generative fallback occurs.
+
+\code{prompt_cache_options} is \code{NULL} or a nonempty named list with only \code{mode}
+(\code{"implicit"}, \code{"explicit"}, or \code{NULL}) and/or \code{ttl} (\code{"30m"}). Omitted
+values use implicit mode and a 30-minute minimum TTL. Explicit mode disables
+the implicit breakpoint; this helper adds no explicit breakpoints, so explicit
+mode disables prompt caching for this request. Cache entries can persist
+longer than the TTL. This is caching, not request storage or a general
+data-retention guarantee. Account/project data controls still apply.
+\code{store}, service/processing tiers, cache keys, breakpoints, and Batch cache
+policy controls are unsupported here. All supplied generative controls,
+including \code{temperature}, \code{top_p}, \code{logprobs}, \code{reasoning},
+\code{max_output_tokens}, and \code{include_thoughts}, fail even when \code{NULL} or \code{FALSE}.
+
+Before request construction, the scientific body is checked independently
+against provenance, exact ordered text/evidence hashes, instructions, question,
+and choices. The serialized JSON is checked again, attached as exact UTF-8
+bytes, and verified before every HTTP attempt, including retries. Inconsistent
+requests abort with \code{pairwiseLLM_decision_request_error} and sample-free
+diagnostics before HTTP; no automatic repair is performed. A fingerprint
+checks identity/integrity and is not an authenticated signature.
+
+Requests contain the complete sample texts. Provenance excludes samples but
+includes full trait/custom instruction text, which can itself be sensitive.
+Failed raw responses can also contain sensitive content; do not log publicly.
+These probabilities do not establish validated educational assessment accuracy
+and do not change binary BT/adaptive evidence. Managed Batch and live bulk
+Decisions execution are unsupported by this issue's single-pair interface.
+API availability remains provider/account dependent. The schema and controls
+follow the \href{https://developers.openai.com/api/reference/resources/decisions/methods/create}{OpenAI Decisions reference}.
+}
+
 \examples{
 \dontrun{
 # Requires API key set and internet access
@@ -148,6 +223,16 @@ res_reasoning <- openai_compare_pair_live(
   service_tier = "flex"
 )
 print(res_reasoning$thoughts)
+
+# 3. One decision with both choice probabilities (also incurs API costs)
+res_decision <- openai_compare_pair_live(
+  "A", "Synthetic sample A.", "B", "Synthetic sample B.",
+  model = "gpt-6-luna", trait_name = "Organization",
+  trait_description = "Logical sequencing and connections between ideas.",
+  endpoint = "decisions", pair_uid = "example-forward",
+  prompt_cache_options = list(mode = "explicit")
+)
+res_decision[c("better_id", "p_sample_1", "p_sample_2", "decision_confidence")]
 }
 
 }

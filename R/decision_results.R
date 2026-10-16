@@ -96,6 +96,9 @@
 #' @return A one-row tibble retaining `ID1`, `ID2`, actual `pair_uid`/`custom_id`,
 #'   `better_sample`, `better_id`, integer `winner_pos`, `model`, and usage
 #'   (`prompt_tokens`, `completion_tokens`, `total_tokens`; `NA` when unavailable).
+#'   Detailed usage columns `prompt_cached_tokens`, `prompt_cache_write_tokens`,
+#'   and `reasoning_tokens` retain nonnegative integer counts when reported;
+#'   unavailable details are `NA`. Invalid supplied counts fail as malformed.
 #'   `model` is the resolved model when supplied, otherwise the requested model;
 #'   `requested_model` and `resolved_model` distinguish them without claiming
 #'   resolution when the provider omits it. Additive scalar columns are:
@@ -180,7 +183,9 @@
                 custom_id = request$pair_uid, better_sample = NA_character_,
                 better_id = NA_character_, winner_pos = NA_integer_,
                 model = p$requested_model, prompt_tokens = NA_real_,
-                completion_tokens = NA_real_, total_tokens = NA_real_),
+                completion_tokens = NA_real_, total_tokens = NA_real_,
+                prompt_cached_tokens = NA_real_, prompt_cache_write_tokens = NA_real_,
+                reasoning_tokens = NA_real_),
            .decision_column_defaults(1L))
   for (name in c("decision_question", "decision_type", "decision_template_version",
                  "endpoint", "requested_model", "trait_name")) out[[name]] <- p[[name]]
@@ -203,9 +208,24 @@
           .decision_fail("malformed_decision", "Invalid token count.")
         }
       }
-      out$prompt_tokens <- as.numeric(usage$input_tokens %||% NA_real_)
-      out$completion_tokens <- as.numeric(usage$output_tokens %||% NA_real_)
-      out$total_tokens <- as.numeric(usage$total_tokens %||% NA_real_)
+      out$prompt_tokens <- as.numeric(usage[["input_tokens"]] %||% NA_real_)
+      out$completion_tokens <- as.numeric(usage[["output_tokens"]] %||% NA_real_)
+      out$total_tokens <- as.numeric(usage[["total_tokens"]] %||% NA_real_)
+      details <- list(input_tokens_details = c(cached_tokens = "prompt_cached_tokens",
+                                               cache_write_tokens = "prompt_cache_write_tokens"),
+                      output_tokens_details = c(reasoning_tokens = "reasoning_tokens"))
+      for (group in names(details)) {
+        info <- usage[[group]]
+        if (is.null(info)) next
+        if (!.decision_object(info)) .decision_fail("malformed_decision", "Invalid token details object.")
+        for (field in names(details[[group]])) {
+          value <- info[[field]]
+          if (!is.null(value) && (!.decision_number(value) || value < 0 || value != floor(value))) {
+            .decision_fail("malformed_decision", "Invalid detailed token count.")
+          }
+          out[[details[[group]][[field]]]] <- as.numeric(value %||% NA_real_)
+        }
+      }
     }
     answers <- parsed$answers
     if (p$provider == "openai") {

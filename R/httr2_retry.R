@@ -110,7 +110,8 @@
 .retry_httr2_request <- function(req,
                                  max_attempts = 3L,
                                  base_delay = 0.5,
-                                 jitter = 0) {
+                                 jitter = 0,
+                                 validate_request = NULL) {
   if (max_attempts < 1L) {
     rlang::abort("`max_attempts` must be at least 1.")
   }
@@ -131,6 +132,8 @@
   }
 
   while (TRUE) {
+    # Integrity errors are preflight failures, never HTTP failures or retries.
+    if (!is.null(validate_request)) validate_request(req)
     resp_or_err <- tryCatch(
       .pairwiseLLM_req_perform(req),
       error = function(e) e
