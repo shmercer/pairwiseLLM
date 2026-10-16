@@ -1,5 +1,15 @@
 # pairwiseLLM (development version)
 
+* Single-pair comparisons support opt-in `backend = "typesafe"` and the direct
+  `typesafe_compare_pair_live()` helper (#335). The default is versioned
+  `jev-1.13.0`; explicit Jev versions and documented moving aliases are supported
+  without availability guarantees or fallback. `TYPESAFE_API_KEY` is included in
+  credential checks. Jev reuses the shared decision prompt, request-to-wire
+  integrity checks, response parser, and probability-preserving normalization.
+  TypeSafe overload/rate-limit retries preserve validated bytes; existing
+  OpenAI Decisions, generative endpoints, and binary modeling are unchanged.
+  TypeSafe bulk execution and managed Batch remain unsupported.
+
 * Single-pair OpenAI comparisons now support opt-in `endpoint = "decisions"`
   with `gpt-6-luna` (#334). The frozen decision instructions, selected winner,
   both probabilities, independent confidence, usage and provenance are retained.

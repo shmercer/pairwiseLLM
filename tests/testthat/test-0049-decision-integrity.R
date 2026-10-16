@@ -55,15 +55,12 @@ test_that("internally inconsistent provenance fails even with a freshly computed
 
 test_that("the shared validator also rejects altered TypeSafe scientific content", {
   original <- decision_333_request("typesafe")
-  mutations <- list(
-    function(r) { r$body$state <- "{}"; r },
-    function(r) { names(r$body$questions) <- "wrong"; r },
-    function(r) { r$body$questions[[1]]$criteria <- rev(r$body$questions[[1]]$criteria); r },
-    function(r) { r$body$questions[[1]]$criteria$SAMPLE_1 <- "changed"; r },
-    function(r) { r$body$extra <- "changed"; r }
-  )
-  for (mutate in mutations) {
-    expect_error(pairwiseLLM:::.validate_decision_request(mutate(original)),
-                 class = "pairwiseLLM_decision_request_error")
+  for (mutate in typesafe_335_mutations()) {
+    altered <- mutate(original)
+    before <- serialize(altered, NULL)
+    err <- tryCatch(pairwiseLLM:::.validate_decision_request(altered), error = identity)
+    expect_s3_class(err, "pairwiseLLM_decision_request_error")
+    expect_identical(serialize(altered, NULL), before)
+    expect_false(grepl("Synthetic|Changed|Altered", conditionMessage(err)))
   }
 })

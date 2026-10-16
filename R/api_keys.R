@@ -52,9 +52,9 @@
 #'
 #' This function inspects the current R session for configured API keys
 #' used by pairwiseLLM. It checks for known environment variables such as
-#' `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, and
-#' `VERTEX_API_KEY`, and returns a small tibble summarising which keys are
-#' available.
+#' `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `VERTEX_API_KEY`,
+#' `TOGETHER_API_KEY`, and `TYPESAFE_API_KEY`, and returns a small tibble
+#' summarising which keys are available.
 #'
 #' It does **not** print or return the key values themselves - only whether
 #' each key is present. This makes it safe to run in logs, scripts, and
@@ -67,10 +67,10 @@
 #' @return A tibble (data frame) with one row per backend and columns:
 #' \describe{
 #'   \item{backend}{Short backend identifier, e.g. `"openai"`, `"anthropic"`,
-#'   `"gemini"`, `"vertex"`, `"together"`.}
+#'   `"gemini"`, `"vertex"`, `"together"`, `"typesafe"`.}
 #'   \item{service}{Human-readable service name, e.g. `"OpenAI"`,
 #'   `"Anthropic"`, `"Google Gemini"`, `"Vertex AI Gemini API"`,
-#'   `"Together.ai"`.}
+#'   `"Together.ai"`, `"TypeSafe"`.}
 #'   \item{env_var}{Name of the environment variable that is checked.}
 #'   \item{has_key}{Logical flag indicating whether the key is set and
 #'   non-empty.}
@@ -85,25 +85,27 @@
 #' status <- check_llm_api_keys(verbose = FALSE)
 #' status
 #'
-#' @seealso [llm_compare_pair()], [submit_llm_pairs()]
+#' @seealso [llm_compare_pair()], [submit_llm_pairs()], [typesafe_compare_pair_live()]
 #' @family live backends
 #' @export
 check_llm_api_keys <- function(verbose = TRUE) {
   # Known backends and their primary env vars
-  backends <- c("openai", "anthropic", "gemini", "vertex", "together")
+  backends <- c("openai", "anthropic", "gemini", "vertex", "together", "typesafe")
   services <- c(
     "OpenAI",
     "Anthropic",
     "Google Gemini",
     "Vertex AI Gemini API",
-    "Together.ai"
+    "Together.ai",
+    "TypeSafe"
   )
   env_vars <- c(
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "GEMINI_API_KEY",
     "VERTEX_API_KEY",
-    "TOGETHER_API_KEY"
+    "TOGETHER_API_KEY",
+    "TYPESAFE_API_KEY"
   )
 
 
@@ -140,13 +142,15 @@ check_llm_api_keys <- function(verbose = TRUE) {
         "  - Google Gemini:  GEMINI_API_KEY\n",
         "  - Vertex AI:      VERTEX_API_KEY\n",
         "  - Together.ai:    TOGETHER_API_KEY\n",
+        "  - TypeSafe:       TYPESAFE_API_KEY\n",
         "\n",
         "Use `usethis::edit_r_environ()` to add the keys persistently, e.g.:\n",
         '  OPENAI_API_KEY    = "YOUR_OPENAI_KEY_HERE"\n',
         '  ANTHROPIC_API_KEY = "YOUR_ANTHROPIC_KEY_HERE"\n',
         '  GEMINI_API_KEY    = "YOUR_GEMINI_KEY_HERE"\n',
         '  VERTEX_API_KEY    = "YOUR_VERTEX_KEY_HERE"\n',
-        '  TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"'
+        '  TOGETHER_API_KEY  = "YOUR_TOGETHER_KEY_HERE"\n',
+        '  TYPESAFE_API_KEY  = "YOUR_TYPESAFE_KEY_HERE"'
       )
     } else {
       message("Some LLM API keys are not set:")
@@ -174,6 +178,19 @@ check_llm_api_keys <- function(verbose = TRUE) {
   }
 
   res
+}
+
+# TypeSafe validates header-safe keys without changing other providers' behavior.
+.typesafe_api_key <- function(api_key = NULL) {
+  valid <- function(key) {
+    .decision_string(key) && !grepl("[[:space:][:cntrl:]]", key)
+  }
+  if (!is.null(api_key) && !identical(api_key, "") && !valid(api_key)) {
+    rlang::abort("`api_key` must be a nonempty character scalar without whitespace or control characters.")
+  }
+  key <- .get_api_key(api_key, env_var = "TYPESAFE_API_KEY", service = "TypeSafe")
+  if (!valid(key)) rlang::abort("TYPESAFE_API_KEY must not contain whitespace or control characters.")
+  key
 }
 
 #' Internal: Google Gemini API key helper

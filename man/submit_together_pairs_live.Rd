@@ -168,6 +168,7 @@ Other live backends:
 \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
 \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
 \code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
+\code{\link[=typesafe_compare_pair_live]{typesafe_compare_pair_live()}},
 \code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}
 }
 \concept{live backends}

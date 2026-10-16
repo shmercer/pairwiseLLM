@@ -48,7 +48,8 @@ testthat::test_that("check_llm_api_keys returns expected structure when keys
     ANTHROPIC_API_KEY = "",
     GEMINI_API_KEY = "",
     VERTEX_API_KEY = "",
-    TOGETHER_API_KEY = ""
+    TOGETHER_API_KEY = "",
+    TYPESAFE_API_KEY = ""
   ))
 
   status <- check_llm_api_keys(verbose = FALSE)
@@ -87,7 +88,8 @@ testthat::test_that("check_llm_api_keys reports keys as present when env
     ANTHROPIC_API_KEY = "ANTHROPIC_KEY_FOR_TEST",
     GEMINI_API_KEY = "GEMINI_KEY_FOR_TEST",
     VERTEX_API_KEY = "VERTEX_KEY_FOR_TEST",
-    TOGETHER_API_KEY = "TOGETHER_KEY_FOR_TEST"
+    TOGETHER_API_KEY = "TOGETHER_KEY_FOR_TEST",
+    TYPESAFE_API_KEY = "TYPESAFE_KEY_FOR_TEST"
   ))
 
   status <- check_llm_api_keys(verbose = FALSE)
@@ -115,7 +117,8 @@ testthat::test_that("check_llm_api_keys(verbose = TRUE) prints all-set message",
     ANTHROPIC_API_KEY = "ANTHROPIC_KEY_FOR_TEST",
     GEMINI_API_KEY = "GEMINI_KEY_FOR_TEST",
     VERTEX_API_KEY = "VERTEX_KEY_FOR_TEST",
-    TOGETHER_API_KEY = "TOGETHER_KEY_FOR_TEST"
+    TOGETHER_API_KEY = "TOGETHER_KEY_FOR_TEST",
+    TYPESAFE_API_KEY = "TYPESAFE_KEY_FOR_TEST"
   ))
 
   msgs <- testthat::capture_messages({
@@ -132,7 +135,8 @@ testthat::test_that("check_llm_api_keys(verbose = TRUE) prints none-set guidance
     ANTHROPIC_API_KEY = "",
     GEMINI_API_KEY = "",
     VERTEX_API_KEY = "",
-    TOGETHER_API_KEY = ""
+    TOGETHER_API_KEY = "",
+    TYPESAFE_API_KEY = ""
   ))
 
   msgs <- testthat::capture_messages({
@@ -154,7 +158,8 @@ testthat::test_that("check_llm_api_keys(verbose = TRUE) prints mixed status per 
     ANTHROPIC_API_KEY = "",
     GEMINI_API_KEY = "",
     VERTEX_API_KEY = "",
-    TOGETHER_API_KEY = "TOGETHER_KEY_FOR_TEST"
+    TOGETHER_API_KEY = "TOGETHER_KEY_FOR_TEST",
+    TYPESAFE_API_KEY = "TYPESAFE_KEY_FOR_TEST"
   ))
 
   msgs <- testthat::capture_messages({
@@ -195,7 +200,8 @@ testthat::test_that(
   withr::local_envvar(c(
     GEMINI_API_KEY = "GEMINI_FROM_ENV",
     VERTEX_API_KEY = "VERTEX_FROM_ENV",
-    TOGETHER_API_KEY = ""
+    TOGETHER_API_KEY = "",
+    TYPESAFE_API_KEY = ""
   ))
   testthat::expect_equal(.gemini_api_key(NULL), "GEMINI_FROM_ENV")
   testthat::expect_equal(.vertex_api_key(NULL), "VERTEX_FROM_ENV")
@@ -241,7 +247,8 @@ testthat::test_that("check_llm_api_keys provides verbose guidance when keys miss
       "ANTHROPIC_API_KEY" = "",
       "GEMINI_API_KEY" = "",
       "VERTEX_API_KEY" = "",
-      "TOGETHER_API_KEY" = ""
+      "TOGETHER_API_KEY" = "",
+      "TYPESAFE_API_KEY" = ""
     ),
     {
       testthat::expect_message(
@@ -258,7 +265,8 @@ testthat::test_that("check_llm_api_keys provides verbose guidance when keys miss
       "ANTHROPIC_API_KEY" = "",
       "GEMINI_API_KEY" = "",
       "VERTEX_API_KEY" = "",
-      "TOGETHER_API_KEY" = ""
+      "TOGETHER_API_KEY" = "",
+      "TYPESAFE_API_KEY" = ""
     ),
     {
       testthat::expect_message(
@@ -267,4 +275,38 @@ testthat::test_that("check_llm_api_keys provides verbose guidance when keys miss
       )
     }
   )
+})
+
+testthat::test_that("TypeSafe keys use shared resolution and reject invalid header values privately", {
+  withr::local_envvar(c(TYPESAFE_API_KEY = "SYNTHETIC_ENV_KEY"))
+  key <- pairwiseLLM:::.typesafe_api_key
+  expect_identical(key("EXPLICIT_SYNTHETIC_KEY"), "EXPLICIT_SYNTHETIC_KEY")
+  expect_identical(key(NULL), "SYNTHETIC_ENV_KEY")
+  expect_identical(key(""), "SYNTHETIC_ENV_KEY")
+  for (invalid in list(NA_character_, 1, TRUE, character(), c("a", "b"),
+                       matrix("KEY"), "PRIVATE KEY", "PRIVATE\r\nheader", "\tPRIVATE")) {
+    err <- tryCatch(key(invalid), error = identity)
+    expect_s3_class(err, "error")
+    expect_false(grepl("PRIVATE|SYNTHETIC_ENV_KEY", conditionMessage(err)))
+  }
+  withr::local_envvar(c(TYPESAFE_API_KEY = "PRIVATE ENV KEY"))
+  expect_error(key(), "TYPESAFE_API_KEY must not contain")
+  withr::local_envvar(c(TYPESAFE_API_KEY = ""))
+  expect_error(key(), "No API key found for TypeSafe")
+})
+
+testthat::test_that("TypeSafe credential status and guidance never expose keys", {
+  withr::local_envvar(c(OPENAI_API_KEY = "", ANTHROPIC_API_KEY = "", GEMINI_API_KEY = "",
+                        VERTEX_API_KEY = "", TOGETHER_API_KEY = "", TYPESAFE_API_KEY = ""))
+  status <- check_llm_api_keys(verbose = FALSE)
+  expect_identical(status$backend, c("openai", "anthropic", "gemini", "vertex", "together", "typesafe"))
+  expect_identical(status$env_var[status$backend == "typesafe"], "TYPESAFE_API_KEY")
+  expect_identical(status$service[status$backend == "typesafe"], "TypeSafe")
+  expect_false(any(status$has_key))
+  expect_message(check_llm_api_keys(), "TYPESAFE_API_KEY")
+  withr::local_envvar(c(TYPESAFE_API_KEY = "PRIVATE_SYNTHETIC_KEY"))
+  messages <- testthat::capture_messages(status <- check_llm_api_keys())
+  expect_identical(status$has_key, c(FALSE, FALSE, FALSE, FALSE, FALSE, TRUE))
+  expect_match(paste(messages, collapse = " "), "TypeSafe \\(typesafe\\): TYPESAFE_API_KEY is set")
+  expect_false(grepl("PRIVATE_SYNTHETIC_KEY", paste(c(messages, capture.output(status)), collapse = " ")))
 })

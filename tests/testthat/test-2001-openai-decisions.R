@@ -317,3 +317,13 @@ test_that("Decisions cannot enter managed Batch or deferred bulk execution", {
                  "Batch|Bulk")
   }
 })
+
+test_that("TypeSafe overload retries do not change OpenAI Decisions HTTP 529 behavior", {
+  calls <- 0L
+  httr2::local_mocked_responses(function(req) {
+    calls <<- calls + 1L
+    decision_334_response(list(error = list(message = "synthetic overload")), 529L)
+  })
+  expect_error(do.call(openai_compare_pair_live, decision_334_args()), class = "httr2_http_529")
+  expect_identical(calls, 1L)
+})
