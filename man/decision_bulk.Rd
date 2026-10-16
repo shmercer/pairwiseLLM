@@ -125,7 +125,11 @@ cannot establish completion and is not imported as a resume journal.
 
 CSV contains valid results with stable scalar columns, including all probability
 and provenance columns. Numeric values use 17 significant digits to round-trip
-R doubles; read IDs as character to preserve leading zeros. A missing or torn
+R doubles with a correctly rounded decimal reader. Some readers (including
+base numeric conversion on macOS ARM in qualification) can change the last
+bit. For exact numeric CSV recovery, read columns as character and decode
+probability cells with \code{jsonlite::parse_json()}; use RDS for exact native
+recovery. Read IDs as character to preserve leading zeros. A missing or torn
 CSV export is rebuilt from RDS on resume. Journal envelopes are RDS lists with
 a SHA-256 and serialized raw \code{data}; \code{unserialize(readRDS(record)$data)} exposes
 the versioned event and its state/attempt records. Treat these as trusted local
