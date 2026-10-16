@@ -166,8 +166,14 @@
   raw_tbl <- raw_tbl |>
     dplyr::select(-dplyr::any_of(canonical_cols))
 
-  if (!include_raw && !any(.decision_rows(raw_tbl)) && "raw_response" %in% names(raw_tbl)) {
-    raw_tbl$raw_response <- NULL
+  if (!include_raw && "raw_response" %in% names(raw_tbl)) {
+    decision <- .decision_rows(raw_tbl)
+    if (any(decision)) {
+      # Failed decisions retain evidence, while legacy rows still honor opt-out.
+      raw_tbl$raw_response[!decision] <- rep(list(NULL), sum(!decision))
+    } else {
+      raw_tbl$raw_response <- NULL
+    }
   }
 
   # Support legacy LIVE_<ID1>_vs_<ID2> ids by parsing when explicit IDs missing.

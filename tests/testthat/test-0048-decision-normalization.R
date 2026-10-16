@@ -163,3 +163,24 @@ test_that("mixed and historical results retain binary semantics and missing prob
   empty <- pairwiseLLM:::.normalize_llm_results(old[0, ], old_pair[0, ], "openai", "legacy-model")
   expect_type(empty$results$p_sample_1, "double")
 })
+
+test_that("mixed failed rows retain raw evidence only for decisions when opted out", {
+  request <- decision_333_request()
+  pairs <- decision_333_pairs(list(request))
+  legacy_pair <- tibble::tibble(ID1 = "X", text1 = "x", ID2 = "Y", text2 = "y", pair_uid = "legacy-failure")
+  legacy <- tibble::tibble(ID1 = "X", ID2 = "Y", custom_id = "legacy-failure", better_id = NA_character_,
+                           raw_response = list(list(content = "SYNTHETIC_LEGACY_PRIVATE")))
+  response <- decision_333_response(p = c(.8, .2))
+  failed <- pairwiseLLM:::.parse_decision_response(response, request)
+  out <- pairwiseLLM:::.normalize_llm_results(dplyr::bind_rows(failed, legacy),
+                                            dplyr::bind_rows(pairs, legacy_pair), "openai", request$body$model)
+  for (table in list(out$failed_pairs, out$failed_attempts)) {
+    expect_identical(table$raw_response[[1]], response)
+    expect_null(table$raw_response[[2]])
+    expect_false(any(grepl("SYNTHETIC_LEGACY_PRIVATE", table$error_detail, fixed = TRUE)))
+  }
+  kept <- pairwiseLLM:::.normalize_llm_results(dplyr::bind_rows(failed, legacy),
+                                             dplyr::bind_rows(pairs, legacy_pair), "openai", request$body$model,
+                                             include_raw = TRUE)
+  expect_identical(kept$failed_attempts$raw_response[[2]], legacy$raw_response[[1]])
+})
