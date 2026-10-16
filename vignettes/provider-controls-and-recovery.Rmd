@@ -18,8 +18,8 @@ This article explains the package's reasoning/thinking controls and how to recov
 provider failures. Model availability changes independently of package behavior. Consult
 [Backends and Tested Model Configurations](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html)
 for the dated registry rather
-than treating examples here as a current model catalog. The registry preserves dated generative tests from September 5 and decision-model
-tests from October 16; a past success does not guarantee present availability.
+than treating examples here as a current model catalog. The registry preserves dated generative tests from 2026-09-05 and decision-model
+tests from 2026-10-16; a past success does not guarantee present availability.
 
 ## Start with the symptom
 

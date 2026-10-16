@@ -1,5 +1,5 @@
 
-<!-- README-source-md5: 4d1644113d38151a03b317da6349051e -->
+<!-- README-source-md5: aaad0f1f3464c09c7367da9d3e54ad5b -->
 
 <img src="man/figures/pairwiseLLM-banner.jpg"
      alt="pairwiseLLM: comparing two writing samples" width="100%">

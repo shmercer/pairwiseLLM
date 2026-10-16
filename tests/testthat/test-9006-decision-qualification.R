@@ -143,11 +143,13 @@ test_that("decision privacy boundaries cover successful, invalid and HTTP-error 
       pairs <- decision_bulk_pairs(1)
       pairs$text1 <- sample
       args <- decision_bulk_args(provider, pairs = pairs, api_key = key,
+                                 verbose = TRUE, status_every = 1L,
                                  save_path = file.path(td, "private.csv"))
       messages <- character()
       printed <- capture.output(out <- withCallingHandlers(do.call(submit_llm_pairs, args),
         message = function(cnd) { messages <<- c(messages, conditionMessage(cnd)); invokeRestart("muffleMessage") },
         warning = function(cnd) { messages <<- c(messages, conditionMessage(cnd)); invokeRestart("muffleWarning") }))
+      expect_gt(length(messages), 0L)
       for (secret in c(key, sample)) {
         expect_false(any(grepl(secret, c(messages, printed), fixed = TRUE)))
         csv <- readLines(args$save_path, warn = FALSE)
@@ -175,6 +177,7 @@ test_that("decision privacy boundaries cover successful, invalid and HTTP-error 
         expect_identical(readRDS(saved_object)$failed_attempts$raw_response[[1]], response)
       }
       args$include_raw <- TRUE
+      args$verbose <- FALSE
       args$save_path <- file.path(td, "opted-in.csv")
       private <- do.call(submit_llm_pairs, args)
       states <- decision_bulk_events(args$save_path)
