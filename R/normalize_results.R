@@ -154,6 +154,7 @@
   }
 
   raw_tbl <- tibble::as_tibble(raw_results)
+  raw_tbl <- .decision_prepare_results(raw_tbl, pairs, backend, model)
 
   # Strip any canonical columns if an upstream helper already added them.
   canonical_cols <- c(
@@ -166,7 +167,13 @@
     dplyr::select(-dplyr::any_of(canonical_cols))
 
   if (!include_raw && "raw_response" %in% names(raw_tbl)) {
-    raw_tbl$raw_response <- NULL
+    decision <- .decision_rows(raw_tbl)
+    if (any(decision)) {
+      # Failed decisions retain evidence, while legacy rows still honor opt-out.
+      raw_tbl$raw_response[!decision] <- rep(list(NULL), sum(!decision))
+    } else {
+      raw_tbl$raw_response <- NULL
+    }
   }
 
   # Support legacy LIVE_<ID1>_vs_<ID2> ids by parsing when explicit IDs missing.
@@ -506,6 +513,9 @@
     result_type,
     USE.NAMES = FALSE
   )
+  # Decision failures must take precedence over a syntactically valid winner.
+  decision_failed <- !is.na(aligned$decision_error_code)
+  error_code[decision_failed] <- aligned$decision_error_code[decision_failed]
 
   is_valid <- is.na(error_code)
 
@@ -528,6 +538,9 @@
   failed_tbl <- aligned[!is_valid, , drop = FALSE]
   failed_tbl$error_code <- error_code[!is_valid]
   failed_tbl$error_detail <- error_message[!is_valid]
+  decision_details <- aligned$decision_error_detail[!is_valid]
+  failed_tbl$error_detail <- ifelse(!is.na(decision_details), decision_details,
+                                   failed_tbl$error_detail)
 
   failed_tbl$error_detail <- ifelse(
     failed_tbl$error_code == "invalid_winner",
@@ -550,7 +563,9 @@
         "pair_uid", "pair_uid_provided",
         "unordered_occurrence_index", "ordered_occurrence_index",
         "custom_id", "backend", "model", "status_code", "error_message",
-        "error_code", "error_detail", "attempted_at", "raw_response"
+        "error_code", "error_detail", "attempted_at", "raw_response",
+        "better_sample", "better_id", "winner_pos",
+        names(.decision_column_defaults(0L))
       ))
     )
 
@@ -600,6 +615,13 @@
     error_code = failed_tbl$error_code,
     error_detail = as.character(failed_tbl$error_detail),
     attempted_at = failed_tbl$attempted_at
+  )
+  decision_diagnostics <- intersect(
+    c(names(.decision_column_defaults(0L)), "better_sample", "better_id", "winner_pos", "raw_response"),
+    names(failed_tbl)
+  )
+  failed_attempts_tbl <- dplyr::bind_cols(
+    failed_attempts_tbl, failed_tbl[, decision_diagnostics, drop = FALSE]
   )
 
   # Add duplicate-result rows as non-observed attempts.
@@ -732,6 +754,7 @@
 
   results_tbl <- results_tbl |>
     dplyr::select(-dplyr::any_of(c("retry_failures")))
+  if (!include_raw) results_tbl$raw_response <- NULL
 
   list(
     results = tibble::as_tibble(results_tbl),

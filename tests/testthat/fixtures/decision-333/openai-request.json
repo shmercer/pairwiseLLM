@@ -1,0 +1,21 @@
+{
+  "model": "gpt-6-luna",
+  "input": "{\"SAMPLE_1\":\"Synthetic sample A.\\nSAMPLE_2: a literal label.\",\"SAMPLE_2\":\"Synthetic sample B says \\\"hello\\\".\"}",
+  "questions": [
+    {
+      "type": "choice",
+      "instructions": "You are an expert writing assessor. Determine which writing sample demonstrates stronger performance on the specified writing trait.\n\nTRAIT: Organization\n\nTRAIT GUIDANCE:\nLogical sequencing and connections.\nExclude spelling and grammar.\n\nASSESSMENT RULES:\n- Consider the overall pattern of relevant strengths and limitations in each sample.\n- Judge only Organization, without compensating for strengths or weaknesses in other writing traits.\n- Do not prefer a sample merely because it is longer, takes a particular stance, or discusses more sophisticated or interesting subject matter. Consider content only when relevant to Organization.\n- Evaluate both samples using the same criteria, regardless of their presentation order.\n- Select the sample demonstrating stronger Organization, even if the difference is small.",
+      "name": "writing_trait",
+      "choices": [
+        {
+          "value": "SAMPLE_1",
+          "description": "SAMPLE_1 demonstrates stronger Organization."
+        },
+        {
+          "value": "SAMPLE_2",
+          "description": "SAMPLE_2 demonstrates stronger Organization."
+        }
+      ]
+    }
+  ]
+}

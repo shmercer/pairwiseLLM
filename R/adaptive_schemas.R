@@ -227,7 +227,8 @@ validate_failed_attempts_tbl <- function(failed_attempts) {
   .adaptive_check_type(failed_attempts$error_detail, "failed_attempts$error_detail", "character", is.character)
   .adaptive_check_phase(failed_attempts$phase, "failed_attempts$phase")
 
-  base_codes <- c("invalid_winner", "parse_error", "backend_missing_fields", "http_error", "timeout")
+  base_codes <- c("invalid_winner", "parse_error", "backend_missing_fields", "http_error", "timeout",
+                   .decision_error_codes)
   extra_codes <- getOption("pairwiseLLM.allowed_error_codes")
   if (!is.null(extra_codes)) {
     extra_codes <- as.character(extra_codes)

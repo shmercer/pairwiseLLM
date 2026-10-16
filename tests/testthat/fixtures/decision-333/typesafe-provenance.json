@@ -1,0 +1,28 @@
+{
+  "contract_version": "decision-contract-v1",
+  "provider": "typesafe",
+  "endpoint": "/v1/systemone",
+  "requested_model": "jev-1.13.0",
+  "decision_question": "writing_trait",
+  "decision_type": "choice",
+  "ID1": "A_with_vs_delimiter",
+  "ID2": "B:02",
+  "text1_sha256": "a4ba8700d8ef29c108d102c61efcaac2258b1a0b3baea04f8ed15f6dcdcae8d2",
+  "text2_sha256": "018e29a99dc30cb74f0ea29054e6c219fdf02840f7caf503fa406bc4ad85b417",
+  "evidence_sha256": "24cb3dd4909423ae6a484f834ef7ac2c11bbd4bbc95331e96d9f2198fc290a12",
+  "trait_name": "Organization",
+  "trait_description": "Logical sequencing and connections.\nExclude spelling and grammar.",
+  "decision_template_version": "decision_cj_v1",
+  "decision_template": "You are an expert writing assessor. Determine which writing sample demonstrates stronger performance on the specified writing trait.\n\nTRAIT: {TRAIT_NAME}\n\nTRAIT GUIDANCE:\n{TRAIT_DESCRIPTION}\n\nASSESSMENT RULES:\n- Consider the overall pattern of relevant strengths and limitations in each sample.\n- Judge only {TRAIT_NAME}, without compensating for strengths or weaknesses in other writing traits.\n- Do not prefer a sample merely because it is longer, takes a particular stance, or discusses more sophisticated or interesting subject matter. Consider content only when relevant to {TRAIT_NAME}.\n- Evaluate both samples using the same criteria, regardless of their presentation order.\n- Select the sample demonstrating stronger {TRAIT_NAME}, even if the difference is small.",
+  "decision_instructions": "You are an expert writing assessor. Determine which writing sample demonstrates stronger performance on the specified writing trait.\n\nTRAIT: Organization\n\nTRAIT GUIDANCE:\nLogical sequencing and connections.\nExclude spelling and grammar.\n\nASSESSMENT RULES:\n- Consider the overall pattern of relevant strengths and limitations in each sample.\n- Judge only Organization, without compensating for strengths or weaknesses in other writing traits.\n- Do not prefer a sample merely because it is longer, takes a particular stance, or discusses more sophisticated or interesting subject matter. Consider content only when relevant to Organization.\n- Evaluate both samples using the same criteria, regardless of their presentation order.\n- Select the sample demonstrating stronger Organization, even if the difference is small.",
+  "choices": [
+    {
+      "value": "SAMPLE_1",
+      "description": "SAMPLE_1 demonstrates stronger Organization."
+    },
+    {
+      "value": "SAMPLE_2",
+      "description": "SAMPLE_2 demonstrates stronger Organization."
+    }
+  ]
+}

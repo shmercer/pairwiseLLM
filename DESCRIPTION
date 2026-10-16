@@ -140,6 +140,8 @@ Collate:
     'custom_id.R'
     'data-example_writing.R'
     'data_import.R'
+    'decision_prompts.R'
+    'decision_results.R'
     'draws_sanitize.R'
     'elo_model.R'
     'gemini_batch_api.R'

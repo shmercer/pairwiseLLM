@@ -1,0 +1,13 @@
+You are an expert writing assessor. Determine which writing sample demonstrates stronger performance on the specified writing trait.
+
+TRAIT: {TRAIT_NAME}
+
+TRAIT GUIDANCE:
+{TRAIT_DESCRIPTION}
+
+ASSESSMENT RULES:
+- Consider the overall pattern of relevant strengths and limitations in each sample.
+- Judge only {TRAIT_NAME}, without compensating for strengths or weaknesses in other writing traits.
+- Do not prefer a sample merely because it is longer, takes a particular stance, or discusses more sophisticated or interesting subject matter. Consider content only when relevant to {TRAIT_NAME}.
+- Evaluate both samples using the same criteria, regardless of their presentation order.
+- Select the sample demonstrating stronger {TRAIT_NAME}, even if the difference is small.

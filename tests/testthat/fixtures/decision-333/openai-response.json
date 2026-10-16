@@ -1,0 +1,26 @@
+{
+  "model": "gpt-6-luna",
+  "answers": [
+    {
+      "type": "choice",
+      "name": "writing_trait",
+      "choice": "SAMPLE_2",
+      "confidence": 0.2,
+      "probabilities": [
+        {
+          "value": "SAMPLE_2",
+          "probability": 0.7
+        },
+        {
+          "value": "SAMPLE_1",
+          "probability": 0.3
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 12,
+    "output_tokens": 0,
+    "total_tokens": 12
+  }
+}
