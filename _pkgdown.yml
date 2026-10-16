@@ -225,6 +225,7 @@ reference:
       - submit_together_pairs_live
       - ollama_compare_pair_live
       - submit_ollama_pairs_live
+      - typesafe_compare_pair_live
   - title: "Provider-specific batch helpers"
     contents:
       - build_openai_batch_requests
