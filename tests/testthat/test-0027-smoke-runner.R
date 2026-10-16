@@ -63,18 +63,19 @@ testthat::test_that("smoke matrix covers the selected current model catalog", {
     stringsAsFactors = FALSE
   )
 
-  testthat::expect_equal(nrow(matrix), 97L)
-  testthat::expect_equal(sum(matrix$mode == "live"), 64L)
+  testthat::expect_equal(nrow(matrix), 99L)
+  testthat::expect_equal(sum(matrix$mode == "live"), 66L)
   testthat::expect_equal(sum(matrix$mode == "batch"), 33L)
 
   openai_models <- unique(matrix$model_id[
     matrix$backend == "openai" & matrix$catalog_status == "current"
   ])
-  testthat::expect_length(openai_models, 18L)
+  testthat::expect_length(openai_models, 19L)
   testthat::expect_false("gpt-6-astra" %in% openai_models)
   testthat::expect_false(any(grepl("-pro$", openai_models)))
 
-  baseline <- matrix$catalog_status %in% c("current", "preview")
+  baseline <- matrix$catalog_status %in% c("current", "preview") &
+    !matrix$endpoint %in% c("decisions", "systemone")
   live_models <- split(matrix$model_id[baseline & matrix$mode == "live"],
     matrix$backend[baseline & matrix$mode == "live"])
   batch_models <- split(matrix$model_id[baseline & matrix$mode == "batch"],
@@ -84,6 +85,41 @@ testthat::test_that("smoke matrix covers the selected current model catalog", {
   testthat::expect_setequal(batch_models$gemini, live_models$gemini)
   testthat::expect_false(any(matrix$backend %in% c("vertex", "together") &
     matrix$mode == "batch"))
+})
+
+testthat::test_that("decision smoke selection is offline and excludes generative controls", {
+  root <- normalizePath(testthat::test_path("..", ".."), winslash = "/")
+  helper <- file.path(root, "inst", "scripts", "smoke_model_compatibility_helpers.R")
+  skip_if_not(file.exists(helper), "Repository smoke helpers unavailable")
+  env <- new.env(parent = globalenv())
+  source(helper, local = env)
+  matrix <- read.csv(file.path(root, "inst", "extdata", "model_smoke_matrix.csv"))
+  selected <- matrix[matrix$endpoint %in% c("decisions", "systemone"), ]
+  expect_equal(nrow(selected), 2L)
+  expect_identical(selected$model_id, c("gpt-6-luna", "jev-1.13.0"))
+  expect_identical(selected$mode, c("live", "live"))
+  expect_silent(env$validate_smoke_matrix(selected))
+  wrong <- selected
+  wrong$mode[2] <- "batch"
+  expect_error(env$validate_smoke_matrix(wrong), "live requests only")
+  for (i in seq_len(nrow(selected))) {
+    expect_identical(env$profile_args(selected$request_profile[i]), list(endpoint = selected$endpoint[i]))
+    request <- decision_333_request(selected$backend[i])
+    good <- pairwiseLLM:::.parse_decision_response(decision_333_response(selected$backend[i]), request)
+    bad <- pairwiseLLM:::.parse_decision_response(decision_333_response(selected$backend[i], p = c(.8, .2)), request)
+    expect_identical(env$outcome_from_results(good)$status, "passed")
+    expect_identical(env$outcome_from_results(bad)$status, "failed-error-row")
+  }
+  # Listing exits before opt-in, credential lookup, package loading or HTTP.
+  output <- withr::with_dir(root, system2(file.path(R.home("bin"), "Rscript"), shQuote(c(
+    file.path(root, "inst", "scripts", "smoke_model_compatibility.R"),
+    "--list=true", "--mode=live", "--providers=openai,typesafe",
+    "--profiles=openai_decisions_default,typesafe_systemone_default"
+  )), stdout = TRUE, stderr = TRUE, env = "PAIRWISELLM_RUN_PROVIDER_SMOKE=false"))
+  expect_null(attr(output, "status"))
+  expect_true(any(grepl("gpt-6-luna", output, fixed = TRUE)))
+  expect_true(any(grepl("jev-1.13.0", output, fixed = TRUE)))
+  expect_false(any(grepl("responses|chat.completions|gpt-5", output)))
 })
 
 testthat::test_that("batch orchestration submits all jobs before grouped polling", {
@@ -207,6 +243,11 @@ testthat::test_that("promotion blocks incomplete runs and builds tested flags", 
     official_catalog_url = "https://example.com/retired",
     stringsAsFactors = FALSE
   )
+  untouched <- existing
+  untouched$model_id <- "dated-decision-model"
+  untouched$status <- "tested-current"
+  untouched$endpoint <- "systemone"
+  existing <- rbind(existing, untouched)
   registry <- build_compatibility_registry(results, existing)
   openai <- registry[registry$model_id == "model-a", , drop = FALSE]
   together <- registry[registry$model_id == "model-b", , drop = FALSE]
@@ -217,6 +258,10 @@ testthat::test_that("promotion blocks incomplete runs and builds tested flags", 
   testthat::expect_false(together$live_tested)
   testthat::expect_identical(together$status, "unverified")
   testthat::expect_true("retired-model" %in% registry$model_id)
+  preserved <- registry[registry$model_id == "dated-decision-model", names(untouched)]
+  rownames(preserved) <- NULL
+  rownames(untouched) <- NULL
+  testthat::expect_identical(preserved, untouched)
 })
 
 testthat::test_that("promotion updates dated evidence references", {
@@ -277,5 +322,7 @@ testthat::test_that("smoke resume restores authoritative static metadata", {
   resumed <- utils::read.csv(output_path, stringsAsFactors = FALSE)
   testthat::expect_identical(resumed$package_version, runtime_version)
   testthat::expect_true(all(grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", resumed$test_date)))
-  testthat::expect_true(all(resumed$catalog_checked_on == "2026-09-05"))
+  matrix <- read.csv(file.path(root, "inst", "extdata", "model_smoke_matrix.csv"))
+  testthat::expect_identical(resumed$catalog_checked_on,
+                             matrix$catalog_checked_on[match(resumed$test_id, matrix$test_id)])
 })

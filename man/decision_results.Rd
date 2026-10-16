@@ -85,7 +85,11 @@ remain malformed rather than being guessed from prose.
 Only normalized successful \code{results} are modeling evidence; retained failed
 choices are diagnostics. Existing BT/Bayesian/adaptive code is unchanged and
 does not consume probabilities as weights, fractional wins, or extra outcomes.
-Raw responses may contain sensitive provider content. Do not log them publicly.
+Raw failed responses remain in memory even with \code{include_raw = FALSE}.
+Saving or serializing the complete returned object can persist sensitive
+provider content, including repeated sample text. Bulk default checkpoints
+and ordinary exports exclude raw responses; see \link{decision_bulk}. Do not log
+complete failure objects publicly.
 }
 \examples{
 request <- pairwiseLLM:::.build_decision_request(

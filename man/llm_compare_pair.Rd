@@ -153,6 +153,13 @@ For the \code{"anthropic"}, \code{"gemini"},
 \code{"vertex"}, \code{"together"}, and \code{"ollama"} backends, \code{endpoint} is
 currently ignored and the default live API for that provider is used.
 }
+\section{Decision failure retention}{
+
+Decision failures may retain raw provider responses in memory even when
+\code{include_raw = FALSE}; saving the complete return value may persist sensitive
+sample text. See \link{decision_bulk} for default checkpoint/export retention.
+}
+
 \examples{
 \dontrun{
 # Requires an API key for the chosen cloud backend. For OpenAI, set

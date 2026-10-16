@@ -31,6 +31,11 @@ Batch workflows can suit larger fixed-pair jobs when turnaround is flexible. The
 - Continue remotely after submission even if your R session ends
 - Can be polled and resumed even if your local R session ends  
 
+OpenAI Decisions and TypeSafe Jev support live multi-pair collection through
+`submit_llm_pairs()`, including concurrency and resumption, but cannot enter
+these provider-managed Batch workflows. See the
+[decision recovery guide](provider-controls-and-recovery.html#decision-models-save-resume-and-inspect).
+
 Supported Batch API providers:
 
 - **OpenAI** (batch pipeline: `run_openai_batch_pipeline()`)

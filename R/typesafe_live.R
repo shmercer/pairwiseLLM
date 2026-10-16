@@ -108,9 +108,6 @@
 #' compression, long-context/image opt-in, or managed Batch is implemented here.
 #' Use [submit_typesafe_pairs_live()] for resumable live bulk collection. The
 #' provider enforces body/context limits.
-#' This feature has provider-free validation, not an authorized live availability
-#' check. Model probabilities do not establish validated educational assessment
-#' accuracy and do not become BT/adaptive weights, fractional wins, or judgments.
 #'
 #' Sample text is sent to TypeSafe. Keys are omitted from diagnostics. Request
 #' bodies and raw responses can contain private text; sample-free provenance

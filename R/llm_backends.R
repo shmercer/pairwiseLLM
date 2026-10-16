@@ -111,6 +111,11 @@
 #'   probabilities never change binary BT/adaptive winner semantics. See
 #'   [decision_bulk] for bulk execution; managed Batch remains unsupported.
 #'
+#' @section Decision failure retention:
+#' Decision failures may retain raw provider responses in memory even when
+#' `include_raw = FALSE`; saving the complete return value may persist sensitive
+#' sample text. See [decision_bulk] for default checkpoint/export retention.
+#'
 #' @return A tibble with one row and the same columns as the underlying
 #'   backend-specific live helper (for example [openai_compare_pair_live()]
 #'   for `"openai"`). All backends are intended to return a compatible

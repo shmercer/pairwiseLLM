@@ -18,8 +18,8 @@ This article explains the package's reasoning/thinking controls and how to recov
 provider failures. Model availability changes independently of package behavior. Consult
 [Backends and Tested Model Configurations](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html)
 for the dated registry rather
-than treating examples here as a current model catalog. The release registry used here was tested
-on 2026-09-05 with pairwiseLLM 1.3.1.
+than treating examples here as a current model catalog. The registry preserves dated generative tests from 2026-09-05 and decision-model
+tests from 2026-10-16; a past success does not guarantee present availability.
 
 ## Start with the symptom
 
@@ -42,13 +42,13 @@ chosen model or study needs them.
 Omitted `temperature` and `top_p` leave model/provider sampling defaults in effect;
 explicit values are forwarded subject to endpoint constraints. A `service_tier`
 is a provider-specific processing option, not a portable speed or price promise.
-OpenAI live requests accept `"standard"`/`"default"`, `"auto"`, `"flex"`, and
+OpenAI generative live requests accept `"standard"`/`"default"`, `"auto"`, `"flex"`, and
 `"priority"`; explicit standard/default sends `"default"`. Gemini Developer API
 and Vertex use `"standard"`, `"flex"`, or `"priority"`, through different request
 surfaces. Availability is provider- and model-dependent. See `llm_compare_pair()`
 and the selected provider's help for supported arguments.
 
-For OpenAI, `store` controls response storage; for Gemini Developer API it controls
+For OpenAI generative endpoints, `store` controls response storage; for Gemini Developer API it controls
 request logging. `NULL` omits the setting, preserving provider/project defaults.
 Neither `store = FALSE` nor omission establishes a general zero-retention policy.
 For OpenAI Batch storage, output limits, and separate error files, see the
@@ -58,7 +58,9 @@ For OpenAI Batch storage, output limits, and separate error files, see the
 
 | Backend | Public controls | Important constraint |
 |---|---|---|
-| OpenAI | `reasoning`, `include_thoughts`, endpoint sampling controls | Reasoning support depends on model and endpoint; unsupported combinations abort during request normalization. |
+| OpenAI generative | `reasoning`, `include_thoughts`, endpoint sampling controls | Reasoning support depends on model and endpoint; unsupported combinations abort during request normalization. |
+| OpenAI Decisions | `decision_template`, `prompt_cache_options` | Live only; generative sampling, reasoning, storage and tier controls are rejected. |
+| TypeSafe Jev | `decision_template` | Live only; sampling, reasoning, caching, storage and tier controls are unsupported. |
 | Anthropic | `reasoning = "none"` or `"enabled"`, `include_thoughts`, `thinking_budget_tokens` | Extended thinking requires `temperature = 1` and `1024 <= thinking_budget_tokens < max_tokens`. Claude 5 adaptive thinking is not implemented or advertised. |
 | Gemini Developer API | `thinking_level`, `include_thoughts`, `service_tier` | Accepted thinking levels depend on the detected model family; `service_tier` is `NULL`/`"standard"`, `"flex"`, or `"priority"`. |
 | Vertex | `thinking_level` or `thinking_budget`, `include_thoughts`, `service_tier` | Use the control supported by the selected Gemini family; Vertex batch is not implemented. |
@@ -128,13 +130,56 @@ call. Preserve the saved file, retry only `failed_pairs`, and re-bind results af
 the retry did not duplicate successful `custom_id` values. A returned HTTP success is not a valid
 judgment unless parsing also produced a winner belonging to the submitted pair.
 
-For OpenAI Decisions and TypeSafe Jev, keep the `.checkpoint` directory beside
-`save_path`: it holds completed decisions and retry history. Repeating the same
-call resumes matching work without repeating committed decisions. Requests left
-in flight may have incurred charges; one automatic reissue is allowed across
-restarts, and `execution_control = list(retry_ambiguous = FALSE)` disables it.
-Inspect all three returned components before modeling. See
-[`decision_bulk`](../reference/decision_bulk.html) for configuration and recovery details.
+### Decision models: save, resume, and inspect
+
+Use `submit_llm_pairs()` with `backend = "openai", endpoint = "decisions",
+model = "gpt-6-luna"`, or `backend = "typesafe", model = "jev-1.13.0"`.
+Configure `OPENAI_API_KEY` or `TYPESAFE_API_KEY`; explicit `api_key` values take
+precedence. Omit generative prompts and controls, including explicit `NULL`
+settings for unsupported options. See the [prompts guide](data-and-prompts.html#decision-instructions-and-probabilities)
+for custom traits and decision instructions.
+
+```{r decision-resume, eval=FALSE}
+# Requires TYPESAFE_API_KEY and incurs charges for unresolved work.
+result <- submit_llm_pairs(
+  pairs, backend = "typesafe", model = "jev-1.13.0",
+  trait_name = trait$name, trait_description = trait$description,
+  save_path = "jev-decisions.csv", parallel = FALSE,
+  execution_control = list(requests_per_minute = 30, retry_ambiguous = FALSE)
+)
+# Repeat this same call after interruption; preserve the .checkpoint directory.
+result$failed_pairs
+result$failed_attempts
+```
+
+Saved decision runs require optional `filelock`. The `.checkpoint` directory
+beside `save_path` is the authoritative record; CSV alone cannot resume a run.
+Keep it with its export. Repeating the same call reuses committed decisions;
+changing samples, presentation order, trait, instructions, model, workset, or
+OpenAI cache controls requires a separate save path. Corrupt checkpoints stop
+before calls; preserve them for inspection instead of editing them. Prefer a
+local filesystem with reliable locking and atomic renames. Cloud-synchronized
+folders do not establish cross-machine locking or power-loss durability.
+
+Sequential calls need no asynchronous packages. Concurrent collection uses
+optional `promises` and `later` with `parallel = TRUE, workers = 4`; workers
+limit simultaneous requests. Set request limits for your account and workload;
+token limiting additionally needs your token estimates, including an output
+allowance. These controls cover one run, not all activity on the account, and
+token reservations are estimates. Retry budgets and recent reservations survive
+restart. Temporary errors receive bounded retries; invalid decisions stay
+unresolved. In-flight requests may already have incurred charges. By default,
+one ambiguous reissue is allowed across restarts; the example disables it.
+Checkpoints do not guarantee exactly-once provider execution.
+
+OpenAI Decisions uses its own `prompt_cache_options`, separate from generative
+Batch caching controls. In this helper, `list(mode = "explicit")` disables
+caching because no explicit breakpoints are added. Omission uses implicit
+caching; caching does not guarantee zero retention. TypeSafe exposes no caching
+or retention control here. Full limits and recovery details are in
+[`decision_bulk`](../reference/decision_bulk.html) and the provider helpers.
+Compare reversal probabilities after mapping positions back to the same sample
+ID, and inspect both probabilities alongside the selected winner.
 
 ## Batch recovery
 
@@ -183,7 +228,10 @@ server, do not use it when another process may need those models.
 ## Privacy and retention
 
 Cloud requests transmit sample and prompt text to the selected provider. Raw responses and thoughts
-may repeat submitted text and increase storage. Set `include_raw = TRUE` only under an appropriate
+may repeat submitted text and increase storage. In-memory decision failure objects
+may retain raw responses even with `include_raw = FALSE`; saving an entire
+returned object can persist them and retained source text columns. Default decision checkpoints and ordinary
+exports omit raw responses. See `decision_bulk` for detailed retention rules. Set `include_raw = TRUE` only under an appropriate
 privacy and retention policy, and avoid placing credentials or raw responses in registries,
 vignettes, bug reports, or version control.
 

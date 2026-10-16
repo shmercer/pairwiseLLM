@@ -15,7 +15,16 @@ test_that("model compatibility registry has a stable unique schema", {
   expect_false(anyDuplicated(registry[c(
     "backend", "model_id", "endpoint", "reasoning_mode", "test_date"
   )]) > 0L)
-  expect_true(all(registry$package_version == "1.3.1"))
+  decision <- registry$endpoint %in% c("decisions", "systemone")
+  expect_true(all(registry$package_version[!decision] == "1.3.1"))
+  qualified <- registry[decision, ]
+  expect_equal(nrow(qualified), 2L)
+  expect_setequal(paste(qualified$backend, qualified$model_id, qualified$endpoint),
+                  c("openai gpt-6-luna decisions", "typesafe jev-1.13.0 systemone"))
+  expect_true(all(qualified$package_version == "1.6.0"))
+  expect_true(all(qualified$test_date == "2026-10-16"))
+  expect_identical(as.logical(qualified$live_tested), c(TRUE, TRUE))
+  expect_identical(as.logical(qualified$batch_tested), c(FALSE, FALSE))
   expect_true(all(grepl("^https://", registry$official_catalog_url)))
 })
 
@@ -31,14 +40,14 @@ test_that("provider smoke matrix covers live and implemented batch surfaces", {
   ))
   expect_false(anyDuplicated(matrix$test_id) > 0L)
   expect_setequal(unique(matrix$backend[matrix$mode == "live"]), c(
-    "openai", "anthropic", "gemini", "vertex", "together"
+    "openai", "anthropic", "gemini", "vertex", "together", "typesafe"
   ))
   expect_setequal(unique(matrix$backend[matrix$mode == "batch"]), c(
     "openai", "anthropic", "gemini"
   ))
   expect_true(all(matrix$env_var %in% c(
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
-    "VERTEX_API_KEY", "TOGETHER_API_KEY"
+    "VERTEX_API_KEY", "TOGETHER_API_KEY", "TYPESAFE_API_KEY"
   )))
 })
 
@@ -61,7 +70,8 @@ test_that("dated provider smoke evidence is internally consistent", {
   matrix <- utils::read.csv(matrix_path, stringsAsFactors = FALSE)
 
   expect_false(anyDuplicated(evidence$test_id) > 0L)
-  expect_setequal(evidence$test_id, matrix$test_id)
+  historical <- matrix[matrix$catalog_checked_on == "2026-09-05", ]
+  expect_setequal(evidence$test_id, historical$test_id)
   expect_true(all(evidence$status %in% c("passed", "failed-error-row", "failed-remote")))
   passed <- evidence$status == "passed"
   expect_true(all(evidence$status_code[passed] == 200L))
