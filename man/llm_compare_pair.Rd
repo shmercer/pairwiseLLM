@@ -14,7 +14,7 @@ llm_compare_pair(
   trait_description,
   prompt_template = set_prompt_template(),
   backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
-  endpoint = c("chat.completions", "responses"),
+  endpoint = c("chat.completions", "responses", "decisions"),
   api_key = NULL,
   include_raw = FALSE,
   ...
@@ -45,7 +45,8 @@ such as \code{"deepseek-ai/DeepSeek-V4-Flash-0731"}. For
 \item{trait_description}{Full-text definition of the trait.}
 
 \item{prompt_template}{Prompt template string, typically from
-\code{\link[=set_prompt_template]{set_prompt_template()}}.}
+\code{\link[=set_prompt_template]{set_prompt_template()}}. For Decisions, omit or use \code{NULL}; custom decision
+instructions belong in \code{decision_template} in \code{...}.}
 
 \item{backend}{Character scalar indicating which LLM provider to use.
 One of \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"vertex"}, \code{"together"},
@@ -53,7 +54,7 @@ or \code{"ollama"}.}
 
 \item{endpoint}{Character scalar specifying which endpoint family to use
 for backends that support multiple live APIs. For the \code{"openai"} backend
-this must be one of \code{"chat.completions"} or \code{"responses"}, matching
+this must be one of \code{"chat.completions"}, \code{"responses"}, or \code{"decisions"}, matching
 \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}. For \code{"anthropic"}, \code{"gemini"}, \code{"vertex"},
 \code{"together"}, and \code{"ollama"}, this argument is currently ignored.}
 
@@ -81,7 +82,7 @@ are forwarded to \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live
 Vertex each validate and encode it using their own request surfaces. For
 Gemini Developer API and Vertex, supported public values are \code{"standard"}
 (default / omitted), \code{"flex"}, and \code{"priority"}.
-For both OpenAI live endpoints, \code{"standard"} and \code{"default"} send
+For both OpenAI generative live endpoints, \code{"standard"} and \code{"default"} send
 \code{"default"}; \code{"auto"}, \code{"flex"}, and \code{"priority"} are sent unchanged.
 Omission or \code{NULL} allows OpenAI's project-configured \code{"auto"} behavior.
 Model/tier availability is validated by OpenAI.
@@ -89,7 +90,11 @@ Model/tier availability is validated by OpenAI.
 For OpenAI and Gemini Developer API, \code{store} accepts \code{NULL}, \code{TRUE}, or
 \code{FALSE}. It controls OpenAI response storage or Gemini request logging;
 omission or \code{NULL} preserves provider/project defaults. See the selected
-provider helper for details; this is not a cross-provider retention policy.}
+provider helper for details; this is not a cross-provider retention policy.
+Decisions accepts only \code{pair_uid}, \code{decision_template}, and
+\code{prompt_cache_options} in \code{...}; generative, storage, and tier controls
+fail before HTTP. Use \code{model = "gpt-6-luna"}. Its omitted prompt is never
+replaced with the generative default. Bulk Decisions execution is deferred.}
 }
 \value{
 A tibble with one row and the same columns as the underlying
@@ -125,8 +130,12 @@ including:
 }
 
 For the \code{"openai"} backend, the \code{endpoint} argument controls whether
-the Chat Completions API (\code{"chat.completions"}) or the Responses API
-(\code{"responses"}) is used. For the \code{"anthropic"}, \code{"gemini"},
+the Chat Completions API (\code{"chat.completions"}), Responses API
+(\code{"responses"}), or opt-in Decisions API (\code{"decisions"}) is used.
+Decisions uses the approved decision instructions and retains the complete
+binary probability distribution; see \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}} for its
+supported controls, return fields, validation, and errors.
+For the \code{"anthropic"}, \code{"gemini"},
 \code{"vertex"}, \code{"together"}, and \code{"ollama"} backends, \code{endpoint} is
 currently ignored and the default live API for that provider is used.
 }

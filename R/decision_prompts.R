@@ -44,7 +44,8 @@ ASSESSMENT RULES:
 #'
 #' Internal foundation for single-trait binary decision endpoints. This helper
 #' constructs a request without HTTP, credentials, retries, persistence, or model
-#' availability checks. Existing live/batch dispatchers do not call it yet.
+#' availability checks. Live decision helpers validate its body before HTTP;
+#' managed Batch and bulk decision execution are not supported.
 #'
 #' @param ID1,ID2 Distinct, nonempty character scalar sample IDs, in presentation
 #'   order. IDs may recur across different pairs; each scheduled occurrence must
@@ -94,6 +95,9 @@ ASSESSMENT RULES:
 #' scientific fingerprint inputs. Future resumption must verify both pair UID and
 #' fingerprint, and inspect resolved-model metadata when aliases are used; this
 #' helper does not implement resumption or guarantee provider reproducibility.
+#' A fingerprint is an identity/integrity check, not an authenticated signature.
+#' Live transports must independently check the body against this provenance
+#' and check the final serialized payload before every HTTP attempt.
 #'
 #' The body contains private sample text and must not be logged publicly.
 #' Provenance contains text hashes, not sample contents, but custom trait/template
@@ -178,4 +182,88 @@ ASSESSMENT RULES:
   }
   list(body = body, pair_uid = pair_uid, provenance = provenance,
        request_fingerprint = .decision_fingerprint(provenance))
+}
+
+.decision_request_error <- function() {
+  rlang::abort(
+    "Decision request integrity check failed; use an unmodified decision request.",
+    class = "pairwiseLLM_decision_request_error"
+  )
+}
+
+# Validate independently of the builder and its mutable output. Expected fields
+# are for comparison only; the supplied scientific body is never repaired.
+# Both existing provider representations share the same evidence/provenance checks.
+.validate_decision_request <- function(request, body = request$body,
+                                        provider = NULL, model = NULL) {
+  valid <- tryCatch({
+    if (!.decision_object(request) || !.decision_object(request$provenance) ||
+        !.decision_string(request$pair_uid) || !.decision_object(body) ||
+        !identical(request$request_fingerprint,
+                   .decision_fingerprint(request$provenance))) {
+      .decision_request_error()
+    }
+    p <- request$provenance
+    if ((!is.null(provider) && !identical(p$provider, provider)) ||
+        (!is.null(model) && !identical(p$requested_model, model))) {
+      .decision_request_error()
+    }
+    fields <- c("contract_version", "provider", "endpoint", "requested_model",
+                "decision_question", "decision_type", "ID1", "ID2",
+                "text1_sha256", "text2_sha256", "evidence_sha256", "trait_name",
+                "trait_description", "decision_template_version", "decision_template",
+                "decision_instructions", "choices")
+    if (!identical(names(p), fields) ||
+        !all(vapply(p[setdiff(fields, "choices")], .decision_string, logical(1L))) ||
+        !identical(p$contract_version, "decision-contract-v1") ||
+        !p$provider %in% c("openai", "typesafe") || identical(p$ID1, p$ID2) ||
+        !identical(p$decision_question, "writing_trait") || !identical(p$decision_type, "choice")) {
+      .decision_request_error()
+    }
+    openai <- p$provider == "openai"
+    endpoint <- if (openai) "/v1/decisions" else "/v1/systemone"
+    field <- if (openai) "input" else "state"
+    template <- p$decision_template
+    required <- c("{TRAIT_NAME}", "{TRAIT_DESCRIPTION}")
+    version <- if (identical(template, .decision_cj_v1)) "decision_cj_v1" else {
+      paste0("custom-sha256-", .decision_sha256(template))
+    }
+    if (!identical(p$endpoint, endpoint) ||
+        !all(vapply(required, grepl, logical(1L), x = template, fixed = TRUE)) ||
+        grepl("\\{SAMPLE_[12]\\}|<\\s*/?\\s*BETTER_SAMPLE", template, ignore.case = TRUE) ||
+        !identical(p$decision_template_version, version) ||
+        !identical(p$decision_instructions,
+                   .decision_render(template, p$trait_name, p$trait_description)) ||
+        !.decision_string(body[[field]])) {
+      .decision_request_error()
+    }
+    evidence <- jsonlite::parse_json(body[[field]], simplifyVector = FALSE)
+    if (!.decision_object(evidence) ||
+        !identical(names(evidence), c("SAMPLE_1", "SAMPLE_2")) ||
+        !all(vapply(evidence, .decision_string, logical(1L), allow_empty = TRUE)) ||
+        !identical(p$text1_sha256, .decision_sha256(evidence$SAMPLE_1)) ||
+        !identical(p$text2_sha256, .decision_sha256(evidence$SAMPLE_2)) ||
+        !identical(p$evidence_sha256, .decision_sha256(body[[field]]))) {
+      .decision_request_error()
+    }
+    labels <- c("SAMPLE_1", "SAMPLE_2")
+    choices <- lapply(labels, function(label) {
+      list(value = label, description = paste0(label, " demonstrates stronger ", p$trait_name, "."))
+    })
+    question <- list(type = p$decision_type, instructions = p$decision_instructions)
+    if (openai) {
+      question$name <- p$decision_question
+      question$choices <- p$choices
+      questions <- list(question)
+    } else {
+      question$criteria <- stats::setNames(lapply(choices, `[[`, "description"), labels)
+      questions <- stats::setNames(list(question), p$decision_question)
+    }
+    expected <- list(model = p$requested_model)
+    expected[[field]] <- body[[field]]
+    expected$questions <- questions
+    identical(p$choices, choices) && identical(body, expected)
+  }, error = function(e) FALSE)
+  if (!isTRUE(valid)) .decision_request_error()
+  invisible(NULL)
 }

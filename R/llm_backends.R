@@ -26,8 +26,12 @@
 #' }
 #'
 #' For the `"openai"` backend, the \code{endpoint} argument controls whether
-#' the Chat Completions API (\code{"chat.completions"}) or the Responses API
-#' (\code{"responses"}) is used. For the `"anthropic"`, `"gemini"`,
+#' the Chat Completions API (\code{"chat.completions"}), Responses API
+#' (\code{"responses"}), or opt-in Decisions API (\code{"decisions"}) is used.
+#' Decisions uses the approved decision instructions and retains the complete
+#' binary probability distribution; see [openai_compare_pair_live()] for its
+#' supported controls, return fields, validation, and errors.
+#' For the `"anthropic"`, `"gemini"`,
 #' `"vertex"`, `"together"`, and `"ollama"` backends, \code{endpoint} is
 #' currently ignored and the default live API for that provider is used.
 #'
@@ -48,13 +52,14 @@
 #'   `"Overall Quality"`).
 #' @param trait_description Full-text definition of the trait.
 #' @param prompt_template Prompt template string, typically from
-#'   [set_prompt_template()].
+#'   [set_prompt_template()]. For Decisions, omit or use `NULL`; custom decision
+#'   instructions belong in `decision_template` in `...`.
 #' @param backend Character scalar indicating which LLM provider to use.
 #'   One of `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`,
 #'   or `"ollama"`.
 #' @param endpoint Character scalar specifying which endpoint family to use
 #'   for backends that support multiple live APIs. For the `"openai"` backend
-#'   this must be one of `"chat.completions"` or `"responses"`, matching
+#'   this must be one of `"chat.completions"`, `"responses"`, or `"decisions"`, matching
 #'   [openai_compare_pair_live()]. For `"anthropic"`, `"gemini"`, `"vertex"`,
 #'   `"together"`, and `"ollama"`, this argument is currently ignored.
 #' @param api_key Optional API key for the selected backend. If `NULL`, the
@@ -79,7 +84,7 @@
 #'   Vertex each validate and encode it using their own request surfaces. For
 #'   Gemini Developer API and Vertex, supported public values are `"standard"`
 #'   (default / omitted), `"flex"`, and `"priority"`.
-#'   For both OpenAI live endpoints, `"standard"` and `"default"` send
+#'   For both OpenAI generative live endpoints, `"standard"` and `"default"` send
 #'   `"default"`; `"auto"`, `"flex"`, and `"priority"` are sent unchanged.
 #'   Omission or `NULL` allows OpenAI's project-configured `"auto"` behavior.
 #'   Model/tier availability is validated by OpenAI.
@@ -88,6 +93,10 @@
 #'   `FALSE`. It controls OpenAI response storage or Gemini request logging;
 #'   omission or `NULL` preserves provider/project defaults. See the selected
 #'   provider helper for details; this is not a cross-provider retention policy.
+#'   Decisions accepts only `pair_uid`, `decision_template`, and
+#'   `prompt_cache_options` in `...`; generative, storage, and tier controls
+#'   fail before HTTP. Use `model = "gpt-6-luna"`. Its omitted prompt is never
+#'   replaced with the generative default. Bulk Decisions execution is deferred.
 #'
 #' @return A tibble with one row and the same columns as the underlying
 #'   backend-specific live helper (for example [openai_compare_pair_live()]
@@ -191,7 +200,7 @@ llm_compare_pair <- function(
   trait_description,
   prompt_template = set_prompt_template(),
   backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
-  endpoint = c("chat.completions", "responses"),
+  endpoint = c("chat.completions", "responses", "decisions"),
   api_key = NULL,
   include_raw = FALSE,
   ...
@@ -218,6 +227,7 @@ llm_compare_pair <- function(
 
   if (backend == "openai") {
     endpoint <- match.arg(endpoint)
+    if (endpoint == "decisions" && missing(prompt_template)) prompt_template <- NULL
 
     return(
       openai_compare_pair_live(
@@ -545,6 +555,9 @@ submit_llm_pairs <- function(
   }
 
   if (backend == "openai") {
+    if (identical(endpoint, "decisions")) {
+      rlang::abort("Bulk Decisions execution is not supported; use `llm_compare_pair()` for a single pair.")
+    }
     endpoint <- match.arg(endpoint)
 
     return(

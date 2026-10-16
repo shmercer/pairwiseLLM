@@ -1,3 +1,28 @@
+test_that("detailed token usage is exact, optional and validated without partial matching", {
+  request <- decision_333_request()
+  response <- decision_333_response()
+  response$usage <- list(input_tokens_details = list(cached_tokens = 0, cache_write_tokens = 12),
+                         output_tokens_details = list(reasoning_tokens = 0))
+  row <- pairwiseLLM:::.parse_decision_response(response, request)
+  expect_true(is.na(row$decision_error_code))
+  expect_true(all(is.na(row[c("prompt_tokens", "completion_tokens", "total_tokens")])))
+  expect_identical(c(row$prompt_cached_tokens, row$prompt_cache_write_tokens, row$reasoning_tokens), c(0, 12, 0))
+  response$usage <- list(input_tokens_details = list(cache_write_tokens = 3))
+  row <- pairwiseLLM:::.parse_decision_response(response, request)
+  expect_identical(row$prompt_cache_write_tokens, 3)
+  expect_true(is.na(row$prompt_cached_tokens))
+  expect_true(is.na(row$reasoning_tokens))
+  for (group in c("input_tokens_details", "output_tokens_details")) {
+    for (value in list(1, "invalid", list(cached_tokens = -1, reasoning_tokens = -1),
+                       list(cached_tokens = .5, reasoning_tokens = .5),
+                       list(cached_tokens = "2", reasoning_tokens = "2"))) {
+      response$usage <- stats::setNames(list(value), group)
+      expect_identical(pairwiseLLM:::.parse_decision_response(response, request)$decision_error_code,
+                       "malformed_decision")
+    }
+  }
+})
+
 test_that("provider fixtures preserve selections, complete distributions, models and usage", {
   for (provider in c("openai", "typesafe")) {
     request <- decision_333_request(provider)

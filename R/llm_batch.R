@@ -4,6 +4,9 @@
 #' `llm_submit_pairs_batch()` is a backend-agnostic front-end for running
 #' provider batch pipelines (OpenAI, Anthropic, Gemini). Vertex, Together.ai,
 #' and Ollama are supported only for live comparisons in this series.
+#' OpenAI `endpoint = "decisions"` is not a managed Batch endpoint and is
+#' rejected before entering a provider pipeline. Use [llm_compare_pair()] for
+#' single-pair Decisions; bulk decision execution is deferred.
 #'
 #' It mirrors [submit_llm_pairs()] but uses the provider batch APIs under the
 #' hood via `run_openai_batch_pipeline()`, `run_anthropic_batch_pipeline()`,
@@ -219,6 +222,9 @@ llm_submit_pairs_batch <- function(
   dot_list <- list(...)
 
   if (backend == "openai") {
+    if (identical(dot_list$endpoint, "decisions")) {
+      rlang::abort("The Decisions endpoint is not supported by managed Batch; use `llm_compare_pair()` for a single live pair.")
+    }
     reasoning <- if ("reasoning" %in% names(dot_list)) {
       dot_list$reasoning
     } else {

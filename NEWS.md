@@ -1,5 +1,12 @@
 # pairwiseLLM (development version)
 
+* Single-pair OpenAI comparisons now support opt-in `endpoint = "decisions"`
+  with `gpt-6-luna` (#334). The frozen decision instructions, selected winner,
+  both probabilities, independent confidence, usage and provenance are retained.
+  Scientific request bodies and final serialized bytes are checked before HTTP,
+  including retries. Unsupported controls fail early; existing generative
+  endpoints are unchanged. Managed Batch and bulk Decisions remain unsupported.
+
 * Internal decision-model foundations freeze the approved `decision_cj_v1`
   instructions and construct equivalent offline OpenAI Decisions/TypeSafe Jev
   requests (#333). Parsers retain both probabilities, the selected winner,

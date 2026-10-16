@@ -50,8 +50,9 @@ NULL
 #'
 #' @keywords internal
 #' @noRd
-.openai_req_perform <- function(req) {
-  .retry_httr2_request(req)
+.openai_req_perform <- function(req, validate_request = NULL) {
+  if (is.null(validate_request)) return(.retry_httr2_request(req))
+  .retry_httr2_request(req, validate_request = validate_request)
 }
 
 #' Internal: Parse JSON body from an OpenAI response
