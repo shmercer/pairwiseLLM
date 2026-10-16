@@ -204,6 +204,7 @@ Other live backends:
 [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
 [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
 [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
+[`typesafe_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/typesafe_compare_pair_live.md),
 [`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)
 
 ## Examples

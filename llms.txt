@@ -600,6 +600,8 @@ to go from features to validated models and starting scores.
   : Live Ollama comparison for a single pair of samples
 - [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
   : Live Ollama comparisons for a tibble of pairs
+- [`typesafe_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/typesafe_compare_pair_live.md)
+  : Live TypeSafe Jev comparison for a single pair of samples
 
 ## Provider-specific batch helpers
 

@@ -2,9 +2,9 @@
 
 `llm_compare_pair()` is a thin wrapper around backend-specific
 comparison functions. It currently supports the `"openai"`,
-`"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, and `"ollama"`
-backends and forwards the call to the appropriate live comparison
-helper:
+`"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, `"ollama"`, and
+`"typesafe"` backends and forwards the call to the appropriate live
+comparison helper:
 
 - `"openai"` →
   [`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md)
@@ -24,6 +24,9 @@ helper:
 - `"ollama"` →
   [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
 
+- `"typesafe"` →
+  [`typesafe_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/typesafe_compare_pair_live.md)
+
 ## Usage
 
 ``` r
@@ -36,7 +39,8 @@ llm_compare_pair(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama",
+    "typesafe"),
   endpoint = c("chat.completions", "responses", "decisions"),
   api_key = NULL,
   include_raw = FALSE,
@@ -73,7 +77,11 @@ llm_compare_pair(
   use Together.ai model identifiers such as
   `"deepseek-ai/DeepSeek-V4-Flash-0731"`. For `"ollama"`, use a local
   model name known to the Ollama server (for example
-  `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`).
+  `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`). For
+  `"typesafe"`, omission defaults to `"jev-1.13.0"`; explicit versioned
+  Jev identifiers and documented aliases are accepted without an
+  availability guarantee or automatic fallback. Other backends still
+  require `model`.
 
 - trait_name:
 
@@ -88,13 +96,14 @@ llm_compare_pair(
   Prompt template string, typically from
   [`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md).
   For Decisions, omit or use `NULL`; custom decision instructions belong
-  in `decision_template` in `...`.
+  in `decision_template` in `...`. The same rule applies to TypeSafe;
+  its omitted generative default is never evaluated.
 
 - backend:
 
   Character scalar indicating which LLM provider to use. One of
-  `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, or
-  `"ollama"`.
+  `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`,
+  `"ollama"`, or `"typesafe"`.
 
 - endpoint:
 
@@ -104,15 +113,17 @@ llm_compare_pair(
   matching
   [`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md).
   For `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, and
-  `"ollama"`, this argument is currently ignored.
+  `"ollama"`, this argument is currently ignored. For `"typesafe"`, omit
+  it or use `"systemone"`; other values fail.
 
 - api_key:
 
   Optional API key for the selected backend. If `NULL`, the
   backend-specific helper will use its own default environment variable
   (for example `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
-  `VERTEX_API_KEY`, `TOGETHER_API_KEY`). For `"ollama"`, this argument
-  is ignored (no API key is required for local inference).
+  `VERTEX_API_KEY`, `TOGETHER_API_KEY`, `TYPESAFE_API_KEY`). For
+  `"ollama"`, this argument is ignored (no API key is required for local
+  inference).
 
 - include_raw:
 
@@ -153,7 +164,12 @@ llm_compare_pair(
   `decision_template`, and `prompt_cache_options` in `...`; generative,
   storage, and tier controls fail before HTTP. Use
   `model = "gpt-6-luna"`. Its omitted prompt is never replaced with the
-  generative default. Bulk Decisions execution is deferred.
+  generative default. Bulk Decisions execution is deferred. TypeSafe
+  accepts only `pair_uid` and `decision_template` in `...`, including
+  rejection of unsupported settings explicitly supplied as `NULL`. Both
+  decision backends retain independent confidence and full request
+  provenance; probabilities never change binary BT/adaptive winner
+  semantics. TypeSafe bulk execution and managed Batch are unsupported.
 
 ## Value
 
@@ -186,10 +202,13 @@ Chat Completions API (`"chat.completions"`), Responses API
 Decisions uses the approved decision instructions and retains the
 complete binary probability distribution; see
 [`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md)
-for its supported controls, return fields, validation, and errors. For
-the `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, and `"ollama"`
-backends, `endpoint` is currently ignored and the default live API for
-that provider is used.
+for its supported controls, return fields, validation, and errors.
+TypeSafe uses its Choice endpoint and the same decision instructions and
+probability-preserving contracts; see
+[`typesafe_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/typesafe_compare_pair_live.md).
+For the `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, and
+`"ollama"` backends, `endpoint` is currently ignored and the default
+live API for that provider is used.
 
 ## See also
 
@@ -198,8 +217,9 @@ that provider is used.
   [`gemini_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/gemini_compare_pair_live.md),
   [`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md),
   [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
+  [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md),
   and
-  [`ollama_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/ollama_compare_pair_live.md)
+  [`typesafe_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/typesafe_compare_pair_live.md)
   for backend-specific implementations.
 
 - [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
@@ -224,6 +244,7 @@ Other live backends:
 [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
 [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
 [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
+[`typesafe_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/typesafe_compare_pair_live.md),
 [`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)
 
 ## Examples
