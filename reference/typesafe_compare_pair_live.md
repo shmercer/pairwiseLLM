@@ -202,8 +202,10 @@ the package's shared retry helper; it does not currently interpret
 `Retry-After` headers.
 
 Only the standard text endpoint is supported: no SDK is required, and no
-compression, long-context/image opt-in, managed Batch, bulk execution,
-or resumption is implemented here. The provider enforces body/context
+compression, long-context/image opt-in, or managed Batch is implemented
+here. Use
+[`submit_typesafe_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_typesafe_pairs_live.md)
+for resumable live bulk collection. The provider enforces body/context
 limits. This feature has provider-free validation, not an authorized
 live availability check. Model probabilities do not establish validated
 educational assessment accuracy and do not become BT/adaptive weights,
@@ -238,6 +240,7 @@ Other live backends:
 [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
 [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
 [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
+[`submit_typesafe_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_typesafe_pairs_live.md),
 [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
 [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
 [`vertex_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/vertex_compare_pair_live.md)

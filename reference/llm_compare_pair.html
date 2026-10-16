@@ -217,12 +217,12 @@ provider helper for details; this is not a cross-provider retention policy.
 Decisions accepts only <code>pair_uid</code>, <code>decision_template</code>, and
 <code>prompt_cache_options</code> in <code>...</code>; generative, storage, and tier controls
 fail before HTTP. Use <code>model = "gpt-6-luna"</code>. Its omitted prompt is never
-replaced with the generative default. Bulk Decisions execution is deferred.
+replaced with the generative default. Use <code><a href="submit_llm_pairs.html">submit_llm_pairs()</a></code> for resumable bulk Decisions execution.
 TypeSafe accepts only <code>pair_uid</code> and <code>decision_template</code> in <code>...</code>, including
 rejection of unsupported settings explicitly supplied as <code>NULL</code>. Both
 decision backends retain independent confidence and full request provenance;
-probabilities never change binary BT/adaptive winner semantics. TypeSafe
-bulk execution and managed Batch are unsupported.</p></dd>
+probabilities never change binary BT/adaptive winner semantics. See
+<a href="decision_bulk.html">decision_bulk</a> for bulk execution; managed Batch remains unsupported.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -277,6 +277,7 @@ comparison results.</p></li>
 <code><a href="submit_ollama_pairs_live.html">submit_ollama_pairs_live()</a></code>,
 <code><a href="submit_openai_pairs_live.html">submit_openai_pairs_live()</a></code>,
 <code><a href="submit_together_pairs_live.html">submit_together_pairs_live()</a></code>,
+<code><a href="submit_typesafe_pairs_live.html">submit_typesafe_pairs_live()</a></code>,
 <code><a href="submit_vertex_pairs_live.html">submit_vertex_pairs_live()</a></code>,
 <code><a href="together_compare_pair_live.html">together_compare_pair_live()</a></code>,
 <code><a href="typesafe_compare_pair_live.html">typesafe_compare_pair_live()</a></code>,

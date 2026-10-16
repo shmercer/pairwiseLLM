@@ -48,6 +48,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/check_positional_bias.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/compute_reverse_consistency.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/decision_bulk.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/decision_request.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/decision_results.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/dot-adaptive_predictive_tree.html</loc></url>
@@ -142,6 +143,7 @@
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.html</loc></url>
+<url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_typesafe_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/summarize_adaptive.html</loc></url>
 <url><loc>https://shmercer.github.io/pairwiseLLM/reference/summarize_bt_fit.html</loc></url>

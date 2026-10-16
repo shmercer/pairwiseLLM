@@ -159,6 +159,16 @@ not duplicate successful `custom_id` values. A returned HTTP success is
 not a valid judgment unless parsing also produced a winner belonging to
 the submitted pair.
 
+For OpenAI Decisions and TypeSafe Jev, keep the `.checkpoint` directory
+beside `save_path`: it holds completed decisions and retry history.
+Repeating the same call resumes matching work without repeating
+committed decisions. Requests left in flight may have incurred charges;
+one automatic reissue is allowed across restarts, and
+`execution_control = list(retry_ambiguous = FALSE)` disables it. Inspect
+all three returned components before modeling. See
+[`decision_bulk`](https://shmercer.github.io/pairwiseLLM/reference/decision_bulk.md)
+for configuration and recovery details.
+
 ## Batch recovery
 
 Batch workflows separate local request creation, remote submission,

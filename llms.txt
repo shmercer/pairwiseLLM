@@ -360,6 +360,8 @@ recovery](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-
   : Check configured API keys for LLM backends
 - [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
   : Backend-agnostic live comparisons for a tibble of pairs
+- [`decision_bulk`](https://shmercer.github.io/pairwiseLLM/reference/decision_bulk.md)
+  : Live decision execution, persistence and recovery contracts
 - [`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
   : Backend-agnostic live comparison for a single pair of samples
 - [`llm_submit_pairs_batch()`](https://shmercer.github.io/pairwiseLLM/reference/llm_submit_pairs_batch.md)
@@ -602,6 +604,8 @@ to go from features to validated models and starting scores.
   : Live Ollama comparisons for a tibble of pairs
 - [`typesafe_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/typesafe_compare_pair_live.md)
   : Live TypeSafe Jev comparison for a single pair of samples
+- [`submit_typesafe_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_typesafe_pairs_live.md)
+  : Collect and resume live TypeSafe Jev decisions
 
 ## Provider-specific batch helpers
 

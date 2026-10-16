@@ -269,10 +269,13 @@ but includes full trait/custom instruction text, which can itself be
 sensitive. Failed raw responses can also contain sensitive content; do
 not log publicly. These probabilities do not establish validated
 educational assessment accuracy and do not change binary BT/adaptive
-evidence. Managed Batch and live bulk Decisions execution are
-unsupported by this issue's single-pair interface. API availability
-remains provider/account dependent. The schema and controls follow the
-[OpenAI Decisions
+evidence. Use
+[`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
+or
+[`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md)
+for live bulk execution; managed Batch remains unsupported for
+Decisions. API availability remains provider/account dependent. The
+schema and controls follow the [OpenAI Decisions
 reference](https://developers.openai.com/api/reference/resources/decisions/methods/create).
 
 ## See also
@@ -292,6 +295,7 @@ Other live backends:
 [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
 [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
 [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
+[`submit_typesafe_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_typesafe_pairs_live.md),
 [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
 [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
 [`typesafe_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/typesafe_compare_pair_live.md),

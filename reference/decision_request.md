@@ -3,8 +3,9 @@
 Internal foundation for single-trait binary decision endpoints. This
 helper constructs a request without HTTP, credentials, retries,
 persistence, or model availability checks. Live decision helpers
-validate its body before HTTP; managed Batch and bulk decision execution
-are not supported.
+validate its body before HTTP; managed Batch is unsupported. Live bulk
+collection is documented in
+[decision_bulk](https://shmercer.github.io/pairwiseLLM/reference/decision_bulk.md).
 
 ## Usage
 
@@ -102,9 +103,9 @@ rendering, complete trait definition, template version/text, rendered
 instructions, and both choice definitions. No Unicode normalization,
 trimming, or line-ending conversion is performed. Pair UID, provider
 request ID, response/resolved model, and timestamps are not scientific
-fingerprint inputs. Future resumption must verify both pair UID and
-fingerprint, and inspect resolved-model metadata when aliases are used;
-this helper does not implement resumption or guarantee provider
+fingerprint inputs. Live bulk resumption verifies both pair UID and
+fingerprint; inspect resolved-model metadata when aliases are used. This
+helper does not implement resumption or guarantee provider
 reproducibility. A fingerprint is an identity/integrity check, not an
 authenticated signature. Live transports must independently check the
 body against this provenance and check the final serialized payload

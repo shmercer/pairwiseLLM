@@ -335,6 +335,15 @@ confirming that the retry did not duplicate successful
 <code>custom_id</code> values. A returned HTTP success is not a valid
 judgment unless parsing also produced a winner belonging to the
 submitted pair.</p>
+<p>For OpenAI Decisions and TypeSafe Jev, keep the
+<code>.checkpoint</code> directory beside <code>save_path</code>: it
+holds completed decisions and retry history. Repeating the same call
+resumes matching work without repeating committed decisions. Requests
+left in flight may have incurred charges; one automatic reissue is
+allowed across restarts, and
+<code>execution_control = list(retry_ambiguous = FALSE)</code> disables
+it. Inspect all three returned components before modeling. See <a href="../reference/decision_bulk.html"><code>decision_bulk</code></a>
+for configuration and recovery details.</p>
 </div>
 <div class="section level2">
 <h2 id="batch-recovery">Batch recovery<a class="anchor" aria-label="anchor" href="#batch-recovery"></a>

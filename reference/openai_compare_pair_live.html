@@ -303,8 +303,9 @@ checks identity/integrity and is not an authenticated signature.</p>
 includes full trait/custom instruction text, which can itself be sensitive.
 Failed raw responses can also contain sensitive content; do not log publicly.
 These probabilities do not establish validated educational assessment accuracy
-and do not change binary BT/adaptive evidence. Managed Batch and live bulk
-Decisions execution are unsupported by this issue's single-pair interface.
+and do not change binary BT/adaptive evidence. Use <code><a href="submit_llm_pairs.html">submit_llm_pairs()</a></code> or
+<code><a href="submit_openai_pairs_live.html">submit_openai_pairs_live()</a></code> for live bulk execution; managed Batch remains
+unsupported for Decisions.
 API availability remains provider/account dependent. The schema and controls
 follow the <a href="https://developers.openai.com/api/reference/resources/decisions/methods/create" class="external-link">OpenAI Decisions reference</a>.</p>
     </div>
@@ -323,6 +324,7 @@ follow the <a href="https://developers.openai.com/api/reference/resources/decisi
 <code><a href="submit_ollama_pairs_live.html">submit_ollama_pairs_live()</a></code>,
 <code><a href="submit_openai_pairs_live.html">submit_openai_pairs_live()</a></code>,
 <code><a href="submit_together_pairs_live.html">submit_together_pairs_live()</a></code>,
+<code><a href="submit_typesafe_pairs_live.html">submit_typesafe_pairs_live()</a></code>,
 <code><a href="submit_vertex_pairs_live.html">submit_vertex_pairs_live()</a></code>,
 <code><a href="together_compare_pair_live.html">together_compare_pair_live()</a></code>,
 <code><a href="typesafe_compare_pair_live.html">typesafe_compare_pair_live()</a></code>,

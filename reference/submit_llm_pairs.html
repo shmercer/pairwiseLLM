@@ -73,8 +73,9 @@ for multiple pairs. It takes a tibble of pairs (<code>ID1</code>, <code>text1</c
 <span>  <span class="va">trait_name</span>,</span>
 <span>  <span class="va">trait_description</span>,</span>
 <span>  prompt_template <span class="op">=</span> <span class="fu"><a href="set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>  backend <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"openai"</span>, <span class="st">"anthropic"</span>, <span class="st">"gemini"</span>, <span class="st">"vertex"</span>, <span class="st">"together"</span>, <span class="st">"ollama"</span><span class="op">)</span>,</span>
-<span>  endpoint <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"chat.completions"</span>, <span class="st">"responses"</span><span class="op">)</span>,</span>
+<span>  backend <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"openai"</span>, <span class="st">"anthropic"</span>, <span class="st">"gemini"</span>, <span class="st">"vertex"</span>, <span class="st">"together"</span>, <span class="st">"ollama"</span>,</span>
+<span>    <span class="st">"typesafe"</span><span class="op">)</span>,</span>
+<span>  endpoint <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"chat.completions"</span>, <span class="st">"responses"</span>, <span class="st">"decisions"</span><span class="op">)</span>,</span>
 <span>  api_key <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  status_every <span class="op">=</span> <span class="fl">1</span>,</span>
@@ -83,6 +84,7 @@ for multiple pairs. It takes a tibble of pairs (<code>ID1</code>, <code>text1</c
 <span>  save_path <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  parallel <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  workers <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  execution_control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -126,15 +128,16 @@ comparison function (for example <code>"Overall Quality"</code>).</p></dd>
 <dt id="arg-backend">backend<a class="anchor" aria-label="anchor" href="#arg-backend"></a></dt>
 <dd><p>Character scalar indicating which LLM provider to use.
 One of <code>"openai"</code>, <code>"anthropic"</code>, <code>"gemini"</code>, <code>"vertex"</code>, <code>"together"</code>,
-or <code>"ollama"</code>.</p></dd>
+<code>"ollama"</code>, or <code>"typesafe"</code> (Jev decisions).</p></dd>
 
 
 <dt id="arg-endpoint">endpoint<a class="anchor" aria-label="anchor" href="#arg-endpoint"></a></dt>
 <dd><p>Character scalar specifying which endpoint family to use for
 backends that support multiple live APIs. For the <code>"openai"</code> backend this
-must be one of <code>"chat.completions"</code> or <code>"responses"</code>, matching
+must be <code>"chat.completions"</code>, <code>"responses"</code>, or <code>"decisions"</code>, matching
 <code><a href="submit_openai_pairs_live.html">submit_openai_pairs_live()</a></code>. For <code>"anthropic"</code>, <code>"gemini"</code>, <code>"vertex"</code>,
-<code>"together"</code>, and <code>"ollama"</code>, this is currently ignored.</p></dd>
+<code>"together"</code>, and <code>"ollama"</code>, this is currently ignored. For TypeSafe,
+omit it or use <code>"systemone"</code>.</p></dd>
 
 
 <dt id="arg-api-key">api_key<a class="anchor" aria-label="anchor" href="#arg-api-key"></a></dt>
@@ -175,13 +178,19 @@ Supported by all backends.</p></dd>
 
 <dt id="arg-parallel">parallel<a class="anchor" aria-label="anchor" href="#arg-parallel"></a></dt>
 <dd><p>Logical; if <code>TRUE</code>, enables parallel processing using
-<code>future.apply</code>. Requires the <code>future</code> package. Supported by
-all backends (though defaults may vary).</p></dd>
+<code>future.apply</code> for generative backends, requiring <span class="pkg">future</span> and
+<span class="pkg">future.apply</span>. Decision concurrency uses optional promises/later.</p></dd>
 
 
 <dt id="arg-workers">workers<a class="anchor" aria-label="anchor" href="#arg-workers"></a></dt>
 <dd><p>Integer; the number of parallel workers (threads) to use if
 <code>parallel = TRUE</code>. Defaults to 1.</p></dd>
+
+
+<dt id="arg-execution-control">execution_control<a class="anchor" aria-label="anchor" href="#arg-execution-control"></a></dt>
+<dd><p>Named list of decision-only scheduling, retry,
+timeout and lock controls; defaults to <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>. See <a href="decision_bulk.html">decision_bulk</a> for
+all defaults, persistent budgets, probability storage and recovery guarantees.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -239,7 +248,16 @@ and the <a href="https://shmercer.github.io/pairwiseLLM/articles/provider-contro
 <li><p><code>"vertex"</code>   → <code><a href="submit_vertex_pairs_live.html">submit_vertex_pairs_live()</a></code></p></li>
 <li><p><code>"together"</code>  → <code><a href="submit_together_pairs_live.html">submit_together_pairs_live()</a></code></p></li>
 <li><p><code>"ollama"</code>   → <code><a href="submit_ollama_pairs_live.html">submit_ollama_pairs_live()</a></code></p></li>
-</ul></div>
+<li><p><code>"typesafe"</code> → <code><a href="submit_typesafe_pairs_live.html">submit_typesafe_pairs_live()</a></code></p></li>
+</ul><p>For OpenAI Decisions and TypeSafe Jev, omitted <code>prompt_template</code> selects the
+frozen decision instructions. Explicit generative templates fail. See
+<a href="decision_bulk.html">decision_bulk</a> for concurrent live execution, occurrence IDs, strict resume
+identity, atomic RDS checkpoints, CSV exports, raw-response privacy and the
+one-time automatic ambiguous reissue. Concurrent decision execution uses
+optional promises/later, with <code>workers</code> bounding in-flight requests; sequential
+decision execution requires neither. Other backends retain their existing
+future-based execution and CSV resumption behavior.</p>
+    </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index">
@@ -259,6 +277,7 @@ backend-specific implementations.</p></li>
 <code><a href="submit_ollama_pairs_live.html">submit_ollama_pairs_live()</a></code>,
 <code><a href="submit_openai_pairs_live.html">submit_openai_pairs_live()</a></code>,
 <code><a href="submit_together_pairs_live.html">submit_together_pairs_live()</a></code>,
+<code><a href="submit_typesafe_pairs_live.html">submit_typesafe_pairs_live()</a></code>,
 <code><a href="submit_vertex_pairs_live.html">submit_vertex_pairs_live()</a></code>,
 <code><a href="together_compare_pair_live.html">together_compare_pair_live()</a></code>,
 <code><a href="typesafe_compare_pair_live.html">typesafe_compare_pair_live()</a></code>,

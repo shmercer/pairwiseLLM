@@ -14,7 +14,7 @@ submit_openai_pairs_live(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  endpoint = c("chat.completions", "responses"),
+  endpoint = c("chat.completions", "responses", "decisions"),
   api_key = NULL,
   verbose = TRUE,
   status_every = 1,
@@ -23,6 +23,7 @@ submit_openai_pairs_live(
   save_path = NULL,
   parallel = FALSE,
   workers = 1,
+  execution_control = list(),
   ...
 )
 ```
@@ -102,6 +103,12 @@ submit_openai_pairs_live(
   8 is usually safe. Setting this too high (e.g., \>20) may trigger
   OpenAI rate limit errors (HTTP 429) depending on your usage tier.
 
+- execution_control:
+
+  Named list used only with `endpoint = "decisions"`; see
+  [decision_bulk](https://shmercer.github.io/pairwiseLLM/reference/decision_bulk.md)
+  for controls, defaults, durable budgets and recovery.
+
 - ...:
 
   Additional OpenAI parameters (temperature, top_p, logprobs, reasoning,
@@ -151,6 +158,15 @@ This function improves upon simple looping by offering:
 - **Error Separation:** Returns valid results and failed pairs
   separately, making it easier to debug or retry specific failures.
 
+With `endpoint = "decisions"`, omitted `prompt_template` selects the
+frozen decision prompt. Concurrent execution uses optional
+promises/later; `workers` bounds in-flight requests. Saved decisions
+require filelock and an atomic RDS journal alongside the CSV export. See
+[decision_bulk](https://shmercer.github.io/pairwiseLLM/reference/decision_bulk.md)
+for complete scientific identity, probability storage, raw-response
+privacy and recovery contracts. Historical generative execution and
+resumption are unchanged.
+
 ## See also
 
 [`check_llm_api_keys()`](https://shmercer.github.io/pairwiseLLM/reference/check_llm_api_keys.md),
@@ -168,6 +184,7 @@ Other live backends:
 [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md),
 [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
 [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
+[`submit_typesafe_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_typesafe_pairs_live.md),
 [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
 [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
 [`typesafe_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/typesafe_compare_pair_live.md),

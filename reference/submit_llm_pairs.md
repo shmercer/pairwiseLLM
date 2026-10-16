@@ -14,8 +14,9 @@ submit_llm_pairs(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
-  endpoint = c("chat.completions", "responses"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama",
+    "typesafe"),
+  endpoint = c("chat.completions", "responses", "decisions"),
   api_key = NULL,
   verbose = TRUE,
   status_every = 1,
@@ -24,6 +25,7 @@ submit_llm_pairs(
   save_path = NULL,
   parallel = FALSE,
   workers = 1,
+  execution_control = list(),
   ...
 )
 ```
@@ -69,17 +71,18 @@ submit_llm_pairs(
 - backend:
 
   Character scalar indicating which LLM provider to use. One of
-  `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, or
-  `"ollama"`.
+  `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`,
+  `"ollama"`, or `"typesafe"` (Jev decisions).
 
 - endpoint:
 
   Character scalar specifying which endpoint family to use for backends
   that support multiple live APIs. For the `"openai"` backend this must
-  be one of `"chat.completions"` or `"responses"`, matching
+  be `"chat.completions"`, `"responses"`, or `"decisions"`, matching
   [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md).
   For `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, and
-  `"ollama"`, this is currently ignored.
+  `"ollama"`, this is currently ignored. For TypeSafe, omit it or use
+  `"systemone"`.
 
 - api_key:
 
@@ -118,14 +121,23 @@ submit_llm_pairs(
 
 - parallel:
 
-  Logical; if `TRUE`, enables parallel processing using `future.apply`.
-  Requires the `future` package. Supported by all backends (though
-  defaults may vary).
+  Logical; if `TRUE`, enables parallel processing using `future.apply`
+  for generative backends, requiring future and future.apply. Decision
+  concurrency uses optional promises/later.
 
 - workers:
 
   Integer; the number of parallel workers (threads) to use if
   `parallel = TRUE`. Defaults to 1.
+
+- execution_control:
+
+  Named list of decision-only scheduling, retry, timeout and lock
+  controls; defaults to [`list()`](https://rdrr.io/r/base/list.html).
+  See
+  [decision_bulk](https://shmercer.github.io/pairwiseLLM/reference/decision_bulk.md)
+  for all defaults, persistent budgets, probability storage and recovery
+  guarantees.
 
 - ...:
 
@@ -210,6 +222,20 @@ At present, the following backends are implemented:
 - `"ollama"` →
   [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md)
 
+- `"typesafe"` →
+  [`submit_typesafe_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_typesafe_pairs_live.md)
+
+For OpenAI Decisions and TypeSafe Jev, omitted `prompt_template` selects
+the frozen decision instructions. Explicit generative templates fail.
+See
+[decision_bulk](https://shmercer.github.io/pairwiseLLM/reference/decision_bulk.md)
+for concurrent live execution, occurrence IDs, strict resume identity,
+atomic RDS checkpoints, CSV exports, raw-response privacy and the
+one-time automatic ambiguous reissue. Concurrent decision execution uses
+optional promises/later, with `workers` bounding in-flight requests;
+sequential decision execution requires neither. Other backends retain
+their existing future-based execution and CSV resumption behavior.
+
 ## See also
 
 - [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
@@ -233,6 +259,7 @@ Other live backends:
 [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
 [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
 [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
+[`submit_typesafe_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_typesafe_pairs_live.md),
 [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
 [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
 [`typesafe_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/typesafe_compare_pair_live.md),

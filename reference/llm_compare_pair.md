@@ -164,12 +164,15 @@ llm_compare_pair(
   `decision_template`, and `prompt_cache_options` in `...`; generative,
   storage, and tier controls fail before HTTP. Use
   `model = "gpt-6-luna"`. Its omitted prompt is never replaced with the
-  generative default. Bulk Decisions execution is deferred. TypeSafe
-  accepts only `pair_uid` and `decision_template` in `...`, including
-  rejection of unsupported settings explicitly supplied as `NULL`. Both
-  decision backends retain independent confidence and full request
-  provenance; probabilities never change binary BT/adaptive winner
-  semantics. TypeSafe bulk execution and managed Batch are unsupported.
+  generative default. Use
+  [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
+  for resumable bulk Decisions execution. TypeSafe accepts only
+  `pair_uid` and `decision_template` in `...`, including rejection of
+  unsupported settings explicitly supplied as `NULL`. Both decision
+  backends retain independent confidence and full request provenance;
+  probabilities never change binary BT/adaptive winner semantics. See
+  [decision_bulk](https://shmercer.github.io/pairwiseLLM/reference/decision_bulk.md)
+  for bulk execution; managed Batch remains unsupported.
 
 ## Value
 
@@ -242,6 +245,7 @@ Other live backends:
 [`submit_ollama_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_ollama_pairs_live.md),
 [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md),
 [`submit_together_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_together_pairs_live.md),
+[`submit_typesafe_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_typesafe_pairs_live.md),
 [`submit_vertex_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_vertex_pairs_live.md),
 [`together_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/together_compare_pair_live.md),
 [`typesafe_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/typesafe_compare_pair_live.md),

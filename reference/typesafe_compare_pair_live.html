@@ -240,8 +240,9 @@ abort. Conditions have sample-free/key-free messages and <code>retry_failures</c
 HTTP conditions also carry <code>status_code</code>. Backoff uses the package's shared
 retry helper; it does not currently interpret <code>Retry-After</code> headers.</p>
 <p>Only the standard text endpoint is supported: no SDK is required, and no
-compression, long-context/image opt-in, managed Batch, bulk execution, or
-resumption is implemented here. The provider enforces body/context limits.
+compression, long-context/image opt-in, or managed Batch is implemented here.
+Use <code><a href="submit_typesafe_pairs_live.html">submit_typesafe_pairs_live()</a></code> for resumable live bulk collection. The
+provider enforces body/context limits.
 This feature has provider-free validation, not an authorized live availability
 check. Model probabilities do not establish validated educational assessment
 accuracy and do not become BT/adaptive weights, fractional wins, or judgments.</p>
@@ -269,6 +270,7 @@ Avoid logging them publicly. This helper provides no data-retention control.</p>
 <code><a href="submit_ollama_pairs_live.html">submit_ollama_pairs_live()</a></code>,
 <code><a href="submit_openai_pairs_live.html">submit_openai_pairs_live()</a></code>,
 <code><a href="submit_together_pairs_live.html">submit_together_pairs_live()</a></code>,
+<code><a href="submit_typesafe_pairs_live.html">submit_typesafe_pairs_live()</a></code>,
 <code><a href="submit_vertex_pairs_live.html">submit_vertex_pairs_live()</a></code>,
 <code><a href="together_compare_pair_live.html">together_compare_pair_live()</a></code>,
 <code><a href="vertex_compare_pair_live.html">vertex_compare_pair_live()</a></code></p></div>
