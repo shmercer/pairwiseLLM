@@ -96,3 +96,5 @@ together_qwen_3_7_plus_live,together,Together AI,Qwen/Qwen3.7-Plus,live,chat.com
 together_ternary_bonsai_live,together,Together AI,Prism-ML/Ternary-Bonsai-27B,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
 together_muse_glimmer_live,together,Together AI,meta-models/Muse-Glimmer-30B,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
 together_qwen_3_8_flash_live,together,Together AI,Qwen/Qwen3.8-Flash,live,chat.completions,together_standard,none,TOGETHER_API_KEY,current,2026-09-05,https://docs.together.ai/docs/serverless/models
+openai_gpt_6_luna_decisions_live,openai,OpenAI,gpt-6-luna,live,decisions,openai_decisions_default,provider-default,OPENAI_API_KEY,current,2026-10-16,https://developers.openai.com/api/docs/models/all
+typesafe_jev_1_13_0_live,typesafe,TypeSafe,jev-1.13.0,live,systemone,typesafe_systemone_default,provider-default,TYPESAFE_API_KEY,current,2026-10-16,https://docs.typesafe.ai/models

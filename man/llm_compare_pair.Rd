@@ -105,7 +105,11 @@ TypeSafe accepts only \code{pair_uid} and \code{decision_template} in \code{...}
 rejection of unsupported settings explicitly supplied as \code{NULL}. Both
 decision backends retain independent confidence and full request provenance;
 probabilities never change binary BT/adaptive winner semantics. See
-\link{decision_bulk} for bulk execution; managed Batch remains unsupported.}
+\link{decision_bulk} for bulk execution; managed Batch remains unsupported.
+
+Decision failures may retain raw provider responses in memory even when
+\code{include_raw = FALSE}; saving the complete return value may persist sensitive
+sample text. See \link{decision_bulk} for default checkpoint/export retention.}
 }
 \value{
 A tibble with one row and the same columns as the underlying

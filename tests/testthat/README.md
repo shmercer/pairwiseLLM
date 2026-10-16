@@ -292,3 +292,8 @@ Issue #336 reserves 2003 for bounded live decision scheduling and 3071–3073 fo
 lossless persistence, interruption recovery and exclusive writer locks. These
 prefixes were verified unused before implementation. All provider activity is
 mocked; subprocess tests only coordinate local files/locks in temporary folders.
+
+Issue #337 reserves 9006 for provider-free end-to-end decision release
+qualification (verified unused on 2026-10-16). It extends bulk tamper/wire,
+binary-ingest and privacy boundaries; existing 0046–0049, 2001–2003 and
+3071–3073 cover the underlying contracts and recovery machinery.

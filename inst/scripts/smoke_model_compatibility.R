@@ -41,6 +41,7 @@ if (!mode_filter %in% c("live", "batch", "all")) {
 provider_filter <- trimws(tolower(strsplit(
   arg_value("providers", "all"), ",", fixed = TRUE
 )[[1L]]))
+profile_filter <- strsplit(arg_value("profiles", "all"), ",", fixed = TRUE)[[1L]]
 allow_missing_keys <- arg_flag("allow-missing-keys")
 list_only <- arg_flag("list")
 retry_failures <- arg_flag("retry-failures")
@@ -61,6 +62,9 @@ if (!identical(mode_filter, "all")) {
 }
 if (!identical(provider_filter, "all")) {
   smoke_matrix <- smoke_matrix[smoke_matrix$backend %in% provider_filter, , drop = FALSE]
+}
+if (!identical(profile_filter, "all")) {
+  smoke_matrix <- smoke_matrix[smoke_matrix$request_profile %in% profile_filter, , drop = FALSE]
 }
 if (!nrow(smoke_matrix)) stop("No smoke-test rows matched the filters.", call. = FALSE)
 
@@ -109,55 +113,6 @@ prompt_template <- paste(
 pace <- function() {
   if (request_delay_seconds > 0) Sys.sleep(request_delay_seconds)
   invisible(NULL)
-}
-
-profile_args <- function(profile) {
-  switch(
-    profile,
-    openai_responses_default = list(
-      endpoint = "responses", include_thoughts = FALSE, max_output_tokens = 4096
-    ),
-    openai_chat_default = list(endpoint = "chat.completions"),
-    anthropic_standard = list(reasoning = "none", max_tokens = 2048),
-    anthropic_thinking = list(
-      reasoning = "enabled", include_thoughts = TRUE, temperature = 1,
-      max_tokens = 2048, thinking_budget_tokens = 1024
-    ),
-    gemini_low = list(
-      thinking_level = "low", include_thoughts = FALSE, max_output_tokens = 2048
-    ),
-    vertex_gemini3_low = list(
-      thinking_level = "low", include_thoughts = FALSE, max_output_tokens = 2048
-    ),
-    vertex_gemini25_no_thinking = list(
-      thinking_level = NULL, thinking_budget = 0L, include_thoughts = FALSE,
-      max_output_tokens = 2048
-    ),
-    together_standard = list(max_tokens = 4096),
-    stop("Unknown request profile: ", profile, call. = FALSE)
-  )
-}
-
-outcome_from_results <- function(result_tbl) {
-  parsed <- !is.null(result_tbl) && nrow(result_tbl) > 0L &&
-    "better_id" %in% names(result_tbl) && !is.na(result_tbl$better_id[[1L]])
-  code <- if (!is.null(result_tbl) && "status_code" %in% names(result_tbl)) {
-    as.integer(result_tbl$status_code[[1L]])
-  } else {
-    NA_integer_
-  }
-  error_text <- if (!is.null(result_tbl) && "error_message" %in% names(result_tbl) &&
-    !is.na(result_tbl$error_message[[1L]])) {
-    as.character(result_tbl$error_message[[1L]])
-  } else if (!parsed) {
-    "Response did not contain a parsed winner."
-  } else {
-    NA_character_
-  }
-  list(
-    status = if (parsed) "passed" else "failed-error-row",
-    status_code = code, parsed_winner = parsed, error = error_text
-  )
 }
 
 dir.create(dirname(output_path), recursive = TRUE, showWarnings = FALSE)
@@ -226,6 +181,9 @@ for (i in live_indices) {
       trait_description = trait_description, prompt_template = prompt_template,
       backend = row$backend, include_raw = FALSE
     )
+    if (row$request_profile %in% c("openai_decisions_default", "typesafe_systemone_default")) {
+      common$prompt_template <- NULL
+    }
     outcome <- tryCatch({
       value <- do.call(
         pairwiseLLM::llm_compare_pair,

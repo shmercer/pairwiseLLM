@@ -153,7 +153,12 @@
 #' opted-in records are not erased. In-memory failed-response diagnostics follow
 #' the existing parser contract and can retain raw responses. Increasing raw
 #' retention on resume cannot recreate responses previously omitted and never
-#' triggers resubmission. Keep journals and returned diagnostics private.
+#' triggers resubmission. In-memory failure objects may contain raw responses
+#' even with `include_raw = FALSE`. Explicitly saving or serializing the complete
+#' returned object (for example with `saveRDS()`) can persist sensitive text.
+#' Successful normalized results can also retain source text columns. The
+#' default journal/export privacy policy does not sanitize caller-created stores.
+#' Keep journals and returned diagnostics private.
 #'
 #' @examples
 #' \dontrun{

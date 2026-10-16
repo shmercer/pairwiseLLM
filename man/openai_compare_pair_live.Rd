@@ -194,6 +194,10 @@ These probabilities do not establish validated educational assessment accuracy
 and do not change binary BT/adaptive evidence. Use \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} or
 \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}} for live bulk execution; managed Batch remains
 unsupported for Decisions.
+A live smoke run on 2026-10-16 exercised \code{gpt-6-luna} on 20 synthetic
+samples, 60 primary pairs and 10 reverse audits; see the model-compatibility
+vignette for the tested commit and limits. Probabilities are not established
+calibrated probabilities of assessment correctness.
 API availability remains provider/account dependent. The schema and controls
 follow the \href{https://developers.openai.com/api/reference/resources/decisions/methods/create}{OpenAI Decisions reference}.
 }

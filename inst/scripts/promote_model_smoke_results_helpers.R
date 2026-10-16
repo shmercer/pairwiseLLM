@@ -105,9 +105,15 @@ build_compatibility_registry <- function(results, existing_registry = NULL) {
 
   registry <- do.call(rbind, generated)
   if (!is.null(existing_registry) && nrow(existing_registry) > 0L) {
-    historical <- existing_registry[
-      existing_registry$status %in% c("tested-legacy", "retired"), , drop = FALSE
-    ]
+    refreshed <- rep(FALSE, nrow(existing_registry))
+    for (i in seq_len(nrow(configs))) {
+      matches <- rep(TRUE, nrow(existing_registry))
+      for (column in config_columns) {
+        matches <- matches & existing_registry[[column]] == configs[[column]][i]
+      }
+      refreshed <- refreshed | matches
+    }
+    historical <- existing_registry[!refreshed, , drop = FALSE]
     registry <- rbind(registry, historical[names(registry)])
   }
   rownames(registry) <- NULL

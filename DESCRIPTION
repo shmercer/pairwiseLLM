@@ -8,7 +8,7 @@ Description: Provides a unified framework for generating, submitting, and
     analyzing pairwise comparisons of writing quality using large language 
     models (LLMs). The package supports live and/or batch evaluation workflows 
     across multiple providers ('OpenAI', 'Anthropic', 'Google Gemini', 
-    'Together AI', and locally-hosted 'Ollama' models), includes bias-tested 
+    'Together AI', 'TypeSafe', and locally-hosted 'Ollama' models), includes bias-tested
     prompt templates and a flexible template registry, and offers tools
     for constructing forward and reversed comparison sets to analyze
     consistency and positional bias. The package additionally supports
