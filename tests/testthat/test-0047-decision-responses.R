@@ -160,3 +160,24 @@ test_that("parser rejects invalid construction controls", {
     expect_error(pairwiseLLM:::.parse_decision_response(response, request, provider_request_id = invalid), "provider_request_id")
   }
 })
+
+test_that("response strings are literal JSON and never file or URL inputs", {
+  request <- decision_333_request()
+  response <- decision_333_response()
+  path <- file.path(withr::local_tempdir(), "synthetic-response.json")
+  writeLines(pairwiseLLM:::.decision_json(response), path)
+  row <- pairwiseLLM:::.parse_decision_response(path, request)
+  expect_identical(row$decision_error_code, "malformed_decision")
+  expect_true(is.na(row$better_id))
+  # Disable the convenience reader to guarantee that URL cases cannot do IO.
+  local_mocked_bindings(fromJSON = function(...) stop("Convenience reader must not be called"),
+                         .package = "jsonlite")
+  for (input in c(path, "https://example.invalid/decision.json", "http://example.invalid/decision.json")) {
+    row <- pairwiseLLM:::.parse_decision_response(input, request)
+    expect_identical(row$decision_error_code, "malformed_decision")
+    expect_true(is.na(row$better_id))
+  }
+  row <- pairwiseLLM:::.parse_decision_response(pairwiseLLM:::.decision_json(response), request)
+  expect_true(is.na(row$decision_error_code))
+  expect_identical(row$better_id, request$provenance$ID2)
+})

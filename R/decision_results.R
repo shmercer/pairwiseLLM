@@ -18,7 +18,8 @@
 .decision_read_json <- function(x) {
   if (is.character(x)) {
     if (!.decision_string(x)) .decision_fail("malformed_decision", "Expected a JSON object.")
-    x <- tryCatch(jsonlite::fromJSON(x, simplifyVector = FALSE),
+    # Unlike fromJSON(), parse_json() never interprets strings as files or URLs.
+    x <- tryCatch(jsonlite::parse_json(x, simplifyVector = FALSE),
                   error = function(e) .decision_fail("malformed_decision", "Invalid JSON response or provenance."))
   }
   if (!.decision_object(x)) .decision_fail("malformed_decision", "Expected an object with unique field names.")
@@ -81,8 +82,9 @@
 #' This is an internal, pure converter, with no HTTP or automatic retries.
 #'
 #' @param response JSON character scalar or an unsimplified parsed JSON object
-#'   (as returned by `jsonlite::fromJSON(..., simplifyVector = FALSE)`). OpenAI
-#'   requires an `answers` array containing exactly the requested named answer;
+#'   (as returned by `jsonlite::fromJSON(..., simplifyVector = FALSE)`). Strings
+#'   are parsed literally; filenames and URLs are never read. OpenAI requires an
+#'   `answers` array containing exactly the requested named answer;
 #'   TypeSafe requires an `answers` map with exactly the requested key. Unexpected
 #'   nesting, duplicate keys/options, extra answers, and non-choice answers fail.
 #' @param request An unmodified request from [decision_request].

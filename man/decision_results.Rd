@@ -14,8 +14,9 @@
 }
 \arguments{
 \item{response}{JSON character scalar or an unsimplified parsed JSON object
-(as returned by \code{jsonlite::fromJSON(..., simplifyVector = FALSE)}). OpenAI
-requires an \code{answers} array containing exactly the requested named answer;
+(as returned by \code{jsonlite::fromJSON(..., simplifyVector = FALSE)}). Strings
+are parsed literally; filenames and URLs are never read. OpenAI requires an
+\code{answers} array containing exactly the requested named answer;
 TypeSafe requires an \code{answers} map with exactly the requested key. Unexpected
 nesting, duplicate keys/options, extra answers, and non-choice answers fail.}
 
