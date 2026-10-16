@@ -2,6 +2,17 @@
 
 ## pairwiseLLM (development version)
 
+- Internal decision-model foundations freeze the approved
+  `decision_cj_v1` instructions and construct equivalent offline OpenAI
+  Decisions/TypeSafe Jev requests
+  ([\#333](https://github.com/shmercer/pairwiseLLM/issues/333)). Parsers
+  retain both probabilities, the selected winner, independent
+  confidence, and sample-free request provenance. Strict identity and
+  completeness checks exclude malformed, refused, or
+  choice/probability-mismatched decisions from model evidence. Existing
+  generative defaults and binary BT inputs are preserved; live
+  integration and resumable execution follow separately.
+
 - Require `rlang >= 1.3.0` for stable linked-input and runtime hashing,
   and optional `withr >= 3.0.3` for correct local RNG restoration.
   `glmnet` remains optional without a new minimum version. macOS CI
