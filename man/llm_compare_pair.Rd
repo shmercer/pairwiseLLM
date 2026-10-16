@@ -13,7 +13,8 @@ llm_compare_pair(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama",
+    "typesafe"),
   endpoint = c("chat.completions", "responses", "decisions"),
   api_key = NULL,
   include_raw = FALSE,
@@ -37,7 +38,10 @@ corresponding Gemini model names (for example \code{"gemini-3.5-flash-lite"} or
 \code{"gemini-2.5-flash"}). For "together", use Together.ai model identifiers
 such as \code{"deepseek-ai/DeepSeek-V4-Flash-0731"}. For
 \code{"ollama"}, use a local model name known to the Ollama server (for example
-\code{"mistral-small3.2:24b"}, \code{"qwen3:32b"}, \code{"gemma3:27b"}).}
+\code{"mistral-small3.2:24b"}, \code{"qwen3:32b"}, \code{"gemma3:27b"}).
+For \code{"typesafe"}, omission defaults to \code{"jev-1.13.0"}; explicit versioned
+Jev identifiers and documented aliases are accepted without an availability
+guarantee or automatic fallback. Other backends still require \code{model}.}
 
 \item{trait_name}{Short label for the trait (for example
 \code{"Overall Quality"}).}
@@ -46,23 +50,25 @@ such as \code{"deepseek-ai/DeepSeek-V4-Flash-0731"}. For
 
 \item{prompt_template}{Prompt template string, typically from
 \code{\link[=set_prompt_template]{set_prompt_template()}}. For Decisions, omit or use \code{NULL}; custom decision
-instructions belong in \code{decision_template} in \code{...}.}
+instructions belong in \code{decision_template} in \code{...}. The same rule applies
+to TypeSafe; its omitted generative default is never evaluated.}
 
 \item{backend}{Character scalar indicating which LLM provider to use.
 One of \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"vertex"}, \code{"together"},
-or \code{"ollama"}.}
+\code{"ollama"}, or \code{"typesafe"}.}
 
 \item{endpoint}{Character scalar specifying which endpoint family to use
 for backends that support multiple live APIs. For the \code{"openai"} backend
 this must be one of \code{"chat.completions"}, \code{"responses"}, or \code{"decisions"}, matching
 \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}. For \code{"anthropic"}, \code{"gemini"}, \code{"vertex"},
-\code{"together"}, and \code{"ollama"}, this argument is currently ignored.}
+\code{"together"}, and \code{"ollama"}, this argument is currently ignored.
+For \code{"typesafe"}, omit it or use \code{"systemone"}; other values fail.}
 
 \item{api_key}{Optional API key for the selected backend. If \code{NULL}, the
 backend-specific helper will use its own default environment variable
 (for example \code{OPENAI_API_KEY}, \code{ANTHROPIC_API_KEY}, \code{GEMINI_API_KEY},
-\code{VERTEX_API_KEY}, \code{TOGETHER_API_KEY}). For \code{"ollama"}, this argument is
-ignored (no API key is required for local inference).}
+\code{VERTEX_API_KEY}, \code{TOGETHER_API_KEY}, \code{TYPESAFE_API_KEY}). For \code{"ollama"},
+this argument is ignored (no API key is required for local inference).}
 
 \item{include_raw}{Logical; if \code{TRUE}, the returned tibble includes a
 \code{raw_response} list-column with the parsed JSON body (or \code{NULL} on parse
@@ -94,7 +100,12 @@ provider helper for details; this is not a cross-provider retention policy.
 Decisions accepts only \code{pair_uid}, \code{decision_template}, and
 \code{prompt_cache_options} in \code{...}; generative, storage, and tier controls
 fail before HTTP. Use \code{model = "gpt-6-luna"}. Its omitted prompt is never
-replaced with the generative default. Bulk Decisions execution is deferred.}
+replaced with the generative default. Bulk Decisions execution is deferred.
+TypeSafe accepts only \code{pair_uid} and \code{decision_template} in \code{...}, including
+rejection of unsupported settings explicitly supplied as \code{NULL}. Both
+decision backends retain independent confidence and full request provenance;
+probabilities never change binary BT/adaptive winner semantics. TypeSafe
+bulk execution and managed Batch are unsupported.}
 }
 \value{
 A tibble with one row and the same columns as the underlying
@@ -105,8 +116,8 @@ structure including \code{thoughts}, \code{content}, and token counts.
 \description{
 \code{llm_compare_pair()} is a thin wrapper around backend-specific comparison
 functions. It currently supports the \code{"openai"}, \code{"anthropic"}, \code{"gemini"},
-\code{"vertex"}, \code{"together"}, and \code{"ollama"} backends and forwards the call to the
-appropriate live comparison helper:
+\code{"vertex"}, \code{"together"}, \code{"ollama"}, and \code{"typesafe"} backends and forwards
+the call to the appropriate live comparison helper:
 \itemize{
 \item \code{"openai"}   → \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}
 \item \code{"anthropic"} → \code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}}
@@ -114,6 +125,7 @@ appropriate live comparison helper:
 \item \code{"vertex"}   → \code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}
 \item \code{"together"}  → \code{\link[=together_compare_pair_live]{together_compare_pair_live()}}
 \item \code{"ollama"}   → \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}}
+\item \code{"typesafe"} → \code{\link[=typesafe_compare_pair_live]{typesafe_compare_pair_live()}}
 }
 }
 \details{
@@ -135,6 +147,8 @@ the Chat Completions API (\code{"chat.completions"}), Responses API
 Decisions uses the approved decision instructions and retains the complete
 binary probability distribution; see \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}} for its
 supported controls, return fields, validation, and errors.
+TypeSafe uses its Choice endpoint and the same decision instructions and
+probability-preserving contracts; see \code{\link[=typesafe_compare_pair_live]{typesafe_compare_pair_live()}}.
 For the \code{"anthropic"}, \code{"gemini"},
 \code{"vertex"}, \code{"together"}, and \code{"ollama"} backends, \code{endpoint} is
 currently ignored and the default live API for that provider is used.
@@ -220,7 +234,8 @@ res_ollama$better_id
 \itemize{
 \item \code{\link[=openai_compare_pair_live]{openai_compare_pair_live()}}, \code{\link[=anthropic_compare_pair_live]{anthropic_compare_pair_live()}},
 \code{\link[=gemini_compare_pair_live]{gemini_compare_pair_live()}}, \code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}},
-\code{\link[=together_compare_pair_live]{together_compare_pair_live()}}, and \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}} for
+\code{\link[=together_compare_pair_live]{together_compare_pair_live()}}, \code{\link[=ollama_compare_pair_live]{ollama_compare_pair_live()}}, and
+\code{\link[=typesafe_compare_pair_live]{typesafe_compare_pair_live()}} for
 backend-specific implementations.
 \item \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} for row-wise comparisons over a tibble of pairs.
 \item \code{\link[=build_bt_data]{build_bt_data()}} and \code{\link[=fit_bt_model]{fit_bt_model()}} for Bradley–Terry modelling of
@@ -241,6 +256,7 @@ Other live backends:
 \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
 \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
 \code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
+\code{\link[=typesafe_compare_pair_live]{typesafe_compare_pair_live()}},
 \code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}
 }
 \concept{live backends}

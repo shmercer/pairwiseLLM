@@ -192,6 +192,7 @@ Collate:
     'seed_helpers.R'
     'together_live.R'
     'traits.R'
+    'typesafe_live.R'
     'utils-null-coalesce.R'
     'vertex_live.R'
     'warm_start_adaptive.R'

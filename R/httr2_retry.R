@@ -111,12 +111,11 @@
                                  max_attempts = 3L,
                                  base_delay = 0.5,
                                  jitter = 0,
-                                 validate_request = NULL) {
+                                 validate_request = NULL,
+                                 transient_status = c(408L, 429L, 500L, 502L, 503L, 504L)) {
   if (max_attempts < 1L) {
     rlang::abort("`max_attempts` must be at least 1.")
   }
-
-  transient_status <- c(408L, 429L, 500L, 502L, 503L, 504L)
 
   attempt <- 1L
   failures <- list()

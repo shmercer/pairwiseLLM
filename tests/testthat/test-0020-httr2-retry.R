@@ -4,6 +4,20 @@
 .pairwiseLLM_req_perform <- pairwiseLLM:::.pairwiseLLM_req_perform
 .pairwiseLLM_resp_status <- pairwiseLLM:::.pairwiseLLM_resp_status
 
+test_that("provider retry-status overrides do not change the default overload policy", {
+  calls <- 0L
+  local_mocked_bindings(.pairwiseLLM_req_perform = function(req) {
+    calls <<- calls + 1L
+    structure(list(status = if (calls == 1L) 529L else 200L), class = "httr2_response")
+  }, .pairwiseLLM_resp_status = function(resp) resp$status, .package = "pairwiseLLM")
+  expect_identical(.retry_httr2_request(list(), base_delay = 0)$status, 529L)
+  expect_identical(calls, 1L)
+  calls <- 0L
+  expect_identical(suppressMessages(.retry_httr2_request(list(), base_delay = 0,
+    transient_status = c(429L, 500:599)))$status, 200L)
+  expect_identical(calls, 2L)
+})
+
 test_that("retry helper retries transient status codes and records failures", {
   call_count <- 0L
   fake_resp <- function(status) {

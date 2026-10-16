@@ -2,8 +2,8 @@
 #'
 #' `llm_compare_pair()` is a thin wrapper around backend-specific comparison
 #' functions. It currently supports the `"openai"`, `"anthropic"`, `"gemini"`,
-#' `"vertex"`, `"together"`, and `"ollama"` backends and forwards the call to the
-#' appropriate live comparison helper:
+#' `"vertex"`, `"together"`, `"ollama"`, and `"typesafe"` backends and forwards
+#' the call to the appropriate live comparison helper:
 #' \itemize{
 #'   \item `"openai"`   → [openai_compare_pair_live()]
 #'   \item `"anthropic"` → [anthropic_compare_pair_live()]
@@ -11,6 +11,7 @@
 #'   \item `"vertex"`   → [vertex_compare_pair_live()]
 #'   \item `"together"`  → [together_compare_pair_live()]
 #'   \item `"ollama"`   → [ollama_compare_pair_live()]
+#'   \item `"typesafe"` → [typesafe_compare_pair_live()]
 #' }
 #'
 #' All backends are expected to return a tibble with a compatible structure,
@@ -31,6 +32,8 @@
 #' Decisions uses the approved decision instructions and retains the complete
 #' binary probability distribution; see [openai_compare_pair_live()] for its
 #' supported controls, return fields, validation, and errors.
+#' TypeSafe uses its Choice endpoint and the same decision instructions and
+#' probability-preserving contracts; see [typesafe_compare_pair_live()].
 #' For the `"anthropic"`, `"gemini"`,
 #' `"vertex"`, `"together"`, and `"ollama"` backends, \code{endpoint} is
 #' currently ignored and the default live API for that provider is used.
@@ -48,25 +51,30 @@
 #'   such as `"deepseek-ai/DeepSeek-V4-Flash-0731"`. For
 #'   `"ollama"`, use a local model name known to the Ollama server (for example
 #'    `"mistral-small3.2:24b"`, `"qwen3:32b"`, `"gemma3:27b"`).
+#'   For `"typesafe"`, omission defaults to `"jev-1.13.0"`; explicit versioned
+#'   Jev identifiers and documented aliases are accepted without an availability
+#'   guarantee or automatic fallback. Other backends still require `model`.
 #' @param trait_name Short label for the trait (for example
 #'   `"Overall Quality"`).
 #' @param trait_description Full-text definition of the trait.
 #' @param prompt_template Prompt template string, typically from
 #'   [set_prompt_template()]. For Decisions, omit or use `NULL`; custom decision
-#'   instructions belong in `decision_template` in `...`.
+#'   instructions belong in `decision_template` in `...`. The same rule applies
+#'   to TypeSafe; its omitted generative default is never evaluated.
 #' @param backend Character scalar indicating which LLM provider to use.
 #'   One of `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`,
-#'   or `"ollama"`.
+#'   `"ollama"`, or `"typesafe"`.
 #' @param endpoint Character scalar specifying which endpoint family to use
 #'   for backends that support multiple live APIs. For the `"openai"` backend
 #'   this must be one of `"chat.completions"`, `"responses"`, or `"decisions"`, matching
 #'   [openai_compare_pair_live()]. For `"anthropic"`, `"gemini"`, `"vertex"`,
 #'   `"together"`, and `"ollama"`, this argument is currently ignored.
+#'   For `"typesafe"`, omit it or use `"systemone"`; other values fail.
 #' @param api_key Optional API key for the selected backend. If `NULL`, the
 #'   backend-specific helper will use its own default environment variable
 #'   (for example `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
-#'   `VERTEX_API_KEY`, `TOGETHER_API_KEY`). For `"ollama"`, this argument is
-#'   ignored (no API key is required for local inference).
+#'   `VERTEX_API_KEY`, `TOGETHER_API_KEY`, `TYPESAFE_API_KEY`). For `"ollama"`,
+#'   this argument is ignored (no API key is required for local inference).
 #' @param include_raw Logical; if `TRUE`, the returned tibble includes a
 #'   `raw_response` list-column with the parsed JSON body (or `NULL` on parse
 #'   failure). Support for this may vary across backends.
@@ -97,6 +105,11 @@
 #'   `prompt_cache_options` in `...`; generative, storage, and tier controls
 #'   fail before HTTP. Use `model = "gpt-6-luna"`. Its omitted prompt is never
 #'   replaced with the generative default. Bulk Decisions execution is deferred.
+#'   TypeSafe accepts only `pair_uid` and `decision_template` in `...`, including
+#'   rejection of unsupported settings explicitly supplied as `NULL`. Both
+#'   decision backends retain independent confidence and full request provenance;
+#'   probabilities never change binary BT/adaptive winner semantics. TypeSafe
+#'   bulk execution and managed Batch are unsupported.
 #'
 #' @return A tibble with one row and the same columns as the underlying
 #'   backend-specific live helper (for example [openai_compare_pair_live()]
@@ -182,7 +195,8 @@
 #' @seealso
 #' * [openai_compare_pair_live()], [anthropic_compare_pair_live()],
 #'   [gemini_compare_pair_live()], [vertex_compare_pair_live()],
-#'   [together_compare_pair_live()], and [ollama_compare_pair_live()] for
+#'   [together_compare_pair_live()], [ollama_compare_pair_live()], and
+#'   [typesafe_compare_pair_live()] for
 #'   backend-specific implementations.
 #' * [submit_llm_pairs()] for row-wise comparisons over a tibble of pairs.
 #' * [build_bt_data()] and [fit_bt_model()] for Bradley–Terry modelling of
@@ -199,14 +213,14 @@ llm_compare_pair <- function(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama", "typesafe"),
   endpoint = c("chat.completions", "responses", "decisions"),
   api_key = NULL,
   include_raw = FALSE,
   ...
 ) {
   backend <- as.character(backend)
-  valid_backends <- c("openai", "anthropic", "gemini", "vertex", "together", "ollama")
+  valid_backends <- c("openai", "anthropic", "gemini", "vertex", "together", "ollama", "typesafe")
   if (length(backend) < 1L || is.na(backend[1L]) || !nzchar(backend[1L])) {
     rlang::abort("`backend` must be a non-empty character scalar.")
   }
@@ -216,13 +230,26 @@ llm_compare_pair <- function(
       "Backend '", backend, "' is not implemented yet. ",
       "Currently supported backends are: ",
       "\"openai\", \"anthropic\", \"gemini\", \"vertex\", ",
-      "\"together\", and \"ollama\"."
+      "\"together\", \"ollama\", and \"typesafe\"."
     ))
   }
 
   # Normalize empty-string keys to NULL
   if (!is.null(api_key) && identical(api_key, "")) {
     api_key <- NULL
+  }
+
+  if (backend == "typesafe") {
+    if (!missing(endpoint) && !identical(endpoint, "systemone")) {
+      rlang::abort("TypeSafe supports only `endpoint = \"systemone\"`; omit the endpoint or use 'systemone'.")
+    }
+    if (missing(model)) model <- "jev-1.13.0"
+    if (missing(prompt_template)) prompt_template <- NULL
+    return(typesafe_compare_pair_live(
+      ID1 = ID1, text1 = text1, ID2 = ID2, text2 = text2,
+      model = model, trait_name = trait_name, trait_description = trait_description,
+      prompt_template = prompt_template, api_key = api_key, include_raw = include_raw, ...
+    ))
   }
 
   if (backend == "openai") {

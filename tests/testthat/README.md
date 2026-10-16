@@ -108,6 +108,10 @@ for OpenAI Decisions live transport, raw-payload capture, retries and dispatch.
 Prefixes were verified unused before implementation. All fixtures are synthetic;
 transport mocks return responses without network or real credentials.
 
+Issue #335 reserves 2002 for TypeSafe Jev live transport, raw-payload capture,
+model/credential validation, retries, and dispatch. Shared integrity tests remain
+in 0049. Fixtures are synthetic; all provider operations are mocked offline.
+
 Issue #305 reserves 0041–0043 for lapse likelihood/derivative contracts,
 estimation/recovery, and boundary/failure handling (verified unused on 2026-10-02).
 The frozen synthetic qualification matrix is in `scripts/validate-bt-lapse.R`;
