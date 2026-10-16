@@ -136,6 +136,8 @@ test_that("unsupported settings and malformed controls fail before credentials o
 test_that("altered constructed requests are rejected by both entry points before IO", {
   calls <- 0L
   original <- decision_333_request(pair_uid = "live-pair-334")
+  other_identities <- list(decision_333_request("typesafe"),
+                            decision_333_request(model = "another-model"))
   altered <- original
   forbidden <- function(...) { calls <<- calls + 1L; stop("unexpected IO") }
   local_mocked_bindings(.build_decision_request = function(...) altered,
@@ -147,7 +149,7 @@ test_that("altered constructed requests are rejected by both entry points before
       expect_error(do.call(fn, decision_334_args()), class = "pairwiseLLM_decision_request_error")
     }
   }
-  for (r in list(decision_333_request("typesafe"), decision_333_request(model = "another-model"))) {
+  for (r in other_identities) {
     altered <- r
     for (fn in list(openai_compare_pair_live, llm_compare_pair)) {
       expect_error(do.call(fn, decision_334_args()), class = "pairwiseLLM_decision_request_error")
