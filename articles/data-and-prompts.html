@@ -147,10 +147,11 @@ they are needed to map a provider’s <code>SAMPLE_1</code> or
 <div class="section level2">
 <h2 id="traits-and-prompt-templates">Traits and prompt templates<a class="anchor" aria-label="anchor" href="#traits-and-prompt-templates"></a>
 </h2>
-<p>Templates require all four placeholders: <code>{TRAIT_NAME}</code>,
-<code>{TRAIT_DESCRIPTION}</code>, <code>{SAMPLE_1}</code>, and
-<code>{SAMPLE_2}</code>. <code><a href="../reference/build_prompt.html">build_prompt()</a></code> substitutes them
-but does not submit anything to a provider.</p>
+<p>Generative templates require all four placeholders:
+<code>{TRAIT_NAME}</code>, <code>{TRAIT_DESCRIPTION}</code>,
+<code>{SAMPLE_1}</code>, and <code>{SAMPLE_2}</code>.
+<code><a href="../reference/build_prompt.html">build_prompt()</a></code> substitutes them but does not submit
+anything to a provider.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">trait</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trait_description.html">trait_description</a></span><span class="op">(</span><span class="st">"overall_quality"</span><span class="op">)</span></span>
 <span><span class="va">template</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span></span>
@@ -189,6 +190,66 @@ built-in template of the same name.
 registrations; it cannot delete built-in files.</p>
 </div>
 <div class="section level2">
+<h2 id="decision-instructions-and-probabilities">Decision instructions and probabilities<a class="anchor" aria-label="anchor" href="#decision-instructions-and-probabilities"></a>
+</h2>
+<p>OpenAI Decisions and TypeSafe Jev ask a binary choice question
+instead of asking the model to generate a tagged answer. Omitting
+<code>prompt_template</code> selects the same built-in
+<code>decision_cj_v1</code> instructions for both. This default is
+separate from <code><a href="../reference/set_prompt_template.html">set_prompt_template()</a></code> and its session
+registry. Pass your complete <code>trait_name</code> and
+<code>trait_description</code>; the description is preserved in full.
+For a custom trait, include its boundaries and what the assessor should
+ignore.</p>
+<p>You can prepare the settings entirely offline:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">decision_settings</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>  trait_name <span class="op">=</span> <span class="st">"Organization"</span>,</span>
+<span>  trait_description <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span></span>
+<span>    <span class="st">"Judge logical sequencing and connections between ideas."</span>,</span>
+<span>    <span class="st">"Exclude spelling and grammar except when they obscure organization."</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co"># Optional replacement instructions; omit to use decision_cj_v1.</span></span>
+<span><span class="va">custom_instructions</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span></span>
+<span>  <span class="st">"Assess {TRAIT_NAME} using the full guidance below."</span>,</span>
+<span>  <span class="st">"{TRAIT_DESCRIPTION}"</span>,</span>
+<span>  <span class="st">"Select the sample with stronger performance on this trait."</span>, sep <span class="op">=</span> <span class="st">"\n"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>Supply custom instructions as <code>decision_template</code>,
+retaining both trait placeholders. Sample text is supplied separately in
+presentation order. Do not put sample placeholders or the generative
+<code>&lt;BETTER_SAMPLE&gt;</code> tag into decision instructions. See
+<a href="../reference/llm_compare_pair.html"><code>llm_compare_pair()</code></a>
+for supported controls and validation.</p>
+<p>This <strong>invented result</strong> illustrates the output without
+making a provider call:</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">synthetic_decision</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  ID1 <span class="op">=</span> <span class="st">"A"</span>, ID2 <span class="op">=</span> <span class="st">"B"</span>, better_id <span class="op">=</span> <span class="st">"B"</span>,</span>
+<span>  p_sample_1 <span class="op">=</span> <span class="fl">0.3</span>, p_sample_2 <span class="op">=</span> <span class="fl">0.7</span>, p_chosen <span class="op">=</span> <span class="fl">0.7</span>,</span>
+<span>  decision_confidence <span class="op">=</span> <span class="fl">0.4</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">synthetic_decision</span></span>
+<span><span class="co">#&gt;   ID1 ID2 better_id p_sample_1 p_sample_2 p_chosen decision_confidence</span></span>
+<span><span class="co">#&gt; 1   A   B         B        0.3        0.7      0.7                 0.4</span></span>
+<span><span class="fu"><a href="../reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">synthetic_decision</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 1 × 3</span></span></span>
+<span><span class="co">#&gt;   object1 object2 result</span></span>
+<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> A       B            0</span></span></code></pre></div>
+<p><code>p_sample_1</code> refers to <code>ID1</code>, and
+<code>p_sample_2</code> to <code>ID2</code>, as presented. Compare the
+probability assigned to the <strong>same ID</strong> when auditing
+reversals; do not compare position columns without remapping IDs. Equal
+probabilities still require an explicit selected winner.
+<code>decision_confidence</code> is a separate provider field, not a
+substitute for either probability. These values have no demonstrated
+calibration for educational judgments and do not become BT weights or
+extra comparisons. The <a href="model-compatibility.html#decision-model-live-qualification">compatibility
+record</a> describes the observed live results and their limits.</p>
+</div>
+<div class="section level2">
 <h2 id="provider-and-result-schemas">Provider and result schemas<a class="anchor" aria-label="anchor" href="#provider-and-result-schemas"></a>
 </h2>
 <p>The live wrappers accept the fixed-pair rows directly. Batch request
@@ -218,7 +279,7 @@ audit and recovery.</p>
 and call <code><a href="../reference/build_bt_data.html">build_bt_data()</a></code> or <code><a href="../reference/build_elo_data.html">build_elo_data()</a></code>.
 Invalid or missing winners are not valid outcomes; inspect failures
 before modeling rather than silently treating them as ties.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_pairs"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">bt_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/build_bt_data.html">build_bt_data</a></span><span class="op">(</span><span class="va">example_writing_pairs</span><span class="op">)</span></span>

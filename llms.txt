@@ -117,14 +117,15 @@ return as they are processed; provider batch jobs are submitted for
 later retrieval. Choose according to turnaround, provider support, and
 workload, rather than a fixed number-of-pairs threshold.
 
-| Backend     | Service              | Live | Batch | Key environment variable |
-|-------------|----------------------|------|-------|--------------------------|
-| `openai`    | OpenAI               | Yes  | Yes   | `OPENAI_API_KEY`         |
-| `anthropic` | Anthropic            | Yes  | Yes   | `ANTHROPIC_API_KEY`      |
-| `gemini`    | Gemini Developer API | Yes  | Yes   | `GEMINI_API_KEY`         |
-| `vertex`    | Vertex AI Gemini API | Yes  | No    | `VERTEX_API_KEY`         |
-| `together`  | Together.ai          | Yes  | No    | `TOGETHER_API_KEY`       |
-| `ollama`    | Local Ollama server  | Yes  | No    | None                     |
+| Backend | Service | Live | Batch | Key environment variable |
+|----|----|----|----|----|
+| `openai` | OpenAI (including opt-in Decisions) | Yes | Generative endpoints only | `OPENAI_API_KEY` |
+| `anthropic` | Anthropic | Yes | Yes | `ANTHROPIC_API_KEY` |
+| `gemini` | Gemini Developer API | Yes | Yes | `GEMINI_API_KEY` |
+| `vertex` | Vertex AI Gemini API | Yes | No | `VERTEX_API_KEY` |
+| `together` | Together.ai | Yes | No | `TOGETHER_API_KEY` |
+| `typesafe` | TypeSafe Jev | Yes | No | `TYPESAFE_API_KEY` |
+| `ollama` | Local Ollama server | Yes | No | None |
 
 Gemini Developer API and Vertex use separate credentials. Ollama needs a
 local server and model installation. Model availability and supported
@@ -132,6 +133,37 @@ controls can change; see [Backends and Tested Model
 Configurations](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html)
 for dated evidence and official catalogs. The package does not maintain
 an exhaustive model allowlist or a current pricing catalog.
+
+### Decision models: a winner and two probabilities
+
+OpenAI Decisions (`endpoint = "decisions"`) and TypeSafe Jev
+(`backend = "typesafe"`) return a selected winner and a probability for
+each presented sample. Both use live requests, including when processing
+many pairs; provider-managed Batch is unsupported. They use the built-in
+`decision_cj_v1` instructions, so omit the generative `prompt_template`
+argument.
+
+``` r
+
+# Requires OPENAI_API_KEY; sends synthetic text and incurs usage charges.
+trait <- trait_description("overall_quality")
+decision <- llm_compare_pair(
+  "A", "A clear synthetic explanation.", "B", "A vague synthetic explanation.",
+  backend = "openai", model = "gpt-6-luna", endpoint = "decisions",
+  trait_name = trait$name, trait_description = trait$description
+)
+decision[c("better_id", "p_sample_1", "p_sample_2")]
+# For Jev, use backend = "typesafe", model = "jev-1.13.0",
+# endpoint = "systemone", and configure TYPESAFE_API_KEY.
+```
+
+These are provider probabilities for this pair and presentation order;
+they are not established probabilities that the assessment is correct.
+BT scoring continues to use the binary winner. See the [dated live
+qualification](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html#decision-model-live-qualification)
+and [recovery
+guide](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html#decision-models-save-resume-and-inspect)
+for tested models, safe resumption, and practical limits.
 
 ## All guides and statistical background
 

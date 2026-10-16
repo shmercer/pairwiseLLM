@@ -2,6 +2,17 @@
 
 ## pairwiseLLM (development version)
 
+- Document OpenAI Decisions and TypeSafe Jev setup, probability
+  interpretation, live collection, caching and recovery
+  ([\#337](https://github.com/shmercer/pairwiseLLM/issues/337)). The
+  dated October 16 synthetic pilot confirms compatibility for
+  `gpt-6-luna`/`decisions` and `jev-1.13.0`/`systemone`, with differing
+  reversal consistency; it does not establish probability calibration or
+  educational validity. Offline qualification extends bulk request
+  integrity, modeling compatibility and privacy regressions. Default
+  saved runs omit raw responses; in-memory failure objects can still
+  contain sensitive provider content when serialized by callers.
+
 - OpenAI Decisions and TypeSafe Jev support bounded concurrent live
   collection through
   [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)
@@ -28,8 +39,8 @@
   integrity checks, response parser, and probability-preserving
   normalization. TypeSafe overload/rate-limit retries preserve validated
   bytes; existing OpenAI Decisions, generative endpoints, and binary
-  modeling are unchanged. TypeSafe bulk execution and managed Batch
-  remain unsupported.
+  modeling are unchanged. Resumable live bulk execution is available;
+  managed Batch remains unsupported.
 
 - Single-pair OpenAI comparisons now support opt-in
   `endpoint = "decisions"` with `gpt-6-luna`
@@ -38,8 +49,8 @@
   independent confidence, usage and provenance are retained. Scientific
   request bodies and final serialized bytes are checked before HTTP,
   including retries. Unsupported controls fail early; existing
-  generative endpoints are unchanged. Managed Batch and bulk Decisions
-  remain unsupported.
+  generative endpoints are unchanged. Resumable live bulk Decisions is
+  available; managed Batch remains unsupported.
 
 - Internal decision-model foundations freeze the approved
   `decision_cj_v1` instructions and construct equivalent offline OpenAI
@@ -50,7 +61,7 @@
   completeness checks exclude malformed, refused, or
   choice/probability-mismatched decisions from model evidence. Existing
   generative defaults and binary BT inputs are preserved; live
-  integration and resumable execution follow separately.
+  integration and resumable execution use these contracts.
 
 - Require `rlang >= 1.3.0` for stable linked-input and runtime hashing,
   and optional `withr >= 3.0.3` for correct local RNG restoration.

@@ -123,8 +123,13 @@ from prose.
 Only normalized successful `results` are modeling evidence; retained
 failed choices are diagnostics. Existing BT/Bayesian/adaptive code is
 unchanged and does not consume probabilities as weights, fractional
-wins, or extra outcomes. Raw responses may contain sensitive provider
-content. Do not log them publicly.
+wins, or extra outcomes. Raw failed responses remain in memory even with
+`include_raw = FALSE`. Saving or serializing the complete returned
+object can persist sensitive provider content, including repeated sample
+text. Bulk default checkpoints and ordinary exports exclude raw
+responses; see
+[decision_bulk](https://shmercer.github.io/pairwiseLLM/reference/decision_bulk.md).
+Do not log complete failure objects publicly.
 
 ## See also
 

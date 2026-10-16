@@ -274,7 +274,11 @@ evidence. Use
 or
 [`submit_openai_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_openai_pairs_live.md)
 for live bulk execution; managed Batch remains unsupported for
-Decisions. API availability remains provider/account dependent. The
+Decisions. A live smoke run on 2026-10-16 exercised `gpt-6-luna` on 20
+synthetic samples, 60 primary pairs and 10 reverse audits; see the
+model-compatibility vignette for the tested commit and limits.
+Probabilities are not established calibrated probabilities of assessment
+correctness. API availability remains provider/account dependent. The
 schema and controls follow the [OpenAI Decisions
 reference](https://developers.openai.com/api/reference/resources/decisions/methods/create).
 

@@ -255,6 +255,14 @@ For the <code>"anthropic"</code>, <code>"gemini"</code>,
 currently ignored and the default live API for that provider is used.</p>
     </div>
     <div class="section level2">
+    <h2 id="decision-failure-retention">Decision failure retention<a class="anchor" aria-label="anchor" href="#decision-failure-retention"></a></h2>
+
+
+<p>Decision failures may retain raw provider responses in memory even when
+<code>include_raw = FALSE</code>; saving the complete return value may persist sensitive
+sample text. See <a href="decision_bulk.html">decision_bulk</a> for default checkpoint/export retention.</p>
+    </div>
+    <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index">
 <ul><li><p><code><a href="openai_compare_pair_live.html">openai_compare_pair_live()</a></code>, <code><a href="anthropic_compare_pair_live.html">anthropic_compare_pair_live()</a></code>,

@@ -90,8 +90,10 @@
 how to recover useful work after provider failures. Model availability
 changes independently of package behavior. Consult <a href="https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html">Backends
 and Tested Model Configurations</a> for the dated registry rather than
-treating examples here as a current model catalog. The release registry
-used here was tested on 2026-09-05 with pairwiseLLM 1.3.1.</p>
+treating examples here as a current model catalog. The registry
+preserves dated generative tests from 2026-09-05 and decision-model
+tests from 2026-10-16; a past success does not guarantee present
+availability.</p>
 <div class="section level2">
 <h2 id="start-with-the-symptom">Start with the symptom<a class="anchor" aria-label="anchor" href="#start-with-the-symptom"></a>
 </h2>
@@ -150,7 +152,7 @@ concurrency.</td>
 model/provider sampling defaults in effect; explicit values are
 forwarded subject to endpoint constraints. A <code>service_tier</code>
 is a provider-specific processing option, not a portable speed or price
-promise. OpenAI live requests accept
+promise. OpenAI generative live requests accept
 <code>"standard"</code>/<code>"default"</code>, <code>"auto"</code>,
 <code>"flex"</code>, and <code>"priority"</code>; explicit
 standard/default sends <code>"default"</code>. Gemini Developer API and
@@ -159,12 +161,12 @@ Vertex use <code>"standard"</code>, <code>"flex"</code>, or
 Availability is provider- and model-dependent. See
 <code><a href="../reference/llm_compare_pair.html">llm_compare_pair()</a></code> and the selected provider’s help for
 supported arguments.</p>
-<p>For OpenAI, <code>store</code> controls response storage; for Gemini
-Developer API it controls request logging. <code>NULL</code> omits the
-setting, preserving provider/project defaults. Neither
-<code>store = FALSE</code> nor omission establishes a general
-zero-retention policy. For OpenAI Batch storage, output limits, and
-separate error files, see the <a href="advanced-batch-workflows.html#openai-storage-output-limits-and-error-files">batch
+<p>For OpenAI generative endpoints, <code>store</code> controls response
+storage; for Gemini Developer API it controls request logging.
+<code>NULL</code> omits the setting, preserving provider/project
+defaults. Neither <code>store = FALSE</code> nor omission establishes a
+general zero-retention policy. For OpenAI Batch storage, output limits,
+and separate error files, see the <a href="advanced-batch-workflows.html#openai-storage-output-limits-and-error-files">batch
 guide</a>.</p>
 </div>
 <div class="section level2">
@@ -183,12 +185,27 @@ guide</a>.</p>
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td>OpenAI</td>
+<td>OpenAI generative</td>
 <td>
 <code>reasoning</code>, <code>include_thoughts</code>, endpoint
 sampling controls</td>
 <td>Reasoning support depends on model and endpoint; unsupported
 combinations abort during request normalization.</td>
+</tr>
+<tr class="even">
+<td>OpenAI Decisions</td>
+<td>
+<code>decision_template</code>,
+<code>prompt_cache_options</code>
+</td>
+<td>Live only; generative sampling, reasoning, storage and tier controls
+are rejected.</td>
+</tr>
+<tr class="odd">
+<td>TypeSafe Jev</td>
+<td><code>decision_template</code></td>
+<td>Live only; sampling, reasoning, caching, storage and tier controls
+are unsupported.</td>
 </tr>
 <tr class="even">
 <td>Anthropic</td>
@@ -273,6 +290,8 @@ workflow depend on hidden reasoning being present.</p>
 <span><span class="co">#&gt; 58  together     chat.completions               none           1.3.1 2026-09-05</span></span>
 <span><span class="co">#&gt; 60  together     chat.completions               none           1.3.1 2026-09-05</span></span>
 <span><span class="co">#&gt; 76    gemini      generateContent thinking_level=low           1.3.1 2026-09-02</span></span>
+<span><span class="co">#&gt; 77    openai            decisions   provider-default           1.6.0 2026-10-16</span></span>
+<span><span class="co">#&gt; 78  typesafe            systemone   provider-default           1.6.0 2026-10-16</span></span>
 <span><span class="co">#&gt;            status</span></span>
 <span><span class="co">#&gt; 1  tested-current</span></span>
 <span><span class="co">#&gt; 16 tested-current</span></span>
@@ -287,7 +306,9 @@ workflow depend on hidden reasoning being present.</p>
 <span><span class="co">#&gt; 57     unverified</span></span>
 <span><span class="co">#&gt; 58 tested-current</span></span>
 <span><span class="co">#&gt; 60     unverified</span></span>
-<span><span class="co">#&gt; 76        retired</span></span></code></pre></div>
+<span><span class="co">#&gt; 76        retired</span></span>
+<span><span class="co">#&gt; 77 tested-current</span></span>
+<span><span class="co">#&gt; 78 tested-current</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="live-calls-retain-successes-and-failures">Live calls: retain successes and failures<a class="anchor" aria-label="anchor" href="#live-calls-retain-successes-and-failures"></a>
@@ -335,15 +356,60 @@ confirming that the retry did not duplicate successful
 <code>custom_id</code> values. A returned HTTP success is not a valid
 judgment unless parsing also produced a winner belonging to the
 submitted pair.</p>
-<p>For OpenAI Decisions and TypeSafe Jev, keep the
-<code>.checkpoint</code> directory beside <code>save_path</code>: it
-holds completed decisions and retry history. Repeating the same call
-resumes matching work without repeating committed decisions. Requests
-left in flight may have incurred charges; one automatic reissue is
-allowed across restarts, and
-<code>execution_control = list(retry_ambiguous = FALSE)</code> disables
-it. Inspect all three returned components before modeling. See <a href="../reference/decision_bulk.html"><code>decision_bulk</code></a>
-for configuration and recovery details.</p>
+<div class="section level3">
+<h3 id="decision-models-save-resume-and-inspect">Decision models: save, resume, and inspect<a class="anchor" aria-label="anchor" href="#decision-models-save-resume-and-inspect"></a>
+</h3>
+<p>Use <code><a href="../reference/submit_llm_pairs.html">submit_llm_pairs()</a></code> with
+<code>backend = "openai", endpoint = "decisions", model = "gpt-6-luna"</code>,
+or <code>backend = "typesafe", model = "jev-1.13.0"</code>. Configure
+<code>OPENAI_API_KEY</code> or <code>TYPESAFE_API_KEY</code>; explicit
+<code>api_key</code> values take precedence. Omit generative prompts and
+controls, including explicit <code>NULL</code> settings for unsupported
+options. See the <a href="data-and-prompts.html#decision-instructions-and-probabilities">prompts
+guide</a> for custom traits and decision instructions.</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Requires TYPESAFE_API_KEY and incurs charges for unresolved work.</span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/submit_llm_pairs.html">submit_llm_pairs</a></span><span class="op">(</span></span>
+<span>  <span class="va">pairs</span>, backend <span class="op">=</span> <span class="st">"typesafe"</span>, model <span class="op">=</span> <span class="st">"jev-1.13.0"</span>,</span>
+<span>  trait_name <span class="op">=</span> <span class="va">trait</span><span class="op">$</span><span class="va">name</span>, trait_description <span class="op">=</span> <span class="va">trait</span><span class="op">$</span><span class="va">description</span>,</span>
+<span>  save_path <span class="op">=</span> <span class="st">"jev-decisions.csv"</span>, parallel <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  execution_control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>requests_per_minute <span class="op">=</span> <span class="fl">30</span>, retry_ambiguous <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co"># Repeat this same call after interruption; preserve the .checkpoint directory.</span></span>
+<span><span class="va">result</span><span class="op">$</span><span class="va">failed_pairs</span></span>
+<span><span class="va">result</span><span class="op">$</span><span class="va">failed_attempts</span></span></code></pre></div>
+<p>Saved decision runs require optional <code>filelock</code>. The
+<code>.checkpoint</code> directory beside <code>save_path</code> is the
+authoritative record; CSV alone cannot resume a run. Keep it with its
+export. Repeating the same call reuses committed decisions; changing
+samples, presentation order, trait, instructions, model, workset, or
+OpenAI cache controls requires a separate save path. Corrupt checkpoints
+stop before calls; preserve them for inspection instead of editing them.
+Prefer a local filesystem with reliable locking and atomic renames.
+Cloud-synchronized folders do not establish cross-machine locking or
+power-loss durability.</p>
+<p>Sequential calls need no asynchronous packages. Concurrent collection
+uses optional <code>promises</code> and <code>later</code> with
+<code>parallel = TRUE, workers = 4</code>; workers limit simultaneous
+requests. Set request limits for your account and workload; token
+limiting additionally needs your token estimates, including an output
+allowance. These controls cover one run, not all activity on the
+account, and token reservations are estimates. Retry budgets and recent
+reservations survive restart. Temporary errors receive bounded retries;
+invalid decisions stay unresolved. In-flight requests may already have
+incurred charges. By default, one ambiguous reissue is allowed across
+restarts; the example disables it. Checkpoints do not guarantee
+exactly-once provider execution.</p>
+<p>OpenAI Decisions uses its own <code>prompt_cache_options</code>,
+separate from generative Batch caching controls. In this helper,
+<code>list(mode = "explicit")</code> disables caching because no
+explicit breakpoints are added. Omission uses implicit caching; caching
+does not guarantee zero retention. TypeSafe exposes no caching or
+retention control here. Full limits and recovery details are in <a href="../reference/decision_bulk.html"><code>decision_bulk</code></a>
+and the provider helpers. Compare reversal probabilities after mapping
+positions back to the same sample ID, and inspect both probabilities
+alongside the selected winner.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="batch-recovery">Batch recovery<a class="anchor" aria-label="anchor" href="#batch-recovery"></a>
@@ -387,7 +453,7 @@ calling the package. Tags are local and environment-dependent. Large
 models and context windows can exhaust accelerator or system memory;
 reduce <code>num_ctx</code>, concurrency, or model size when requests
 are evicted or time out.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Local-system example; requires the Ollama CLI/server and a previously pulled tag.</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>pairwiseLLM.ollama_host <span class="op">=</span> <span class="st">"http://127.0.0.1:11434"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/ensure_only_ollama_model_loaded.html">ensure_only_ollama_model_loaded</a></span><span class="op">(</span><span class="st">"qwen3:32b"</span><span class="op">)</span></span></code></pre></div>
@@ -405,10 +471,14 @@ need those models.</p>
 </h2>
 <p>Cloud requests transmit sample and prompt text to the selected
 provider. Raw responses and thoughts may repeat submitted text and
-increase storage. Set <code>include_raw = TRUE</code> only under an
-appropriate privacy and retention policy, and avoid placing credentials
-or raw responses in registries, vignettes, bug reports, or version
-control.</p>
+increase storage. In-memory decision failure objects may retain raw
+responses even with <code>include_raw = FALSE</code>; saving an entire
+returned object can persist them and retained source text columns.
+Default decision checkpoints and ordinary exports omit raw responses.
+See <code>decision_bulk</code> for detailed retention rules. Set
+<code>include_raw = TRUE</code> only under an appropriate privacy and
+retention policy, and avoid placing credentials or raw responses in
+registries, vignettes, bug reports, or version control.</p>
 </div>
 <div class="section level2">
 <h2 id="estimate-costs-before-a-larger-run">Estimate costs before a larger run<a class="anchor" aria-label="anchor" href="#estimate-costs-before-a-larger-run"></a>
@@ -431,7 +501,7 @@ tokens, controlled by <code>budget_quantile</code>)</li>
 <p>If you are running a discounted batch workflow, set
 <code>mode = "batch"</code> and supply a <code>batch_discount</code>
 multiplier.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/shmercer/pairwiseLLM" class="external-link">pairwiseLLM</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
 <span></span>
@@ -491,7 +561,7 @@ not included in the pilot (<code>remaining_pairs</code>). Use
 <code>remaining_pairs</code> to submit only the remaining work after you
 are satisfied with the estimate. Pilot judgments are not automatically
 merged into the later submission result:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">remaining_pairs</span> <span class="op">&lt;-</span> <span class="va">est</span><span class="op">$</span><span class="va">remaining_pairs</span></span>
 <span></span>
 <span><span class="co"># Example: submit only the remaining pairs as a batch</span></span>

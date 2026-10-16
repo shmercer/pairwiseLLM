@@ -104,10 +104,17 @@ Recovery</a> for troubleshooting.</p>
 <h2 id="what-the-package-supports">What the package supports<a class="anchor" aria-label="anchor" href="#what-the-package-supports"></a>
 </h2>
 <p><code>pairwiseLLM</code> implements request and response handling for
-six backends. The package generally forwards <code>model</code>
+seven backends. The package generally forwards <code>model</code>
 identifiers to the selected provider; it does not maintain an exhaustive
 model allowlist.</p>
 <table class="table">
+<colgroup>
+<col width="15%">
+<col width="15%">
+<col width="26%">
+<col width="26%">
+<col width="15%">
+</colgroup>
 <thead><tr class="header">
 <th>Backend</th>
 <th>Provider surface</th>
@@ -118,9 +125,9 @@ model allowlist.</p>
 <tbody>
 <tr class="odd">
 <td><code>openai</code></td>
-<td>OpenAI</td>
+<td>OpenAI generative endpoints; opt-in Decisions</td>
 <td align="center">yes</td>
-<td align="center">yes</td>
+<td align="center">generative only</td>
 <td><code>OPENAI_API_KEY</code></td>
 </tr>
 <tr class="even">
@@ -152,6 +159,13 @@ model allowlist.</p>
 <td><code>TOGETHER_API_KEY</code></td>
 </tr>
 <tr class="even">
+<td><code>typesafe</code></td>
+<td>TypeSafe Jev (<code>systemone</code>)</td>
+<td align="center">yes</td>
+<td align="center">no</td>
+<td><code>TYPESAFE_API_KEY</code></td>
+</tr>
+<tr class="odd">
 <td><code>ollama</code></td>
 <td>Local Ollama server</td>
 <td align="center">yes</td>
@@ -170,7 +184,9 @@ package.</p>
 <a href="https://ai.google.dev/gemini-api/docs/models" class="external-link">Gemini Developer
 API</a>, <a href="https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions" class="external-link">Vertex
 AI</a>, and <a href="https://docs.together.ai/docs/serverless/models" class="external-link">Together AI</a>.
-Ollama tags depend on what is installed on the local server.</p>
+<a href="https://docs.typesafe.ai/models" class="external-link">TypeSafe</a> documents Jev
+versions and aliases. Ollama tags depend on what is installed on the
+local server.</p>
 </div>
 <div class="section level2">
 <h2 id="dated-compatibility-record">Dated compatibility record<a class="anchor" aria-label="anchor" href="#dated-compatibility-record"></a>
@@ -182,8 +198,10 @@ records a successful maintained smoke test for that exact mode; a live
 success is not evidence of batch success. The dated detailed result
 artifacts are
 <code>inst/extdata/model_smoke_results_2026-09-05.csv</code> and
-<code>inst/extdata/model_batch_smoke_results_2026-09-05.csv</code>.
-Standard configurations omit <code>temperature</code> and
+<code>inst/extdata/model_batch_smoke_results_2026-09-05.csv</code>. The
+October 16 decision qualification is summarized below and in the
+registry; its private raw journals are not distributed. Standard
+generative configurations omit <code>temperature</code> and
 <code>top_p</code>, so their model/provider defaults apply.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">registry_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span></span>
@@ -280,6 +298,8 @@ Standard configurations omit <code>temperature</code> and
 <span><span class="co">#&gt; 74  together            meta-models/Muse-Glimmer-30B     chat.completions</span></span>
 <span><span class="co">#&gt; 75  together                      Qwen/Qwen3.8-Flash     chat.completions</span></span>
 <span><span class="co">#&gt; 76    gemini                    gemini-3-pro-preview      generateContent</span></span>
+<span><span class="co">#&gt; 77    openai                              gpt-6-luna            decisions</span></span>
+<span><span class="co">#&gt; 78  typesafe                              jev-1.13.0            systemone</span></span>
 <span><span class="co">#&gt;    live_tested batch_tested     reasoning_mode package_version  test_date</span></span>
 <span><span class="co">#&gt; 1         TRUE         TRUE   provider-default           1.3.1 2026-09-05</span></span>
 <span><span class="co">#&gt; 2         TRUE         TRUE   provider-default           1.3.1 2026-09-05</span></span>
@@ -357,6 +377,8 @@ Standard configurations omit <code>temperature</code> and
 <span><span class="co">#&gt; 74        TRUE        FALSE               none           1.3.1 2026-09-05</span></span>
 <span><span class="co">#&gt; 75       FALSE        FALSE               none           1.3.1 2026-09-05</span></span>
 <span><span class="co">#&gt; 76       false        false thinking_level=low           1.3.1 2026-09-02</span></span>
+<span><span class="co">#&gt; 77        TRUE        FALSE   provider-default           1.6.0 2026-10-16</span></span>
+<span><span class="co">#&gt; 78        TRUE        FALSE   provider-default           1.6.0 2026-10-16</span></span>
 <span><span class="co">#&gt;            status</span></span>
 <span><span class="co">#&gt; 1  tested-current</span></span>
 <span><span class="co">#&gt; 2  tested-current</span></span>
@@ -433,7 +455,9 @@ Standard configurations omit <code>temperature</code> and
 <span><span class="co">#&gt; 73 tested-current</span></span>
 <span><span class="co">#&gt; 74 tested-current</span></span>
 <span><span class="co">#&gt; 75     unverified</span></span>
-<span><span class="co">#&gt; 76        retired</span></span></code></pre></div>
+<span><span class="co">#&gt; 76        retired</span></span>
+<span><span class="co">#&gt; 77 tested-current</span></span>
+<span><span class="co">#&gt; 78 tested-current</span></span></code></pre></div>
 <p>Registry statuses mean:</p>
 <ul>
 <li>
@@ -450,6 +474,9 @@ retained only as historical evidence.</li>
 <code>unverified</code>: availability or a partial response was
 observed, but no successful parsed package result was established.</li>
 </ul>
+<div class="section level3">
+<h3 id="optional-future-checks">Optional future checks<a class="anchor" aria-label="anchor" href="#optional-future-checks"></a>
+</h3>
 <p>The opt-in <code>inst/scripts/smoke_model_compatibility.R</code>
 harness can re-test selected live or batch configurations and write a
 dated result artifact. It makes billable network calls and is
@@ -468,6 +495,110 @@ implement and test. Likewise, Ollama names such as
 <code>mistral-small3.2:24b</code> are only dated, environment-dependent
 local examples, not claims about what another Ollama installation
 provides.</p>
+</div>
+</div>
+<div class="section level2">
+<h2 id="decision-model-live-qualification">Decision-model live qualification<a class="anchor" aria-label="anchor" href="#decision-model-live-qualification"></a>
+</h2>
+<p>On <strong>2026-10-16</strong>, an owner-authorized live smoke run
+used pairwiseLLM 1.6.0, PR #343 HEAD
+<code>8a220cb2a6ebdf55faed4d1712ce4e23c2b2dd79</code>:</p>
+<table class="table">
+<thead><tr class="header">
+<th>Provider</th>
+<th>Exact requested model</th>
+<th>Live endpoint</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>OpenAI</td>
+<td><code>gpt-6-luna</code></td>
+<td>
+<code>decisions</code> (<code>POST /v1/decisions</code>)</td>
+</tr>
+<tr class="even">
+<td>TypeSafe</td>
+<td><code>jev-1.13.0</code></td>
+<td>
+<code>systemone</code> (<code>POST /v1/systemone</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Both used the bundled <strong>20 synthetic writing samples</strong>,
+Overall Quality, the same <strong>60 primary pairs</strong> (each item
+appeared in six pairs), and <strong>10 reversed presentation audits per
+provider</strong>, plus a separate single-pair preflight for each. No
+provider-managed Batch jobs were used. Both preflights succeeded; both
+providers returned 60/60 valid primary decisions and all 10 reverse
+audits. All 120 primary SAMPLE_1 probabilities were finite and within
+[0,1], selected winners agreed with their probabilities and belonged to
+their submitted pairs, and all 20 items had finite Firth-adjusted BT
+estimates for each provider.</p>
+<p>Primary winners agreed on 53/60 pairs (88.33%; kappa 0.7619). The two
+sets of BT scores had Pearson correlation 0.9211 and Spearman
+correlation 0.9053. Winner agreement under reversed presentation was
+7/10 for OpenAI and 5/10 for TypeSafe. These are descriptive results
+from a small synthetic pilot. The reversal results raise a
+position-consistency concern for further study; they do not establish an
+implementation defect or that the providers are interchangeable.
+Provider probabilities have not been shown to be calibrated, and this
+run does not validate educational scoring or replace BT inference.</p>
+<p>The live evidence establishes compatibility and end-to-end completion
+for these configurations on that date. Its aggregate summaries do not
+establish exact transmission counts, every outbound JSON field,
+interruption/retry behavior, lock exclusion, or zero new sends on
+restart. Those implementation paths are qualified separately with
+provider-free regression tests. OpenAI Decisions currently accepts only
+<code>gpt-6-luna</code> in this package. Other Jev versions and the
+moving <code>jev-latest</code>/<code>jev-preview</code> aliases are
+accepted but were not tested here; record requested and reported model
+versions, and do not assume aliases freeze model weights or future
+availability.</p>
+<div class="section level3">
+<h3 id="reproduce-the-design-without-sharing-private-data">Reproduce the design without sharing private data<a class="anchor" aria-label="anchor" href="#reproduce-the-design-without-sharing-private-data"></a>
+</h3>
+<p>Prepare the bundled samples locally, select a connected degree-six
+graph with 60 unique primary pairs, freeze the same oriented pair table
+for both providers, and select 10 of those pairs for reversed audits
+with distinct occurrence IDs. Use Overall Quality and the default
+decision instructions. This offline example builds a connected
+degree-six schedule and ten reverse audits, without calls:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="st">"example_writing_samples"</span>, package <span class="op">=</span> <span class="st">"pairwiseLLM"</span><span class="op">)</span></span>
+<span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">example_writing_samples</span></span>
+<span><span class="va">edges</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/expand.grid.html" class="external-link">expand.grid</a></span><span class="op">(</span>i <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">s</span><span class="op">)</span><span class="op">)</span>, offset <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">3</span><span class="op">)</span></span>
+<span><span class="va">j</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="va">edges</span><span class="op">$</span><span class="va">i</span> <span class="op">-</span> <span class="fl">1L</span> <span class="op">+</span> <span class="va">edges</span><span class="op">$</span><span class="va">offset</span><span class="op">)</span> <span class="op"><a href="https://rdrr.io/r/base/Arithmetic.html" class="external-link">%%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">s</span><span class="op">)</span> <span class="op">+</span> <span class="fl">1L</span></span>
+<span><span class="va">primary</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  ID1 <span class="op">=</span> <span class="va">s</span><span class="op">$</span><span class="va">ID</span><span class="op">[</span><span class="va">edges</span><span class="op">$</span><span class="va">i</span><span class="op">]</span>, text1 <span class="op">=</span> <span class="va">s</span><span class="op">$</span><span class="va">text</span><span class="op">[</span><span class="va">edges</span><span class="op">$</span><span class="va">i</span><span class="op">]</span>, ID2 <span class="op">=</span> <span class="va">s</span><span class="op">$</span><span class="va">ID</span><span class="op">[</span><span class="va">j</span><span class="op">]</span>, text2 <span class="op">=</span> <span class="va">s</span><span class="op">$</span><span class="va">text</span><span class="op">[</span><span class="va">j</span><span class="op">]</span>,</span>
+<span>  pair_uid <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"primary-"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">edges</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">audit</span> <span class="op">&lt;-</span> <span class="va">primary</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">10</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ID2"</span>, <span class="st">"text2"</span>, <span class="st">"ID1"</span>, <span class="st">"text1"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">audit</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ID1"</span>, <span class="st">"text1"</span>, <span class="st">"ID2"</span>, <span class="st">"text2"</span><span class="op">)</span></span>
+<span><span class="va">audit</span><span class="op">$</span><span class="va">pair_uid</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"reverse-"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">audit</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>samples <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">s</span><span class="op">)</span>, primary_pairs <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">primary</span><span class="op">)</span>, reverse_audits <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">audit</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;        samples  primary_pairs reverse_audits </span></span>
+<span><span class="co">#&gt;             20             60             10</span></span></code></pre></div>
+<p>This reproduces the pilot design, not necessarily its exact original
+schedule. After separate owner authorization, preflight one pair per
+provider, collect the primary and reverse work into separate saved runs,
+and retain their checkpoints. Inspect completeness, ID mappings,
+probability validity, binary BT output and reversal consistency
+separately. Record date, package commit, requested/reported models,
+response IDs, usage and actual cost when available. Keep sample text,
+credentials, raw responses and complete returned objects private;
+publish only appropriate aggregate summaries. No additional live run is
+required to use the dated evidence above.</p>
+<p>A future tiny compatibility check can select the two decision
+profiles in the existing smoke harness. First inspect the selection
+without calls:</p>
+<pre class="text"><code>Rscript inst/scripts/smoke_model_compatibility.R --list=true --mode=live \
+  --providers=openai,typesafe \
+  --profiles=openai_decisions_default,typesafe_systemone_default</code></pre>
+<p>Running without <code>--list=true</code> additionally requires the
+explicit billable opt-in shown above and separate owner approval. This
+one-pair harness does not reproduce the 20-sample pilot or its reversal
+analysis.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>

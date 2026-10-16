@@ -430,6 +430,14 @@ charges** when you run them. They send the prompt and sample text to
 your chosen provider. Review its privacy and retention terms before
 submitting sensitive data.
 
+OpenAI Decisions and TypeSafe Jev also return two choice probabilities.
+For a short example see the
+[README](https://shmercer.github.io/pairwiseLLM/#decision-models-a-winner-and-two-probabilities);
+use the [recovery
+guide](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html#decision-models-save-resume-and-inspect)
+for resumable live collection. These options do not use provider-managed
+Batch.
+
 ### Configure one provider
 
 A **backend** selects the service; `model` selects a model offered by

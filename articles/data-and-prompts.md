@@ -68,7 +68,7 @@ Keep the identifiers: they are needed to map a provider’s `SAMPLE_1` or
 
 ## Traits and prompt templates
 
-Templates require all four placeholders: `{TRAIT_NAME}`,
+Generative templates require all four placeholders: `{TRAIT_NAME}`,
 `{TRAIT_DESCRIPTION}`, `{SAMPLE_1}`, and `{SAMPLE_2}`.
 [`build_prompt()`](https://shmercer.github.io/pairwiseLLM/reference/build_prompt.md)
 substitutes them but does not submit anything to a provider.
@@ -117,6 +117,74 @@ resolves a user registration before a built-in template of the same
 name.
 [`remove_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/remove_prompt_template.md)
 removes only session registrations; it cannot delete built-in files.
+
+## Decision instructions and probabilities
+
+OpenAI Decisions and TypeSafe Jev ask a binary choice question instead
+of asking the model to generate a tagged answer. Omitting
+`prompt_template` selects the same built-in `decision_cj_v1`
+instructions for both. This default is separate from
+[`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md)
+and its session registry. Pass your complete `trait_name` and
+`trait_description`; the description is preserved in full. For a custom
+trait, include its boundaries and what the assessor should ignore.
+
+You can prepare the settings entirely offline:
+
+``` r
+
+decision_settings <- list(
+  trait_name = "Organization",
+  trait_description = paste(
+    "Judge logical sequencing and connections between ideas.",
+    "Exclude spelling and grammar except when they obscure organization."
+  )
+)
+# Optional replacement instructions; omit to use decision_cj_v1.
+custom_instructions <- paste(
+  "Assess {TRAIT_NAME} using the full guidance below.",
+  "{TRAIT_DESCRIPTION}",
+  "Select the sample with stronger performance on this trait.", sep = "\n"
+)
+```
+
+Supply custom instructions as `decision_template`, retaining both trait
+placeholders. Sample text is supplied separately in presentation order.
+Do not put sample placeholders or the generative `<BETTER_SAMPLE>` tag
+into decision instructions. See
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
+for supported controls and validation.
+
+This **invented result** illustrates the output without making a
+provider call:
+
+``` r
+
+synthetic_decision <- data.frame(
+  ID1 = "A", ID2 = "B", better_id = "B",
+  p_sample_1 = 0.3, p_sample_2 = 0.7, p_chosen = 0.7,
+  decision_confidence = 0.4
+)
+synthetic_decision
+#>   ID1 ID2 better_id p_sample_1 p_sample_2 p_chosen decision_confidence
+#> 1   A   B         B        0.3        0.7      0.7                 0.4
+build_bt_data(synthetic_decision)
+#> # A tibble: 1 × 3
+#>   object1 object2 result
+#>   <chr>   <chr>    <dbl>
+#> 1 A       B            0
+```
+
+`p_sample_1` refers to `ID1`, and `p_sample_2` to `ID2`, as presented.
+Compare the probability assigned to the **same ID** when auditing
+reversals; do not compare position columns without remapping IDs. Equal
+probabilities still require an explicit selected winner.
+`decision_confidence` is a separate provider field, not a substitute for
+either probability. These values have no demonstrated calibration for
+educational judgments and do not become BT weights or extra comparisons.
+The [compatibility
+record](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html#decision-model-live-qualification)
+describes the observed live results and their limits.
 
 ## Provider and result schemas
 

@@ -18,18 +18,19 @@ for troubleshooting.
 
 ## What the package supports
 
-`pairwiseLLM` implements request and response handling for six backends.
-The package generally forwards `model` identifiers to the selected
-provider; it does not maintain an exhaustive model allowlist.
+`pairwiseLLM` implements request and response handling for seven
+backends. The package generally forwards `model` identifiers to the
+selected provider; it does not maintain an exhaustive model allowlist.
 
-| Backend     | Provider surface     | Live | Batch | Credential          |
-|-------------|----------------------|:----:|:-----:|---------------------|
-| `openai`    | OpenAI               | yes  |  yes  | `OPENAI_API_KEY`    |
-| `anthropic` | Anthropic            | yes  |  yes  | `ANTHROPIC_API_KEY` |
-| `gemini`    | Gemini Developer API | yes  |  yes  | `GEMINI_API_KEY`    |
-| `vertex`    | Vertex AI Gemini API | yes  |  no   | `VERTEX_API_KEY`    |
-| `together`  | Together AI          | yes  |  no   | `TOGETHER_API_KEY`  |
-| `ollama`    | Local Ollama server  | yes  |  no   | none                |
+| Backend | Provider surface | Live | Batch | Credential |
+|----|----|:--:|:--:|----|
+| `openai` | OpenAI generative endpoints; opt-in Decisions | yes | generative only | `OPENAI_API_KEY` |
+| `anthropic` | Anthropic | yes | yes | `ANTHROPIC_API_KEY` |
+| `gemini` | Gemini Developer API | yes | yes | `GEMINI_API_KEY` |
+| `vertex` | Vertex AI Gemini API | yes | no | `VERTEX_API_KEY` |
+| `together` | Together AI | yes | no | `TOGETHER_API_KEY` |
+| `typesafe` | TypeSafe Jev (`systemone`) | yes | no | `TYPESAFE_API_KEY` |
+| `ollama` | Local Ollama server | yes | no | none |
 
 Backend implementation is not the same as compatibility with every
 model. Endpoint compatibility depends on the request shape a model
@@ -45,7 +46,8 @@ Check current availability in the official catalogs for
 [Vertex
 AI](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions),
 and [Together AI](https://docs.together.ai/docs/serverless/models).
-Ollama tags depend on what is installed on the local server.
+[TypeSafe](https://docs.typesafe.ai/models) documents Jev versions and
+aliases. Ollama tags depend on what is installed on the local server.
 
 ## Dated compatibility record
 
@@ -55,7 +57,9 @@ not imply incompatibility. A `true` value records a successful
 maintained smoke test for that exact mode; a live success is not
 evidence of batch success. The dated detailed result artifacts are
 `inst/extdata/model_smoke_results_2026-09-05.csv` and
-`inst/extdata/model_batch_smoke_results_2026-09-05.csv`. Standard
+`inst/extdata/model_batch_smoke_results_2026-09-05.csv`. The October 16
+decision qualification is summarized below and in the registry; its
+private raw journals are not distributed. Standard generative
 configurations omit `temperature` and `top_p`, so their model/provider
 defaults apply.
 
@@ -155,6 +159,8 @@ registry[c(
 #> 74  together            meta-models/Muse-Glimmer-30B     chat.completions
 #> 75  together                      Qwen/Qwen3.8-Flash     chat.completions
 #> 76    gemini                    gemini-3-pro-preview      generateContent
+#> 77    openai                              gpt-6-luna            decisions
+#> 78  typesafe                              jev-1.13.0            systemone
 #>    live_tested batch_tested     reasoning_mode package_version  test_date
 #> 1         TRUE         TRUE   provider-default           1.3.1 2026-09-05
 #> 2         TRUE         TRUE   provider-default           1.3.1 2026-09-05
@@ -232,6 +238,8 @@ registry[c(
 #> 74        TRUE        FALSE               none           1.3.1 2026-09-05
 #> 75       FALSE        FALSE               none           1.3.1 2026-09-05
 #> 76       false        false thinking_level=low           1.3.1 2026-09-02
+#> 77        TRUE        FALSE   provider-default           1.6.0 2026-10-16
+#> 78        TRUE        FALSE   provider-default           1.6.0 2026-10-16
 #>            status
 #> 1  tested-current
 #> 2  tested-current
@@ -309,6 +317,8 @@ registry[c(
 #> 74 tested-current
 #> 75     unverified
 #> 76        retired
+#> 77 tested-current
+#> 78 tested-current
 ```
 
 Registry statuses mean:
@@ -321,6 +331,8 @@ Registry statuses mean:
   only as historical evidence.
 - `unverified`: availability or a partial response was observed, but no
   successful parsed package result was established.
+
+### Optional future checks
 
 The opt-in `inst/scripts/smoke_model_compatibility.R` harness can
 re-test selected live or batch configurations and write a dated result
@@ -344,6 +356,99 @@ implement and test. Likewise, Ollama names such as `qwen3:32b`,
 `gemma3:27b`, and `mistral-small3.2:24b` are only dated,
 environment-dependent local examples, not claims about what another
 Ollama installation provides.
+
+## Decision-model live qualification
+
+On **2026-10-16**, an owner-authorized live smoke run used pairwiseLLM
+1.6.0, PR \#343 HEAD `8a220cb2a6ebdf55faed4d1712ce4e23c2b2dd79`:
+
+| Provider | Exact requested model | Live endpoint                      |
+|----------|-----------------------|------------------------------------|
+| OpenAI   | `gpt-6-luna`          | `decisions` (`POST /v1/decisions`) |
+| TypeSafe | `jev-1.13.0`          | `systemone` (`POST /v1/systemone`) |
+
+Both used the bundled **20 synthetic writing samples**, Overall Quality,
+the same **60 primary pairs** (each item appeared in six pairs), and
+**10 reversed presentation audits per provider**, plus a separate
+single-pair preflight for each. No provider-managed Batch jobs were
+used. Both preflights succeeded; both providers returned 60/60 valid
+primary decisions and all 10 reverse audits. All 120 primary SAMPLE_1
+probabilities were finite and within \[0,1\], selected winners agreed
+with their probabilities and belonged to their submitted pairs, and all
+20 items had finite Firth-adjusted BT estimates for each provider.
+
+Primary winners agreed on 53/60 pairs (88.33%; kappa 0.7619). The two
+sets of BT scores had Pearson correlation 0.9211 and Spearman
+correlation 0.9053. Winner agreement under reversed presentation was
+7/10 for OpenAI and 5/10 for TypeSafe. These are descriptive results
+from a small synthetic pilot. The reversal results raise a
+position-consistency concern for further study; they do not establish an
+implementation defect or that the providers are interchangeable.
+Provider probabilities have not been shown to be calibrated, and this
+run does not validate educational scoring or replace BT inference.
+
+The live evidence establishes compatibility and end-to-end completion
+for these configurations on that date. Its aggregate summaries do not
+establish exact transmission counts, every outbound JSON field,
+interruption/retry behavior, lock exclusion, or zero new sends on
+restart. Those implementation paths are qualified separately with
+provider-free regression tests. OpenAI Decisions currently accepts only
+`gpt-6-luna` in this package. Other Jev versions and the moving
+`jev-latest`/`jev-preview` aliases are accepted but were not tested
+here; record requested and reported model versions, and do not assume
+aliases freeze model weights or future availability.
+
+### Reproduce the design without sharing private data
+
+Prepare the bundled samples locally, select a connected degree-six graph
+with 60 unique primary pairs, freeze the same oriented pair table for
+both providers, and select 10 of those pairs for reversed audits with
+distinct occurrence IDs. Use Overall Quality and the default decision
+instructions. This offline example builds a connected degree-six
+schedule and ten reverse audits, without calls:
+
+``` r
+
+data("example_writing_samples", package = "pairwiseLLM")
+s <- example_writing_samples
+edges <- expand.grid(i = seq_len(nrow(s)), offset = 1:3)
+j <- (edges$i - 1L + edges$offset) %% nrow(s) + 1L
+primary <- data.frame(
+  ID1 = s$ID[edges$i], text1 = s$text[edges$i], ID2 = s$ID[j], text2 = s$text[j],
+  pair_uid = paste0("primary-", seq_len(nrow(edges)))
+)
+audit <- primary[1:10, c("ID2", "text2", "ID1", "text1")]
+names(audit) <- c("ID1", "text1", "ID2", "text2")
+audit$pair_uid <- paste0("reverse-", seq_len(nrow(audit)))
+c(samples = nrow(s), primary_pairs = nrow(primary), reverse_audits = nrow(audit))
+#>        samples  primary_pairs reverse_audits 
+#>             20             60             10
+```
+
+This reproduces the pilot design, not necessarily its exact original
+schedule. After separate owner authorization, preflight one pair per
+provider, collect the primary and reverse work into separate saved runs,
+and retain their checkpoints. Inspect completeness, ID mappings,
+probability validity, binary BT output and reversal consistency
+separately. Record date, package commit, requested/reported models,
+response IDs, usage and actual cost when available. Keep sample text,
+credentials, raw responses and complete returned objects private;
+publish only appropriate aggregate summaries. No additional live run is
+required to use the dated evidence above.
+
+A future tiny compatibility check can select the two decision profiles
+in the existing smoke harness. First inspect the selection without
+calls:
+
+``` text
+Rscript inst/scripts/smoke_model_compatibility.R --list=true --mode=live \
+  --providers=openai,typesafe \
+  --profiles=openai_decisions_default,typesafe_systemone_default
+```
+
+Running without `--list=true` additionally requires the explicit
+billable opt-in shown above and separate owner approval. This one-pair
+harness does not reproduce the 20-sample pilot or its reversal analysis.
 
 ## Citation
 

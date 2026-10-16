@@ -206,10 +206,13 @@ compression, long-context/image opt-in, or managed Batch is implemented
 here. Use
 [`submit_typesafe_pairs_live()`](https://shmercer.github.io/pairwiseLLM/reference/submit_typesafe_pairs_live.md)
 for resumable live bulk collection. The provider enforces body/context
-limits. This feature has provider-free validation, not an authorized
-live availability check. Model probabilities do not establish validated
-educational assessment accuracy and do not become BT/adaptive weights,
-fractional wins, or judgments.
+limits. An owner-authorized live smoke run on 2026-10-16 exercised
+`jev-1.13.0` through this endpoint on 20 synthetic samples (60 primary
+pairs and 10 reverse audits); other versions/aliases were not qualified.
+See the model-compatibility vignette for the tested commit, design and
+limits. Model probabilities do not establish validated educational
+assessment accuracy and do not become BT/adaptive weights, fractional
+wins, or judgments.
 
 Sample text is sent to TypeSafe. Keys are omitted from diagnostics.
 Request bodies and raw responses can contain private text; sample-free

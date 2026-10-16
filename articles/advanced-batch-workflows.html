@@ -104,6 +104,11 @@ providers)<br>
 <li>Continue remotely after submission even if your R session ends</li>
 <li>Can be polled and resumed even if your local R session ends</li>
 </ul>
+<p>OpenAI Decisions and TypeSafe Jev support live multi-pair collection
+through <code><a href="../reference/submit_llm_pairs.html">submit_llm_pairs()</a></code>, including concurrency and
+resumption, but cannot enter these provider-managed Batch workflows. See
+the <a href="provider-controls-and-recovery.html#decision-models-save-resume-and-inspect">decision
+recovery guide</a>.</p>
 <p>Supported Batch API providers:</p>
 <ul>
 <li>

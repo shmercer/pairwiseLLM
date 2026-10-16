@@ -213,6 +213,14 @@ For the `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, and
 `"ollama"` backends, `endpoint` is currently ignored and the default
 live API for that provider is used.
 
+## Decision failure retention
+
+Decision failures may retain raw provider responses in memory even when
+`include_raw = FALSE`; saving the complete return value may persist
+sensitive sample text. See
+[decision_bulk](https://shmercer.github.io/pairwiseLLM/reference/decision_bulk.md)
+for default checkpoint/export retention.
+
 ## See also
 
 - [`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md),

@@ -166,7 +166,11 @@ remain malformed rather than being guessed from prose.</p>
 <p>Only normalized successful <code>results</code> are modeling evidence; retained failed
 choices are diagnostics. Existing BT/Bayesian/adaptive code is unchanged and
 does not consume probabilities as weights, fractional wins, or extra outcomes.
-Raw responses may contain sensitive provider content. Do not log them publicly.</p>
+Raw failed responses remain in memory even with <code>include_raw = FALSE</code>.
+Saving or serializing the complete returned object can persist sensitive
+provider content, including repeated sample text. Bulk default checkpoints
+and ordinary exports exclude raw responses; see <a href="decision_bulk.html">decision_bulk</a>. Do not log
+complete failure objects publicly.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
