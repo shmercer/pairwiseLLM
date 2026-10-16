@@ -29,59 +29,10 @@
                                             trait_name, trait_description,
                                             prompt_template, api_key, include_raw,
                                             dots) {
-  controls <- .openai_decision_controls(dots)
-  if (!.decision_string(model) || !identical(model, "gpt-6-luna")) {
-    rlang::abort("The Decisions endpoint currently supports only `model = \"gpt-6-luna\"`.")
-  }
-  if (!is.logical(include_raw) || length(include_raw) != 1L ||
-      !is.null(dim(include_raw)) || is.na(include_raw)) {
-    rlang::abort("`include_raw` must be TRUE or FALSE.")
-  }
-  request <- .build_decision_request(
-    ID1, text1, ID2, text2, trait_name, trait_description,
-    pair_uid = dots[["pair_uid"]] %||% .pairwiseLLM_make_custom_id(ID1, ID2),
-    provider = "openai", model = model,
-    decision_template = dots[["decision_template"]], prompt_template = prompt_template
-  )
-  .validate_decision_request(request, provider = "openai", model = model)
-  body <- request$body
-  if (!is.null(controls$prompt_cache_options)) {
-    body$prompt_cache_options <- controls$prompt_cache_options
-  }
-  payload <- charToRaw(enc2utf8(.decision_json(body)))
-  # Verify the serialized representation, including the independently validated
-  # transport settings. No subsequent JSON formatting is allowed.
-  wire <- .decision_read_json(rawToChar(payload))
-  if (!identical(wire$prompt_cache_options, controls$prompt_cache_options)) {
-    .decision_request_error()
-  }
-  .validate_decision_request(request, wire[setdiff(names(wire), "prompt_cache_options")],
-                             provider = "openai", model = model)
-
-  req <- .openai_request("/decisions", api_key)
-  req <- httr2::req_body_raw(req, payload, type = "application/json")
-  validate_request <- function(req) {
-    .validate_decision_request(request, provider = "openai", model = model)
-    if (!identical(req$body$type, "raw") || !identical(req$body$data, payload) ||
-        !identical(req$body$content_type, "application/json") ||
-        !identical(req$url, paste0(.openai_base_url(), "/decisions"))) {
-      .decision_request_error()
-    }
-    invisible(NULL)
-  }
-  validate_request(req)
+  spec <- .decision_live_spec(ID1, text1, ID2, text2, model, trait_name,
+                              trait_description, prompt_template, "openai", include_raw, dots)
+  req <- .decision_live_http(spec, api_key)
+  validate_request <- function(req) .decision_live_validate(spec, req)
   resp <- .openai_req_perform(req, validate_request = validate_request)
-  response <- tryCatch(.openai_resp_body_json(resp, simplifyVector = FALSE),
-                        error = function(e) httr2::resp_body_string(resp))
-  out <- .parse_decision_response(
-    response, request, provider_request_id = httr2::resp_header(resp, "x-request-id"),
-    include_raw = include_raw
-  )
-  out$object_type <- "decision"
-  out$status_code <- .openai_resp_status(resp)
-  out$error_message <- out$decision_error_detail
-  out$thoughts <- out$content <- NA_character_
-  out$retry_failures <- list(attr(resp, "retry_failures") %||% tibble::tibble())
-  out$request_controls_json <- .decision_json(controls)
-  out
+  .decision_live_response(resp, spec, include_raw)
 }

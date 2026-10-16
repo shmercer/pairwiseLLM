@@ -105,8 +105,9 @@
 #' retry helper; it does not currently interpret `Retry-After` headers.
 #'
 #' Only the standard text endpoint is supported: no SDK is required, and no
-#' compression, long-context/image opt-in, managed Batch, bulk execution, or
-#' resumption is implemented here. The provider enforces body/context limits.
+#' compression, long-context/image opt-in, or managed Batch is implemented here.
+#' Use [submit_typesafe_pairs_live()] for resumable live bulk collection. The
+#' provider enforces body/context limits.
 #' This feature has provider-free validation, not an authorized live availability
 #' check. Model probabilities do not establish validated educational assessment
 #' accuracy and do not become BT/adaptive weights, fractional wins, or judgments.
@@ -147,57 +148,12 @@ typesafe_compare_pair_live <- function(ID1, text1, ID2, text2,
                                        trait_name, trait_description,
                                        prompt_template = NULL, api_key = NULL,
                                        include_raw = FALSE, ...) {
-  dots <- list(...)
-  if (length(dots) && (is.null(names(dots)) || anyNA(names(dots)) ||
-      any(!nzchar(names(dots))) || anyDuplicated(names(dots)))) {
-    rlang::abort("TypeSafe arguments must be uniquely named.")
-  }
-  if (length(setdiff(names(dots), c("pair_uid", "decision_template")))) {
-    rlang::abort("Unsupported TypeSafe settings; see `typesafe_compare_pair_live()`.")
-  }
-  if (!.decision_string(model) ||
-      !grepl("^jev-([0-9]+\\.[0-9]+\\.[0-9]+|latest|preview)$", model)) {
-    rlang::abort("`model` must be a versioned Jev ID (jev-<major>.<minor>.<patch>), 'jev-latest', or 'jev-preview'.")
-  }
-  if (!is.logical(include_raw) || length(include_raw) != 1L ||
-      !is.null(dim(include_raw)) || is.na(include_raw)) {
-    rlang::abort("`include_raw` must be TRUE or FALSE.")
-  }
-  request <- .build_decision_request(
-    ID1, text1, ID2, text2, trait_name, trait_description,
-    pair_uid = dots[["pair_uid"]] %||% .pairwiseLLM_make_custom_id(ID1, ID2),
-    provider = "typesafe", model = model,
-    decision_template = dots[["decision_template"]], prompt_template = prompt_template
-  )
-  .validate_decision_request(request, provider = "typesafe", model = model)
-  payload <- charToRaw(enc2utf8(.decision_json(request$body)))
-  .validate_decision_request(request, .decision_read_json(rawToChar(payload)),
-                             provider = "typesafe", model = model)
-  req <- .typesafe_request(api_key) |>
-    httr2::req_body_raw(payload, type = "application/json")
-  validate_request <- function(req) {
-    .validate_decision_request(request, provider = "typesafe", model = model)
-    if (!identical(req$url, "https://api.typesafe.ai/v1/systemone") ||
-        !identical(req$body$type, "raw") || !identical(req$body$data, payload) ||
-        !identical(req$body$content_type, "application/json")) {
-      .decision_request_error()
-    }
-    invisible(NULL)
-  }
-  validate_request(req)
+  spec <- .decision_live_spec(ID1, text1, ID2, text2, model, trait_name,
+                              trait_description, prompt_template, "typesafe", include_raw, list(...))
+  req <- .decision_live_http(spec, api_key)
+  validate_request <- function(req) .decision_live_validate(spec, req)
   resp <- .typesafe_req_perform(req, validate_request)
-  response <- tryCatch(httr2::resp_body_json(resp, simplifyVector = FALSE),
-                        error = function(e) httr2::resp_body_string(resp))
-  out <- .parse_decision_response(
-    response, request, provider_request_id = httr2::resp_header(resp, "x-request-id"),
-    include_raw = include_raw
-  )
-  out$object_type <- "decision"
-  out$status_code <- httr2::resp_status(resp)
-  out$error_message <- out$decision_error_detail
-  out$thoughts <- out$content <- NA_character_
-  out$retry_failures <- list(attr(resp, "retry_failures") %||% tibble::tibble())
-  out
+  .decision_live_response(resp, spec, include_raw)
 }
 
 .typesafe_request <- function(api_key) {
@@ -249,4 +205,35 @@ typesafe_compare_pair_live <- function(ID1, text1, ID2, text2,
     rlang::cnd_signal(error)
   }
   resp
+}
+
+#' Collect and resume live TypeSafe Jev decisions
+#'
+#' Collect multiple binary decisions with the same scientific contract as
+#' [typesafe_compare_pair_live()]. Use [submit_llm_pairs()] for provider-neutral
+#' dispatch. These are live requests, not managed Batch jobs.
+#'
+#' @inheritParams submit_llm_pairs
+#' @param model Requested Jev identifier; defaults to versioned `"jev-1.13.0"`.
+#' @param prompt_template Must be omitted or `NULL`; custom decision instructions
+#'   are supplied with `decision_template` in `...`.
+#' @param ... Only `decision_template` is supported. See
+#'   [typesafe_compare_pair_live()] for the complete scientific/provider contract.
+#' @return The `results`, `failed_pairs`, and `failed_attempts` list documented
+#'   in [submit_llm_pairs()].
+#' @details See [decision_bulk] for execution controls, persistent retry budgets,
+#'   locking, probability storage, and interruption/recovery guarantees.
+#' @seealso [submit_llm_pairs()], [submit_openai_pairs_live()], [decision_bulk]
+#' @family live backends
+#' @export
+submit_typesafe_pairs_live <- function(pairs, model = "jev-1.13.0", trait_name,
+                                       trait_description, prompt_template = NULL,
+                                       api_key = NULL, verbose = TRUE, status_every = 1,
+                                       progress = TRUE, include_raw = FALSE,
+                                       save_path = NULL, parallel = FALSE, workers = 1,
+                                       execution_control = list(), ...) {
+  .submit_decision_pairs(pairs, model, trait_name, trait_description,
+                         prompt_template, "typesafe", api_key, verbose, status_every,
+                         progress, include_raw, save_path, parallel, workers,
+                         execution_control, list(...))
 }

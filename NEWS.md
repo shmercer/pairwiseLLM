@@ -1,5 +1,14 @@
 # pairwiseLLM (development version)
 
+* OpenAI Decisions and TypeSafe Jev support bounded concurrent live collection
+  through `submit_llm_pairs()` and provider wrappers (#336). Shared integrity
+  validation binds every transmission and saved result to its scientific request.
+  Locked atomic RDS journals preserve full probabilities, valid results and attempt
+  history; CSV exports can be rebuilt safely. Retry budgets survive restarts,
+  including at most one automatic reissue of ambiguous interrupted work. Optional
+  promises/later enable concurrency; filelock is required for saved decision runs.
+  See `?decision_bulk` for controls, recovery guarantees and privacy limitations.
+
 * Single-pair comparisons support opt-in `backend = "typesafe"` and the direct
   `typesafe_compare_pair_live()` helper (#335). The default is versioned
   `jev-1.13.0`; explicit Jev versions and documented moving aliases are supported

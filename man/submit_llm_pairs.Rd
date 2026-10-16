@@ -10,8 +10,9 @@ submit_llm_pairs(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
-  endpoint = c("chat.completions", "responses"),
+  backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama",
+    "typesafe"),
+  endpoint = c("chat.completions", "responses", "decisions"),
   api_key = NULL,
   verbose = TRUE,
   status_every = 1,
@@ -20,6 +21,7 @@ submit_llm_pairs(
   save_path = NULL,
   parallel = FALSE,
   workers = 1,
+  execution_control = list(),
   ...
 )
 }
@@ -48,13 +50,14 @@ comparison function (for example \code{"Overall Quality"}).}
 
 \item{backend}{Character scalar indicating which LLM provider to use.
 One of \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"vertex"}, \code{"together"},
-or \code{"ollama"}.}
+\code{"ollama"}, or \code{"typesafe"} (Jev decisions).}
 
 \item{endpoint}{Character scalar specifying which endpoint family to use for
 backends that support multiple live APIs. For the \code{"openai"} backend this
-must be one of \code{"chat.completions"} or \code{"responses"}, matching
+must be \code{"chat.completions"}, \code{"responses"}, or \code{"decisions"}, matching
 \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}}. For \code{"anthropic"}, \code{"gemini"}, \code{"vertex"},
-\code{"together"}, and \code{"ollama"}, this is currently ignored.}
+\code{"together"}, and \code{"ollama"}, this is currently ignored. For TypeSafe,
+omit it or use \code{"systemone"}.}
 
 \item{api_key}{Optional API key for the selected backend. If \code{NULL}, the
 backend-specific helper will use its own default environment variable.
@@ -81,11 +84,15 @@ to identify and skip pairs that have already been processed (resume mode).
 Supported by all backends.}
 
 \item{parallel}{Logical; if \code{TRUE}, enables parallel processing using
-\code{future.apply}. Requires the \code{future} package. Supported by
-all backends (though defaults may vary).}
+\code{future.apply} for generative backends, requiring \pkg{future} and
+\pkg{future.apply}. Decision concurrency uses optional promises/later.}
 
 \item{workers}{Integer; the number of parallel workers (threads) to use if
 \code{parallel = TRUE}. Defaults to 1.}
+
+\item{execution_control}{Named list of decision-only scheduling, retry,
+timeout and lock controls; defaults to \code{list()}. See \link{decision_bulk} for
+all defaults, persistent budgets, probability storage and recovery guarantees.}
 
 \item{...}{Additional backend-specific parameters. For \code{"openai"} these
 are forwarded to \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}} and typically include
@@ -144,7 +151,17 @@ At present, the following backends are implemented:
 \item \code{"vertex"}   → \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}}
 \item \code{"together"}  → \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}}
 \item \code{"ollama"}   → \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}}
+\item \code{"typesafe"} → \code{\link[=submit_typesafe_pairs_live]{submit_typesafe_pairs_live()}}
 }
+
+For OpenAI Decisions and TypeSafe Jev, omitted \code{prompt_template} selects the
+frozen decision instructions. Explicit generative templates fail. See
+\link{decision_bulk} for concurrent live execution, occurrence IDs, strict resume
+identity, atomic RDS checkpoints, CSV exports, raw-response privacy and the
+one-time automatic ambiguous reissue. Concurrent decision execution uses
+optional promises/later, with \code{workers} bounding in-flight requests; sequential
+decision execution requires neither. Other backends retain their existing
+future-based execution and CSV resumption behavior.
 }
 \examples{
 \dontrun{
@@ -230,6 +247,7 @@ Other live backends:
 \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
 \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
 \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_typesafe_pairs_live]{submit_typesafe_pairs_live()}},
 \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
 \code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
 \code{\link[=typesafe_compare_pair_live]{typesafe_compare_pair_live()}},

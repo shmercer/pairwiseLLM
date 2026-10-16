@@ -191,8 +191,9 @@ Requests contain the complete sample texts. Provenance excludes samples but
 includes full trait/custom instruction text, which can itself be sensitive.
 Failed raw responses can also contain sensitive content; do not log publicly.
 These probabilities do not establish validated educational assessment accuracy
-and do not change binary BT/adaptive evidence. Managed Batch and live bulk
-Decisions execution are unsupported by this issue's single-pair interface.
+and do not change binary BT/adaptive evidence. Use \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} or
+\code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}} for live bulk execution; managed Batch remains
+unsupported for Decisions.
 API availability remains provider/account dependent. The schema and controls
 follow the \href{https://developers.openai.com/api/reference/resources/decisions/methods/create}{OpenAI Decisions reference}.
 }
@@ -251,6 +252,7 @@ Other live backends:
 \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
 \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
 \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_typesafe_pairs_live]{submit_typesafe_pairs_live()}},
 \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
 \code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
 \code{\link[=typesafe_compare_pair_live]{typesafe_compare_pair_live()}},

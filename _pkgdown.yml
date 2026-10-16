@@ -136,6 +136,7 @@ reference:
     contents:
       - check_llm_api_keys
       - submit_llm_pairs
+      - decision_bulk
       - llm_compare_pair
       - llm_submit_pairs_batch
       - llm_download_batch_results
@@ -226,6 +227,7 @@ reference:
       - ollama_compare_pair_live
       - submit_ollama_pairs_live
       - typesafe_compare_pair_live
+      - submit_typesafe_pairs_live
   - title: "Provider-specific batch helpers"
     contents:
       - build_openai_batch_requests

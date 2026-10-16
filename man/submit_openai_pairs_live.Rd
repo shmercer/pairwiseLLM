@@ -10,7 +10,7 @@ submit_openai_pairs_live(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  endpoint = c("chat.completions", "responses"),
+  endpoint = c("chat.completions", "responses", "decisions"),
   api_key = NULL,
   verbose = TRUE,
   status_every = 1,
@@ -19,6 +19,7 @@ submit_openai_pairs_live(
   save_path = NULL,
   parallel = FALSE,
   workers = 1,
+  execution_control = list(),
   ...
 )
 }
@@ -69,6 +70,9 @@ packages.}
 too high (e.g., >20) may trigger OpenAI rate limit errors (HTTP 429)
 depending on your usage tier.}
 
+\item{execution_control}{Named list used only with \code{endpoint = "decisions"};
+see \link{decision_bulk} for controls, defaults, durable budgets and recovery.}
+
 \item{...}{Additional OpenAI parameters (temperature, top_p, logprobs,
 reasoning, service_tier, store, and so on) passed on to
 \code{openai_compare_pair_live}. \code{store} accepts \code{NULL},
@@ -111,6 +115,13 @@ If the process is interrupted, re-running the function with the same
 \item \strong{Error Separation:} Returns valid results and failed pairs separately,
 making it easier to debug or retry specific failures.
 }
+
+With \code{endpoint = "decisions"}, omitted \code{prompt_template} selects
+the frozen decision prompt. Concurrent execution uses optional promises/later;
+\code{workers} bounds in-flight requests. Saved decisions require filelock and an
+atomic RDS journal alongside the CSV export. See \link{decision_bulk} for complete
+scientific identity, probability storage, raw-response privacy and recovery
+contracts. Historical generative execution and resumption are unchanged.
 }
 \examples{
 \dontrun{
@@ -186,6 +197,7 @@ Other live backends:
 \code{\link[=submit_llm_pairs]{submit_llm_pairs()}},
 \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
 \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_typesafe_pairs_live]{submit_typesafe_pairs_live()}},
 \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
 \code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
 \code{\link[=typesafe_compare_pair_live]{typesafe_compare_pair_live()}},

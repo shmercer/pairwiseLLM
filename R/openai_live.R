@@ -154,8 +154,9 @@ NULL
 #' includes full trait/custom instruction text, which can itself be sensitive.
 #' Failed raw responses can also contain sensitive content; do not log publicly.
 #' These probabilities do not establish validated educational assessment accuracy
-#' and do not change binary BT/adaptive evidence. Managed Batch and live bulk
-#' Decisions execution are unsupported by this issue's single-pair interface.
+#' and do not change binary BT/adaptive evidence. Use [submit_llm_pairs()] or
+#' [submit_openai_pairs_live()] for live bulk execution; managed Batch remains
+#' unsupported for Decisions.
 #' API availability remains provider/account dependent. The schema and controls
 #' follow the [OpenAI Decisions reference](https://developers.openai.com/api/reference/resources/decisions/methods/create).
 #'
@@ -512,6 +513,15 @@ openai_compare_pair_live <- function(
 #'     timeouts, parse errors, invalid winners), separate from observed outcomes.}
 #' }
 #'
+#' @param execution_control Named list used only with `endpoint = "decisions"`;
+#'   see [decision_bulk] for controls, defaults, durable budgets and recovery.
+#' @details With `endpoint = "decisions"`, omitted `prompt_template` selects
+#'   the frozen decision prompt. Concurrent execution uses optional promises/later;
+#'   `workers` bounds in-flight requests. Saved decisions require filelock and an
+#'   atomic RDS journal alongside the CSV export. See [decision_bulk] for complete
+#'   scientific identity, probability storage, raw-response privacy and recovery
+#'   contracts. Historical generative execution and resumption are unchanged.
+#'
 #' @examples
 #' \dontrun{
 #' # Requires API key set and internet access
@@ -579,7 +589,7 @@ submit_openai_pairs_live <- function(
   trait_name,
   trait_description,
   prompt_template = set_prompt_template(),
-  endpoint = c("chat.completions", "responses"),
+  endpoint = c("chat.completions", "responses", "decisions"),
   api_key = NULL,
   verbose = TRUE,
   status_every = 1,
@@ -588,10 +598,19 @@ submit_openai_pairs_live <- function(
   save_path = NULL,
   parallel = FALSE,
   workers = 1,
+  execution_control = list(),
   ...
 ) {
   if (identical(endpoint, "decisions")) {
-    rlang::abort("Bulk Decisions execution is not supported; use `openai_compare_pair_live()` for a single pair.")
+    return(.submit_decision_pairs(
+      pairs, model, trait_name, trait_description,
+      if (missing(prompt_template)) NULL else prompt_template, "openai", api_key,
+      verbose, status_every, progress, include_raw, save_path, parallel, workers,
+      execution_control, list(...)
+    ))
+  }
+  if (length(execution_control) || !is.list(execution_control)) {
+    rlang::abort("`execution_control` is supported only for decision bulk execution.")
   }
   endpoint <- match.arg(endpoint)
   pairs <- tibble::as_tibble(pairs)

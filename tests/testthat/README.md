@@ -287,3 +287,8 @@ The two files in `fixtures/direct-trueskill-326/` are unmodified source from
 references. Tests compare full selection records, trajectories, and RNG state.
 `scripts/benchmark-direct-trueskill.R` separately measures scoring, complete
 selection, and synthetic trajectories at N=57/91/229, with no timing assertions.
+
+Issue #336 reserves 2003 for bounded live decision scheduling and 3071–3073 for
+lossless persistence, interruption recovery and exclusive writer locks. These
+prefixes were verified unused before implementation. All provider activity is
+mocked; subprocess tests only coordinate local files/locks in temporary folders.

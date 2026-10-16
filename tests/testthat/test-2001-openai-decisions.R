@@ -309,9 +309,9 @@ test_that("timeout exhaustion preserves failed attempts without changing the pay
   expect_identical(captured[[1]], captured[[2]])
 })
 
-test_that("Decisions cannot enter managed Batch or deferred bulk execution", {
+test_that("Decisions cannot enter managed Batch execution", {
   pairs <- tibble::tibble(ID1 = "A", text1 = "one", ID2 = "B", text2 = "two")
-  for (fn in list(llm_submit_pairs_batch, submit_llm_pairs, submit_openai_pairs_live)) {
+  for (fn in list(llm_submit_pairs_batch)) {
     expect_error(fn(pairs, model = "gpt-6-luna", trait_name = "Organization",
                     trait_description = "Logical sequencing", endpoint = "decisions"),
                  "Batch|Bulk")
