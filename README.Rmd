@@ -169,7 +169,7 @@ decision[c("better_id", "p_sample_1", "p_sample_2")]
 ```
 
 These are provider probabilities for this pair and presentation order; they are
-not established calibrated probabilities of assessment correctness. BT scoring
+not established probabilities that the assessment is correct. BT scoring
 continues to use the binary winner. See the [dated live qualification](https://shmercer.github.io/pairwiseLLM/articles/model-compatibility.html#decision-model-live-qualification)
 and [recovery guide](https://shmercer.github.io/pairwiseLLM/articles/provider-controls-and-recovery.html#decision-models-save-resume-and-inspect)
 for tested models, safe resumption, and practical limits.

@@ -166,8 +166,25 @@ model weights or future availability.
 Prepare the bundled samples locally, select a connected degree-six graph with
 60 unique primary pairs, freeze the same oriented pair table for both providers,
 and select 10 of those pairs for reversed audits with distinct occurrence IDs.
-Use Overall Quality and the default decision instructions. This specifies the
-pilot design; a newly generated schedule need not reproduce its exact pairs.
+Use Overall Quality and the default decision instructions. This offline example
+builds a connected degree-six schedule and ten reverse audits, without calls:
+
+```{r decision-smoke-design}
+data("example_writing_samples", package = "pairwiseLLM")
+s <- example_writing_samples
+edges <- expand.grid(i = seq_len(nrow(s)), offset = 1:3)
+j <- (edges$i - 1L + edges$offset) %% nrow(s) + 1L
+primary <- data.frame(
+  ID1 = s$ID[edges$i], text1 = s$text[edges$i], ID2 = s$ID[j], text2 = s$text[j],
+  pair_uid = paste0("primary-", seq_len(nrow(edges)))
+)
+audit <- primary[1:10, c("ID2", "text2", "ID1", "text1")]
+names(audit) <- c("ID1", "text1", "ID2", "text2")
+audit$pair_uid <- paste0("reverse-", seq_len(nrow(audit)))
+c(samples = nrow(s), primary_pairs = nrow(primary), reverse_audits = nrow(audit))
+```
+
+This reproduces the pilot design, not necessarily its exact original schedule.
 After separate owner authorization, preflight one pair per provider, collect the
 primary and reverse work into separate saved runs, and retain their checkpoints.
 Inspect completeness, ID mappings, probability validity, binary BT output and
