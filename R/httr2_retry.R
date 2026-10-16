@@ -4,8 +4,9 @@
 
 #' @keywords internal
 #' @noRd
-.pairwiseLLM_req_perform <- function(req) {
-  httr2::req_perform(req)
+.pairwiseLLM_req_perform <- function(req, verbosity = NULL) {
+  if (is.null(verbosity)) return(httr2::req_perform(req))
+  httr2::req_perform(req, verbosity = verbosity)
 }
 
 #' @keywords internal

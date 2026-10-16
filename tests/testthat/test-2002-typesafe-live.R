@@ -229,7 +229,7 @@ test_that("retry preflights detect altered bytes or scientific bodies before a s
       if (preflights == 2L) {
         if (mode == "bytes") r$body$data <- charToRaw("{}") else {
           env <- environment(validate_request)
-          env$request$body$questions$writing_trait$instructions <- "Altered between attempts"
+          env$spec$request$body$questions$writing_trait$instructions <- "Altered between attempts"
         }
       }
       validate_request(r)
@@ -362,12 +362,12 @@ test_that("invalid responses retain diagnostics and never produce additional pro
   expect_true(all(is.na(c(row$prompt_tokens, row$completion_tokens, row$total_tokens, row$resolved_model))))
 })
 
-test_that("TypeSafe cannot enter deferred live bulk or managed Batch paths", {
+test_that("TypeSafe cannot enter managed Batch paths", {
   pairs <- tibble::tibble(ID1 = "A", text1 = "a", ID2 = "B", text2 = "b")
   calls <- 0L
   local_mocked_bindings(.typesafe_request = function(...) { calls <<- calls + 1L; stop("unexpected IO") },
                          .package = "pairwiseLLM")
-  for (fn in list(submit_llm_pairs, llm_submit_pairs_batch, llm_submit_pairs_multi_batch)) {
+  for (fn in list(llm_submit_pairs_batch, llm_submit_pairs_multi_batch)) {
     expect_error(fn(pairs, model = "jev-1.13.0", backend = "typesafe",
                     trait_name = "Organization", trait_description = "Logical sequencing"))
   }

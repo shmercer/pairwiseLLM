@@ -13,7 +13,9 @@
 
 #' @keywords internal
 #' @noRd
-.batch_retry_after <- function(resp) {
+.batch_retry_after <- function(resp) .retry_after_seconds(resp, .batch_now())
+
+.retry_after_seconds <- function(resp, now) {
   value <- httr2::resp_header(resp, "Retry-After")
   if (is.null(value)) return(NA_real_)
   value <- trimws(value)
@@ -22,8 +24,8 @@
   } else {
     retry_at <- curl::parse_date(value)
     server_date <- httr2::resp_header(resp, "Date")
-    now <- if (is.null(server_date)) NA else curl::parse_date(server_date)
-    if (is.na(now)) now <- .batch_now()
+    server_now <- if (is.null(server_date)) NA else curl::parse_date(server_date)
+    if (!is.na(server_now)) now <- server_now
     delay <- as.numeric(difftime(retry_at, now, units = "secs"))
   }
   if (!is.finite(delay)) return(NA_real_)

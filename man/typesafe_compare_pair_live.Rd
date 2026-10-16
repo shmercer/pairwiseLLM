@@ -134,8 +134,9 @@ HTTP conditions also carry \code{status_code}. Backoff uses the package's shared
 retry helper; it does not currently interpret \code{Retry-After} headers.
 
 Only the standard text endpoint is supported: no SDK is required, and no
-compression, long-context/image opt-in, managed Batch, bulk execution, or
-resumption is implemented here. The provider enforces body/context limits.
+compression, long-context/image opt-in, or managed Batch is implemented here.
+Use \code{\link[=submit_typesafe_pairs_live]{submit_typesafe_pairs_live()}} for resumable live bulk collection. The
+provider enforces body/context limits.
 This feature has provider-free validation, not an authorized live availability
 check. Model probabilities do not establish validated educational assessment
 accuracy and do not become BT/adaptive weights, fractional wins, or judgments.
@@ -185,6 +186,7 @@ Other live backends:
 \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
 \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
 \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_typesafe_pairs_live]{submit_typesafe_pairs_live()}},
 \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
 \code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
 \code{\link[=vertex_compare_pair_live]{vertex_compare_pair_live()}}

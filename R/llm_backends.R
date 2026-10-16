@@ -104,12 +104,12 @@
 #'   Decisions accepts only `pair_uid`, `decision_template`, and
 #'   `prompt_cache_options` in `...`; generative, storage, and tier controls
 #'   fail before HTTP. Use `model = "gpt-6-luna"`. Its omitted prompt is never
-#'   replaced with the generative default. Bulk Decisions execution is deferred.
+#'   replaced with the generative default. Use [submit_llm_pairs()] for resumable bulk Decisions execution.
 #'   TypeSafe accepts only `pair_uid` and `decision_template` in `...`, including
 #'   rejection of unsupported settings explicitly supplied as `NULL`. Both
 #'   decision backends retain independent confidence and full request provenance;
-#'   probabilities never change binary BT/adaptive winner semantics. TypeSafe
-#'   bulk execution and managed Batch are unsupported.
+#'   probabilities never change binary BT/adaptive winner semantics. See
+#'   [decision_bulk] for bulk execution; managed Batch remains unsupported.
 #'
 #' @return A tibble with one row and the same columns as the underlying
 #'   backend-specific live helper (for example [openai_compare_pair_live()]
@@ -392,6 +392,7 @@ llm_compare_pair <- function(
 #'   \item `"vertex"`   → [submit_vertex_pairs_live()]
 #'   \item `"together"`  → [submit_together_pairs_live()]
 #'   \item `"ollama"`   → [submit_ollama_pairs_live()]
+#'   \item `"typesafe"` → [submit_typesafe_pairs_live()]
 #' }
 #'
 #' @param pairs Tibble or data frame with at least columns `ID1`, `text1`,
@@ -413,12 +414,13 @@ llm_compare_pair <- function(
 #'   [set_prompt_template()].
 #' @param backend Character scalar indicating which LLM provider to use.
 #'   One of `"openai"`, `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`,
-#'   or `"ollama"`.
+#'   `"ollama"`, or `"typesafe"` (Jev decisions).
 #' @param endpoint Character scalar specifying which endpoint family to use for
 #'   backends that support multiple live APIs. For the `"openai"` backend this
-#'   must be one of `"chat.completions"` or `"responses"`, matching
+#'   must be `"chat.completions"`, `"responses"`, or `"decisions"`, matching
 #'   [submit_openai_pairs_live()]. For `"anthropic"`, `"gemini"`, `"vertex"`,
-#'   `"together"`, and `"ollama"`, this is currently ignored.
+#'   `"together"`, and `"ollama"`, this is currently ignored. For TypeSafe,
+#'   omit it or use `"systemone"`.
 #' @param api_key Optional API key for the selected backend. If `NULL`, the
 #'   backend-specific helper will use its own default environment variable.
 #'   For `"ollama"`, this argument is ignored (no API key is required for
@@ -438,8 +440,11 @@ llm_compare_pair <- function(
 #'   to identify and skip pairs that have already been processed (resume mode).
 #'   Supported by all backends.
 #' @param parallel Logical; if `TRUE`, enables parallel processing using
-#'   \code{future.apply}. Requires the \code{future} package. Supported by
-#'   all backends (though defaults may vary).
+#'   \code{future.apply} for generative backends, requiring \pkg{future} and
+#'   \pkg{future.apply}. Decision concurrency uses optional promises/later.
+#' @param execution_control Named list of decision-only scheduling, retry,
+#'   timeout and lock controls; defaults to `list()`. See [decision_bulk] for
+#'   all defaults, persistent budgets, probability storage and recovery guarantees.
 #' @param workers Integer; the number of parallel workers (threads) to use if
 #'   \code{parallel = TRUE}. Defaults to 1.
 #' @param ... Additional backend-specific parameters. For `"openai"` these
@@ -462,6 +467,16 @@ llm_compare_pair <- function(
 #'   `FALSE`. It controls OpenAI response storage or Gemini request logging;
 #'   omission or `NULL` preserves provider/project defaults. See the selected
 #'   provider helper for details; this is not a cross-provider retention policy.
+#'
+#' @details
+#' For OpenAI Decisions and TypeSafe Jev, omitted `prompt_template` selects the
+#' frozen decision instructions. Explicit generative templates fail. See
+#' [decision_bulk] for concurrent live execution, occurrence IDs, strict resume
+#' identity, atomic RDS checkpoints, CSV exports, raw-response privacy and the
+#' one-time automatic ambiguous reissue. Concurrent decision execution uses
+#' optional promises/later, with `workers` bounding in-flight requests; sequential
+#' decision execution requires neither. Other backends retain their existing
+#' future-based execution and CSV resumption behavior.
 #'
 #' @return A list containing:
 #' \describe{
@@ -549,8 +564,8 @@ submit_llm_pairs <- function(
     trait_name,
     trait_description,
     prompt_template = set_prompt_template(),
-    backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
-    endpoint = c("chat.completions", "responses"),
+    backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama", "typesafe"),
+    endpoint = c("chat.completions", "responses", "decisions"),
     api_key = NULL,
     verbose = TRUE,
     status_every = 1,
@@ -559,10 +574,11 @@ submit_llm_pairs <- function(
     save_path = NULL,
     parallel = FALSE,
     workers = 1,
+    execution_control = list(),
     ...
 ) {
   backend <- as.character(backend)
-  valid_backends <- c("openai", "anthropic", "gemini", "vertex", "together", "ollama")
+  valid_backends <- c("openai", "anthropic", "gemini", "vertex", "together", "ollama", "typesafe")
   if (length(backend) < 1L || is.na(backend[1L]) || !nzchar(backend[1L])) {
     rlang::abort("`backend` must be a non-empty character scalar.")
   }
@@ -581,10 +597,32 @@ submit_llm_pairs <- function(
     api_key <- NULL
   }
 
-  if (backend == "openai") {
-    if (identical(endpoint, "decisions")) {
-      rlang::abort("Bulk Decisions execution is not supported; use `llm_compare_pair()` for a single pair.")
+  if (backend == "typesafe") {
+    if (!missing(endpoint) && !identical(endpoint, "systemone")) {
+      rlang::abort("TypeSafe supports only `endpoint = \"systemone\"`; omit the endpoint or use 'systemone'.")
     }
+    if (missing(model)) model <- "jev-1.13.0"
+    return(submit_typesafe_pairs_live(
+      pairs, model, trait_name, trait_description,
+      prompt_template = if (missing(prompt_template)) NULL else prompt_template,
+      api_key = api_key, verbose = verbose, status_every = status_every, progress = progress,
+      include_raw = include_raw, save_path = save_path, parallel = parallel, workers = workers,
+      execution_control = execution_control, ...
+    ))
+  }
+  if (backend == "openai" && identical(endpoint, "decisions")) {
+    return(submit_openai_pairs_live(
+      pairs, model, trait_name, trait_description,
+      prompt_template = if (missing(prompt_template)) NULL else prompt_template,
+      endpoint = endpoint, api_key = api_key, verbose = verbose, status_every = status_every,
+      progress = progress, include_raw = include_raw, save_path = save_path,
+      parallel = parallel, workers = workers, execution_control = execution_control, ...
+    ))
+  }
+  if (length(execution_control) || !is.list(execution_control)) {
+    rlang::abort("`execution_control` is supported only for decision bulk execution.")
+  }
+  if (backend == "openai") {
     endpoint <- match.arg(endpoint)
 
     return(

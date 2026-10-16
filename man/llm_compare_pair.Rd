@@ -100,12 +100,12 @@ provider helper for details; this is not a cross-provider retention policy.
 Decisions accepts only \code{pair_uid}, \code{decision_template}, and
 \code{prompt_cache_options} in \code{...}; generative, storage, and tier controls
 fail before HTTP. Use \code{model = "gpt-6-luna"}. Its omitted prompt is never
-replaced with the generative default. Bulk Decisions execution is deferred.
+replaced with the generative default. Use \code{\link[=submit_llm_pairs]{submit_llm_pairs()}} for resumable bulk Decisions execution.
 TypeSafe accepts only \code{pair_uid} and \code{decision_template} in \code{...}, including
 rejection of unsupported settings explicitly supplied as \code{NULL}. Both
 decision backends retain independent confidence and full request provenance;
-probabilities never change binary BT/adaptive winner semantics. TypeSafe
-bulk execution and managed Batch are unsupported.}
+probabilities never change binary BT/adaptive winner semantics. See
+\link{decision_bulk} for bulk execution; managed Batch remains unsupported.}
 }
 \value{
 A tibble with one row and the same columns as the underlying
@@ -254,6 +254,7 @@ Other live backends:
 \code{\link[=submit_ollama_pairs_live]{submit_ollama_pairs_live()}},
 \code{\link[=submit_openai_pairs_live]{submit_openai_pairs_live()}},
 \code{\link[=submit_together_pairs_live]{submit_together_pairs_live()}},
+\code{\link[=submit_typesafe_pairs_live]{submit_typesafe_pairs_live()}},
 \code{\link[=submit_vertex_pairs_live]{submit_vertex_pairs_live()}},
 \code{\link[=together_compare_pair_live]{together_compare_pair_live()}},
 \code{\link[=typesafe_compare_pair_live]{typesafe_compare_pair_live()}},

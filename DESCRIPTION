@@ -45,10 +45,12 @@ Suggests:
     cmdstanr,
     e1071,
     EloChoice,
+    filelock,
     future,
     future.apply,
     glmnet,
     knitr,
+    later,
     mgcv (>= 1.9-4),
     mockery,
     ordinal,
@@ -56,6 +58,7 @@ Suggests:
     pkgload,
     pls,
     posterior,
+    promises,
     purrr,
     readr,
     rmarkdown,
@@ -140,6 +143,9 @@ Collate:
     'custom_id.R'
     'data-example_writing.R'
     'data_import.R'
+    'decision_bulk.R'
+    'decision_checkpoint.R'
+    'decision_live.R'
     'decision_prompts.R'
     'decision_results.R'
     'draws_sanitize.R'
