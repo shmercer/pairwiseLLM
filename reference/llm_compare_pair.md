@@ -37,7 +37,7 @@ llm_compare_pair(
   trait_description,
   prompt_template = set_prompt_template(),
   backend = c("openai", "anthropic", "gemini", "vertex", "together", "ollama"),
-  endpoint = c("chat.completions", "responses"),
+  endpoint = c("chat.completions", "responses", "decisions"),
   api_key = NULL,
   include_raw = FALSE,
   ...
@@ -87,6 +87,8 @@ llm_compare_pair(
 
   Prompt template string, typically from
   [`set_prompt_template()`](https://shmercer.github.io/pairwiseLLM/reference/set_prompt_template.md).
+  For Decisions, omit or use `NULL`; custom decision instructions belong
+  in `decision_template` in `...`.
 
 - backend:
 
@@ -98,7 +100,8 @@ llm_compare_pair(
 
   Character scalar specifying which endpoint family to use for backends
   that support multiple live APIs. For the `"openai"` backend this must
-  be one of `"chat.completions"` or `"responses"`, matching
+  be one of `"chat.completions"`, `"responses"`, or `"decisions"`,
+  matching
   [`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md).
   For `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, and
   `"ollama"`, this argument is currently ignored.
@@ -137,16 +140,20 @@ llm_compare_pair(
   Vertex each validate and encode it using their own request surfaces.
   For Gemini Developer API and Vertex, supported public values are
   `"standard"` (default / omitted), `"flex"`, and `"priority"`. For both
-  OpenAI live endpoints, `"standard"` and `"default"` send `"default"`;
-  `"auto"`, `"flex"`, and `"priority"` are sent unchanged. Omission or
-  `NULL` allows OpenAI's project-configured `"auto"` behavior.
-  Model/tier availability is validated by OpenAI.
+  OpenAI generative live endpoints, `"standard"` and `"default"` send
+  `"default"`; `"auto"`, `"flex"`, and `"priority"` are sent unchanged.
+  Omission or `NULL` allows OpenAI's project-configured `"auto"`
+  behavior. Model/tier availability is validated by OpenAI.
 
   For OpenAI and Gemini Developer API, `store` accepts `NULL`, `TRUE`,
   or `FALSE`. It controls OpenAI response storage or Gemini request
   logging; omission or `NULL` preserves provider/project defaults. See
   the selected provider helper for details; this is not a cross-provider
-  retention policy.
+  retention policy. Decisions accepts only `pair_uid`,
+  `decision_template`, and `prompt_cache_options` in `...`; generative,
+  storage, and tier controls fail before HTTP. Use
+  `model = "gpt-6-luna"`. Its omitted prompt is never replaced with the
+  generative default. Bulk Decisions execution is deferred.
 
 ## Value
 
@@ -174,10 +181,15 @@ structure, including:
 - `prompt_tokens`, `completion_tokens`, `total_tokens`
 
 For the `"openai"` backend, the `endpoint` argument controls whether the
-Chat Completions API (`"chat.completions"`) or the Responses API
-(`"responses"`) is used. For the `"anthropic"`, `"gemini"`, `"vertex"`,
-`"together"`, and `"ollama"` backends, `endpoint` is currently ignored
-and the default live API for that provider is used.
+Chat Completions API (`"chat.completions"`), Responses API
+(`"responses"`), or opt-in Decisions API (`"decisions"`) is used.
+Decisions uses the approved decision instructions and retains the
+complete binary probability distribution; see
+[`openai_compare_pair_live()`](https://shmercer.github.io/pairwiseLLM/reference/openai_compare_pair_live.md)
+for its supported controls, return fields, validation, and errors. For
+the `"anthropic"`, `"gemini"`, `"vertex"`, `"together"`, and `"ollama"`
+backends, `endpoint` is currently ignored and the default live API for
+that provider is used.
 
 ## See also
 

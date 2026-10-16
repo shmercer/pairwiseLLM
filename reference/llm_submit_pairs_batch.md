@@ -3,7 +3,10 @@
 `llm_submit_pairs_batch()` is a backend-agnostic front-end for running
 provider batch pipelines (OpenAI, Anthropic, Gemini). Vertex,
 Together.ai, and Ollama are supported only for live comparisons in this
-series.
+series. OpenAI `endpoint = "decisions"` is not a managed Batch endpoint
+and is rejected before entering a provider pipeline. Use
+[`llm_compare_pair()`](https://shmercer.github.io/pairwiseLLM/reference/llm_compare_pair.md)
+for single-pair Decisions; bulk decision execution is deferred.
 
 It mirrors
 [`submit_llm_pairs()`](https://shmercer.github.io/pairwiseLLM/reference/submit_llm_pairs.md)

@@ -101,7 +101,7 @@ appropriate live comparison helper:</p><ul><li><p><code>"openai"</code>   → <c
 <span>  <span class="va">trait_description</span>,</span>
 <span>  prompt_template <span class="op">=</span> <span class="fu"><a href="set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  backend <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"openai"</span>, <span class="st">"anthropic"</span>, <span class="st">"gemini"</span>, <span class="st">"vertex"</span>, <span class="st">"together"</span>, <span class="st">"ollama"</span><span class="op">)</span>,</span>
-<span>  endpoint <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"chat.completions"</span>, <span class="st">"responses"</span><span class="op">)</span>,</span>
+<span>  endpoint <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"chat.completions"</span>, <span class="st">"responses"</span>, <span class="st">"decisions"</span><span class="op">)</span>,</span>
 <span>  api_key <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  include_raw <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  <span class="va">...</span></span>
@@ -151,7 +151,8 @@ such as <code>"deepseek-ai/DeepSeek-V4-Flash-0731"</code>. For
 
 <dt id="arg-prompt-template">prompt_template<a class="anchor" aria-label="anchor" href="#arg-prompt-template"></a></dt>
 <dd><p>Prompt template string, typically from
-<code><a href="set_prompt_template.html">set_prompt_template()</a></code>.</p></dd>
+<code><a href="set_prompt_template.html">set_prompt_template()</a></code>. For Decisions, omit or use <code>NULL</code>; custom decision
+instructions belong in <code>decision_template</code> in <code>...</code>.</p></dd>
 
 
 <dt id="arg-backend">backend<a class="anchor" aria-label="anchor" href="#arg-backend"></a></dt>
@@ -163,7 +164,7 @@ or <code>"ollama"</code>.</p></dd>
 <dt id="arg-endpoint">endpoint<a class="anchor" aria-label="anchor" href="#arg-endpoint"></a></dt>
 <dd><p>Character scalar specifying which endpoint family to use
 for backends that support multiple live APIs. For the <code>"openai"</code> backend
-this must be one of <code>"chat.completions"</code> or <code>"responses"</code>, matching
+this must be one of <code>"chat.completions"</code>, <code>"responses"</code>, or <code>"decisions"</code>, matching
 <code><a href="openai_compare_pair_live.html">openai_compare_pair_live()</a></code>. For <code>"anthropic"</code>, <code>"gemini"</code>, <code>"vertex"</code>,
 <code>"together"</code>, and <code>"ollama"</code>, this argument is currently ignored.</p></dd>
 
@@ -196,14 +197,18 @@ are forwarded to <code><a href="ollama_compare_pair_live.html">ollama_compare_pa
 Vertex each validate and encode it using their own request surfaces. For
 Gemini Developer API and Vertex, supported public values are <code>"standard"</code>
 (default / omitted), <code>"flex"</code>, and <code>"priority"</code>.
-For both OpenAI live endpoints, <code>"standard"</code> and <code>"default"</code> send
+For both OpenAI generative live endpoints, <code>"standard"</code> and <code>"default"</code> send
 <code>"default"</code>; <code>"auto"</code>, <code>"flex"</code>, and <code>"priority"</code> are sent unchanged.
 Omission or <code>NULL</code> allows OpenAI's project-configured <code>"auto"</code> behavior.
 Model/tier availability is validated by OpenAI.</p>
 <p>For OpenAI and Gemini Developer API, <code>store</code> accepts <code>NULL</code>, <code>TRUE</code>, or
 <code>FALSE</code>. It controls OpenAI response storage or Gemini request logging;
 omission or <code>NULL</code> preserves provider/project defaults. See the selected
-provider helper for details; this is not a cross-provider retention policy.</p></dd>
+provider helper for details; this is not a cross-provider retention policy.
+Decisions accepts only <code>pair_uid</code>, <code>decision_template</code>, and
+<code>prompt_cache_options</code> in <code>...</code>; generative, storage, and tier controls
+fail before HTTP. Use <code>model = "gpt-6-luna"</code>. Its omitted prompt is never
+replaced with the generative default. Bulk Decisions execution is deferred.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -224,8 +229,12 @@ including:</p><ul><li><p><code>custom_id</code>, <code>ID1</code>, <code>ID2</co
 <li><p><code>better_sample</code>, <code>better_id</code></p></li>
 <li><p><code>prompt_tokens</code>, <code>completion_tokens</code>, <code>total_tokens</code></p></li>
 </ul><p>For the <code>"openai"</code> backend, the <code>endpoint</code> argument controls whether
-the Chat Completions API (<code>"chat.completions"</code>) or the Responses API
-(<code>"responses"</code>) is used. For the <code>"anthropic"</code>, <code>"gemini"</code>,
+the Chat Completions API (<code>"chat.completions"</code>), Responses API
+(<code>"responses"</code>), or opt-in Decisions API (<code>"decisions"</code>) is used.
+Decisions uses the approved decision instructions and retains the complete
+binary probability distribution; see <code><a href="openai_compare_pair_live.html">openai_compare_pair_live()</a></code> for its
+supported controls, return fields, validation, and errors.
+For the <code>"anthropic"</code>, <code>"gemini"</code>,
 <code>"vertex"</code>, <code>"together"</code>, and <code>"ollama"</code> backends, <code>endpoint</code> is
 currently ignored and the default live API for that provider is used.</p>
     </div>

@@ -47,10 +47,13 @@ automatic retries.
 A one-row tibble retaining `ID1`, `ID2`, actual `pair_uid`/`custom_id`,
 `better_sample`, `better_id`, integer `winner_pos`, `model`, and usage
 (`prompt_tokens`, `completion_tokens`, `total_tokens`; `NA` when
-unavailable). `model` is the resolved model when supplied, otherwise the
-requested model; `requested_model` and `resolved_model` distinguish them
-without claiming resolution when the provider omits it. Additive scalar
-columns are:
+unavailable). Detailed usage columns `prompt_cached_tokens`,
+`prompt_cache_write_tokens`, and `reasoning_tokens` retain nonnegative
+integer counts when reported; unavailable details are `NA`. Invalid
+supplied counts fail as malformed. `model` is the resolved model when
+supplied, otherwise the requested model; `requested_model` and
+`resolved_model` distinguish them without claiming resolution when the
+provider omits it. Additive scalar columns are:
 
 - p_sample_1, p_sample_2:
 

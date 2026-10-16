@@ -2,8 +2,9 @@
 
 Internal foundation for single-trait binary decision endpoints. This
 helper constructs a request without HTTP, credentials, retries,
-persistence, or model availability checks. Existing live/batch
-dispatchers do not call it yet.
+persistence, or model availability checks. Live decision helpers
+validate its body before HTTP; managed Batch and bulk decision execution
+are not supported.
 
 ## Usage
 
@@ -104,7 +105,10 @@ request ID, response/resolved model, and timestamps are not scientific
 fingerprint inputs. Future resumption must verify both pair UID and
 fingerprint, and inspect resolved-model metadata when aliases are used;
 this helper does not implement resumption or guarantee provider
-reproducibility.
+reproducibility. A fingerprint is an identity/integrity check, not an
+authenticated signature. Live transports must independently check the
+body against this provenance and check the final serialized payload
+before every HTTP attempt.
 
 The body contains private sample text and must not be logged publicly.
 Provenance contains text hashes, not sample contents, but custom

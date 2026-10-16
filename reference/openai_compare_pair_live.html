@@ -79,7 +79,7 @@ analogue of <code><a href="build_openai_batch_requests.html">build_openai_batch_
 <span>  <span class="va">trait_name</span>,</span>
 <span>  <span class="va">trait_description</span>,</span>
 <span>  prompt_template <span class="op">=</span> <span class="fu"><a href="set_prompt_template.html">set_prompt_template</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>  endpoint <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"chat.completions"</span>, <span class="st">"responses"</span><span class="op">)</span>,</span>
+<span>  endpoint <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"chat.completions"</span>, <span class="st">"responses"</span>, <span class="st">"decisions"</span><span class="op">)</span>,</span>
 <span>  tag_prefix <span class="op">=</span> <span class="st">"&lt;BETTER_SAMPLE&gt;"</span>,</span>
 <span>  tag_suffix <span class="op">=</span> <span class="st">"&lt;/BETTER_SAMPLE&gt;"</span>,</span>
 <span>  api_key <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -109,7 +109,8 @@ analogue of <code><a href="build_openai_batch_requests.html">build_openai_batch_
 
 
 <dt id="arg-model">model<a class="anchor" aria-label="anchor" href="#arg-model"></a></dt>
-<dd><p>OpenAI model name (e.g. "gpt-4.1", "gpt-5.6-sol").</p></dd>
+<dd><p>OpenAI model name (e.g. "gpt-4.1", "gpt-5.6-sol"). Decisions
+currently accepts only <code>"gpt-6-luna"</code>; other model IDs fail before HTTP.</p></dd>
 
 
 <dt id="arg-trait-name">trait_name<a class="anchor" aria-label="anchor" href="#arg-trait-name"></a></dt>
@@ -121,20 +122,22 @@ analogue of <code><a href="build_openai_batch_requests.html">build_openai_batch_
 
 
 <dt id="arg-prompt-template">prompt_template<a class="anchor" aria-label="anchor" href="#arg-prompt-template"></a></dt>
-<dd><p>Prompt template string.</p></dd>
+<dd><p>Generative prompt template string. For Decisions,
+omit this argument or use <code>NULL</code>; explicitly supplied non-NULL templates
+fail. Use <code>decision_template</code> in <code>...</code> for custom decision instructions.</p></dd>
 
 
 <dt id="arg-endpoint">endpoint<a class="anchor" aria-label="anchor" href="#arg-endpoint"></a></dt>
-<dd><p>Which OpenAI endpoint to use: <code>"chat.completions"</code> or
-<code>"responses"</code>.</p></dd>
+<dd><p>Which OpenAI endpoint to use: <code>"chat.completions"</code>
+(the unchanged default), <code>"responses"</code>, or <code>"decisions"</code>.</p></dd>
 
 
 <dt id="arg-tag-prefix">tag_prefix<a class="anchor" aria-label="anchor" href="#arg-tag-prefix"></a></dt>
-<dd><p>Prefix for the better-sample tag.</p></dd>
+<dd><p>Prefix for the better-sample tag. Must be omitted for Decisions.</p></dd>
 
 
 <dt id="arg-tag-suffix">tag_suffix<a class="anchor" aria-label="anchor" href="#arg-tag-suffix"></a></dt>
-<dd><p>Suffix for the better-sample tag.</p></dd>
+<dd><p>Suffix for the better-sample tag. Must be omitted for Decisions.</p></dd>
 
 
 <dt id="arg-api-key">api_key<a class="anchor" aria-label="anchor" href="#arg-api-key"></a></dt>
@@ -153,9 +156,9 @@ analogue of <code><a href="build_openai_batch_requests.html">build_openai_batch_
 positive integer and is supported only by the Responses endpoint. When
 <code>pair_uid</code> is supplied, it is used verbatim as <code>custom_id</code>.
 <code>store</code> accepts <code>NULL</code> or one non-missing logical value for
-either endpoint. <code>TRUE</code>/<code>FALSE</code> are sent unchanged; omission
+either generative endpoint. <code>TRUE</code>/<code>FALSE</code> are sent unchanged; omission
 or <code>NULL</code> leaves the field absent and preserves the OpenAI default.
-For either endpoint, <code>service_tier = "standard"</code> or <code>"default"</code>
+For either generative endpoint, <code>service_tier = "standard"</code> or <code>"default"</code>
 sends <code>"default"</code>; explicit <code>"auto"</code>, <code>"flex"</code>, and
 <code>"priority"</code> are sent unchanged. Omission or <code>NULL</code> leaves
 the field absent, allowing OpenAI's project-configured <code>"auto"</code>
@@ -167,7 +170,10 @@ gpt-5 models are applied as in <code><a href="build_openai_batch_requests.html">
 When using the Responses endpoint with reasoning models, you can request
 reasoning summaries in the <code>thoughts</code> column by setting
 <code>endpoint = "responses"</code>, a non-"none" reasoning effort, and
-<code>include_thoughts = TRUE</code>.</p></dd>
+<code>include_thoughts = TRUE</code>.
+For Decisions, only <code>pair_uid</code>, <code>decision_template</code>, and
+<code>prompt_cache_options</code> are supported in <code>...</code>; see below. Duplicate,
+unnamed, unsupported, or misspelled settings fail before credentials or HTTP.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -219,16 +225,31 @@ otherwise NA.</p></dd>
 
 <dt>raw_response</dt>
 <dd><p>(Optional) list-column containing the parsed JSON
-body.</p></dd>
+body. Failed Decisions always retain their response, including invalid JSON
+text, regardless of <code>include_raw</code>.</p></dd>
 
 
-</dl></div>
+</dl><p>Decisions additionally returns the columns documented in <a href="decision_results.html">decision_results</a>,
+including integer <code>winner_pos</code>, <code>pair_uid</code>, both probabilities, <code>p_chosen</code>,
+independent <code>decision_confidence</code>, full <code>probabilities_json</code>, scientific
+provenance/fingerprint, requested/resolved model, and provider <code>x-request-id</code>.
+<code>object_type</code> is <code>"decision"</code>; <code>thoughts</code> and <code>content</code> are <code>NA</code>.
+<code>prompt_cached_tokens</code>, <code>prompt_cache_write_tokens</code>, and <code>reasoning_tokens</code>
+retain reported usage details, including zero; unavailable counts are <code>NA</code>.
+<code>request_controls_json</code> records submitted <code>prompt_cache_options</code> (or <code>null</code>)
+and <code>effective_prompt_cache_options</code> with effective mode and TTL. These
+transport settings are separate from the scientific fingerprint.
+<code>retry_failures</code> is a list-column of transient attempt diagnostics, consumed
+by the existing normalizer for <code>failed_attempts</code>.</p>
+    </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>It supports both the Chat Completions endpoint ("/v1/chat/completions") and
+    <p>It supports the Chat Completions endpoint ("/v1/chat/completions") and
 the Responses endpoint ("/v1/responses", for example gpt-5.6 with reasoning),
 using the same prompt template and model / parameter rules as the batch
-pipeline.</p>
+pipeline.
+The opt-in Decisions endpoint (<code>"/v1/decisions"</code>) instead uses one structured
+binary choice question; see the Decisions section below.</p>
 <p>For the Responses endpoint, the function collects:</p><ul><li><p>Reasoning / "thoughts" text (if available) into the <code>thoughts</code>
 column.</p></li>
 <li><p>Visible assistant output into the <code>content</code> column.</p></li>
@@ -236,6 +257,56 @@ column.</p></li>
 If <code>temperature</code> or <code>top_p</code> is not provided in <code>...</code>, the corresponding
 field is omitted so the model/provider default applies. Reasoning modes that
 do not support sampling parameters continue to require them to be <code>NULL</code>.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="decisions">Decisions<a class="anchor" aria-label="anchor" href="#decisions"></a></h2>
+
+
+<p>Decisions is single-pair, single-trait and binary only. <code>input</code> is the exact
+shared JSON-string evidence built by <a href="decision_request.html">decision_request</a>; <code>questions</code> contains
+one named <code>choice</code> question, <code>writing_trait</code>, with the ordered <code>SAMPLE_1</code> and
+<code>SAMPLE_2</code> values and symmetric descriptions. Omission of the generative
+prompt does not evaluate <code><a href="set_prompt_template.html">set_prompt_template()</a></code>. The default instructions
+are the exact approved <code>decision_cj_v1</code>. A custom <code>decision_template</code> must
+contain <code>{TRAIT_NAME}</code> and <code>{TRAIT_DESCRIPTION}</code>, and cannot contain sample
+placeholders or generative output tags. The complete trait definition is
+inserted verbatim and fingerprinted. No instructions request generated
+probabilities, reasoning traces, or XML.</p>
+<p>The selected <code>choice</code> is preserved, never replaced with an argmax. Both
+probabilities must be finite numbers in <code>[0,1]</code> summing to 1 within <code>1e-6</code>;
+exact 0, 0.5 and 1 are kept. Independent confidence is required in <code>[0,1]</code>.
+A selection below the alternative by more than <code>1e-8</code> is a diagnostic failure,
+retaining the original choice and probabilities. Malformed JSON/answers,
+refusals, and incomplete distributions return classified failed rows; they
+are never valid binary evidence or automatically retried. See <a href="decision_results.html">decision_results</a>
+for error codes and failure retention. HTTP errors/timeouts use the existing
+transport/retry conditions and attempt metadata; no generative fallback occurs.</p>
+<p><code>prompt_cache_options</code> is <code>NULL</code> or a nonempty named list with only <code>mode</code>
+(<code>"implicit"</code>, <code>"explicit"</code>, or <code>NULL</code>) and/or <code>ttl</code> (<code>"30m"</code>). Omitted
+values use implicit mode and a 30-minute minimum TTL. Explicit mode disables
+the implicit breakpoint; this helper adds no explicit breakpoints, so explicit
+mode disables prompt caching for this request. Cache entries can persist
+longer than the TTL. This is caching, not request storage or a general
+data-retention guarantee. Account/project data controls still apply.
+<code>store</code>, service/processing tiers, cache keys, breakpoints, and Batch cache
+policy controls are unsupported here. All supplied generative controls,
+including <code>temperature</code>, <code>top_p</code>, <code>logprobs</code>, <code>reasoning</code>,
+<code>max_output_tokens</code>, and <code>include_thoughts</code>, fail even when <code>NULL</code> or <code>FALSE</code>.</p>
+<p>Before request construction, the scientific body is checked independently
+against provenance, exact ordered text/evidence hashes, instructions, question,
+and choices. The serialized JSON is checked again, attached as exact UTF-8
+bytes, and verified before every HTTP attempt, including retries. Inconsistent
+requests abort with <code>pairwiseLLM_decision_request_error</code> and sample-free
+diagnostics before HTTP; no automatic repair is performed. A fingerprint
+checks identity/integrity and is not an authenticated signature.</p>
+<p>Requests contain the complete sample texts. Provenance excludes samples but
+includes full trait/custom instruction text, which can itself be sensitive.
+Failed raw responses can also contain sensitive content; do not log publicly.
+These probabilities do not establish validated educational assessment accuracy
+and do not change binary BT/adaptive evidence. Managed Batch and live bulk
+Decisions execution are unsupported by this issue's single-pair interface.
+API availability remains provider/account dependent. The schema and controls
+follow the <a href="https://developers.openai.com/api/reference/resources/decisions/methods/create" class="external-link">OpenAI Decisions reference</a>.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -284,6 +355,16 @@ do not support sampling parameters continue to require them to be <code>NULL</co
 <span class="r-in"><span>  service_tier <span class="op">=</span> <span class="st">"flex"</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">res_reasoning</span><span class="op">$</span><span class="va">thoughts</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># 3. One decision with both choice probabilities (also incurs API costs)</span></span></span>
+<span class="r-in"><span><span class="va">res_decision</span> <span class="op">&lt;-</span> <span class="fu">openai_compare_pair_live</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  <span class="st">"A"</span>, <span class="st">"Synthetic sample A."</span>, <span class="st">"B"</span>, <span class="st">"Synthetic sample B."</span>,</span></span>
+<span class="r-in"><span>  model <span class="op">=</span> <span class="st">"gpt-6-luna"</span>, trait_name <span class="op">=</span> <span class="st">"Organization"</span>,</span></span>
+<span class="r-in"><span>  trait_description <span class="op">=</span> <span class="st">"Logical sequencing and connections between ideas."</span>,</span></span>
+<span class="r-in"><span>  endpoint <span class="op">=</span> <span class="st">"decisions"</span>, pair_uid <span class="op">=</span> <span class="st">"example-forward"</span>,</span></span>
+<span class="r-in"><span>  prompt_cache_options <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>mode <span class="op">=</span> <span class="st">"explicit"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">res_decision</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"better_id"</span>, <span class="st">"p_sample_1"</span>, <span class="st">"p_sample_2"</span>, <span class="st">"decision_confidence"</span><span class="op">)</span><span class="op">]</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
