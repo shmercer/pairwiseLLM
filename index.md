@@ -247,6 +247,19 @@ stopping criteria.
 
 ## Research Studies Using pairwiseLLM
 
+Matta, M., Keller-Margulis, M. A., & Mercer, S. H. (2026). *Screening
+elementary writing with AI: Evidence for ChatGPT as a feasible
+alternative to human ratings and specialized scoring models*
+\[Preprint\]. Social Science Research Network.
+<https://doi.org/10.2139/ssrn.7630098>
+
+Examines ChatGPT-based comparative judgment writing assessment with 237
+students in Grades 3–5. ChatGPT scores closely matched human comparative
+judgments and predicted standardized writing performance comparably to
+or better than human ratings, writeAlizer, PEG, and curriculum-based
+writing measures. No statistically significant differences in predictive
+validity were found between emerging bilingual students and their peers.
+
 Mercer, S., & Reed, D. K. (2026). *Validity of large language model
 comparative judgment for universal writing screening* \[Preprint\].
 EdArXiv. <https://osf.io/preprints/edarxiv/4k9r8_v2>
